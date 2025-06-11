@@ -1,0 +1,19 @@
+[project]
+name = "pixel-patrol"
+version = "0.1.0"
+description = "Image prevalidation tool"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "bioio>=1.6.1",
+    "matplotlib>=3.10.3",
+    "polars>=1.29.0",
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+    "pyyaml>=6.0.2",
+]
+
+[project.entry-points."pixel_patrol.widgets"]
+summary = "pixel_patrol.widgets.summary.summary:SummaryWidget"
+dataframe = "pixel_patrol.widgets.summary.dataframe:DataFrameWidget"
+dim_order = "pixel_patrol.widgets.metadata.dim_order:DimOrderWidget"
