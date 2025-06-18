@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "bioio>=1.6.1",
     "matplotlib>=3.10.3",
+    "opencv-python>=4.11.0.86",
     "polars>=1.29.0",
     "pytest>=8.3.5",
     "pytest-mock>=3.14.1",
@@ -17,3 +18,8 @@ dependencies = [
 summary = "pixel_patrol.widgets.summary.summary:SummaryWidget"
 dataframe = "pixel_patrol.widgets.summary.dataframe:DataFrameWidget"
 dim_order = "pixel_patrol.widgets.metadata.dim_order:DimOrderWidget"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
