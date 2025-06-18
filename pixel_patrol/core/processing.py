@@ -1,14 +1,13 @@
-import polars as pl
+import logging
 from pathlib import Path
 from typing import List, Optional, Dict
-import logging
+
+import polars as pl
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
-from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata, available_columns
 from pixel_patrol.core.project_settings import Settings
-from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata
-from pixel_patrol.utils.widget import get_required_columns
-from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
+from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +200,7 @@ def preprocess_files(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def build_images_df(paths_df: pl.DataFrame, settings: Settings, widgets: List[PixelPatrolWidget]) -> \
+def build_images_df(paths_df: pl.DataFrame, settings: Settings) -> \
         Optional[pl.DataFrame]:
     """
     Builds the images DataFrame by filtering, preprocessing, extracting metadata.
@@ -248,7 +247,7 @@ def build_images_df(paths_df: pl.DataFrame, settings: Settings, widgets: List[Pi
 
     # 5. Get required columns from widgets
     # This function is now imported from pixel_patrol.utils.widget
-    required_columns = get_required_columns(widgets)
+    required_columns = available_columns()
     logger.info(f"Required columns for metadata extraction: {required_columns}")
 
     # 6. Extract metadata and process files

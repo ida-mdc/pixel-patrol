@@ -1,14 +1,15 @@
+import logging
 from pathlib import Path
 from typing import Union, Iterable, List, Optional, Dict
-import polars as pl
-import logging
 
+import polars as pl
+
+from pixel_patrol.core import processing
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
 from pixel_patrol.io.project_io import export_project as _io_export_project
 from pixel_patrol.io.project_io import import_project as _io_import_project
-from pixel_patrol.core import processing
-from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
+from pixel_patrol.report.dashboard_app import create_app
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +81,7 @@ def get_available_extensions(project: Project) -> Dict[str, int]:
 def get_images_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_images_df()
 
-def get_widgets(project: Project) -> List[PixelPatrolWidget]:
-    """
-    Returns a list of all active PixelPatrolWidget instances in the project.
-    """
-    logger.info(f"API Call: Getting all active widgets for project '{project.name}'.")
-    return project.widgets
+def show_report(project: Project, host: str = "127.0.0.1", port: int = None) -> None:
+    logger.info(f"API Call: Showing report for project '{project.name}'.")
+    app = create_app(project)
+    app.run(debug=True, host=host, port=port)

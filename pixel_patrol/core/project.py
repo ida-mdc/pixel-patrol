@@ -1,16 +1,13 @@
+import logging
 from pathlib import Path
 from typing import Any, List, Union, Iterable, Optional, Set
-import logging
 
-
-from pixel_patrol.core.project_settings import Settings
-from  pixel_patrol.core import processing, report, validation
-from pixel_patrol.utils.path_utils import is_subpath, is_superpath
-from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 import polars as pl
 
-from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
-from pixel_patrol.utils.widget import load_widgets
+from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
+from pixel_patrol.core import processing, report, validation
+from pixel_patrol.core.project_settings import Settings
+from pixel_patrol.utils.path_utils import is_subpath, is_superpath
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +26,6 @@ class Project:
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
-
-        self.widgets: List[PixelPatrolWidget] = load_widgets()
-        logger.info(f"Project Core: Discovered and activated {len(self.widgets)} total widget types via entry points.")
 
         self.images_df: Optional[pl.DataFrame] = None
         self.results: Any = None # HTML file? All plots? # TODO: Define a better type once decided
@@ -170,7 +164,7 @@ class Project:
             logger.error("Project Core: Cannot build images DataFrame. paths_df is None. Call .process_paths() first.")
             raise ValueError("Preprocessing has not produced any data (paths_df is None). Call .process_paths() first and ensure paths contain data.")
         else:
-            self.images_df = processing.build_images_df(self.paths_df, self.settings, self.widgets)
+            self.images_df = processing.build_images_df(self.paths_df, self.settings)
         return self
 
     def generate_report(self, dest: Path) -> None:

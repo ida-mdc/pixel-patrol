@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 SPRITE_SIZE = 64
 
+def available_columns() -> List[str]:
+    keys = list(_mapping_for_np_array_processing_by_column_name().keys())
+    keys.extend(_mapping_for_bioimage_metadata_by_column_name())
+    return keys
 
 def _mapping_for_np_array_processing_by_column_name() -> Dict[str, Callable]:
     """

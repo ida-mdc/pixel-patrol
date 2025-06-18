@@ -3,17 +3,36 @@ name = "pixel-patrol"
 version = "0.1.0"
 description = "Image prevalidation tool"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "bioio>=1.6.1",
+    "dash-ag-grid>=31.3.1",
+    "dash-bootstrap-components>=2.0.3",
     "matplotlib>=3.10.3",
+    "opencv-python>=4.11.0.86",
     "polars>=1.29.0",
     "pytest>=8.3.5",
     "pytest-mock>=3.14.1",
     "pyyaml>=6.0.2",
+    "statsmodels>=0.14.4",
+    "tensorboardx>=2.6.4",
 ]
 
 [project.entry-points."pixel_patrol.widgets"]
-summary = "pixel_patrol.widgets.summary.summary:SummaryWidget"
-dataframe = "pixel_patrol.widgets.summary.dataframe:DataFrameWidget"
-dim_order = "pixel_patrol.widgets.metadata.dim_order:DimOrderWidget"
+file_timestamp = "pixel_patrol.report.widgets.file_stats.file_timestamp:FileTimestampWidget"
+file_size = "pixel_patrol.report.widgets.file_stats.file_size:FileSizeWidget"
+file_extension = "pixel_patrol.report.widgets.file_stats.file_extension:FileExtensionWidget"
+data_type = "pixel_patrol.report.widgets.metadata.data_type:DataTypeWidget"
+dim_order = "pixel_patrol.report.widgets.metadata.dim_order:DimOrderWidget"
+dim_size = "pixel_patrol.report.widgets.metadata.dim_size:DimSizeWidget"
+image_mosaik = "pixel_patrol.report.widgets.visualization.image_mosaik:ImageMosaikWidget"
+dataset_stats = "pixel_patrol.report.widgets.dataset_stats.dataset_stats:DatasetStatsWidget"
+embedding_projector = "pixel_patrol.report.widgets.visualization.embedding_projector:EmbeddingProjectorWidget"
+image_quality = "pixel_patrol.report.widgets.dataset_stats.image_quality:ImageQualityWidget"
+summary = "pixel_patrol.report.widgets.summary.summary:SummaryWidget"
+dataframe = "pixel_patrol.report.widgets.summary.dataframe:DataFrameWidget"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
