@@ -1,11 +1,12 @@
 import polars as pl
 from pathlib import Path
-from typing import List, Optional, Dict
+import os
+from datetime import datetime, timezone
+from typing import List, Optional, Dict, Set
 import logging
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
-from pixel_patrol.core.project_settings import Settings
 from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata
 from pixel_patrol.utils.widget import get_required_columns
 from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
@@ -201,101 +202,141 @@ def preprocess_files(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def build_images_df(paths_df: pl.DataFrame, settings: Settings, widgets: List[PixelPatrolWidget]) -> \
-        Optional[pl.DataFrame]:
+def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame,
+                                   widgets: List[PixelPatrolWidget]) -> \
+                                                        Optional[pl.DataFrame]:
     """
-    Builds the images DataFrame by filtering, preprocessing, extracting metadata.
+    Extracts deep image-specific metadata for files already pre-filtered into `paths_df_subset`.
+    This function assumes `paths_df_subset` contains only the relevant image files.
 
     Args:
-        paths_df: The Polars DataFrame containing all file system paths.
-        settings: The project settings, including selected file extensions.
+        paths_df_subset: A Polars DataFrame containing basic file system metadata for image files.
+                         This DataFrame should already be filtered by file type and extension.
         widgets: A list of PixelPatrolWidget instances used to determine required metadata columns.
 
     Returns:
-        An Optional Polars DataFrame containing information about image files,
-        or None if no image data is available after filtering and processing.
+        An Optional Polars DataFrame containing combined basic and image-specific metadata,
+        or None if no valid image data is available.
     """
-
-    if paths_df is None or paths_df.is_empty():
-        logger.warning("No paths DataFrame provided or it's empty. Cannot build images DataFrame.")
+    if paths_df_subset is None or paths_df_subset.is_empty():
+        logger.warning("Input paths_df_subset is empty. Cannot build images DataFrame.")
         return None
 
-    # 1. Filter for files only
-    dataframe_images = paths_df.filter(pl.col("type").eq("file"))
+    logger.info(f"Building images DataFrame from {paths_df_subset.height} pre-filtered image files...")
 
-    # 2. Filter based on selected file extensions
-    selected_file_extensions = settings.selected_file_extensions
-    if selected_file_extensions:
-        # Convert selected_file_extensions to lowercase for case-insensitive comparison
-        lower_selected_ext = {ext.lower() for ext in selected_file_extensions}
-        dataframe_images = dataframe_images.filter(
-            pl.col("file_extension").str.to_lowercase().is_in(list(lower_selected_ext))
-        )
-        logger.info(
-            f"Filtered images DataFrame for extensions: {lower_selected_ext}. Rows remaining: {dataframe_images.height}")
-    else:
-        logger.info("No specific file extensions selected. All files are considered for image processing.")
-
-    if dataframe_images.is_empty():
-        logger.warning("No image files found after filtering by type and extension. images_df will be None.")
-        return None
-
-    # 3. Preprocess files (add short names, modification period, etc.)
-    # Note: `preprocess_files` now expects a `imported_path` column,
-    # which is added by `build_paths_df` in the updated `processing.py`.
-    dataframe_images = preprocess_files(dataframe_images)
+    # Preprocess files (add short names, modification period, etc.)
+    # Note: `preprocess_files` now expects an `imported_path` column,
+    # which is assumed to be present in `paths_df_subset` if it came from build_paths_df
+    # or added by _build_images_df_from_file_system if it's the optimized path.
+    dataframe_images = preprocess_files(paths_df_subset)
     logger.info(f"Images DataFrame preprocessed. Columns: {dataframe_images.columns}")
 
-    # 5. Get required columns from widgets
-    # This function is now imported from pixel_patrol.utils.widget
+    # Get required columns from widgets
     required_columns = get_required_columns(widgets)
     logger.info(f"Required columns for metadata extraction: {required_columns}")
 
-    # 6. Extract metadata and process files
+    # Extract metadata and process files
     if required_columns:
-        logger.info("Extracting metadata for images...")
+        logger.info("Extracting deep metadata for images...")
 
-        metadata_list = [
-            extract_image_metadata(Path(path_str), required_columns)
-            for path_str in dataframe_images["path"].to_list()  # Convert series to list
-        ]
+        metadata_list = []
+        for path_str in dataframe_images["path"].to_list():
+            file_path = Path(path_str)
+            try:
+                image_specific_metadata = extract_image_metadata(file_path, required_columns)
+                if image_specific_metadata:
+                    metadata_list.append({**{"path": path_str}, **image_specific_metadata})
+            except Exception as e:
+                logger.warning(f"Error extracting image metadata for '{file_path}': {e}")
 
-        # Convert list of dicts to a DataFrame
         if metadata_list:
-            # Filter out None/empty dicts first
-            valid_metadata = [m for m in metadata_list if m]
-            if valid_metadata:
-                processed_metadata_df = pl.DataFrame(valid_metadata)
+            processed_metadata_df = pl.DataFrame(metadata_list)
+            # Ensure 'path' column is correctly used for joining
+            if "path" not in processed_metadata_df.columns:
+                logger.error("Internal error: 'path' column missing from processed_metadata_df after extraction.")
+                return None  # Or handle more gracefully
 
-                # Ensure the 'path' column is present in processed_metadata_df for joining
-                # Create a series with the original paths from dataframe_images
-                paths_series = pl.Series("path", dataframe_images["path"].to_list())
-
-                # Add 'path' column to processed_metadata_df if it's not already there.
-                # If valid_metadata was empty or only had dicts without 'path', this ensures it exists.
-                # It's safer to ensure the join key is always present in both DFs.
-                if "path" not in processed_metadata_df.columns:
-                    processed_metadata_df = processed_metadata_df.with_columns(paths_series)
-                else:
-                    # If 'path' is already there, ensure it's in the correct order for joining
-                    # and that it perfectly matches the original dataframe_images paths.
-                    # This might be an over-caution, but ensures robustness for the join.
-                    processed_metadata_df = processed_metadata_df.with_columns(
-                        paths_series.alias("path")  # Overwrite to ensure exact alignment
-                    )
-
-                # Aggregate processing result (join metadata back to the main DataFrame)
-                # Join on 'path' as extract_image_metadata receives Path objects
-                dataframe_images = aggregate_processing_result(dataframe_images, processed_metadata_df)
-                logger.info("Metadata extraction and aggregation complete.")
-            else:
-                logger.warning("No valid metadata extracted for any images.")
+            # Aggregate processing result (join metadata back to the main DataFrame)
+            dataframe_images = dataframe_images.join(processed_metadata_df, on="path", how="left")
+            logger.info("Deep metadata extraction and aggregation complete.")
         else:
-            logger.warning("Metadata extraction yielded no results.")
+            logger.warning("No valid deep metadata extracted for any images.")
     else:
-        logger.info("No specific metadata columns required by widgets. Skipping metadata extraction.")
+        logger.info("No specific deep metadata columns required by widgets. Skipping deep metadata extraction.")
 
     return dataframe_images
+
+
+def build_images_df_from_file_system(
+        paths: List[Path], selected_extensions: Set[str], widgets: List[PixelPatrolWidget]
+) -> Optional[pl.DataFrame]:
+    """
+    Performs a single-pass scan over the file system to find image files,
+    collect their basic file system metadata, and extract deep image-specific metadata.
+    Returns a complete images_df.
+    """
+    logger.debug(f"DEBUG: Starting direct optimized scan for image files with extensions: {selected_extensions}")
+    all_image_data_records = []
+    lower_selected_ext = {ext.lower() for ext in selected_extensions}
+    required_metadata_cols = get_required_columns(widgets)
+
+    for base_path in paths:
+        if not base_path.is_dir():
+            logger.warning(f"Base path '{base_path}' is not a directory. Skipping direct image scan for this path.")
+            continue
+        try:
+            # Calculate depth of current base_path to ensure correct relative depths for files found within
+            # This is important for the 'depth' column in the resulting DataFrame
+            base_path_parts_len = len(base_path.parts)
+
+            for root, _, files in os.walk(base_path):
+                current_root_path = Path(root)
+                for file_name in files:
+                    file_path = current_root_path / file_name
+                    file_extension = file_path.suffix[1:].lower()
+
+                    # Only process files with selected extensions
+                    if file_extension in lower_selected_ext:
+                        try:
+                            stat = file_path.stat()
+                            basic_metadata = {
+                                "path": str(file_path),
+                                "name": file_name,
+                                "type": "file",
+                                "parent": str(file_path.parent),
+                                # Calculate depth relative to the `base_path` used in this specific os.walk
+                                "depth": len(file_path.parts) - base_path_parts_len,
+                                "size_bytes": stat.st_size,
+                                # Use timezone.utc to ensure timezone-aware datetime objects,
+                                # which is good practice for consistent timestamps.
+                                "modification_date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                                "file_extension": file_extension,
+                                "size_readable": format_bytes_to_human_readable(stat.st_size),
+                                "imported_path": str(base_path)
+                            }
+                            # Extract deep image metadata in the same pass
+                            image_specific_metadata = extract_image_metadata(file_path, required_metadata_cols)
+                            # Combine all metadata for this file
+                            combined_metadata = {**basic_metadata, **image_specific_metadata}
+                            all_image_data_records.append(combined_metadata)
+                        except OSError as e:
+                            logger.warning(f"Could not stat or access file '{file_path}': {e}")
+                        except Exception as e:
+                            logger.warning(f"Error extracting image metadata for '{file_path}': {e}")
+        except Exception as e:
+            logger.error(f"Error during direct scan for path '{base_path}': {e}", exc_info=True)
+    if not all_image_data_records:
+        logger.info(f"No image files found for extensions {selected_extensions}.")
+        return None
+
+    temp_df = pl.DataFrame(all_image_data_records)  # Create DataFrame from the collected records
+    # Ensure the DataFrame has all expected columns from PATHS_DF_EXPECTED_SCHEMA,
+    # filled with nulls if missing, and cast to correct types. This makes the output
+    # consistent with `paths_df` schema for basic file properties.
+    final_df = temp_df.select([pl.col(col).cast(PATHS_DF_EXPECTED_SCHEMA[col]) if col in temp_df.columns else pl.lit(
+        None, dtype=PATHS_DF_EXPECTED_SCHEMA[col]).alias(col) for col in PATHS_DF_EXPECTED_SCHEMA])
+    logger.debug(f"DEBUG: Direct image scan completed, found {final_df.height} files.")
+    return final_df
 
 
 ###################################### Other #####################################################

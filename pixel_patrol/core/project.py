@@ -141,7 +141,6 @@ class Project:
         logger.info(f"Project Core: Attempting to set project settings for '{self.name}'.")
 
         # Handle selected_file_extensions first.
-        # This helper modifies the 'settings' object (specifically settings.selected_file_extensions) in place.
         self._set_selected_file_extensions(settings)
 
         # Validate cmap: Must be a valid Matplotlib colormap
@@ -158,20 +157,46 @@ class Project:
             raise ValueError("Number of example images must be an integer between 1 and 19 (i.e., positive and below 20).")
 
         # All validations passed, apply the new settings.
-        # The 'settings' object already has its selected_file_extensions potentially updated
-        # by _set_selected_file_extensions.
         self.settings = settings
         logger.info(f"Project Core: Project settings updated for '{self.name}'.")
         return self
 
+    def process_images(self, settings: Optional[Settings] = None) -> "Project":
+        """
+        Processes images in the project, building the `images_df`.
 
-    def process_images(self) -> "Project":
+        This method offers an optimized workflow:
+        - If `paths_df` does not exist, it performs a single, targeted file system scan
+          to build `images_df` directly.
+        - If `paths_df` already exists (meaning `process_paths()` was previously called),
+          it leverages this existing DataFrame, filters it, and then extracts image metadata.
+
+        Any `settings` provided as an argument will first be applied to the project
+        (validated and persisted), and then the image processing will use the project's
+        (potentially updated) settings for filtering and metadata extraction.
+
+        Args:
+            settings: An optional Settings object to apply to the project
+                      before processing images. If None, the project's current
+                      settings (self.settings) will be used without modification.
+
+        Returns:
+            The Project instance with the `images_df` updated.
+        """
+        # Apply settings if provided (this also handles validation and persistence)
+        if settings is not None:
+            logger.info("Project Core: Applying provided settings before processing images.")
+            self.set_settings(settings)  # This method ensures validation and updates self.settings
+
         if self.paths_df is None:
-            logger.error("Project Core: Cannot build images DataFrame. paths_df is None. Call .process_paths() first.")
-            raise ValueError("Preprocessing has not produced any data (paths_df is None). Call .process_paths() first and ensure paths contain data.")
+            # Optimized path: paths_df is not built, so perform a targeted direct scan for images
+            self.images_df = self._process_images_from_file_system()
         else:
-            self.images_df = processing.build_images_df(self.paths_df, self.settings, self.widgets)
+            # Standard Path: paths_df exists, filter it and then extract deep metadata
+            self.images_df = self._process_images_from_paths_df()
+
         return self
+
 
     def generate_report(self, dest: Path) -> None:
         report.generate_report(self.images_df, dest)
@@ -271,52 +296,50 @@ class Project:
         return final_paths_set
 
 
-    def _set_selected_file_extensions(self, new_settings: Settings) -> None: # Removed '-> Settings' return type
-
+    def _set_selected_file_extensions(self, new_settings: Settings) -> None:
+        """
+        Handles the setting of `selected_file_extensions` within the Settings object.
+        Performs validation and filtering against supported extensions.
+        Raises ValueError if extensions are attempted to be changed after initial definition.
+        """
         current_extensions_value = self.settings.selected_file_extensions
         new_extensions_input = new_settings.selected_file_extensions
 
-        extensions_previously_defined = not(isinstance(current_extensions_value, Set) and not current_extensions_value)
-
-        if extensions_previously_defined:
-            if new_extensions_input == current_extensions_value or \
-               (isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all" and current_extensions_value == DEFAULT_PRESELECTED_FILE_EXTENSIONS) or \
-               (isinstance(current_extensions_value, str) and current_extensions_value.lower() == "all" and new_extensions_input == DEFAULT_PRESELECTED_FILE_EXTENSIONS):
-                logger.info(f"Project Core: File extensions remain unchanged as '{current_extensions_value}'.")
-                return
-
-            logger.error(f"Project Core: Attempted to change file extensions from '{current_extensions_value}' to '{new_extensions_input}'.")
-            raise ValueError("File extensions cannot be changed once they have been defined for the project.")
-
-        if isinstance(new_extensions_input, str):
-            if new_extensions_input.lower() == "all":
-                new_settings.selected_file_extensions = DEFAULT_PRESELECTED_FILE_EXTENSIONS
-                logger.info("Project Core: Set file extensions to 'all' supported types.")
-            else:
-                logger.error(f"Project Core: Invalid string value for selected_file_extensions: '{new_extensions_input}'.")
-                raise ValueError(
-                    f"Invalid string value for selected_file_extensions: '{new_extensions_input}'. "
-                    "Must be 'all' (case-insensitive) or a Set of strings."
-                )
-        elif isinstance(new_extensions_input, Set):
-            if not new_extensions_input: # Empty set provided for the first time
-                new_settings.selected_file_extensions = set()
-                logger.info("Project Core: File extensions remain undefined (empty set).")
-            else: # Non-empty set provided for the first time
-                processed_extensions = self._validate_and_filter_extensions(new_extensions_input)
-                if not processed_extensions:
-                    new_settings.selected_file_extensions = set() # Explicitly set to empty if no supported extensions
-                    logger.warning("Project Core: No supported file extensions provided. The selected_file_extensions will be empty.")
-                else:
-                    logger.info(f"Project Core: Set file extensions to: {processed_extensions}.")
-                new_settings.selected_file_extensions = processed_extensions # Apply the filtered set
-        else:
-            # For an invalid type, we still explicitly set to an empty set to ensure state consistency
-            new_settings.selected_file_extensions = set()
-            logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(new_extensions_input)}. Defaulting to empty set.")
+        if isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
+            new_extensions_input = DEFAULT_PRESELECTED_FILE_EXTENSIONS
+        elif not isinstance(new_extensions_input, Set):
+            logger.error(
+                f"Project Core: Invalid type for selected_file_extensions: {type(new_extensions_input)}. Defaulting to empty set.")
             raise TypeError(
                 "selected_file_extensions must be 'all' (string) or a Set of strings."
             )
+        else:
+            if not new_extensions_input:
+                logger.warning(
+                    "Project Core: No file extensions provided. Defaulting to empty set.")
+                return
+            else:
+                new_extensions_input = self._validate_and_filter_extensions(new_extensions_input)
+                if not new_extensions_input:
+                    logger.warning(
+                        "Project Core: No supported file extensions provided. The selected_file_extensions will be empty.")
+                    return
+
+        if (current_extensions_value
+                and isinstance(current_extensions_value, Set)
+                and current_extensions_value == new_extensions_input):
+            logger.info(f"Project Core: File extensions remain unchanged as '{current_extensions_value}'.")
+            return
+
+        is_current_value_defined = bool(current_extensions_value)
+
+        if is_current_value_defined:
+            logger.error(
+                f"Project Core: Attempted to change file extensions from '{current_extensions_value}' to '{new_extensions_input}'.")
+            raise ValueError("File extensions cannot be changed once they have been defined for the project.")
+
+        new_settings.selected_file_extensions = new_extensions_input
+        logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
 
 
     def _validate_and_filter_extensions(self, extensions: Set[str]) -> Set[str]:
@@ -334,3 +357,61 @@ class Project:
                 f"Supported extensions (after filtering): {', '.join(sorted(supported_extensions))}."
             )
         return supported_extensions
+
+    def _process_images_from_file_system(self) -> Optional[pl.DataFrame]:
+        """
+        Private method to build images_df by performing a direct, single-pass scan
+        of the file system for specified image extensions when paths_df is not available.
+        """
+        # self.settings.selected_file_extensions is guaranteed to be a Set[str] here
+        actual_extensions_for_scan = self.settings.selected_file_extensions
+        assert isinstance(actual_extensions_for_scan, Set), "selected_file_extensions must be a Set[str] at this point."
+
+        if not actual_extensions_for_scan:
+            logger.warning(
+                "Project Core: No image file extensions selected. Cannot build images DataFrame via direct file system scan.")
+            return None
+
+        logger.info("Project Core: paths_df not built. Performing direct file system scan for images.")
+        # This function now returns the full images_df directly
+        images_df = processing.build_images_df_from_file_system(self.paths, actual_extensions_for_scan, self.widgets)
+
+        if images_df is None or images_df.is_empty():
+            logger.warning(
+                "Project Core: No image files found via direct file system scan for the specified extensions. images_df will be None.")
+            return None
+
+        return images_df
+
+
+    def _process_images_from_paths_df(self) -> Optional[pl.DataFrame]:
+        """
+        Private method to build images_df by leveraging an existing paths_df.
+        It filters paths_df for image files and then extracts deep metadata.
+        """
+        logger.info("Project Core: paths_df exists. Filtering it for images and extracting metadata.")
+
+        if self.paths_df.is_empty():
+            logger.warning("Project Core: Existing paths_df is empty. Cannot filter for images. images_df will be None.")
+            return None
+
+        # self.settings.selected_file_extensions is guaranteed to be a Set[str] here
+        actual_extensions_for_scan = self.settings.selected_file_extensions
+
+        if not actual_extensions_for_scan:
+            logger.warning("Project Core: No image file extensions selected. Cannot filter existing paths_df. images_df will be None.")
+            return None
+
+        # Filter the existing paths_df by the determined actual_extensions_for_scan
+        filtered_paths_df_for_images = self.paths_df.filter(
+            (pl.col("type") == "file") &
+            (pl.col("file_extension").str.to_lowercase().is_in(list(actual_extensions_for_scan)))
+        )
+
+        if filtered_paths_df_for_images.is_empty():
+            logger.warning(f"Project Core: No image files found in existing paths_df for extensions {actual_extensions_for_scan}. images_df will be None.")
+            return None
+
+        # Pass the already filtered DataFrame to _build_images_df_from_paths_df for deep metadata extraction
+        return processing.build_images_df_from_paths_df(filtered_paths_df_for_images, self.widgets)
+

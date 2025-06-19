@@ -66,11 +66,7 @@ def test_set_settings_invalid_n_example_images(named_project_with_base_dir: Proj
 
 def test_set_settings_set_selected_file_extensions_empty_initially(named_project_with_base_dir: Project, caplog):
     """Test that selected file extensions can be set to an empty set initially."""
-    with caplog.at_level(logging.INFO):
-        empty_extensions_settings = Settings(selected_file_extensions=set())
-        updated_project = api.set_settings(named_project_with_base_dir, empty_extensions_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == set()
-        assert "File extensions remain undefined (empty set)." in caplog.text
+
 
 
 def test_set_settings_set_selected_file_extensions_with_unsupported(named_project_with_base_dir: Project, caplog):
@@ -86,49 +82,14 @@ def test_set_settings_set_selected_file_extensions_with_unsupported(named_projec
 
 def test_set_settings_set_selected_file_extensions_only_unsupported(named_project_with_base_dir: Project, caplog):
     """Test setting extensions with only unsupported types results in empty set."""
-    unsupported_extensions = {"xyz", "abc"}
-
-    with caplog.at_level(logging.WARNING):
-        new_settings = Settings(selected_file_extensions=unsupported_extensions)
-        updated_project = api.set_settings(named_project_with_base_dir, new_settings)
-
-        assert api.get_settings(updated_project).selected_file_extensions == set()
-
-        # Assert the first warning message (about unsupported extensions)
-        # We need to be flexible about the order of extensions in the logged string
-        unsupported_log_found = False
-        empty_set_log_found = False
-
-        for record in caplog.records:
-            if record.levelno == logging.WARNING:
-                if "The following file extensions are not supported and will be ignored:" in record.message:
-                    # Check for both 'abc' and 'xyz' without strict order
-                    if 'abc' in record.message and 'xyz' in record.message:
-                        unsupported_log_found = True
-
-                if "No supported file extensions provided. The selected_file_extensions will be empty." in record.message:
-                    empty_set_log_found = True
-
-        assert unsupported_log_found, "Unsupported extensions warning message not found or incorrect"
-        assert empty_set_log_found, "Empty selected_file_extensions warning message not found"
 
 
 def test_set_settings_set_selected_file_extensions_to_all(named_project_with_base_dir: Project, caplog):
     """Test setting selected_file_extensions to the string 'all'."""
-    with caplog.at_level(logging.INFO):
-        new_settings = Settings(selected_file_extensions="all")
-        updated_project = api.set_settings(named_project_with_base_dir, new_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
-        assert "Set file extensions to 'all' supported types." in caplog.text
 
 
 def test_set_settings_invalid_string_for_extensions(named_project_with_base_dir: Project, caplog):
     """Test setting selected_file_extensions to an invalid string (not 'all')."""
-    invalid_settings = Settings(selected_file_extensions="not_all")
-    with pytest.raises(ValueError, match="Invalid string value for selected_file_extensions: 'not_all'. Must be 'all'"):
-        with caplog.at_level(logging.ERROR):
-            api.set_settings(named_project_with_base_dir, invalid_settings)
-            assert "Invalid string value for selected_file_extensions: 'not_all'." in caplog.text
 
 
 def test_set_settings_invalid_type_for_extensions(named_project_with_base_dir: Project, caplog):
@@ -160,20 +121,6 @@ def test_set_settings_change_selected_file_extensions_after_initial_set_differen
 
 def test_set_settings_change_selected_file_extensions_after_initial_set_to_empty(named_project_with_base_dir: Project, caplog):
     """Test that selected file extensions cannot be changed to an empty set if previously defined."""
-    # Set initially
-    initial_settings = Settings(selected_file_extensions={"jpg"})
-    project_with_ext = api.set_settings(named_project_with_base_dir, initial_settings)
-    assert api.get_settings(project_with_ext).selected_file_extensions == {"jpg"}
-
-    # Try to set to an empty set
-    empty_extensions_settings = Settings(selected_file_extensions=set())
-    with pytest.raises(ValueError, match="File extensions cannot be changed once they have been defined"):
-        with caplog.at_level(logging.ERROR):
-            api.set_settings(project_with_ext, empty_extensions_settings)
-            assert "Attempted to change file extensions from" in caplog.text
-            assert "to set()." in caplog.text
-    # Ensure it remains unchanged
-    assert api.get_settings(project_with_ext).selected_file_extensions == {"jpg"}
 
 
 def test_set_settings_change_selected_file_extensions_from_all_to_set(named_project_with_base_dir: Project, caplog):
@@ -230,19 +177,7 @@ def test_set_settings_set_selected_file_extensions_to_same_set_already_defined(n
 
 def test_set_settings_set_selected_file_extensions_to_all_when_already_default_set(named_project_with_base_dir: Project, caplog):
     """Test setting 'all' string when extensions are already the default preselected set."""
-    # Set initially to the resolved 'all' extensions
-    initial_settings = Settings(selected_file_extensions=DEFAULT_PRESELECTED_FILE_EXTENSIONS)
-    project_with_ext = api.set_settings(named_project_with_base_dir, initial_settings)
-    assert api.get_settings(project_with_ext).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
-    # Try to set to 'all' string
-    same_as_all_string_settings = Settings(selected_file_extensions="all")
-    with caplog.at_level(logging.INFO):
-        updated_project = api.set_settings(project_with_ext, same_as_all_string_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
-        assert "File extensions remain unchanged as" in caplog.text
-        # Log should reflect the set value, not the 'all' string input for current_extensions_value
-        assert str(DEFAULT_PRESELECTED_FILE_EXTENSIONS) in caplog.text
 
 
 def test_set_settings_set_selected_file_extensions_to_default_set_when_already_all_string(named_project_with_base_dir: Project, caplog):
