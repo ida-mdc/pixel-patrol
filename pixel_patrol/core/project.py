@@ -305,8 +305,18 @@ class Project:
         current_extensions_value = self.settings.selected_file_extensions
         new_extensions_input = new_settings.selected_file_extensions
 
+        if bool(current_extensions_value):
+            logger.info(
+                f"Project Core: File extensions are already set to '{current_extensions_value}'. No changes allowed.")
+            new_settings.selected_file_extensions = current_extensions_value
+            return
+
         if isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
             new_extensions_input = DEFAULT_PRESELECTED_FILE_EXTENSIONS
+            new_settings.selected_file_extensions = new_extensions_input
+            logger.info(
+                f"Project Core: Selected file extensions set to 'all'. Using default preselected extensions: {new_extensions_input}.")
+            return
         elif not isinstance(new_extensions_input, Set):
             logger.error(
                 f"Project Core: Invalid type for selected_file_extensions: {type(new_extensions_input)}. Defaulting to empty set.")
@@ -317,26 +327,15 @@ class Project:
             if not new_extensions_input:
                 logger.warning(
                     "Project Core: No file extensions provided. Defaulting to empty set.")
+                new_settings.selected_file_extensions = set()
                 return
             else:
                 new_extensions_input = self._validate_and_filter_extensions(new_extensions_input)
                 if not new_extensions_input:
+                    new_settings.selected_file_extensions = set()
                     logger.warning(
                         "Project Core: No supported file extensions provided. The selected_file_extensions will be empty.")
                     return
-
-        if (current_extensions_value
-                and isinstance(current_extensions_value, Set)
-                and current_extensions_value == new_extensions_input):
-            logger.info(f"Project Core: File extensions remain unchanged as '{current_extensions_value}'.")
-            return
-
-        is_current_value_defined = bool(current_extensions_value)
-
-        if is_current_value_defined:
-            logger.error(
-                f"Project Core: Attempted to change file extensions from '{current_extensions_value}' to '{new_extensions_input}'.")
-            raise ValueError("File extensions cannot be changed once they have been defined for the project.")
 
         new_settings.selected_file_extensions = new_extensions_input
         logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
