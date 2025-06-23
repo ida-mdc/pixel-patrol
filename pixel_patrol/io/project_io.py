@@ -218,10 +218,9 @@ def _reconstruct_project_core_data(metadata_content: Dict[str, Any]) -> Project:
         settings_dict = {}
 
     project = Project(name, Path.cwd())  # Initialize with a dummy base_dir first, then update
-
     if base_dir_str is not None:
         try:
-            project.set_base_dir_internal(Path(base_dir_str))
+            project.base_dir = Path(base_dir_str)  # Corrected line
         except (FileNotFoundError, ValueError) as e:
             logger.warning(
                 f"Project IO: Could not set base directory '{base_dir_str}' for imported project: {e}. Project will retain initial base_dir.")
