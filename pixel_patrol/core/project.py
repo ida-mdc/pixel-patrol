@@ -23,7 +23,6 @@ class Project:
         validation.validate_project_name(name)
         self.name: str = name
 
-        self.base_dir: Optional[Path] = None
         self.base_dir = base_dir
 
         self.paths: List[Path] = [self.base_dir]
