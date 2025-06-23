@@ -7,8 +7,6 @@ from pixel_patrol.api import (
     process_paths,
     set_settings,
     process_images,
-    export_project,
-    get_paths_df,
     get_images_df, show_report,
 )
 from pixel_patrol.core.project_settings import Settings  # Still needed for Settings object
@@ -20,14 +18,14 @@ logger = logging.getLogger(__name__)
 # --- Main Execution ---
 if __name__ == "__main__":
     # Define the path to your test data directory relative to this script
-    test_data_directory = Path(__file__).parent / "tests" / "data"
+    test_data_directory = Path(__file__).parent.parent / "tests" / "data"
 
     # Define the output directory for the exported project
     output_directory = Path(__file__).parent / "exported_projects"
     output_directory.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
 
     # Define the path for the exported zip file
-    exported_project_path = output_directory / "my_exported_project.zip"
+    exported_project_path = output_directory / "my_exported_project1.zip"
 
     # Ensure the test data directory exists (optional, for robustness)
     if not test_data_directory.is_dir():
@@ -35,7 +33,7 @@ if __name__ == "__main__":
         exit(1)
 
     # 1. Create a new project (using API)
-    my_project = create_project("Test Project for API Run", Path.cwd())
+    my_project = create_project("Test Project for API Run", Path(__file__).parent.parent)
 
     # 2. Add the test data directory paths (using API)
     my_project = add_paths(my_project, test_data_directory)
