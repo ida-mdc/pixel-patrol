@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # --- Main Execution ---
 if __name__ == "__main__":
     # Define the path to your test data directory relative to this script
-    test_data_directory = Path(__file__).parent / "tests" / "data"
+    test_data_directory = Path(__file__).parent.parent / "tests" / "data"
 
     # Define the output directory for the exported project
     output_directory = Path(__file__).parent / "exported_projects"
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         exit(1)
 
     # 1. Create a new project (using API)
-    my_project = create_project("Test Project for API Run", Path.cwd())
+    my_project = create_project("Test Project for API Run", Path(__file__).parent.parent)
 
     # 2. Add the test data directory paths (using API)
     my_project = add_paths(my_project, test_data_directory)
