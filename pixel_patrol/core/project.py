@@ -5,26 +5,26 @@ import logging
 
 from pixel_patrol.core.project_settings import Settings
 from  pixel_patrol.core import processing, report, validation
-from pixel_patrol.utils.path_utils import is_subpath, is_superpath
-from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 import polars as pl
 
 from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
 from pixel_patrol.utils.widget import load_widgets
+from pixel_patrol.utils.path_utils import process_new_paths_for_redundancy
+from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
+
 
 logger = logging.getLogger(__name__)
+
 
 class Project:
 
     def __init__(self, name: str, base_dir: Union[str, Path]): # base_dir is now mandatory
 
-        if not name or not name.strip():
-            logger.error("Project Core: Project name cannot be empty or just whitespace.")
-            raise ValueError("Project name cannot be empty or just whitespace.")
+        validation.validate_project_name(name)
         self.name: str = name
 
         self.base_dir: Optional[Path] = None
-        self.set_base_dir_internal(base_dir)
+        self.base_dir = base_dir
 
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
@@ -39,36 +39,28 @@ class Project:
         logger.info(f"Project Core: Project '{self.name}' initialized with base dir: {self.base_dir}.")
 
 
-    def set_base_dir_internal(self, base_dir: Union[str, Path]) -> None:
-        """Internal method to set and validate base_dir during initialization."""
-        logger.info(f"Project Core: Attempting to set project base directory to '{base_dir}'.")
-        resolved_base = Path(base_dir).resolve()
+    @property
+    def base_dir(self) -> Optional[Path]:
+        """Get the project base directory."""
+        return self._base_dir
 
-        if not resolved_base.exists():
-            logger.error(f"Project Core: Specified project base directory not found: {resolved_base}.")
-            raise FileNotFoundError(f"Project base directory not found: {resolved_base}")
-        if not resolved_base.is_dir():
-            logger.error(f"Project Core: Specified project base directory is not a directory: {resolved_base}.")
-            raise ValueError(f"Project base directory is not a directory: {resolved_base}")
-
-        self.base_dir = resolved_base
-        logger.info(f"Project Core: Project base directory set to: '{self.base_dir}'.")
+    @base_dir.setter
+    def base_dir(self, value: Union[str, Path]) -> None:
+        """Set and validate the project base directory."""
+        logger.info(f"Project Core: Attempting to set project base directory to '{value}'.")
+        resolved_base = validation.resolve_and_validate_base_dir(value)
+        self._base_dir = resolved_base
+        logger.info(f"Project Core: Project base directory set to: '{self._base_dir}'.")
 
 
     def add_paths(self, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> "Project":
         logger.info(f"Project Core: Attempting to add paths to project '{self.name}'.")
 
-        if isinstance(paths, (str, Path)):
-            paths_to_add_raw = [paths]
-        elif isinstance(paths, Iterable):
-            paths_to_add_raw = list(paths)
-        else:
-            logger.error("Project Core: Invalid paths type provided. Must be str, Path, or an iterable.")
-            raise TypeError("Paths must be a string, Path, or an iterable of strings/Paths.")
+        paths_to_add_raw = validation.validate_paths_type(paths)
 
         validated_paths_to_process = []
         for p_input in paths_to_add_raw:
-            validated_path = self._is_valid_path_for_project(p_input)
+            validated_path = validation.resolve_and_validate_project_path(p_input, self.base_dir)
             if validated_path:
                 validated_paths_to_process.append(validated_path)
 
@@ -78,13 +70,12 @@ class Project:
 
         initial_paths_set = set(self.paths)
         temp_final_paths_set = set(self.paths).copy()  # Start with current paths
-
         if len(self.paths) == 1 and self.paths[0] == self.base_dir:
             logger.info(
                 "Project Core: Explicit paths being added, removing base directory from initial paths set for redundancy check.")
             temp_final_paths_set.clear()
 
-        updated_paths_set = self._process_new_paths_for_redundancy(
+        updated_paths_set = process_new_paths_for_redundancy(
             validated_paths_to_process,
             temp_final_paths_set  # Use the potentially modified set
         )
@@ -100,10 +91,11 @@ class Project:
         logger.debug(f"Project Core: Current project paths: {self.paths}")
         return self
 
+
     def delete_path(self, path: Union[str, Path]) -> "Project":
         logger.info(f"Project Core: Attempting to delete path '{path}' from project '{self.name}'.")
 
-        resolved_p_to_delete = self._is_valid_path_for_project(path)
+        resolved_p_to_delete = validation.resolve_and_validate_project_path(path, self.base_dir)
 
         if resolved_p_to_delete is None:
             logger.error(f"Project Core: Invalid or inaccessible path '{path}' provided for deletion. Cannot proceed.")
@@ -160,6 +152,7 @@ class Project:
         self.settings = settings
         logger.info(f"Project Core: Project settings updated for '{self.name}'.")
         return self
+
 
     def process_images(self, settings: Optional[Settings] = None) -> "Project":
         """
@@ -224,77 +217,6 @@ class Project:
         """Get the single DataFrame containing processed data."""
         return self.images_df
 
-    def _is_valid_path_for_project(self, raw_path: Union[str, Path]) -> Optional[Path]:
-
-        try:
-            candidate_path = Path(raw_path)
-            resolved_path = candidate_path.resolve() if candidate_path.is_absolute() else (self.base_dir / candidate_path).resolve()
-
-            if not resolved_path.exists():
-                logger.warning(
-                    f"Project Core: Path not found and will be skipped: {raw_path} (resolved to {resolved_path})."
-                )
-                return None
-            if not resolved_path.is_dir():
-                logger.warning(
-                    f"Project Core: Path is not a directory and will be skipped: {raw_path} (resolved to {resolved_path})."
-                )
-                return None
-
-            try:
-                resolved_path.relative_to(self.base_dir)  # TODO: I think this is inclusive, and thus confusing - maybe need to change.
-            except ValueError:
-                logger.warning(
-                    f"Project Core: Path '{resolved_path}' is not within the project base directory "
-                    f"'{resolved_path}' and will be skipped."
-                )
-                return None
-
-            return resolved_path
-
-
-        except Exception as e:
-            logger.error(
-                f"Project Core: Error validating path '{raw_path}': {e}", exc_info=True
-            )
-            return None
-
-    @staticmethod
-    def _process_new_paths_for_redundancy(validated_paths: List[Path], existing_paths_set: set[Path]) -> set[
-        Path]:
-        """
-        Processes a list of new validated paths, handling redundancy (subpaths/superpaths)
-        against a set of existing paths. Returns the updated set of paths.
-        """
-        final_paths_set = existing_paths_set.copy()
-
-        for new_candidate_path in validated_paths:
-            is_subpath_of_existing = False
-
-            # Check against paths already in the final_paths_set (which includes existing + previous new candidates)
-            for existing_path_in_set in list(final_paths_set): # Iterate over a copy to allow modification
-                # If the new path is a subpath of an existing one, skip it
-                if is_subpath(new_candidate_path, existing_path_in_set):
-                    logger.warning(
-                        f"Project Core: Path '{new_candidate_path}' is a subpath of existing project path "
-                        f"'{existing_path_in_set}' and will be skipped to avoid redundancy."
-                    )
-                    is_subpath_of_existing = True
-                    break
-                # If the new path is a superpath of an existing one, remove the existing (redundant) path
-                elif is_superpath(new_candidate_path, existing_path_in_set):
-                    logger.info(
-                        f"Project Core: Path '{new_candidate_path}' is a superpath of existing project path "
-                        f"'{existing_path_in_set}'. Removing the subpath."
-                    )
-                    final_paths_set.remove(existing_path_in_set)
-
-            if not is_subpath_of_existing:
-                # Add the new candidate if it's not a subpath of any other existing/new path
-                final_paths_set.add(new_candidate_path)
-
-        return final_paths_set
-
 
     def _set_selected_file_extensions(self, new_settings: Settings) -> None:
         """
@@ -330,7 +252,7 @@ class Project:
                 new_settings.selected_file_extensions = set()
                 return
             else:
-                new_extensions_input = self._validate_and_filter_extensions(new_extensions_input)
+                new_extensions_input = validation.validate_and_filter_extensions(new_extensions_input)
                 if not new_extensions_input:
                     new_settings.selected_file_extensions = set()
                     logger.warning(
@@ -340,22 +262,6 @@ class Project:
         new_settings.selected_file_extensions = new_extensions_input
         logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
 
-
-    def _validate_and_filter_extensions(self, extensions: Set[str]) -> Set[str]:
-        """
-        Helper method to filter user-provided extensions against supported ones
-        and log warnings for unsupported extensions.
-        """
-        supported_extensions = extensions.intersection(DEFAULT_PRESELECTED_FILE_EXTENSIONS)
-        unsupported_extensions = extensions - supported_extensions
-
-        if unsupported_extensions:
-            logger.warning(
-                f"Project Core: The following file extensions are not supported and will be ignored: "
-                f"{', '.join(unsupported_extensions)}. "
-                f"Supported extensions (after filtering): {', '.join(sorted(supported_extensions))}."
-            )
-        return supported_extensions
 
     def _process_images_from_file_system(self) -> Optional[pl.DataFrame]:
         """
