@@ -61,10 +61,6 @@ def _write_dataframe_to_parquet(
 
 
 def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
-    """
-    Prepares the project's metadata content as a dictionary for YAML serialization.
-    Ensures 'name' comes before 'base_dir' and 'results' is excluded.
-    """
     metadata_content = {
         'name': project.name,  # Ensure name is first
         'base_dir': str(project.base_dir) if project.base_dir else None,
@@ -197,15 +193,10 @@ def _read_and_validate_metadata(tmp_path: Path, src_archive: Path) -> Dict[str, 
 
 
 def _reconstruct_project_core_data(metadata_content: Dict[str, Any]) -> Project:
-    """
-    Reconstructs the core Project attributes (name, paths, settings, results) from metadata.
-    'results' are no longer expected in the metadata.
-    """
     name = metadata_content.get('name', 'Imported Project')
     base_dir_str = metadata_content.get('base_dir')
     paths_str_list = metadata_content.get('paths', [])
     settings_dict = metadata_content.get('settings', {})
-    # REMOVED: results = metadata_content.get('results') # No longer read from metadata
 
     if not isinstance(paths_str_list, list):
         logger.warning(

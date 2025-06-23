@@ -107,7 +107,7 @@ def test_add_paths_non_existent_path_is_skipped(project_instance: Project, tmp_p
     with caplog.at_level(logging.WARNING):
         api.add_paths(project_instance, str(non_existent_path))
     assert project_instance.paths == [project_instance.base_dir]  # Path should not be added, base_dir preserved
-    assert "Path not found and will be skipped" in caplog.text
+    assert "Path not valid ('not found') and will be skipped" in caplog.text
 
 
 def test_add_paths_file_is_skipped(project_instance: Project, tmp_path: Path, caplog):
@@ -118,7 +118,7 @@ def test_add_paths_file_is_skipped(project_instance: Project, tmp_path: Path, ca
     with caplog.at_level(logging.WARNING):
         api.add_paths(project_instance, str(test_file))
     assert project_instance.paths == [project_instance.base_dir]  # File should not be added, base_dir preserved
-    assert "Path is not a directory and will be skipped" in caplog.text
+    assert "Path not valid ('not a directory') and will be skipped" in caplog.text
 
 
 def test_add_paths_path_outside_base_is_skipped(project_instance: Project, tmp_path: Path, caplog):

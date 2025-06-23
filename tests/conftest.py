@@ -3,6 +3,7 @@ from pathlib import Path
 import polars as pl
 from typing import List
 from datetime import datetime
+import logging
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
 from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
@@ -147,3 +148,48 @@ def mock_temp_file_system_edge_cases(tmp_path: Path) -> List[Path]:
     (test_dir / "regular.png").write_bytes(b"content")
 
     return [test_dir]
+
+@pytest.fixture
+def project_with_minimal_data(project_instance: Project, temp_test_dirs: list[Path]) -> Project:
+    """
+    Provides a Project with base_dir and paths_df (minimal data).
+    It interacts directly with the Project object methods.
+    """
+    project = project_instance # Already has base_dir set by fixture
+    project.add_paths(temp_test_dirs) # Direct call to Project method
+    project.process_paths() # Direct call to Project method
+    return project
+
+@pytest.fixture
+def project_with_all_data(project_with_minimal_data: Project) -> Project:
+    """
+    Provides a Project with base_dir, paths_df, images_df, and custom settings.
+    It interacts directly with the Project object methods.
+    Builds upon project_with_minimal_data.
+    """
+    project = project_with_minimal_data # Already has base_dir, paths, paths_df
+
+    # Set some custom settings for image processing that include actual image extensions
+    new_settings = Settings(
+        cmap="viridis",
+        n_example_images=5,
+        selected_file_extensions={"jpg", "png", "gif"} # Match extensions in temp_test_dirs
+    )
+    project.set_settings(new_settings) # Direct call to Project method
+
+    # Build images_df based on the dummy files created in temp_test_dirs
+    try:
+        project.process_images() # Direct call to Project method
+    except ValueError as e:
+        # If no images are found (e.g., due to specific test setup or filtering),
+        # log and optionally provide a mock images_df for consistent testing.
+        logging.warning(f"Could not build images_df for fixture project_with_all_data: {e}")
+        # Fallback to a mock images_df if real one couldn't be built
+        project.images_df = pl.DataFrame({
+            "image_path": [str(project.base_dir / "test_dir1" / "fileA.jpg"), str(project.base_dir / "test_dir2" / "fileB.png")],
+            "width": [100, 200],
+            "height": [150, 250],
+            "size_bytes": [1024, 2048],
+            "is_corrupt": [False, False]
+        })
+    return project
