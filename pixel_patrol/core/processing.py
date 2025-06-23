@@ -7,9 +7,7 @@ import logging
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
-from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata
-from pixel_patrol.utils.widget import get_required_columns
-from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
+from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata, available_columns
 
 logger = logging.getLogger(__name__)
 
@@ -202,9 +200,7 @@ def preprocess_files(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame,
-                                   widgets: List[PixelPatrolWidget]) -> \
-                                                        Optional[pl.DataFrame]:
+def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame) -> Optional[pl.DataFrame]:
     """
     Extracts deep image-specific metadata for files already pre-filtered into `paths_df_subset`.
     This function assumes `paths_df_subset` contains only the relevant image files.
@@ -212,8 +208,6 @@ def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame,
     Args:
         paths_df_subset: A Polars DataFrame containing basic file system metadata for image files.
                          This DataFrame should already be filtered by file type and extension.
-        widgets: A list of PixelPatrolWidget instances used to determine required metadata columns.
-
     Returns:
         An Optional Polars DataFrame containing combined basic and image-specific metadata,
         or None if no valid image data is available.
@@ -231,8 +225,7 @@ def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame,
     dataframe_images = preprocess_files(paths_df_subset)
     logger.info(f"Images DataFrame preprocessed. Columns: {dataframe_images.columns}")
 
-    # Get required columns from widgets
-    required_columns = get_required_columns(widgets)
+    required_columns = available_columns()
     logger.info(f"Required columns for metadata extraction: {required_columns}")
 
     # Extract metadata and process files
@@ -262,14 +255,12 @@ def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame,
         else:
             logger.warning("No valid deep metadata extracted for any images.")
     else:
-        logger.info("No specific deep metadata columns required by widgets. Skipping deep metadata extraction.")
+        logger.info("No specific deep metadata columns required. Skipping deep metadata extraction.")
 
     return dataframe_images
 
 
-def build_images_df_from_file_system(
-        paths: List[Path], selected_extensions: Set[str], widgets: List[PixelPatrolWidget]
-) -> Optional[pl.DataFrame]:
+def build_images_df_from_file_system(paths: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
     """
     Performs a single-pass scan over the file system to find image files,
     collect their basic file system metadata, and extract deep image-specific metadata.
@@ -278,7 +269,7 @@ def build_images_df_from_file_system(
     logger.debug(f"DEBUG: Starting direct optimized scan for image files with extensions: {selected_extensions}")
     all_image_data_records = []
     lower_selected_ext = {ext.lower() for ext in selected_extensions}
-    required_metadata_cols = get_required_columns(widgets)
+    required_metadata_cols = available_columns()
 
     for base_path in paths:
         if not base_path.is_dir():

@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 SPRITE_SIZE = 64
 
 
+
+def available_columns() -> List[str]:
+    keys = list(_mapping_for_np_array_processing_by_column_name().keys())
+    keys.extend(_mapping_for_bioimage_metadata_by_column_name())
+    return keys
+
+
 def _mapping_for_np_array_processing_by_column_name() -> Dict[str, Callable]:
     """
     Maps column names (requested metadata fields) to functions that compute
@@ -790,4 +797,3 @@ def _generate_thumbnail_internal(np_array: np.array, dim_order: str) -> np.array
         logger.error(
             f"Error converting array to PIL Image or resizing for thumbnail: {e}. Array shape: {normalized_array.shape}, dtype: {normalized_array.dtype}")
         return np.array([])
-

@@ -2,13 +2,10 @@ from pathlib import Path
 from typing import Any, List, Union, Iterable, Optional, Set
 import logging
 
-
 from pixel_patrol.core.project_settings import Settings
-from  pixel_patrol.core import processing, report, validation
+from  pixel_patrol.core import processing, validation
 import polars as pl
 
-from pixel_patrol.widgets.widget_interface import PixelPatrolWidget
-from pixel_patrol.utils.widget import load_widgets
 from pixel_patrol.utils.path_utils import process_new_paths_for_redundancy
 from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
@@ -28,10 +25,6 @@ class Project:
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
-
-        self.widgets: List[PixelPatrolWidget] = load_widgets()
-        logger.info(f"Project Core: Discovered and activated {len(self.widgets)} total widget types via entry points.")
-
         self.images_df: Optional[pl.DataFrame] = None
         self.results: Any = None # HTML file? All plots? # TODO: Define a better type once decided
 
@@ -189,10 +182,6 @@ class Project:
 
         return self
 
-
-    def generate_report(self, dest: Path) -> None:
-        report.generate_report(self.images_df, dest)
-
     def get_name(self) -> str:
         """Get the project name."""
         return self.name
@@ -278,7 +267,7 @@ class Project:
 
         logger.info("Project Core: paths_df not built. Performing direct file system scan for images.")
         # This function now returns the full images_df directly
-        images_df = processing.build_images_df_from_file_system(self.paths, actual_extensions_for_scan, self.widgets)
+        images_df = processing.build_images_df_from_file_system(self.paths, actual_extensions_for_scan)
 
         if images_df is None or images_df.is_empty():
             logger.warning(
@@ -317,5 +306,5 @@ class Project:
             return None
 
         # Pass the already filtered DataFrame to _build_images_df_from_paths_df for deep metadata extraction
-        return processing.build_images_df_from_paths_df(filtered_paths_df_for_images, self.widgets)
+        return processing.build_images_df_from_paths_df(filtered_paths_df_for_images)
 
