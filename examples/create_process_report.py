@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     # 4. Set relevant settings (e.g., image extensions) (using API)
     initial_settings = Settings(
-        selected_file_extensions={"png", "tif", "jpg", "jpeg"},
+        selected_file_extensions={"png", "tif", "tiff", "jpg", "jpeg"},
         cmap="viridis",
         n_example_images=5
     )
