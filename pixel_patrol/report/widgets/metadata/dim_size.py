@@ -31,7 +31,6 @@ class DimSizeWidget(PixelPatrolWidget):
         """Defines the layout of the Dimension Size Distribution widget."""
         return [
             html.Div(id="dim-size-info", style={"marginBottom": "15px"}), # Combined info/ratio
-            html.H4("X and Y Size Distribution"),
             html.Div(id="xy-size-plot-area", children=[
                 html.P("No valid data to plot for X and Y dimension sizes.")
             ]), # Placeholder for XY plot or info message
@@ -142,8 +141,6 @@ class DimSizeWidget(PixelPatrolWidget):
                 if col_plot_data.height == 0:
                     # No data for this column, skip plotting
                     continue
-
-                individual_dim_plots.append(html.H4(f"{column.replace('_', ' ').title()} Distribution"))
 
                 # Determine bin size
                 x_min_s = col_plot_data.select(pl.col(column).min())

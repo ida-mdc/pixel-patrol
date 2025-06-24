@@ -23,7 +23,6 @@ class FileTimestampWidget(PixelPatrolWidget):
 
     def layout(self, df: pl.DataFrame) -> List:
         return [
-            html.H3("File Modification Date Distribution"),
             dcc.Graph(id="file-timestamp-bar-chart", style={"height": "500px"})
         ]
 

@@ -16,8 +16,16 @@ dependencies = [
     "pytest-mock>=3.14.1",
     "pyyaml>=6.0.2",
     "statsmodels>=0.14.4",
+    "tensorboard>=2.18.0",
     "tensorboardx>=2.6.4",
 ]
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pixel_patrol*"]
 
 [project.entry-points."pixel_patrol.widgets"]
 file_timestamp = "pixel_patrol.report.widgets.file_stats.file_timestamp:FileTimestampWidget"

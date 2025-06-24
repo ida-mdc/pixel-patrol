@@ -69,10 +69,10 @@ class DatasetStatsWidget(PixelPatrolWidget):
                 html.P([
                     html.Strong("Images with more than 2 dimensions: "),
                     "As images can contain multiple time points (t), channels (c), and z-slices (z), the statistics are calculated across all dimensions. To e.g. visualize the distribution of mean intensities across all z-slices and channels at time point t0, please select e.g. ",
-                    html.Code("mean_t0"), "."
+                    html.Code("mean_intensity_t0"), "."
                 ]),
                 html.P([
-                    "If you want to display the mean intensity across the whole image, select ", html.Code("mean"),
+                    "If you want to display the mean intensity across the whole image, select ", html.Code("mean_intensity"),
                     " (without any suffix)."
                 ]),
                 html.P([
@@ -82,17 +82,12 @@ class DatasetStatsWidget(PixelPatrolWidget):
                     " for red, green, and blue channels, respectively. This allows for images with multiple channels, where each channels consists of an RGB image itself, while still being able to select the color channel."
                 ]),
                 html.P([
-                    "Some images, like TIFF files, are loaded as 5D arrays (T, C, Z, Y, X), even if they are 2D or 3D images. This results in ",
-                    html.Code("t0"), ", ", html.Code("c0"), ", ", html.Code("z0"),
-                    " to always be present, even if the image is just 2D."
-                ]),
-                html.P([
                     "The suffixes are as follows:", html.Br(),
                     html.Ul([
-                        html.Li(html.Code("t:"), " time point"),
-                        html.Li(html.Code("c:"), " channel"),
-                        html.Li(html.Code("z:"), " z-slice"),
-                        html.Li(html.Code("s:"), " color in RGB images (red, green, blue)")
+                        html.Li(html.Code("t: time point")),
+                        html.Li(html.Code("c: channel")),
+                        html.Li(html.Code("z: z-slice")),
+                        html.Li(html.Code("s: color in RGB images (red, green, blue)"))
                     ])
                 ]),
                 html.H4("Statistical hints:"),
@@ -103,10 +98,10 @@ class DatasetStatsWidget(PixelPatrolWidget):
                 html.P([
                     "Significance levels:", html.Br(),
                     html.Ul([
-                        html.Li(html.Code("ns:"), " not significant"),
-                        html.Li(html.Code("*:"), " p < 0.05"),
-                        html.Li(html.Code("**:"), " p < 0.01"),
-                        html.Li(html.Code("***:"), " p < 0.001")
+                        html.Li(html.Code("ns: not significant")),
+                        html.Li(html.Code("*: p < 0.05")),
+                        html.Li(html.Code("**: p < 0.01")),
+                        html.Li(html.Code("***: p < 0.001"))
                     ])
                 ]),
                 html.H5("Disclaimer:"),

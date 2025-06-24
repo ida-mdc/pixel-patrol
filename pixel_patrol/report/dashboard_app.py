@@ -68,14 +68,8 @@ def _create_app(
     enabled_widgets = all_widgets
 
     def serve_layout_closure() -> html.Div:
-        """
-        Closure to capture df and default_palette_name for the layout.
-        New layout: no tabs, grouped widgets with preferred widths.
-        """
-        # Default width if a widget doesn't specify one
-        DEFAULT_WIDGET_WIDTH = 12 # Full width by default
+        DEFAULT_WIDGET_WIDTH = 12
 
-        # Palette chooser
         palette_dropdown = dcc.Dropdown(
             id='palette-selector',
             options=[{'label': name, 'value': name} for name in sorted(plt.colormaps())],
@@ -83,58 +77,61 @@ def _create_app(
             clearable=False,
             style={'width': '250px'}
         )
-        # Header and Palette Row (slightly more compact)
-        header = dbc.Row(dbc.Col(html.H1('Pixel Patrol', className='text-center mt-3 mb-2'))) # Reduced margin
-        palette_row = dbc.Row(
-            dbc.Col(html.Div([html.Label('Color Palette:'), palette_dropdown]), width='auto', className='mb-3'), # Reduced margin
-            justify='center'
+
+        header = dbc.Row(
+            dbc.Col(html.H1('Pixel Patrol', className='mt-3 mb-2'))
         )
 
-        # Widget Layout
-        # This will hold all the rows for widget groups
-        all_widget_content = []
+        palette_row = dbc.Row(
+            dbc.Col(
+                html.Div([html.Label('Color Palette:'), palette_dropdown]),
+                className='mb-3'
+            )
+        )
 
-        # Organize widgets by tab name (which will now be group names)
-        # Assuming organize_widgets_by_tab returns an OrderedDict to preserve order
+        all_widget_content = []
         groups = organize_widgets_by_tab(enabled_widgets)
 
         for group_name, ws in groups.items():
-            # Add a heading for each group
+            # Left-aligned group header
             all_widget_content.append(
-                dbc.Row(dbc.Col(html.H3(group_name, className='text-center my-3 text-primary'))) # Group heading
+                dbc.Row(
+                    dbc.Col(html.H3(group_name, className='my-3 text-primary'))
+                )
             )
 
-            # This will hold the columns for widgets within the current group
             current_group_cols = []
             current_row_width = 0
 
             for w in ws:
                 widget_width = getattr(w, 'width', DEFAULT_WIDGET_WIDTH)
-
-                # Check if adding this widget exceeds 12 columns
-                # If so, start a new row
                 if current_row_width + widget_width > 12:
                     all_widget_content.append(dbc.Row(current_group_cols, className='g-4 p-3'))
-                    current_group_cols = [] # Reset for new row
+                    current_group_cols = []
                     current_row_width = 0
 
-                # Add the widget to the current row
+                current_group_cols.append(dbc.Row(
+                    dbc.Col(html.H4(w.name, className='my-3 text-primary'))
+                ))
                 current_group_cols.append(
-                    dbc.Col(html.Div(w.layout(df)), width=widget_width, className='mb-3') # Add margin-bottom to cols
+                    dbc.Col(html.Div(w.layout(df)), width=widget_width, className='mb-3')
                 )
                 current_row_width += widget_width
 
-            # After iterating through all widgets in a group, add any remaining columns to a row
             if current_group_cols:
                 all_widget_content.append(dbc.Row(current_group_cols, className='g-4 p-3'))
 
-        # Store for color map and TensorBoard (if needed)
         store = dcc.Store(id='color-map-store')
         tb_store = dcc.Store(id='tb-process-store-tensorboard-embedding-projector', data={})
 
-        # Combine all parts of the layout
-        return dbc.Container([header, palette_row, store, tb_store] + all_widget_content, fluid=True)
-
+        # Final layout with max width and centered
+        return html.Div(
+            dbc.Container(
+                [header, palette_row, store, tb_store] + all_widget_content,
+                style={'maxWidth': '1200px', 'margin': '0 auto'},
+                fluid=True
+            )
+        )
 
     app.layout = serve_layout_closure
 
