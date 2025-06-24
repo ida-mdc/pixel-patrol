@@ -1,7 +1,7 @@
 import fnmatch
 from itertools import product
 from typing import Callable, Optional
-from typing import Dict, List
+from typing import Dict, List, Tuple, Any
 
 import bioio_base
 import cv2
@@ -103,80 +103,187 @@ def column_matches(column: str, columns_requested: List[str]) -> bool:
     return any(fnmatch.fnmatch(column, pattern) for pattern in columns_requested)
 
 
-def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict:
+def _load_image(file_path: Path) -> Tuple[Any, str | None]:
+    """Helper to load an image, returning the image object and its type."""
+    try:
+        img = BioImage(file_path)
+        logger.debug(f"Successfully loaded '{file_path}' as BioImage.")
+        print(f"Image loaded from {file_path} with dimensions: {img.dims.order}, shape: {img.data.shape}")
+        return img, "bioimage"
+    except bioio_base.exceptions.UnsupportedFileFormatError:
+        logger.debug(f"'{file_path}' is not a BioImage, attempting to load with PIL.")
+        try:
+            img = Image.open(file_path)
+            logger.debug(f"Successfully loaded '{file_path}' with PIL.")
+            return img, "pil"
+        except Exception as e:
+            logger.warning(f"Could not load '{file_path}' with PIL: {e}")
+            return None, None
+    except Exception as e:
+        logger.warning(f"Could not load '{file_path}' as BioImage: {e}")
+        return None, None
+
+def _extract_metadata_from_mapping(
+    img: Any,
+    mapping: Dict[str, Any], # Changed from Any to avoid circular imports if BioImage is not defined
+    required_columns: List[str],
+    metadata: Dict
+):
     """
-    Extracts metadata from an image file using BioImage or PIL, based on required columns.
-    This consolidated version integrates logic from the old `extract_metadata` (preprocessing.py)
-    and `extract_image_metadata` (image_operations_and_metadata.py).
+    Extracts metadata using a given mapping, handling individual column failures.
     """
-    metadata = {}
+    for column_name, extractor_func in mapping.items():
+        if column_matches(column_name, required_columns):
+            try:
+                result = extractor_func(img)
+                # Ensure the result is a dictionary before updating
+                if isinstance(result, dict):
+                    metadata.update(result)
+                else:
+                    logger.warning(
+                        f"Extractor for column '{column_name}' returned non-dictionary result: {result}. Skipping update."
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract metadata for column '{column_name}' from image. Error: {e}"
+                )
+
+
+
+def _get_numpy_array_and_dim_order(img: Any, img_type: str, required_columns: List[str], metadata: Dict) -> Tuple[np.ndarray | None, str | None]:
+    """
+    Extracts NumPy array and infers dim_order based on image type.
+    """
     np_array = None
     dim_order = None
 
+    if img_type == "bioimage":
+        try:
+            np_array = img.data
+            dim_order = img.dims.order
+        except Exception as e:
+            logger.warning(f"Could not load data from BioImage: {e}")
+    elif img_type == "pil":
+        try:
+            np_array = np.array(img)
+            # Basic inference for PIL images if dim_order is required and not already from mapping
+            if "dim_order" in required_columns:
+                if np_array.ndim == 3 and np_array.shape[-1] in [3, 4]:
+                    inferred_dim_order = "XYC"
+                elif np_array.ndim == 2:
+                    inferred_dim_order = "XY"
+                else:
+                    inferred_dim_order = ""  # Cannot infer
+                metadata["dim_order"] = inferred_dim_order
+            dim_order = metadata.get("dim_order") # Use the inferred or previously extracted dim_order
+        except Exception as e:
+            logger.warning(f"Could not convert PIL Image to NumPy array: {e}")
+
+    return np_array, dim_order
+
+
+def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict:
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
-
-    try:
-        # Attempt to open as a bioimage
-        img = BioImage(file_path)
-        dim_order = img.dims.order
-
-        bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
-        for column_name, extractor_func in bioimage_mapping.items():
-            if column_matches(column_name, required_columns):
-                result = extractor_func(img)
-                metadata.update(result)
-
-        try:
-            # Extract NumPy array from BioImage
-            np_array = img.data
-        except Exception as e:
-            logger.warning(f"Could not load data of file '{file_path}' from BioImage: {e}")
-            np_array = None
-
-    except bioio_base.exceptions.UnsupportedFileFormatError:
-        try:
-            # If not a bioimage, try as a regular image (e.g., PNG) with PIL
-            img = Image.open(file_path)
-            pil_mapping = _mapping_for_png_metadata_by_column_name()
-
-            for column_name, extractor_func in pil_mapping.items():
-                if column_matches(column_name, required_columns):
-                    result = extractor_func(img)
-                    metadata.update(result)
-
-            try:
-                np_array = np.array(img)
-                # Ensure dim_order is set if required and not already from mapping
-                if "dim_order" not in metadata and "dim_order" in required_columns:
-                    # Basic inference for PIL images: 3D array with 3 or 4 last-axis channels is XYC, else XY
-                    if np_array.ndim == 3 and np_array.shape[-1] in [3, 4]:
-                        metadata["dim_order"] = "XYC"
-                    elif np_array.ndim == 2:
-                        metadata["dim_order"] = "XY"
-                    else:
-                        metadata["dim_order"] = ""  # Cannot infer
-                dim_order = metadata.get("dim_order")  # Use the inferred or extracted dim_order
-
-            except Exception as e:
-                logger.warning(f"Could not convert PIL Image to NumPy array for file '{file_path}': {e}")
-                np_array = None
-
-        except Exception as e:
-            logger.warning(f"Could not load or extract metadata for file '{file_path}' with PIL: {e}")
-            return {}
-    except Exception as e:
-        logger.warning(f"Could not load or extract metadata for file '{file_path}' with BioImage: {e}")
+    img, img_type = _load_image(file_path)
+    if img is None:
+        logger.error(f"Failed to load image from '{file_path}'. Cannot extract metadata.")
         return {}
 
-    # Calculate NumPy array-based stats if an array was loaded and required columns are present
-    if np_array is not None and np_array.size > 0:  # Ensure array is not empty
+    metadata = {}
+
+    if img_type == "bioimage":
+        bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
+        _extract_metadata_from_mapping(img, bioimage_mapping, required_columns, metadata)
+    elif img_type == "pil":
+        pil_mapping = _mapping_for_png_metadata_by_column_name()
+        _extract_metadata_from_mapping(img, pil_mapping, required_columns, metadata)
+
+    np_array, dim_order = _get_numpy_array_and_dim_order(img, img_type, required_columns, metadata)
+
+    if np_array is not None and np_array.size > 0:
         calculate_np_array_stats(required_columns, metadata, np_array, dim_order)
     elif np_array is not None and np_array.size == 0:
         logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping array stats.")
 
     return metadata
+
+
+# def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict:
+#     """
+#     Extracts metadata from an image file using BioImage or PIL, based on required columns.
+#     This consolidated version integrates logic from the old `extract_metadata` (preprocessing.py)
+#     and `extract_image_metadata` (image_operations_and_metadata.py).
+#     """
+#     metadata = {}
+#     np_array = None
+#     dim_order = None
+#
+#     if not file_path.exists():
+#         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
+#         return {}
+#
+#     try:
+#         # Attempt to open as a bioimage
+#         img = BioImage(file_path)
+#         dim_order = img.dims.order
+#
+#         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
+#         for column_name, extractor_func in bioimage_mapping.items():
+#             if column_matches(column_name, required_columns):
+#                 result = extractor_func(img)
+#                 metadata.update(result)
+#
+#         try:
+#             # Extract NumPy array from BioImage
+#             np_array = img.data
+#         except Exception as e:
+#             logger.warning(f"Could not load data of file '{file_path}' from BioImage: {e}")
+#             np_array = None
+#
+#     except bioio_base.exceptions.UnsupportedFileFormatError:
+#         try:
+#             # If not a bioimage, try as a regular image (e.g., PNG) with PIL
+#             img = Image.open(file_path)
+#             pil_mapping = _mapping_for_png_metadata_by_column_name()
+#
+#             for column_name, extractor_func in pil_mapping.items():
+#                 if column_matches(column_name, required_columns):
+#                     result = extractor_func(img)
+#                     metadata.update(result)
+#
+#             try:
+#                 np_array = np.array(img)
+#                 # Ensure dim_order is set if required and not already from mapping
+#                 if "dim_order" not in metadata and "dim_order" in required_columns:
+#                     # Basic inference for PIL images: 3D array with 3 or 4 last-axis channels is XYC, else XY
+#                     if np_array.ndim == 3 and np_array.shape[-1] in [3, 4]:
+#                         metadata["dim_order"] = "XYC"
+#                     elif np_array.ndim == 2:
+#                         metadata["dim_order"] = "XY"
+#                     else:
+#                         metadata["dim_order"] = ""  # Cannot infer
+#                 dim_order = metadata.get("dim_order")  # Use the inferred or extracted dim_order
+#
+#             except Exception as e:
+#                 logger.warning(f"Could not convert PIL Image to NumPy array for file '{file_path}': {e}")
+#                 np_array = None
+#
+#         except Exception as e:
+#             logger.warning(f"Could not load or extract metadata for file '{file_path}' with PIL: {e}")
+#             return {}
+#     except Exception as e:
+#         logger.warning(f"Could not load or extract metadata for file '{file_path}' with BioImage: {e}")
+#         return {}
+#
+#     # Calculate NumPy array-based stats if an array was loaded and required columns are present
+#     if np_array is not None and np_array.size > 0:  # Ensure array is not empty
+#         calculate_np_array_stats(required_columns, metadata, np_array, dim_order)
+#     elif np_array is not None and np_array.size == 0:
+#         logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping array stats.")
+#
+#     return metadata
 
 
 def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray],
