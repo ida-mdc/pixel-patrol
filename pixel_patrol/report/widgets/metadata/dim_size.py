@@ -27,7 +27,7 @@ class DimSizeWidget(PixelPatrolWidget):
             "imported_path", "name" # Required for plotting and hover info
         ]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the Dimension Size Distribution widget."""
         return [
             html.Div(id="dim-size-info", style={"marginBottom": "15px"}), # Combined info/ratio

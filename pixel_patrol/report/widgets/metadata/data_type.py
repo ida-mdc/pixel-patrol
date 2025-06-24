@@ -22,7 +22,7 @@ class DataTypeWidget(PixelPatrolWidget):
         # Only these columns are strictly needed for the simplified plot
         return ["dtype", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""
         return [
             html.Div(id="dtype-present-ratio", style={"marginBottom": "15px"}),

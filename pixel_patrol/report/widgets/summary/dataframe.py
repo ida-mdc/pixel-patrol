@@ -22,7 +22,7 @@ class DataFrameWidget(PixelPatrolWidget):
         return []
 
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         intro = html.Div(id="table-intro", style={"marginBottom": "20px"})
         table = html.Div(id="table-table", style={"marginTop": "20px"})
         return [intro, table]
