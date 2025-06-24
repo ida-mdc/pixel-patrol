@@ -17,7 +17,7 @@ class SummaryWidget(PixelPatrolWidget):
 
     @property
     def name(self) -> str:
-        return "Summary"
+        return "Dataset overview"
 
     def required_columns(self) -> List[str]:
         return [
@@ -65,8 +65,7 @@ class SummaryWidget(PixelPatrolWidget):
                 pl.col("dtype").unique().alias("data_types")
             ]).sort("imported_path_short")
 
-            intro_md = [html.H3("Dataset Overview")]
-            intro_md.append(html.P(f"This dataset compares {folder_details.height} folders."))
+            intro_md = [html.P(f"This dataset compares {folder_details.height} folders.")]
 
             for row in folder_details.iter_rows(named=True):
                 dt_str = ", ".join(row["data_types"])

@@ -110,6 +110,9 @@ def _create_app(
                     current_group_cols = []
                     current_row_width = 0
 
+                current_group_cols.append(dbc.Row(
+                    dbc.Col(html.H4(w.name, className='my-3 text-primary'))
+                ))
                 current_group_cols.append(
                     dbc.Col(html.Div(w.layout(df)), width=widget_width, className='mb-3')
                 )
