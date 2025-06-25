@@ -21,7 +21,7 @@ class FileTimestampWidget(PixelPatrolWidget):
     def required_columns(self) -> List[str]:
         return ["modification_date", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         return [
             dcc.Graph(id="file-timestamp-bar-chart", style={"height": "500px"})
         ]

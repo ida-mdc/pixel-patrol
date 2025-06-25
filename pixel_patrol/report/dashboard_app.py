@@ -1,5 +1,4 @@
 import importlib.util
-import inspect
 from pathlib import Path
 from typing import List, Dict
 
@@ -64,7 +63,6 @@ def _create_app(
 
     # Load widgets
     all_widgets = load_widgets()
-    print(all_widgets)
     enabled_widgets = all_widgets
 
     def serve_layout_closure() -> html.Div:
@@ -80,6 +78,27 @@ def _create_app(
 
         header = dbc.Row(
             dbc.Col(html.H1('Pixel Patrol', className='mt-3 mb-2'))
+        )
+
+        disclaimer = dbc.Row(
+            dbc.Col(
+                dbc.Alert(
+                    [
+                        html.P(
+                            "This application is a prototype. "
+                            "The data may be inaccurate, incomplete, or subject to change. "
+                            "Please use this tool for experimental purposes only and do not rely on its "
+                            "output for critical decisions."
+                        ),
+                        html.Hr(),
+                        html.P(
+                            "Your feedback is welcome!", className="mb-0"
+                        ),
+                    ],
+                    color="warning",
+                    className="my-4"
+                )
+            )
         )
 
         palette_row = dbc.Row(
@@ -114,7 +133,7 @@ def _create_app(
                     dbc.Col(html.H4(w.name, className='my-3 text-primary'))
                 ))
                 current_group_cols.append(
-                    dbc.Col(html.Div(w.layout(df)), width=widget_width, className='mb-3')
+                    dbc.Col(html.Div(w.layout()), width=widget_width, className='mb-3')
                 )
                 current_row_width += widget_width
 
@@ -127,7 +146,7 @@ def _create_app(
         # Final layout with max width and centered
         return html.Div(
             dbc.Container(
-                [header, palette_row, store, tb_store] + all_widget_content,
+                [header, disclaimer, palette_row, store, tb_store] + all_widget_content,
                 style={'maxWidth': '1200px', 'margin': '0 auto'},
                 fluid=True
             )
@@ -142,7 +161,6 @@ def _create_app(
     )
     def update_color_map(palette: str) -> Dict[str, str]:
         # Access df from the closure scope
-        print(df.columns)
         folders = df.select(pl.col('imported_path_short')).unique().to_series().to_list()
         cmap = cm.get_cmap(palette, len(folders))
         return {

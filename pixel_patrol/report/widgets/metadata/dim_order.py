@@ -22,7 +22,7 @@ class DimOrderWidget(PixelPatrolWidget):
         # These are the columns directly used for this simplified plot
         return ["dim_order", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the Dim Order Distribution widget."""
         return [
             html.Div(id="dim-order-present-ratio", style={"marginBottom": "15px"}),

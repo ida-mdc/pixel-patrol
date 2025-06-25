@@ -27,7 +27,7 @@ class PixelPatrolWidget(ABC):
 
 
     @abstractmethod
-    def layout(self, data_frame: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Return Dash components (charts, inputs, descriptions)."""
         pass
 

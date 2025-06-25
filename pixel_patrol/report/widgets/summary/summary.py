@@ -25,11 +25,11 @@ class SummaryWidget(PixelPatrolWidget):
             "file_extension", "dtype"
         ]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         intro = html.Div(id="summary-intro", style={"marginBottom": "20px"})
         graph = dcc.Graph(id="summary-graph")
         table = html.Div(id="summary-table", style={"marginTop": "20px"})
-        return [intro, graph, html.H4("Aggregated Folder Summary", style={"marginTop": "30px"}), table]
+        return [intro, graph, html.B("Aggregated Folder Summary", style={"marginTop": "30px"}), table]
 
     def register_callbacks(self, app, df_global: pl.DataFrame):
         @app.callback(

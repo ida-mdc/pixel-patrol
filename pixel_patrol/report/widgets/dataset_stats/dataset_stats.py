@@ -27,22 +27,8 @@ class DatasetStatsWidget(PixelPatrolWidget):
         # Also need 'name' for hover info and 'imported_path' for grouping/colors
         return ["mean", "median", "std", "min", "max", "name", "imported_path"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the Pixel Value Statistics widget."""
-        # Dynamically generate options for the dropdown based on available columns
-        # Filter for numeric columns that are likely candidates for plotting stats
-        numeric_cols_for_plot = [
-            col for col in df.columns
-            if df[col].dtype.is_numeric() and any(metric in col for metric in self.required_columns()[:-2])
-            # Exclude 'name', 'imported_path'
-        ]
-
-        dropdown_options = [{'label': col, 'value': col} for col in numeric_cols_for_plot]
-
-        # Set a default value if available
-        default_value_to_plot = 'mean' if 'mean' in numeric_cols_for_plot else (
-            numeric_cols_for_plot[0] if numeric_cols_for_plot else None)
-
         return [
             html.P(id="dataset-stats-warning", className="text-warning", style={"marginBottom": "15px"}),
             # Warning for no data
@@ -50,8 +36,8 @@ class DatasetStatsWidget(PixelPatrolWidget):
                 html.Label("Select value to plot:"),
                 dcc.Dropdown(
                     id="stats-value-to-plot-dropdown",
-                    options=dropdown_options,
-                    value=default_value_to_plot,  # Default to 'mean' or first available
+                    options=[],  # Options will be populated by callback
+                    value=None,  # Default value will be set by callback
                     clearable=False,  # Don't allow clearing the selection
                     style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"}
                 )
@@ -113,6 +99,29 @@ class DatasetStatsWidget(PixelPatrolWidget):
     def register_callbacks(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the Pixel Value Statistics widget."""
 
+        # NEW CALLBACK: To populate the dropdown options dynamically
+        @app.callback(
+            Output("stats-value-to-plot-dropdown", "options"),
+            Output("stats-value-to-plot-dropdown", "value"),
+            Input("color-map-store", "data"), # This input can serve as a trigger for initial load
+            prevent_initial_call=False # Allow this callback to run on initial load
+        )
+        def set_stats_dropdown_options(color_map: Dict[str, str]):
+            # Filter for numeric columns that are likely candidates for plotting stats
+            # We use df_global here, which is available in the register_callbacks scope
+            numeric_cols_for_plot = [
+                col for col in df_global.columns
+                if df_global[col].dtype.is_numeric() and any(metric in col for metric in self.required_columns()[:-2])
+            ]
+
+            dropdown_options = [{'label': col, 'value': col} for col in numeric_cols_for_plot]
+
+            # Set a default value if available
+            default_value_to_plot = 'mean' if 'mean' in numeric_cols_for_plot else (
+                numeric_cols_for_plot[0] if numeric_cols_for_plot else None)
+
+            return dropdown_options, default_value_to_plot
+
         @app.callback(
             Output("stats-violin-chart", "figure"),
             Output("dataset-stats-warning", "children"),
@@ -120,6 +129,9 @@ class DatasetStatsWidget(PixelPatrolWidget):
             Input("stats-value-to-plot-dropdown", "value")
         )
         def update_stats_chart(color_map: Dict[str, str], value_to_plot: str):
+            if not value_to_plot:
+                return go.Figure(), "Please select a value to plot."
+
             # --- Data Preprocessing (all in Polars) ---
             # Ensure necessary columns are available and handle potential None values
             processed_df = df_global.filter(
@@ -243,7 +255,13 @@ class DatasetStatsWidget(PixelPatrolWidget):
 
                 # Add bracket annotations for each adjacent comparison
                 for i, (group1, group2) in enumerate(comparisons_to_annotate):
-                    p_corr = pvals_corrected[i] if i < len(pvals_corrected) else 1.0  # Get corrected p-value
+                    # Find the corresponding p-value from the full `comparisons` list
+                    try:
+                        original_comparison_index = comparisons.index((group1, group2))
+                    except ValueError:
+                        original_comparison_index = comparisons.index((group2, group1)) # Check reversed order
+
+                    p_corr = pvals_corrected[original_comparison_index] if original_comparison_index < len(pvals_corrected) else 1.0
 
                     if p_corr < 0.001:
                         sig = "***"

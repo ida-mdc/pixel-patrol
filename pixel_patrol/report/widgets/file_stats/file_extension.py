@@ -24,7 +24,7 @@ class FileExtensionWidget(PixelPatrolWidget):
         # 'file_extension' for x-axis, 'size' for size option, 'imported_path' for color, 'name' for hover
         return ["file_extension", "size_bytes", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the File Extension Distribution widget."""
         return [
             html.Div(id="file-extension-controls", children=[
