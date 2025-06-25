@@ -79,15 +79,11 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
             if not abs_path.is_dir():
                 click.echo(f"Warning: Specified path '{abs_path}' is not a valid directory. Skipping.", err=True)
                 continue
-            resolved_paths.append(str(abs_path)) # Assuming add_paths takes string path
+            resolved_paths.append(Path(abs_path))
             click.echo(f"Adding explicitly specified path: '{abs_path}'")
     else:
-        # Auto-discover immediate subdirectories if no paths are provided
-        click.echo(f"No --paths specified. Auto-discovering immediate subdirectories of '{base_directory}'.")
-        for item in base_directory.iterdir():
-            if item.is_dir():
-                resolved_paths.append(str(item)) # Assuming add_paths takes string path
-                click.echo(f"Discovered and adding path: '{item}'")
+        click.echo(f"No --paths specified. Processing all images in '{base_directory}'.")
+        resolved_paths.append(Path(base_directory))
 
     if not resolved_paths:
         click.echo("No valid paths found to process. Please check your base directory or --paths.", err=True)

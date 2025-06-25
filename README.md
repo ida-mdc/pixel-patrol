@@ -77,7 +77,7 @@ pixel-patrol export <BASE_DIRECTORY> [OPTIONS]
 
   * `-o, --output-zip <PATH>` **(Required)**: The path and filename for the output ZIP archive (e.g., `my_project.zip`).
   * `--name` **(Optional)**. A name for your project. If not provided, it will be automatically derived from the name of the `BASE_DIRECTORY`.
-  * `-p, --paths <PATH>` **(Multiple, Optional)**: Paths to include in the project, **relative to the `BASE_DIRECTORY`**. Can be specified multiple times. If omitted, `pixel-patrol` will automatically include all immediate subdirectories of the `BASE_DIRECTORY`.
+  * `-p, --paths <PATH>` **(Multiple, Optional)**: Paths to include in the project, **relative to the `BASE_DIRECTORY`**. Can be specified multiple times.
   * `--cmap <COLORMAP>` (Default: `rainbow`): The colormap to use for report visualizations (e.g., `viridis`, `plasma`, `rainbow`).
   * `-e, --file-extension <EXT>` **(Multiple, Optional)**: File extensions to include (e.g., `png`, `jpg`, `tiff`). Can be specified multiple times. If not specified, all supported extensions will be used.
 
