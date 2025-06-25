@@ -210,82 +210,6 @@ def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict
     return metadata
 
 
-# def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict:
-#     """
-#     Extracts metadata from an image file using BioImage or PIL, based on required columns.
-#     This consolidated version integrates logic from the old `extract_metadata` (preprocessing.py)
-#     and `extract_image_metadata` (image_operations_and_metadata.py).
-#     """
-#     metadata = {}
-#     np_array = None
-#     dim_order = None
-#
-#     if not file_path.exists():
-#         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
-#         return {}
-#
-#     try:
-#         # Attempt to open as a bioimage
-#         img = BioImage(file_path)
-#         dim_order = img.dims.order
-#
-#         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
-#         for column_name, extractor_func in bioimage_mapping.items():
-#             if column_matches(column_name, required_columns):
-#                 result = extractor_func(img)
-#                 metadata.update(result)
-#
-#         try:
-#             # Extract NumPy array from BioImage
-#             np_array = img.data
-#         except Exception as e:
-#             logger.warning(f"Could not load data of file '{file_path}' from BioImage: {e}")
-#             np_array = None
-#
-#     except bioio_base.exceptions.UnsupportedFileFormatError:
-#         try:
-#             # If not a bioimage, try as a regular image (e.g., PNG) with PIL
-#             img = Image.open(file_path)
-#             pil_mapping = _mapping_for_png_metadata_by_column_name()
-#
-#             for column_name, extractor_func in pil_mapping.items():
-#                 if column_matches(column_name, required_columns):
-#                     result = extractor_func(img)
-#                     metadata.update(result)
-#
-#             try:
-#                 np_array = np.array(img)
-#                 # Ensure dim_order is set if required and not already from mapping
-#                 if "dim_order" not in metadata and "dim_order" in required_columns:
-#                     # Basic inference for PIL images: 3D array with 3 or 4 last-axis channels is XYC, else XY
-#                     if np_array.ndim == 3 and np_array.shape[-1] in [3, 4]:
-#                         metadata["dim_order"] = "XYC"
-#                     elif np_array.ndim == 2:
-#                         metadata["dim_order"] = "XY"
-#                     else:
-#                         metadata["dim_order"] = ""  # Cannot infer
-#                 dim_order = metadata.get("dim_order")  # Use the inferred or extracted dim_order
-#
-#             except Exception as e:
-#                 logger.warning(f"Could not convert PIL Image to NumPy array for file '{file_path}': {e}")
-#                 np_array = None
-#
-#         except Exception as e:
-#             logger.warning(f"Could not load or extract metadata for file '{file_path}' with PIL: {e}")
-#             return {}
-#     except Exception as e:
-#         logger.warning(f"Could not load or extract metadata for file '{file_path}' with BioImage: {e}")
-#         return {}
-#
-#     # Calculate NumPy array-based stats if an array was loaded and required columns are present
-#     if np_array is not None and np_array.size > 0:  # Ensure array is not empty
-#         calculate_np_array_stats(required_columns, metadata, np_array, dim_order)
-#     elif np_array is not None and np_array.size == 0:
-#         logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping array stats.")
-#
-#     return metadata
-
-
 def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray],
                              dim_order: Optional[str]):
     """
@@ -368,6 +292,7 @@ def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optio
 def to_gray(image: np.array, dim_order: str) -> tuple[np.array, str]:
     """
     Convert an image (or higher-dimensional array) to grayscale without reordering any dimensions.
+    Converts to float for calculation to ensure accuracy, then converts back to original dtype.
     """
     if "C" not in dim_order:
         return image, dim_order
@@ -384,16 +309,36 @@ def to_gray(image: np.array, dim_order: str) -> tuple[np.array, str]:
         raise ValueError(
             f"Cannot convert to grayscale for {n_channels} channels. Expected 1, 3 (RGB/BGR), or 4 (RGBA).")
 
+    # Store original dtype and its maximum value for proper scaling back
+    original_dtype = image.dtype
+    if np.issubdtype(original_dtype, np.integer):
+        # For integer types (like uint8), get the max representable value (e.g., 255 for uint8)
+        max_val_original_dtype = np.iinfo(original_dtype).max
+    else:
+        # For float types, assume the range is 0-1, so max value is 1.0
+        max_val_original_dtype = 1.0
+
+    # Convert image to float for accurate grayscale conversion.
+    # It's crucial to perform the weighted sum in floating point.
+    image_float = image.astype(np.float32)
+
     # Move channel axis to the end for easier dot product
-    image_transposed_for_dot = np.moveaxis(image, c_index, -1)
+    image_transposed_for_dot = np.moveaxis(image_float, c_index, -1)
 
     # Standard grayscale conversion weights (luminosity method)
-    weights = np.array([0.2989, 0.5870, 0.1140], dtype=image.dtype)
+    # Ensure weights are float32 to avoid truncation
+    weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float32)
 
     if n_channels == 4:
-        gray = np.dot(image_transposed_for_dot[..., :3], weights)
+        # For RGBA, use only the RGB channels for grayscale conversion
+        gray_float = np.dot(image_transposed_for_dot[..., :3], weights)
     else:
-        gray = np.dot(image_transposed_for_dot, weights)
+        gray_float = np.dot(image_transposed_for_dot, weights)
+
+    # Normalize and convert back to the original data type.
+    # The grayscale_float result will be in a range roughly corresponding to the input's max value.
+    # Clip to ensure values are within the valid range before casting to the original integer type.
+    gray = np.clip(gray_float, 0, max_val_original_dtype).astype(original_dtype)
 
     new_dim_order = dim_order.replace("C", "")
     return gray, new_dim_order
