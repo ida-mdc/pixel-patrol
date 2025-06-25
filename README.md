@@ -21,14 +21,25 @@ PixelPatrol is an early-version tool designed for the systematic pre-validation 
 
 ## Installation
 
-PixelPatrol is published on PyPI.
-https://pypi.org/project/pixel-patrol/
+## Installation
 
-We recommend installing it using `uv` for a fast and efficient installation:
+PixelPatrol is published on PyPI. 
+https://pypi.org/project/pixel-patrol/  
 
+We recommend installing it using `uv` for a fast and efficient installation (you can install `uv` as described [here](https://docs.astral.sh/uv/getting-started/installation/)):
 ```bash
 uv pip install pixel-patrol
 ```
+
+You can install and run the command line tool of `pixel-patrol` in one call using this command:
+```bash
+uvx pixel-patrol
+```
+
+## Getting Started
+
+Please see example scripts in the `examples` directory for detailed usage.  
+To run the tool on an example dataset, you can run the `examples/create_process_report_w_example_data.py` script.
 
 ## Example visualizations
 
