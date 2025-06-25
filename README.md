@@ -21,8 +21,6 @@ PixelPatrol is an early-version tool designed for the systematic pre-validation 
 
 ## Installation
 
-## Installation
-
 PixelPatrol is published on PyPI. 
 https://pypi.org/project/pixel-patrol/  
 
