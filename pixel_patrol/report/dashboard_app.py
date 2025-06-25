@@ -1,5 +1,4 @@
 import importlib.util
-import inspect
 from pathlib import Path
 from typing import List, Dict
 
@@ -64,7 +63,6 @@ def _create_app(
 
     # Load widgets
     all_widgets = load_widgets()
-    print(all_widgets)
     enabled_widgets = all_widgets
 
     def serve_layout_closure() -> html.Div:
@@ -142,7 +140,6 @@ def _create_app(
     )
     def update_color_map(palette: str) -> Dict[str, str]:
         # Access df from the closure scope
-        print(df.columns)
         folders = df.select(pl.col('imported_path_short')).unique().to_series().to_list()
         cmap = cm.get_cmap(palette, len(folders))
         return {
