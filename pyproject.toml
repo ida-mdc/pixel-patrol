@@ -5,6 +5,7 @@ description = "Image prevalidation tool"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "bioio-imageio>=1.1.0",
     "bioio>=1.6.1",
     "bioio-ome-zarr>=1.2.0",
     "bioio-tifffile>=1.2.0",
@@ -44,6 +45,7 @@ dim_order = "pixel_patrol.report.widgets.metadata.dim_order:DimOrderWidget"
 dim_size = "pixel_patrol.report.widgets.metadata.dim_size:DimSizeWidget"
 image_mosaik = "pixel_patrol.report.widgets.visualization.image_mosaik:ImageMosaikWidget"
 dataset_stats = "pixel_patrol.report.widgets.dataset_stats.dataset_stats:DatasetStatsWidget"
+dataset_histograms = "pixel_patrol.report.widgets.dataset_stats.dataset_histograms:DatasetHistogramsWidget"
 embedding_projector = "pixel_patrol.report.widgets.visualization.embedding_projector:EmbeddingProjectorWidget"
 image_quality = "pixel_patrol.report.widgets.dataset_stats.image_quality:ImageQualityWidget"
 summary = "pixel_patrol.report.widgets.summary.summary:SummaryWidget"
