@@ -80,6 +80,27 @@ def _create_app(
             dbc.Col(html.H1('Pixel Patrol', className='mt-3 mb-2'))
         )
 
+        disclaimer = dbc.Row(
+            dbc.Col(
+                dbc.Alert(
+                    [
+                        html.P(
+                            "This application is a prototype. "
+                            "The data may be inaccurate, incomplete, or subject to change. "
+                            "Please use this tool for experimental purposes only and do not rely on its "
+                            "output for critical decisions."
+                        ),
+                        html.Hr(),
+                        html.P(
+                            "Your feedback is welcome!", className="mb-0"
+                        ),
+                    ],
+                    color="warning",
+                    className="my-4"
+                )
+            )
+        )
+
         palette_row = dbc.Row(
             dbc.Col(
                 html.Div([html.Label('Color Palette:'), palette_dropdown]),
@@ -125,7 +146,7 @@ def _create_app(
         # Final layout with max width and centered
         return html.Div(
             dbc.Container(
-                [header, palette_row, store, tb_store] + all_widget_content,
+                [header, disclaimer, palette_row, store, tb_store] + all_widget_content,
                 style={'maxWidth': '1200px', 'margin': '0 auto'},
                 fluid=True
             )
