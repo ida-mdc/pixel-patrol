@@ -11,7 +11,7 @@ from pixel_patrol.report.widget_interface import PixelPatrolWidget
 from pixel_patrol.report.widget_categories import WidgetCategories
 
 # Assume SPRITE_SIZE is defined or imported globally
-SPRITE_SIZE = 16  # Example default, adjust as needed
+SPRITE_SIZE = 32
 
 
 def _create_sprite_image(df: pl.DataFrame, color_map: Dict[str, str], border: bool = False, border_size: int = 0):
@@ -106,21 +106,8 @@ class ImageMosaikWidget(PixelPatrolWidget):
         # '*' means all columns are potentially needed for sorting
         return ["thumbnail", "imported_path", "name", "*"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List: # Removed df parameter
         """Defines the layout of the Image Mosaic widget."""
-        # Dynamically generate dropdown options from the dataframe columns
-        sortable_columns = [
-            col for col in df.columns
-            if df[col].dtype not in [pl.List, pl.Struct]  # Exclude complex types
-        ]
-
-        # Create options for the dropdown
-        dropdown_options = [{'label': col, 'value': col} for col in sortable_columns]
-
-        # Set a default value if possible
-        default_sort_column = 'name' if 'name' in sortable_columns else (
-            sortable_columns[0] if sortable_columns else None)
-
         return [
             html.Div(id="mosaic-intro", children=[
                 html.P(
@@ -130,8 +117,8 @@ class ImageMosaikWidget(PixelPatrolWidget):
                 html.Label("Sort mosaic by:"),
                 dcc.Dropdown(
                     id="mosaic-sort-column-dropdown",
-                    options=dropdown_options,
-                    value=default_sort_column,
+                    options=[], # Options will be populated by callback
+                    value=None, # Default value will be set by callback
                     clearable=False,
                     style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"}
                 )
@@ -141,6 +128,32 @@ class ImageMosaikWidget(PixelPatrolWidget):
 
     def register_callbacks(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the Image Mosaic widget."""
+
+        # NEW CALLBACK to populate the sort column dropdown
+        @app.callback(
+            Output("mosaic-sort-column-dropdown", "options"),
+            Output("mosaic-sort-column-dropdown", "value"),
+            Input("color-map-store", "data"), # Use an existing input to trigger on initial load
+            prevent_initial_call=False # Allow this callback to run on initial load
+        )
+        def set_mosaic_sort_options(color_map: Dict[str, str]):
+            # Dynamically generate dropdown options from the dataframe columns
+            # Exclude 'thumbnail' as it's not suitable for sorting this way
+            # and only include columns that are present in df_global
+            sortable_columns = [
+                col for col in df_global.columns
+                if col != "thumbnail" and df_global[col].dtype not in [pl.List, pl.Struct]
+            ]
+
+            # Create options for the dropdown
+            dropdown_options = [{'label': col, 'value': col} for col in sortable_columns]
+
+            # Set a default value if possible
+            default_sort_column = 'name' if 'name' in sortable_columns else (
+                sortable_columns[0] if sortable_columns else None)
+
+            return dropdown_options, default_sort_column
+
 
         @app.callback(
             Output("image-mosaic-graph", "figure"),

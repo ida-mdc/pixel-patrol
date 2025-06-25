@@ -29,38 +29,16 @@ class ImageQualityWidget(PixelPatrolWidget):
             "name", "imported_path"
         ]
 
-    def layout(self, df: pl.DataFrame) -> List:
-        """Defines the layout of the Pixel Value Statistics widget."""
-        # Dynamically generate options for the dropdown based on available columns
-        # Filter for numeric columns that are likely candidates for plotting stats
-        numeric_cols_for_plot = [
-            col for col in df.columns
-            if df[col].dtype.is_numeric() and any(metric in col for metric in self.required_columns()[:-2])
-            # Exclude 'name', 'imported_path'
-        ]
-
-        dropdown_options = [{'label': col, 'value': col} for col in numeric_cols_for_plot]
-
-        # Set a default value if available
-        default_value_to_plot = numeric_cols_for_plot[0] if numeric_cols_for_plot else None
-
+    def layout(self) -> List:  # Removed df from layout function
         return [
             html.P(id="dataset-quality-warning", className="text-warning", style={"marginBottom": "15px"}),
-            # Warning for no data
             html.Div([
                 html.Label("Select value to plot:"),
-                dcc.Dropdown(
-                    id="quality-value-to-plot-dropdown",
-                    options=dropdown_options,
-                    value=default_value_to_plot,  # Default to 'mean' or first available
-                    clearable=False,  # Don't allow clearing the selection
-                    style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"}
-                )
+                # Dropdown options will be populated by a callback
+                dcc.Dropdown(id="quality-value-to-plot-dropdown", style={"width": "300px"})
             ]),
             html.P(id="dataset-quality-description", style={"marginBottom": "15px"}),
-            dcc.Graph(id="quality-violin-chart", style={"height": "600px"}),  # Set a fixed height for clarity
-            html.Div(className="markdown-content", children=[  # Static markdown content
-            ])
+            dcc.Graph(id="quality-violin-chart", style={"height": "600px"})
         ]
 
     def get_descriptions(self):
@@ -103,9 +81,31 @@ class ImageQualityWidget(PixelPatrolWidget):
         }
         return descriptions
 
-
     def register_callbacks(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the Pixel Value Statistics widget."""
+
+        # New callback to populate the dropdown options
+        @app.callback(
+            Output("quality-value-to-plot-dropdown", "options"),
+            Output("quality-value-to-plot-dropdown", "value"),
+            Input("color-map-store", "data"), # This input can trigger the initial load
+        )
+        def set_dropdown_options(color_map: Dict[str, str]):
+            # Get the keys from get_descriptions
+            description_keys = list(self.get_descriptions().keys())
+
+            # Filter numerical columns to only include those in description_keys
+            # Corrected: Use df_global[col].dtype.is_numeric() instead of .is_numeric()
+            available_plot_columns = [
+                col for col in description_keys
+                if col in df_global.columns and df_global[col].dtype.is_numeric()
+            ]
+
+            options = [{'label': col.replace('_', ' ').title(), 'value': col} for col in available_plot_columns]
+
+            # Set a default value if options exist
+            default_value = available_plot_columns[0] if available_plot_columns else None
+            return options, default_value
 
         @app.callback(
             Output("quality-violin-chart", "figure"),
@@ -115,6 +115,9 @@ class ImageQualityWidget(PixelPatrolWidget):
             Input("quality-value-to-plot-dropdown", "value")
         )
         def update_quality_chart(color_map: Dict[str, str], value_to_plot: str):
+            if not value_to_plot:
+                return go.Figure(), "Please select a value to plot.", ""
+
             # --- Data Preprocessing (all in Polars) ---
             # Ensure necessary columns are available and handle potential None values
             processed_df = df_global.filter(
@@ -130,7 +133,7 @@ class ImageQualityWidget(PixelPatrolWidget):
             # Filter out rows where the selected value_to_plot is null
             if value_to_plot not in processed_df.columns:
                 return go.Figure(), html.P(f"Error: Column '{value_to_plot}' not found in data.",
-                                           className="text-danger")
+                                           className="text-danger"), ""
 
             plot_data = processed_df.filter(
                 pl.col(value_to_plot).is_not_null()
@@ -138,7 +141,7 @@ class ImageQualityWidget(PixelPatrolWidget):
 
             if plot_data.is_empty():
                 return go.Figure(), html.P(f"No valid data found for '{value_to_plot}' in selected folders.",
-                                           className="text-warning")
+                                           className="text-warning"), ""
 
             warning_message = ""  # Clear warning if data is found
             description_message = self.get_descriptions().get(value_to_plot)
@@ -239,7 +242,20 @@ class ImageQualityWidget(PixelPatrolWidget):
 
                 # Add bracket annotations for each adjacent comparison
                 for i, (group1, group2) in enumerate(comparisons_to_annotate):
-                    p_corr = pvals_corrected[i] if i < len(pvals_corrected) else 1.0  # Get corrected p-value
+                    # We need to map the flat p_values list to the comparison
+                    # The `comparisons` list (all combinations) is in the same order as `p_values`
+                    try:
+                        original_comparison_index = comparisons.index((group1, group2))
+                    except ValueError:
+                        # Handle cases where the order might be reversed in `comparisons` if it's not strictly sorted
+                        original_comparison_index = -1
+                        for idx, (c1, c2) in enumerate(comparisons):
+                            if (c1 == group1 and c2 == group2) or (c1 == group2 and c2 == group1):
+                                original_comparison_index = idx
+                                break
+
+                    p_corr = pvals_corrected[original_comparison_index] if original_comparison_index != -1 and original_comparison_index < len(pvals_corrected) else 1.0
+
 
                     if p_corr < 0.001:
                         sig = "***"

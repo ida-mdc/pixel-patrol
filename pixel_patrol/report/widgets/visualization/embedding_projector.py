@@ -157,7 +157,7 @@ class EmbeddingProjectorWidget(PixelPatrolWidget):
         """Returns required data column names."""
         return ["*", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """
         Defines the layout of the Embedding Projector widget.
         The interactive controls are now directly in the layout.

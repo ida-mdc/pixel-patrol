@@ -22,7 +22,7 @@ class FileSizeWidget(PixelPatrolWidget):
         # 'size' for binning, 'imported_path' for color, 'name' for hover
         return ["size_bytes", "imported_path", "name"]
 
-    def layout(self, df: pl.DataFrame) -> List:
+    def layout(self) -> List:
         """Defines the layout of the File Size Distribution widget."""
         return [
             dcc.Graph(id="file-size-bar-chart", style={"height": "500px"})
