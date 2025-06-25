@@ -2,7 +2,6 @@
 
 PixelPatrol is an early-version tool designed for the systematic pre-validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
 
-Take a quick look at PixelPatrol's interactive dashboard:
 ![Overview of the PixelPatrol dashboard, showing interactive data exploration.](readme_assets/overview.png)
 *PixelPatrol's main dashboard provides an intuitive interface for dataset exploration.*
 
