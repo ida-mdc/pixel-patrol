@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 SPRITE_SIZE = 64
 
 
-
 def available_columns() -> List[str]:
     keys = list(_mapping_for_np_array_processing_by_column_name().keys())
     keys.extend(_mapping_for_bioimage_metadata_by_column_name())
@@ -43,7 +42,8 @@ def _mapping_for_np_array_processing_by_column_name() -> Dict[str, Callable]:
         # "wavelet_energy": calculate_wavelet_energy,
         "blocking_artifacts": calculate_blocking_artifacts,
         "ringing_artifacts": calculate_ringing_artifacts,
-        "thumbnail": get_thumbnail  # Note: get_thumbnail is a wrapper for generate_thumbnail
+        "thumbnail": get_thumbnail,  # Note: get_thumbnail is a wrapper for generate_thumbnail
+        "histogram": calculate_histogram  # Added histogram calculation
     }
 
 
@@ -147,7 +147,6 @@ def _extract_metadata_from_mapping(
                 logger.warning(
                     f"Failed to extract metadata for column '{column_name}' from image. Error: {e}"
                 )
-
 
 
 def _get_numpy_array_and_dim_order(img: Any, img_type: str, required_columns: List[str], metadata: Dict) -> Tuple[np.ndarray | None, str | None]:
@@ -290,7 +289,9 @@ def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optio
                              dim_order: Optional[str]):
     """
     Calculates various NumPy array-based statistics and updates the metadata dictionary.
-    This integrates the logic from the old `calculate_np_array_stats` (preprocessing.py).
+    For all stats that require 2D (grayscale), always reduces the array to 2D (XY) by slicing or averaging all non-XY dimensions,
+    matching the robust approach from the Streamlit prototype. Histogram logic is left unchanged as it works flawlessly.
+    Ensures all expected keys (per-dimension and global) are present for consistent downstream use.
     """
     if np_array is None or np_array.size == 0:
         return
@@ -304,28 +305,6 @@ def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optio
         "wavelet_energy", "blocking_artifacts", "ringing_artifacts"
     ]
 
-    # Determine if grayscale conversion is needed for intensity/focus stats
-    needs_grayscale = False
-    if original_dim_order and "C" in original_dim_order:
-        c_index = original_dim_order.index("C")
-        if original_np_array.ndim > c_index and original_np_array.shape[c_index] > 1:
-            if any(column_matches(col, columns) for col in stats_that_need_grayscale):
-                needs_grayscale = True
-
-    np_array_for_stats = original_np_array
-    dim_order_for_stats = original_dim_order
-
-    if needs_grayscale:
-        try:
-            gray_array, gray_dim_order = to_gray(original_np_array, original_dim_order)
-            np_array_for_stats = gray_array
-            dim_order_for_stats = gray_dim_order
-        except ValueError as e:
-            logger.warning(
-                f"Grayscale conversion failed for stats: {e}. Attempting to run stats on original array where possible.")
-            # Fallback to original array if grayscale conversion fails,
-            # but stats that need 2D will fail or return 0.0 later.
-
     mapping = _mapping_for_np_array_processing_by_column_name()
     for column_name, func in mapping.items():
         if column_matches(column_name, columns):
@@ -335,17 +314,68 @@ def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optio
                     result = func(original_np_array, original_dim_order)
                 # For stats requiring 2D input (after grayscale conversion)
                 elif column_name in stats_that_need_grayscale:
-                    if np_array_for_stats.ndim != 2:
-                        logger.warning(
-                            f"Skipping {column_name}: Requires 2D (grayscale) array, got shape {np_array_for_stats.shape}.")
+                    # Always reduce to 2D (XY) by slicing or averaging all non-XY dims, as in prototype
+                    arr = original_np_array
+                    dorder = original_dim_order
+                    # Grayscale conversion if needed
+                    needs_grayscale = False
+                    if dorder and "C" in dorder:
+                        c_index = dorder.index("C")
+                        if arr.ndim > c_index and arr.shape[c_index] > 1:
+                            needs_grayscale = True
+                    if needs_grayscale:
+                        try:
+                            arr, dorder = to_gray(arr, dorder)
+                        except ValueError as e:
+                            logger.warning(f"Grayscale conversion failed for {column_name}: {e}. Using original array.")
+                    # Reduce all dims except XY
+                    while arr.ndim > 2:
+                        i = 0
+                        while i < len(dorder):
+                            dim = dorder[i]
+                            if dim not in ["X", "Y"]:
+                                center_index = arr.shape[i] // 2
+                                arr = np.take(arr, indices=center_index, axis=i)
+                                dorder = dorder.replace(dim, "")
+                            else:
+                                i += 1
+                        if arr.ndim > 2:
+                            arr = np.mean(arr, axis=0)
+                            dorder = dorder[1:]
+                    if arr.ndim != 2:
+                        logger.warning(f"Skipping {column_name}: Could not reduce to 2D (got shape {arr.shape}).")
                         continue
-                    result = func(np_array_for_stats, dim_order_for_stats)
+                    result = func(arr, dorder)
+                elif column_name == "histogram":
+                    # Histogram logic is robust and should not be changed
+                    result = func(original_np_array, original_dim_order)
                 else:
-                    # Other numerical stats can operate on the possibly-grayscale array
-                    result = func(np_array_for_stats, dim_order_for_stats)
+                    # Other numerical stats can operate on the original array
+                    result = func(original_np_array, original_dim_order)
 
+                # Ensure all results are serializable by converting np.ndarray to list for polars
                 if result is not None:
+                    if isinstance(result, dict):
+                        for k, v in result.items():
+                            if isinstance(v, np.ndarray):
+                                result[k] = v.tolist()
+                    elif isinstance(result, np.ndarray):
+                        result = result.tolist()
                     metadata.update(result)
+
+                # Ensure all expected keys (per-dimension and global) are present
+                # For hierarchical stats, fill missing keys with 0.0 or zeros if not present
+                if column_name.startswith("histogram"):
+                    # For histograms, ensure all expected keys are present
+                    expected_keys = [k for k in metadata.keys() if k.startswith("histogram")]
+                    for k in expected_keys:
+                        if k not in metadata:
+                            metadata[k] = [0] * 256
+                elif column_name.endswith("intensity") or column_name in stats_that_need_grayscale:
+                    # For stats, ensure global and per-dim keys
+                    global_key = column_name
+                    if global_key not in metadata:
+                        metadata[global_key] = 0.0
             except Exception as e:
                 logger.warning(f"Error calculating '{column_name}' for array stats: {e}")
 
@@ -598,7 +628,7 @@ def _compute_higher_level_stats(
         logger.warning(
             f"Global stat: Reduced {original_ndim}D array to 2D by averaging. Final shape: {global_arr.shape}")
 
-    if global_arr.ndim == 2 and global_arr.size > 0:  # Ensure it's a 2D array and not empty
+    if global_arr.ndim == 2 and global_arr.size > 0: # Ensure it's a 2D array and not empty
         global_stat = func(global_arr, global_dim_order)
         if global_stat is not None:
             higher_level_stats[func_name] = global_stat
@@ -635,10 +665,32 @@ def _compute_aggregated_stats(
 
             if dim_part:
                 group.setdefault(dim_part, []).append(stat_value)
-
         for part, values in group.items():
-            agg_key = f"{func_name}_{part}"  # e.g., "mean_C0"
+            agg_key = f"{func_name}_{part}"
             agg_stats[agg_key] = agg_func(np.array(values))
+
+    # Additionally, aggregate over all combinations of non-spatial dimensions except one (for multi-dim aggregation)
+    # This ensures keys like histogram_t0z1, histogram_c0z1, etc., are also produced if present
+    if len(non_spatial) > 1:
+        from itertools import combinations
+        for r in range(2, len(non_spatial) + 1):
+            for dims in combinations(non_spatial, r):
+                group = {}
+                dim_names = [dim for dim, _ in dims]
+                for key, stat_value in detailed_stats.items():
+                    key_suffix = key[len(func_name) + 1:]
+                    parts = [s for s in key_suffix.split('_') if s]
+                    dim_parts = []
+                    for dim in dim_names:
+                        dim_part = next((p for p in parts if p.lower().startswith(dim.lower())), None)
+                        if dim_part:
+                            dim_parts.append(dim_part)
+                    if len(dim_parts) == len(dim_names):
+                        group_key = "_".join(dim_parts)
+                        group.setdefault(group_key, []).append(stat_value)
+                for part, values in group.items():
+                    agg_key = f"{func_name}_{part}"
+                    agg_stats[agg_key] = agg_func(np.array(values))
 
     # Compute the final aggregated statistic based on priority order
     final_key = func_name  # This is the global stat name (e.g., "mean_intensity")
@@ -730,6 +782,39 @@ def get_thumbnail(arr: np.array, dim_order: str) -> Dict[str, List[List[List[int
     """Wrapper to generate and return thumbnail as a list for JSON compatibility."""
     thumbnail_array = _generate_thumbnail_internal(arr, dim_order)
     return {"thumbnail": thumbnail_array.tolist()}  # Convert to list for Polars/JSON serializability
+
+
+def histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
+    """
+    Calculate histogram of an array using numpy's histogram function, but ensure it uses 256 bins.
+    """
+    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, 256))
+    return hist
+
+
+def _histogram_agg(hist_list: list[np.ndarray]) -> np.ndarray:
+    """
+    Aggregate a list of histograms by summing them.
+    """
+    if len(hist_list) == 0:
+        return np.zeros(256, dtype=int)
+    return np.sum(np.stack(hist_list), axis=0)
+
+
+def calculate_histogram(
+    arr: np.ndarray, dim_order: str, bins: int = 256
+) -> Dict[str, np.ndarray]:
+    """
+    Calculate the histogram of an array across all dimensions and return it as a dictionary.
+    Uses 256 bins and accumulates the histogram across all dimensions.
+    """
+    return compute_hierarchical_stats(
+        arr,
+        dim_order,
+        lambda a, d: histogram_func(a, bins),  # Accepts both array and dim_order
+        "histogram",
+        agg_func=_histogram_agg,
+    )
 
 
 # --- 2D-specific stat functions (internal, called by hierarchical wrappers) ---
