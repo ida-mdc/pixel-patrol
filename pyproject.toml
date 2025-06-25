@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "opencv-python>=4.11.0.86",
     "polars>=1.29.0",
+    "pyarrow>=20.0.0",
     "pytest>=8.3.5",
     "pytest-mock>=3.14.1",
     "pyyaml>=6.0.2",
