@@ -10,3 +10,7 @@ DEFAULT_PRESELECTED_FILE_EXTENSIONS: Set[str] = {
     # Additional Common Image Formats
     "jpg", "jpeg", "png", "bmp", "gif"
 }
+
+MIN_N_EXAMPLE_IMAGES: int = 1
+MAX_N_EXAMPLE_IMAGES: int = 20
+DEFAULT_N_EXAMPLE_IMAGES: int = 9

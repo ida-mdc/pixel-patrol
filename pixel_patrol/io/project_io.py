@@ -5,9 +5,12 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Any, List, Dict, Tuple
 import logging
+import dataclasses
 
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
+from pixel_patrol.core import validation
+from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +32,39 @@ def _settings_to_dict(settings: Settings) -> dict:
 
 
 def _dict_to_settings(settings_dict: dict) -> Settings:
-    """Converts a dictionary from YAML import back into a Settings dataclass instance."""
+    """
+    Converts a dictionary from YAML import back into a Settings dataclass instance.
+    Handles cases where the input is not a dictionary or has malformed parts.
+    """
+    # Ensure settings_dict is actually a dictionary before attempting to copy or access
+    if not isinstance(settings_dict, dict):
+        logger.warning(
+            f"Project IO: _dict_to_settings received non-dictionary input: {type(settings_dict).__name__}. Using default settings."
+        )
+        return Settings()
+
     s_dict = settings_dict.copy()
+
+    # Handle 'selected_file_extensions' conversion from list to set
     try:
-        # If 'selected_file_extensions' was stored as a list, convert it back to a set
         if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], list):
             s_dict['selected_file_extensions'] = set(s_dict['selected_file_extensions'])
-        return Settings(**s_dict)
-    except TypeError as e:
+    except Exception as e:
         logger.warning(
-            f"Project IO: Could not fully reconstruct Settings from dictionary. Using default settings. Error: {e}")
+            f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}. Defaulting to preselected extensions.")
+        s_dict['selected_file_extensions'] = DEFAULT_PRESELECTED_FILE_EXTENSIONS  # Fallback
+
+    # Reconstruct the Settings object
+    # Filter out keys not present in Settings dataclass to avoid TypeError
+    # This ensures robustness against older metadata formats or unexpected keys
+    valid_settings_keys = {f.name for f in dataclasses.fields(Settings)}
+    filtered_s_dict = {k: v for k, v in s_dict.items() if k in valid_settings_keys}
+
+    try:
+        return Settings(**filtered_s_dict)
+    except Exception as e:
+        logger.warning(
+            f"Project IO: Could not fully reconstruct Settings from filtered dictionary. Using default settings. Error: {e}")
         return Settings()
 
 
@@ -192,40 +218,98 @@ def _read_and_validate_metadata(tmp_path: Path, src_archive: Path) -> Dict[str, 
         raise IOError(f"Error reading {METADATA_FILENAME} from archive {src_archive}: {e}") from e
 
 
-def _reconstruct_project_core_data(metadata_content: Dict[str, Any]) -> Project:
+def _reconstruct_project_core_data(
+    metadata_content: Dict[str, Any],
+    has_images_df: bool
+) -> Project:
     name = metadata_content.get('name', 'Imported Project')
     base_dir_str = metadata_content.get('base_dir')
-    paths_str_list = metadata_content.get('paths', [])
+    paths_str_list = metadata_content.get('paths', []) # This gets "not a list" from the malformed metadata
     settings_dict = metadata_content.get('settings', {})
 
-    if not isinstance(paths_str_list, list):
+    if not isinstance(paths_str_list, list): # This condition is TRUE for the test case
         logger.warning(
             f"Project IO: 'paths' data in {METADATA_FILENAME} is not a list. Found type: {type(paths_str_list).__name__}")
-        paths_str_list = []
+        paths_str_list = [] # <--- THIS LINE IS CRUCIAL AND MUST BE PRESENT TO SET paths_str_list TO AN EMPTY LIST
+                             #      BEFORE THE LOOP BELOW.
 
-    if not isinstance(settings_dict, dict):
-        logger.warning(
-            f"Project IO: 'settings' data in {METADATA_FILENAME} is not a dictionary. Found type: {type(settings_dict).__name__}")
-        settings_dict = {}
+    # Initialize with a dummy base_dir first, will be updated based on validation
+    project = Project(name, Path.cwd())
 
-    project = Project(name, Path.cwd())  # Initialize with a dummy base_dir first, then update
+    # Handle base_dir
     if base_dir_str is not None:
-        try:
-            project.base_dir = Path(base_dir_str)  # Corrected line
-        except (FileNotFoundError, ValueError) as e:
-            logger.warning(
-                f"Project IO: Could not set base directory '{base_dir_str}' for imported project: {e}. Project will retain initial base_dir.")
+        imported_base_dir = Path(base_dir_str)
+        if has_images_df:
+            # If images_df exists, set base_dir directly, warn if not found
+            project._base_dir = imported_base_dir # Set directly to bypass setter validation
+            if not imported_base_dir.exists():
+                logger.warning(
+                    f"Project IO: Imported project's base directory '{imported_base_dir}' does not exist on the file system. "
+                    "This project has processed image data (images_df), so it can still be used for analysis, "
+                    "but path-dependent operations may be limited."
+                )
+            else:
+                logger.info(f"Project IO: Imported project base directory set to '{imported_base_dir}'.")
+        else:
+            # If images_df does NOT exist, base_dir MUST be valid
+            try:
+                project.base_dir = imported_base_dir # Use setter for full validation
+                logger.info(f"Project IO: Imported project base directory set to '{project.base_dir}'.")
+            except (FileNotFoundError, ValueError) as e:
+                raise ValueError(
+                    f"Project requires file system access but imported base directory '{imported_base_dir}' is invalid or inaccessible: {e}. "
+                    "Cannot load project without processed image data."
+                ) from e
+    else:
+        # If base_dir was None in metadata, and no images_df, this is an issue.
+        # If images_df exists, it's less critical, but still note it.
+        if not has_images_df:
+            raise ValueError(
+                "Project requires file system access but no base directory was specified in the imported metadata. "
+                "Cannot load project without processed image data."
+            )
+        else:
+            logger.warning("Project IO: No base directory specified in the imported metadata. "
+                           "Project has processed image data (images_df), but path-dependent operations may be limited.")
+            project._base_dir = None
 
-    project.paths = [Path(p_str) for p_str in paths_str_list]
-    try:
-        project.settings = _dict_to_settings(settings_dict)
-    except Exception as e:
-        logger.warning(
-            f"Project IO: Could not fully reconstruct settings from metadata. Using default settings. Error: {e}")
-        project.settings = Settings()
+
+    # Handle paths
+    reconstructed_paths: List[Path] = []
+    if has_images_df:
+        # If images_df exists, add paths as is, warn if not found
+        for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
+            p = Path(p_str)
+            if not p.exists():
+                logger.warning(
+                    f"Project IO: Imported path '{p}' does not exist on the file system. "
+                    "This project has processed image data (images_df), so it can still be used for analysis, "
+                    "but path-dependent operations may fail."
+                )
+            reconstructed_paths.append(p)
+        project.paths = reconstructed_paths
+    else:
+        # If images_df does NOT exist, paths MUST be valid
+        for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
+            try:
+                # Use resolve_and_validate_project_path for proper validation relative to base_dir
+                validated_path = validation.resolve_and_validate_project_path(Path(p_str), project.base_dir)
+                if validated_path:
+                    reconstructed_paths.append(validated_path)
+                else:
+                    raise ValueError(f"Path '{p_str}' is invalid, inaccessible, or outside the project base directory.")
+            except (FileNotFoundError, ValueError) as e:
+                raise ValueError(
+                    f"Project requires file system access but imported path '{p_str}' is invalid or inaccessible: {e}. "
+                    "Cannot load project without processed image data."
+                ) from e
+        project.paths = reconstructed_paths
+
+    # Call _dict_to_settings with the potentially malformed settings_dict
+    # _dict_to_settings is now robust to non-dictionary inputs.
+    project.settings = _dict_to_settings(settings_dict)
 
     return project
-
 
 def import_project(src: Path) -> Project:
     """
@@ -244,15 +328,21 @@ def import_project(src: Path) -> Project:
 
         metadata_content = _read_and_validate_metadata(tmp_path, src)
 
-        project = _reconstruct_project_core_data(metadata_content)
+        # First, try to read images_df to determine validation behavior
+        imported_images_df = _read_dataframe_from_parquet(
+            tmp_path / IMAGES_DF_FILENAME,
+            src
+        )
+        has_images_df = imported_images_df is not None and not imported_images_df.is_empty()
+        logger.info(f"Project IO: Imported archive {'HAS' if has_images_df else 'DOES NOT HAVE'} images_df.")
+
+        project = _reconstruct_project_core_data(metadata_content, has_images_df)
 
         project.paths_df = _read_dataframe_from_parquet(
             tmp_path / PATHS_DF_FILENAME,
             src
         )
-        project.images_df = _read_dataframe_from_parquet(
-            tmp_path / IMAGES_DF_FILENAME,
-            src
-        )
+        project.images_df = imported_images_df # Assign the already read images_df
 
         return project
+

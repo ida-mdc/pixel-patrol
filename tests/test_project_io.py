@@ -4,13 +4,14 @@ import polars as pl
 import zipfile
 import yaml
 import logging
-import shutil # Required for shutil.rmtree
+import shutil
+from typing import List, Optional
 
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
 from pixel_patrol import api
 from pixel_patrol.io.project_io import METADATA_FILENAME, PATHS_DF_FILENAME, IMAGES_DF_FILENAME
-from pixel_patrol.io.project_io import _settings_to_dict # Helper for test assertions
+from pixel_patrol.io.project_io import _settings_to_dict  # Helper for test assertions
 
 # Configure logging for tests to capture warnings/errors
 logging.basicConfig(level=logging.INFO)
@@ -33,8 +34,8 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert PATHS_DF_FILENAME not in namelist # Should not exist for empty project
-        assert IMAGES_DF_FILENAME not in namelist # Should not exist for empty project
+        assert PATHS_DF_FILENAME not in namelist  # Should not exist for empty project
+        assert IMAGES_DF_FILENAME not in namelist  # Should not exist for empty project
 
         # Verify metadata content
         with zf.open(METADATA_FILENAME) as meta_file:
@@ -44,7 +45,7 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
             # For a newly created project, its `paths` list contains only its `base_dir`
             assert [Path(p) for p in metadata['paths']] == [project_instance.base_dir]
             assert metadata['settings'] == _settings_to_dict(project_instance.settings)
-            assert metadata['settings'] == _settings_to_dict(project_instance.settings)
+
 
 def test_export_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
     """Test exporting a project with base directory and paths_df."""
@@ -58,7 +59,7 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
         assert PATHS_DF_FILENAME in namelist
-        assert IMAGES_DF_FILENAME not in namelist # Not built in this fixture
+        assert IMAGES_DF_FILENAME not in namelist  # Not built in this fixture
 
         # Verify metadata
         with zf.open(METADATA_FILENAME) as meta_file:
@@ -72,6 +73,7 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
         with zf.open(PATHS_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
             assert loaded_df.equals(project_with_minimal_data.paths_df)
+
 
 def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
     """Test exporting a project with base_dir, paths_df, images_df, and custom settings."""
@@ -105,14 +107,16 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             loaded_df = pl.read_parquet(df_file)
             assert loaded_df.equals(project_with_all_data.images_df)
 
+
 def test_export_project_creates_parent_directories(project_instance: Project, tmp_path: Path):
     """Test that `export_project` creates non-existent parent directories for the destination path."""
     nested_dir = tmp_path / "new_dir" / "sub_new_dir"
     export_path = nested_dir / "nested_project.zip"
     api.export_project(project_instance, export_path)
     assert export_path.exists()
-    assert export_path.parent.exists() # Checks if sub_new_dir was created
-    assert export_path.parent.parent.exists() # Checks if new_dir was created
+    assert export_path.parent.exists()  # Checks if sub_new_dir was created
+    assert export_path.parent.parent.exists()  # Checks if new_dir was created
+
 
 # --- Tests for import_project ---
 
@@ -120,10 +124,9 @@ def test_import_project_empty(project_instance: Project, tmp_path: Path):
     """
     Test importing a project that was exported with no data.
     An "empty" project here means it only contains its mandatory name and base_dir
-    An "empty" project here means it only contains its mandatory name and base_dir
     """
     export_path = tmp_path / "exported_empty_project.zip"
-    api.export_project(project_instance, export_path) # Export an empty project first
+    api.export_project(project_instance, export_path)  # Export an empty project first
 
     imported_project = api.import_project(export_path)
 
@@ -133,6 +136,7 @@ def test_import_project_empty(project_instance: Project, tmp_path: Path):
     assert imported_project.settings == project_instance.settings
     assert imported_project.paths_df is None
     assert imported_project.images_df is None
+
 
 def test_import_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
     """Test importing a project with base directory and paths_df."""
@@ -147,7 +151,8 @@ def test_import_project_with_minimal_data(project_with_minimal_data: Project, tm
     assert imported_project.settings == project_with_minimal_data.settings
     assert imported_project.paths_df is not None
     assert imported_project.paths_df.equals(project_with_minimal_data.paths_df)
-    assert imported_project.images_df is None # Not built in this fixture
+    assert imported_project.images_df is None  # Not built in this fixture
+
 
 def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
     """Test importing a project with base_dir, paths_df, images_df, and custom settings."""
@@ -165,18 +170,21 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
     assert imported_project.images_df is not None
     assert imported_project.images_df.equals(project_with_all_data.images_df)
 
+
 def test_import_project_non_existent_file(tmp_path: Path):
     """Test importing from a path that does not exist."""
     non_existent_path = tmp_path / "non_existent.zip"
     with pytest.raises(FileNotFoundError, match="Archive not found"):
         api.import_project(non_existent_path)
 
+
 def test_import_project_non_zip_file(tmp_path: Path):
     """Test importing from a file that is not a valid zip archive."""
     non_zip_file = tmp_path / "not_a_zip.txt"
-    non_zip_file.touch() # Create an empty file
+    non_zip_file.touch()  # Create an empty file
     with pytest.raises(ValueError, match="Source file is not a valid zip archive"):
         api.import_project(non_zip_file)
+
 
 def test_import_project_missing_metadata(tmp_path: Path):
     """Test importing from a zip file that is missing the required metadata.yml."""
@@ -190,8 +198,36 @@ def test_import_project_missing_metadata(tmp_path: Path):
     with pytest.raises(ValueError, match=f"Archive is missing the required '{METADATA_FILENAME}' file"):
         api.import_project(corrupted_zip_path)
 
+
 def test_import_project_malformed_metadata_settings_not_dict(project_instance: Project, tmp_path: Path, caplog):
-    pass
+    """Test importing a project where settings in metadata.yml are not a dictionary."""
+    export_path = tmp_path / "malformed_settings_project.zip"
+    tmp_staging_path = tmp_path / "temp_staging_settings"
+    tmp_staging_path.mkdir()
+
+    try:
+        malformed_metadata = {
+            'name': project_instance.name,
+            'base_dir': str(project_instance.base_dir),
+            'paths': [str(p) for p in project_instance.paths],
+            'settings': "not a dictionary", # Intentionally malformed settings
+        }
+        metadata_file = tmp_staging_path / METADATA_FILENAME
+        with open(metadata_file, 'w') as f:
+            yaml.dump(malformed_metadata, f)
+
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(metadata_file, arcname=METADATA_FILENAME)
+
+        with caplog.at_level(logging.WARNING):
+            imported_project = api.import_project(export_path)
+            # FIX: Update the asserted warning message to match the one generated by _dict_to_settings
+            assert "Project IO: _dict_to_settings received non-dictionary input: str. Using default settings." in caplog.text
+
+        # Verify that default settings are used as a fallback
+        assert imported_project.settings == Settings()
+    finally:
+        shutil.rmtree(tmp_staging_path, ignore_errors=True)
 
 
 def test_import_project_malformed_metadata_paths_not_list(project_instance: Project, tmp_path: Path, caplog):
@@ -203,8 +239,8 @@ def test_import_project_malformed_metadata_paths_not_list(project_instance: Proj
     try:
         malformed_metadata = {
             'name': project_instance.name,
-            'base_dir': str(project_instance.base_dir), # Ensure base_dir is present and a string
-            'paths': "not a list", # Intentionally malformed paths
+            'base_dir': str(project_instance.base_dir),  # Ensure base_dir is present and a string
+            'paths': "not a list",  # Intentionally malformed paths
             'settings': _settings_to_dict(project_instance.settings),
         }
         metadata_file = tmp_staging_path / METADATA_FILENAME
@@ -225,19 +261,16 @@ def test_import_project_malformed_metadata_paths_not_list(project_instance: Proj
         shutil.rmtree(tmp_staging_path, ignore_errors=True)
 
 
-def test_import_project_base_dir_not_found_after_export(project_with_minimal_data: Project, tmp_path: Path, caplog):
-    pass
-
 def test_import_project_corrupted_dataframe_parquet(project_with_minimal_data: Project, tmp_path: Path, caplog):
     """
     Test importing a project where a DataFrame parquet file is corrupted.
     The project should load, but the corrupted DataFrame should be None, and a warning should be logged.
     """
     export_path = tmp_path / "corrupted_paths_df_project.zip"
-    api.export_project(project_with_minimal_data, export_path) # Export a valid project first
+    api.export_project(project_with_minimal_data, export_path)  # Export a valid project first
 
     # Now, "corrupt" the paths_df.parquet inside the zip by replacing its content with invalid data
-    with zipfile.ZipFile(export_path, 'a') as zf: # 'a' for append, but it can overwrite if same name
+    with zipfile.ZipFile(export_path, 'a') as zf:  # 'a' for append, but it can overwrite if same name
         # Write some non-parquet data instead of the actual parquet file
         zf.writestr(PATHS_DF_FILENAME, b"THIS IS NOT A VALID PARQUET FILE BUT JUNK DATA")
 
@@ -252,7 +285,8 @@ def test_import_project_corrupted_dataframe_parquet(project_with_minimal_data: P
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
     assert imported_project.settings == project_with_minimal_data.settings
-    assert imported_project.images_df is None # Still None for this fixture type
+    assert imported_project.images_df is None  # Still None for this fixture type
+
 
 def test_import_project_missing_dataframe_files(project_instance: Project, tmp_path: Path):
     """
@@ -273,6 +307,7 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
     assert imported_project.paths == project_instance.paths
     assert imported_project.settings == project_instance.settings
 
+
 def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_path: Path):
     """
     Performs a full export-import cycle with a project containing
@@ -292,3 +327,323 @@ def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_pa
     assert imported_project.paths_df.equals(project_with_all_data.paths_df)
     assert imported_project.images_df is not None
     assert imported_project.images_df.equals(project_with_all_data.images_df)
+
+
+def create_mock_project_zip(
+        tmp_path: Path,
+        project_name: str,
+        base_dir_str: str,
+        paths_str_list: List[str],
+        include_images_df: bool = False,
+        temp_dir_to_zip: Optional[Path] = None
+) -> Path:
+    """Helper to create a zip file with custom metadata and optional images_df."""
+    zip_export_path = tmp_path / f"{project_name}_mock.zip"
+
+    # Use a temporary directory for staging the files to be zipped
+    if temp_dir_to_zip is None:
+        temp_dir_to_zip = tmp_path / f"staging_{project_name}"
+        temp_dir_to_zip.mkdir()
+
+    metadata_content = {
+        'name': project_name,
+        'base_dir': base_dir_str,
+        'paths': paths_str_list,
+        'settings': _settings_to_dict(Settings()),  # Use default settings for simplicity
+    }
+    metadata_file_path = temp_dir_to_zip / METADATA_FILENAME
+    with open(metadata_file_path, 'w') as f:
+        yaml.dump(metadata_content, f, default_flow_style=False)
+
+    files_for_zip = [(metadata_file_path, METADATA_FILENAME)]
+
+    if include_images_df:
+        # Create a dummy images_df for the test
+        dummy_images_df = pl.DataFrame({
+            "path": ["/dummy/path/image1.jpg"],
+            "filename": ["image1.jpg"],
+            "file_extension": ["jpg"],
+            "size_bytes": [12345],
+            "last_modified": [1678886400],
+            "width": [100],
+            "height": [100],
+            "mode": ["RGB"],
+            "channels": [3],
+            "depth": [8],
+            "is_animated": [False],
+            "n_frames": [1],
+        })
+        images_df_path = temp_dir_to_zip / IMAGES_DF_FILENAME
+        dummy_images_df.write_parquet(images_df_path)
+        files_for_zip.append((images_df_path, IMAGES_DF_FILENAME))
+
+    with zipfile.ZipFile(zip_export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for source_path, arcname in files_for_zip:
+            zf.write(source_path, arcname=arcname)
+
+    return zip_export_path
+
+
+def test_import_project_no_images_df_base_dir_missing_on_system(tmp_path: Path):
+    """
+    Test importing a project without images_df where base_dir in metadata
+    does NOT exist on the current file system. Should raise ValueError.
+    """
+    non_existent_base_dir = tmp_path / "non_existent_base_dir"
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_no_img_df_base_missing",
+        str(non_existent_base_dir),
+        [str(non_existent_base_dir / "subdir")]  # A path dependent on the base_dir
+    )
+
+    with pytest.raises(ValueError, match="Project requires file system access but imported base directory"):
+        api.import_project(export_path)
+
+
+def test_import_project_no_images_df_path_missing_on_system(tmp_path: Path):
+    """
+    Test importing a project without images_df where one of the paths in metadata
+    does NOT exist on the current file system. Should raise ValueError.
+    """
+    # Create a real base_dir but a non-existent sub-path
+    real_base_dir = tmp_path / "real_base"
+    real_base_dir.mkdir()
+
+    non_existent_path = real_base_dir / "non_existent_subdir"
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_no_img_df_path_missing",
+        str(real_base_dir),
+        [str(real_base_dir), str(non_existent_path)]
+    )
+
+    with pytest.raises(ValueError, match="Project requires file system access but imported path"):
+        api.import_project(export_path)
+
+
+def test_import_project_with_images_df_base_dir_missing_on_system_warns(tmp_path: Path, caplog):
+    """
+    Test importing a project WITH images_df where base_dir in metadata
+    does NOT exist on the current file system. Should succeed but log WARNING.
+    """
+    non_existent_base_dir = tmp_path / "non_existent_base_dir_with_images"
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_img_df_base_missing_warns",
+        str(non_existent_base_dir),
+        [str(non_existent_base_dir / "subdir")],  # Include a path for completeness
+        include_images_df=True
+    )
+
+    with caplog.at_level(logging.WARNING):
+        imported_project = api.import_project(export_path)
+        assert "Project IO: Imported project's base directory" in caplog.text
+        assert "does not exist on the file system." in caplog.text
+
+    assert imported_project.name == "test_img_df_base_missing_warns"
+    assert imported_project.base_dir == non_existent_base_dir
+    assert imported_project.images_df is not None  # Should still have images_df
+
+
+def test_import_project_with_images_df_path_missing_on_system_warns(tmp_path: Path, caplog):
+    """
+    Test importing a project WITH images_df where one of the paths in metadata
+    does NOT exist on the current file system. Should succeed but log WARNING.
+    """
+    real_base_dir = tmp_path / "real_base_with_images"
+    real_base_dir.mkdir()
+    non_existent_path = real_base_dir / "non_existent_subdir_with_images"
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_img_df_path_missing_warns",
+        str(real_base_dir),
+        [str(real_base_dir), str(non_existent_path)],
+        include_images_df=True
+    )
+
+    with caplog.at_level(logging.WARNING):
+        imported_project = api.import_project(export_path)
+        assert f"Project IO: Imported path '{non_existent_path}' does not exist on the file system." in caplog.text
+
+    assert imported_project.name == "test_img_df_path_missing_warns"
+    assert imported_project.base_dir == real_base_dir
+    assert imported_project.paths == [real_base_dir, non_existent_path]  # Paths are preserved as is
+    assert imported_project.images_df is not None
+
+
+def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path):
+    """
+    Test importing a project without images_df where the base_dir string
+    in metadata is syntactically invalid (e.g., contains illegal characters).
+    Should raise ValueError.
+    """
+    # A path string that is likely invalid on most systems (e.g., contains null byte)
+    invalid_base_dir_str = "/path/to/invalid\0dir"
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_invalid_base_dir_str",
+        invalid_base_dir_str,
+        [], # No paths needed for this specific test
+        include_images_df=False
+    )
+
+    with pytest.raises(ValueError, match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: embedded null byte\."):
+        api.import_project(export_path)
+
+
+def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
+    """
+    Test importing a project without images_df where one of the paths strings
+    in metadata is syntactically invalid. Should raise ValueError.
+    """
+    real_base_dir = tmp_path / "valid_base"
+    real_base_dir.mkdir()
+    invalid_path_str = str(real_base_dir / "invalid\0path")
+
+    export_path = create_mock_project_zip(
+        tmp_path,
+        "test_invalid_path_str",
+        str(real_base_dir),
+        [str(real_base_dir), invalid_path_str],
+        include_images_df=False
+    )
+
+    with pytest.raises(ValueError, match="is invalid, inaccessible, or outside the project base"):
+        api.import_project(export_path)
+
+
+def test_import_project_malformed_metadata_base_dir_none(tmp_path: Path):
+    """
+    Test importing a project where base_dir in metadata.yml is explicitly None,
+    and there's NO images_df. Should raise ValueError.
+    """
+    export_path = tmp_path / "null_base_dir_no_img_df.zip"
+    tmp_staging_path = tmp_path / "temp_staging_null_base"
+    tmp_staging_path.mkdir()
+
+    try:
+        malformed_metadata = {
+            'name': "NullBaseDirNoImg",
+            'base_dir': None,  # Explicitly None
+            'paths': [],
+            'settings': _settings_to_dict(Settings()),
+        }
+        metadata_file = tmp_staging_path / METADATA_FILENAME
+        with open(metadata_file, 'w') as f:
+            yaml.dump(malformed_metadata, f)
+
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(metadata_file, arcname=METADATA_FILENAME)
+
+        with pytest.raises(ValueError, match="Project requires file system access but no base directory was specified"):
+            api.import_project(export_path)
+    finally:
+        shutil.rmtree(tmp_staging_path, ignore_errors=True)
+
+
+def test_import_project_malformed_metadata_base_dir_none_with_images_df(tmp_path: Path, caplog):
+    """
+    Test importing a project where base_dir in metadata.yml is explicitly None,
+    but there IS an images_df. Should succeed but log WARNING.
+    """
+    export_path = tmp_path / "null_base_dir_with_img_df.zip"
+
+    # Use the helper to create a zip with null base_dir and images_df
+    # We need to manually modify the metadata after initial creation for base_dir: None
+    temp_staging_path = tmp_path / "temp_staging_null_base_with_img"
+    temp_staging_path.mkdir()
+
+    # Create a dummy Project instance to generate images_df for the zip
+    # FIX: Ensure the dummy_base_dir exists before initializing Project, as Project's
+    # base_dir setter validates the path.
+    dummy_base_dir_for_creation = tmp_path / "dummy_base_dir"
+    dummy_base_dir_for_creation.mkdir(exist_ok=True) # Create the directory
+
+    dummy_project = Project(name="DummyProject", base_dir=dummy_base_dir_for_creation)
+    dummy_project.images_df = pl.DataFrame({
+        "path": ["/dummy/path/image1.jpg"],
+        "filename": ["image1.jpg"],
+        "file_extension": ["jpg"],
+        "size_bytes": [12345],
+        "last_modified": [1678886400],
+        "width": [100],
+        "height": [100],
+        "mode": ["RGB"],
+        "channels": [3],
+        "depth": [8],
+        "is_animated": [False],
+        "n_frames": [1],
+    })
+
+    # Prepare files for the zip, manually setting base_dir to None in metadata
+    metadata_content = {
+        'name': "NullBaseDirWithImg",
+        'base_dir': None,  # Explicitly None here
+        'paths': [],
+        'settings': _settings_to_dict(Settings()),
+    }
+    metadata_file_path = temp_staging_path / METADATA_FILENAME
+    with open(metadata_file_path, 'w') as f:
+        yaml.dump(metadata_content, f, default_flow_style=False)
+
+    files_for_zip = [(metadata_file_path, METADATA_FILENAME)]
+
+    images_df_path = temp_staging_path / IMAGES_DF_FILENAME
+    dummy_project.images_df.write_parquet(images_df_path)
+    files_for_zip.append((images_df_path, IMAGES_DF_FILENAME))
+
+    with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for source_path, arcname in files_for_zip:
+            zf.write(source_path, arcname=arcname)
+
+    with caplog.at_level(logging.WARNING):
+        imported_project = api.import_project(export_path)
+        assert "Project IO: No base directory specified in the imported metadata." in caplog.text
+        assert "Project has processed image data (images_df), but path-dependent operations may be limited." in caplog.text
+
+    assert imported_project.name == "NullBaseDirWithImg"
+    assert imported_project.base_dir is None  # Base dir should be None
+    assert imported_project.images_df is not None
+    shutil.rmtree(temp_staging_path, ignore_errors=True)  # Clean up temp staging dir
+    shutil.rmtree(dummy_base_dir_for_creation, ignore_errors=True) # Clean up dummy base dir
+
+
+def test_import_project_malformed_metadata_paths_missing_key(project_instance: Project, tmp_path: Path, caplog):
+    """
+    Test importing a project where the 'paths' key is entirely missing from metadata.yml.
+    Should succeed and default to an empty list for paths, logging a warning.
+    """
+    export_path = tmp_path / "missing_paths_key_project.zip"
+    tmp_staging_path = tmp_path / "temp_staging_missing_paths_key"
+    tmp_staging_path.mkdir()
+
+    try:
+        malformed_metadata = {
+            'name': project_instance.name,
+            'base_dir': str(project_instance.base_dir),
+            # 'paths' key is intentionally missing
+            'settings': _settings_to_dict(project_instance.settings),
+        }
+        metadata_file = tmp_staging_path / METADATA_FILENAME
+        with open(metadata_file, 'w') as f:
+            yaml.dump(malformed_metadata, f)
+
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(metadata_file, arcname=METADATA_FILENAME)
+
+        with caplog.at_level(logging.WARNING):
+            imported_project = api.import_project(export_path)
+            # The 'paths' key missing implies .get('paths', []) will return [], so no specific warning is generated by that logic
+            # Here, we assert that it correctly defaults to an empty list, and no errors occur.
+            assert "Project IO: 'paths' data in metadata.yml is not a list." not in caplog.text  # Ensure it doesn't wrongly warn about type if key is absent
+
+        assert imported_project.paths == []
+        assert imported_project.base_dir == project_instance.base_dir  # Base dir should still be set
+    finally:
+        shutil.rmtree(tmp_staging_path, ignore_errors=True)
