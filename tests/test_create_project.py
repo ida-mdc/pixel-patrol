@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+import os
 
 from pixel_patrol import api
 from pixel_patrol.core.project import Project
@@ -33,3 +34,32 @@ def test_create_project_base_dir_not_a_directory(mock_project_name: str, tmp_pat
     test_file.touch()
     with pytest.raises(ValueError, match="Project base directory is not a directory"):
         api.create_project(mock_project_name, test_file)
+
+def test_create_project_invalid_base_dir_type(mock_project_name: str):
+    # Updated regex to match the TypeError from pathlib.Path
+    expected_error_regex = "argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'int'"
+    with pytest.raises(TypeError, match=expected_error_regex):
+        api.create_project(mock_project_name, 12345)  # An integer is an invalid type
+
+    # You might also consider a more general regex if different types produce slightly different messages,
+    # or separate tests for different invalid types if their error messages vary significantly.
+    # For a list, pathlib will also raise a TypeError:
+    expected_error_regex_list = "argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'list'"
+    with pytest.raises(TypeError, match=expected_error_regex_list):
+        api.create_project(mock_project_name, ["/invalid/path"])  # A list is an invalid type
+
+
+def test_create_project_base_dir_with_relative_path(mock_project_name: str, tmp_path: Path):
+    relative_dir_name = "my_relative_project_base"
+    (tmp_path / relative_dir_name).mkdir()
+    relative_base_dir = Path(relative_dir_name)
+
+    original_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        project = api.create_project(mock_project_name, relative_base_dir)
+        assert isinstance(project, Project)
+        # The base_dir should be resolved to the absolute path relative to tmp_path
+        assert project.base_dir == (tmp_path / relative_dir_name).resolve()
+    finally:
+        os.chdir(original_cwd)  # Restore original CWD

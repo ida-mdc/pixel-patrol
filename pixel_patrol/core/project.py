@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, List, Union, Iterable, Optional, Set
+from typing import List, Union, Iterable, Optional, Set
 import logging
 
 from pixel_patrol.core.project_settings import Settings
@@ -7,7 +7,7 @@ from  pixel_patrol.core import processing, validation
 import polars as pl
 
 from pixel_patrol.utils.path_utils import process_new_paths_for_redundancy
-from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
+from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS, MIN_N_EXAMPLE_IMAGES, MAX_N_EXAMPLE_IMAGES
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,6 @@ class Project:
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
         self.images_df: Optional[pl.DataFrame] = None
-        self.results: Any = None # HTML file? All plots? # TODO: Define a better type once decided
 
         logger.info(f"Project Core: Project '{self.name}' initialized with base dir: {self.base_dir}.")
 
@@ -132,11 +131,9 @@ class Project:
             logger.error(f"Project Core: Invalid colormap name '{settings.cmap}'.")
             raise ValueError(f"Invalid colormap name: '{settings.cmap}'. It is not a recognized Matplotlib colormap.")
 
-        # Validate n_example_images: Must be a positive integer below 20
-        # TODO: move hard coded values to config
         if not isinstance(settings.n_example_images, int) or \
-           settings.n_example_images < 1 or \
-           settings.n_example_images >= 20:
+            settings.n_example_images < MIN_N_EXAMPLE_IMAGES or \
+            settings.n_example_images >= MAX_N_EXAMPLE_IMAGES:
             logger.error(f"Project Core: Invalid n_example_images value: {settings.n_example_images}.")
             raise ValueError("Number of example images must be an integer between 1 and 19 (i.e., positive and below 20).")
 

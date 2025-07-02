@@ -183,6 +183,26 @@ def test_add_paths_empty_input_preserves_current_paths(project_instance: Project
     updated_project = api.add_paths(project_instance, [])
     assert updated_project.paths == initial_paths
 
+def test_add_base_dir_when_subpaths_exist(project_instance: Project, tmp_path: Path, caplog):
+    # Create sub-directories within tmp_path (which is project_instance.base_dir)
+    sub_dir_a = tmp_path / "sub_dir_a"
+    sub_dir_a.mkdir()
+    sub_dir_b = tmp_path / "sub_dir_b"
+    sub_dir_b.mkdir()
+
+    # Add these sub-directories to the project, which will replace the initial base_dir
+    api.add_paths(project_instance, [sub_dir_a, sub_dir_b])
+    assert sorted(project_instance.paths) == sorted([sub_dir_a.resolve(), sub_dir_b.resolve()])
+
+    # Now, add the base_dir itself
+    with caplog.at_level(logging.INFO):
+        updated_project = api.add_paths(project_instance, project_instance.base_dir)
+
+    assert updated_project is project_instance
+    # The base_dir should now be the only path
+    assert updated_project.paths == [project_instance.base_dir.resolve()]
+    # Check for the log message indicating a superpath replacement
+    assert "is a superpath of existing project path" in caplog.text
 
 def test_delete_path_existing(project_instance: Project, temp_test_dirs: List[Path]):
     api.add_paths(project_instance, temp_test_dirs)  # Adds specific paths, removes base_dir

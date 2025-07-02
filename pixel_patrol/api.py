@@ -54,7 +54,7 @@ def export_project(project: Project, dest: Path) -> None: # TODO: think about wh
     _io_export_project(project, dest)
     logger.info(f"API Call: Project '{project.name}' exported successfully.")
 
-def import_project(src: Path) -> Project: # TODO: think about when project can be saved
+def import_project(src: Path) -> Project:
     logger.info(f"API Call: Importing project from '{src}'.")
     project = _io_import_project(src)
     logger.info(f"API Call: Project '{project.name}' imported successfully from '{src}'.")
@@ -69,7 +69,7 @@ def get_base_dir(project: Project) -> Optional[Path]:
 def get_paths(project: Project) -> List[Path]:
     return project.get_paths()
 
-def get_paths_df(project: Project) -> Optional[pl.DataFrame]: # TODO: can we get rid of polars import?
+def get_paths_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_paths_df()
 
 def get_settings(project: Project) -> Settings:
