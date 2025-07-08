@@ -6,7 +6,7 @@ import os
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
 from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA  # To validate schemas
-
+from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 # --- Fixtures for _fetch_single_directory_tree tests ---
 
@@ -71,7 +71,7 @@ def single_file_dir(tmp_path: Path) -> Path:
 def test_fetch_single_directory_tree_basic(complex_temp_dir: Path):
     """
     Tests _fetch_single_directory_tree with a basic directory structure.
-    Verifies column types, content, depth, and parent relationships.
+    Verifies column types, content, depth, parent, size_readable, and imported_path.
     """
     df = _fetch_single_directory_tree(complex_temp_dir)
 
@@ -80,44 +80,114 @@ def test_fetch_single_directory_tree_basic(complex_temp_dir: Path):
 
     # Verify expected columns and their types
     expected_initial_schema = {
-        "path": pl.String,
-        "name": pl.String,
-        "type": pl.String,
-        "parent": pl.String,
-        "depth": pl.Int64,
-        "size_bytes": pl.Int64,
-        "modification_date": pl.Datetime(time_unit="us", time_zone=None),  # Stored as UTC, but no tzinfo
-        "file_extension": pl.String,
+        "path":              pl.String,
+        "name":              pl.String,
+        "type":              pl.String,
+        "parent":            pl.String,
+        "depth":             pl.Int64,
+        "size_bytes":        pl.Int64,
+        "size_readable":     pl.String,
+        "modification_date": pl.Datetime(time_unit="us", time_zone=None),
+        "file_extension":    pl.String,
+        "imported_path":     pl.String,
     }
     assert df.schema == expected_initial_schema
 
     # Convert to dictionary for easier assertion
     df_dict = df.sort("path").to_dicts()
+    anchor = str(complex_temp_dir.anchor)
 
-    # Define expected data based on complex_temp_dir fixture
     expected_data = [
-        # Root directory itself - parent is None as it's the root of the scanned tree
-        {"path": str(complex_temp_dir), "name": "complex_test_root", "type": "folder", "parent": None, "depth": 0,
-         "size_bytes": 0, "file_extension": None},
-        {"path": str(complex_temp_dir / "file1.txt"), "name": "file1.txt", "type": "file",
-         "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10, "file_extension": "txt"},
-        {"path": str(complex_temp_dir / "subdir_a"), "name": "subdir_a", "type": "folder",
-         "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0, "file_extension": None},
-        {"path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
-         "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20, "file_extension": "jpg"},
-        {"path": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "name": "subdir_aa", "type": "folder",
-         "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 0, "file_extension": None},
-        {"path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv", "type": "file",
-         "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3, "size_bytes": 30,
-         "file_extension": "csv"},
-        {"path": str(complex_temp_dir / "subdir_b"), "name": "subdir_b", "type": "folder",
-         "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0, "file_extension": None},
-        {"path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
-         "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40, "file_extension": "png"},
+        {
+            "path":            str(complex_temp_dir),
+            "name":            complex_temp_dir.name,
+            "type":            "folder",
+            "parent":          None,
+            "depth":           0,
+            "size_bytes":      0,
+            "size_readable":   format_bytes_to_human_readable(0),       # changed
+            "file_extension":  None,
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "file1.txt"),
+            "name":            "file1.txt",
+            "type":            "file",
+            "parent":          str(complex_temp_dir),
+            "depth":           1,
+            "size_bytes":      10,
+            "size_readable":   format_bytes_to_human_readable(10),      # changed
+            "file_extension":  "txt",
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_a"),
+            "name":            "subdir_a",
+            "type":            "folder",
+            "parent":          str(complex_temp_dir),
+            "depth":           1,
+            "size_bytes":      0,
+            "size_readable":   format_bytes_to_human_readable(0),       # changed
+            "file_extension":  None,
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_a" / "fileA.jpg"),
+            "name":            "fileA.jpg",
+            "type":            "file",
+            "parent":          str(complex_temp_dir / "subdir_a"),
+            "depth":           2,
+            "size_bytes":      20,
+            "size_readable":   format_bytes_to_human_readable(20),      # changed
+            "file_extension":  "jpg",
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_a" / "subdir_aa"),
+            "name":            "subdir_aa",
+            "type":            "folder",
+            "parent":          str(complex_temp_dir / "subdir_a"),
+            "depth":           2,
+            "size_bytes":      0,
+            "size_readable":   format_bytes_to_human_readable(0),       # changed
+            "file_extension":  None,
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"),
+            "name":            "fileAA.csv",
+            "type":            "file",
+            "parent":          str(complex_temp_dir / "subdir_a" / "subdir_aa"),
+            "depth":           3,
+            "size_bytes":      30,
+            "size_readable":   format_bytes_to_human_readable(30),      # changed
+            "file_extension":  "csv",
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_b"),
+            "name":            "subdir_b",
+            "type":            "folder",
+            "parent":          str(complex_temp_dir),
+            "depth":           1,
+            "size_bytes":      0,
+            "size_readable":   format_bytes_to_human_readable(0),       # changed
+            "file_extension":  None,
+            "imported_path":   anchor,
+        },
+        {
+            "path":            str(complex_temp_dir / "subdir_b" / "fileB.png"),
+            "name":            "fileB.png",
+            "type":            "file",
+            "parent":          str(complex_temp_dir / "subdir_b"),
+            "depth":           2,
+            "size_bytes":      40,
+            "size_readable":   format_bytes_to_human_readable(40),      # changed
+            "file_extension":  "png",
+            "imported_path":   anchor,
+        },
     ]
 
-    # Compare relevant fields, excluding modification_date as it's dynamic unless mocked globally
-    # It's better to verify that it exists and is of the correct type.
     for i, expected_row in enumerate(expected_data):
         actual_row = df_dict[i]
         for key, expected_value in expected_row.items():

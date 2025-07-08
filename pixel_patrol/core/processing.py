@@ -1,11 +1,10 @@
 import polars as pl
 from pathlib import Path
 import os
-from datetime import datetime, timezone
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict, Set, Tuple
 import logging
 
-from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
+from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes, make_basic_record
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
 from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata, available_columns
 
@@ -26,97 +25,64 @@ PATHS_DF_EXPECTED_SCHEMA = {
     "imported_path": pl.String
 }
 
-
+# TODO: still needs some more clean up
 def build_paths_df(paths: List[Path]) -> Optional[pl.DataFrame]:
     """
-    Preprocesses the files and folders in the given paths into a single Polars DataFrame (paths_df).
-    This function traverses directories, collects file system metadata for all entries,
-    aggregates folder sizes, and adds a human-readable size column.
+    Traverses the given directories, collects file and folder metadata,
+    aggregates folder sizes, and returns a normalized Polars DataFrame.
     """
-    logger.debug(f"\n--- DEBUG: Entering build_paths_df ---")
-    logger.debug(f"DEBUG: Input 'paths': {paths}")
-
     if not paths:
-        logger.debug("DEBUG: 'paths' is empty. Returning empty DataFrame with schema.")
         return pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
 
     all_trees: List[pl.DataFrame] = []
-    logger.debug(f"DEBUG: Starting to process {len(paths)} base paths.")
-    for base_path in paths:
-        logger.debug(f"DEBUG: Processing base_path: {base_path}")
+    for base in paths:
         try:
-            tree_df = _fetch_single_directory_tree(base_path)
-            logger.debug(
-                f"DEBUG: _fetch_single_directory_tree for '{base_path}' returned shape: {tree_df.shape}, schema: {tree_df.schema}")
-            tree_df = tree_df.with_columns(pl.lit(str(base_path)).alias("imported_path"))
-            all_trees.append(tree_df)
+            tree = _fetch_single_directory_tree(base)
+            tree = tree.with_columns(pl.lit(str(base)).alias("imported_path"))
+            all_trees.append(tree)
         except ValueError as e:
-            logger.warning(f"Error processing path '{base_path}': {e}. Skipping.")
-            logger.debug(f"DEBUG: Caught ValueError for '{base_path}': {e}")
+            logger.warning(f"Skipping invalid directory {base!r}: {e}")
+        except OSError as e:
+            logger.warning(f"I/O error processing {base!r}: {e}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred for path '{base_path}': {e}. Skipping.",
-                         exc_info=True)
-            logger.debug(f"DEBUG: Caught unexpected Exception for '{base_path}': {e}")
+            logger.error(f"Unexpected error processing {base!r}: {e}", exc_info=True)
 
-    logger.debug(f"DEBUG: Finished processing all base paths. 'all_trees' contains {len(all_trees)} DataFrames.")
     if not all_trees:
-        logger.debug("DEBUG: 'all_trees' is empty. Returning empty DataFrame with schema.")
         return pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
 
-    logger.debug(f"DEBUG: 'all_trees' is not empty. Proceeding with pl.concat.")
-    paths_df = pl.concat(all_trees, how="vertical_relaxed")
-    logger.debug(f"DEBUG: After pl.concat, 'paths_df' shape: {paths_df.shape}, schema: {paths_df.schema}")
+    df = pl.concat(all_trees, how="vertical_relaxed")
 
-    paths_df = paths_df.with_columns(
+    # normalize file extensions
+    df = df.with_columns(
         pl.when(pl.col("type") == "file")
-        .then(
-            # Coalesce the existing 'file_extension' (from _fetch_single_directory_tree)
-            # with extracting from 'name' if the existing one is null or empty.
-            # Convert to lowercase and fill nulls with empty string.
-            pl.coalesce(
-                pl.col("file_extension").str.to_lowercase().fill_null(""),
-                pl.col("name").str.extract(r"\.([^.]+)$", 1).str.to_lowercase().fill_null("")
-            )
-        )
-        .otherwise(pl.lit(None, dtype=pl.String))  # Folders have no extension, keep as None/null
-        .alias("file_extension")  # Apply this back to the 'file_extension' column
+          .then(
+              pl.coalesce(
+                  pl.col("file_extension").str.to_lowercase().fill_null(""),
+                  pl.col("name").str.extract(r"\.([^.]+)$", 1).str.to_lowercase().fill_null("")
+              )
+          )
+          .otherwise(pl.lit(None))
+          .alias("file_extension")
     )
 
-    paths_df = _aggregate_folder_sizes(paths_df)
-    logger.debug(f"DEBUG: After _aggregate_folder_sizes, 'paths_df' shape: {paths_df.shape}, schema: {paths_df.schema}")
-
-    paths_df = paths_df.with_columns(
+    # aggregate folder sizes and add human-readable sizes
+    df = _aggregate_folder_sizes(df)
+    df = df.with_columns(
         pl.col("size_bytes")
-        .map_elements(lambda s: format_bytes_to_human_readable(s), return_dtype=pl.String)
-        .alias("size_readable")
+          .map_elements(format_bytes_to_human_readable)
+          .alias("size_readable")
     )
-    logger.debug(f"DEBUG: After adding 'size_readable', 'paths_df' shape: {paths_df.shape}, schema: {paths_df.schema}")
 
-    logger.debug(f"DEBUG: Before final select. 'paths_df' columns: {paths_df.columns}")
+    # enforce schema order and types
+    return df.select([
+        pl.col(c).cast(t) if c in df.columns
+        else pl.lit(None, dtype=t).alias(c)
+        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
+    ])
 
-    select_expressions = []
-    current_columns = set(paths_df.columns)
-
-    for col_name, col_dtype in PATHS_DF_EXPECTED_SCHEMA.items():
-        if col_name in current_columns:
-            # If column exists, cast it to the expected dtype
-            select_expressions.append(pl.col(col_name).cast(col_dtype))
-        else:
-            # If column does not exist, create it with nulls and the expected dtype
-            select_expressions.append(pl.lit(None, dtype=col_dtype).alias(col_name))
-
-    # Perform the final select and cast in one go, which also enforces the order
-    paths_df = paths_df.select(select_expressions)
-
-    logger.debug(f"DEBUG: After final select, 'paths_df' shape: {paths_df.shape}, schema: {paths_df.schema}")
-
-    logger.debug(f"--- DEBUG: Exiting build_paths_df successfully ---")
-
-    return paths_df
 
 
 ######### build_images_df helpers + function ##########
-
 
 def find_common_base(paths: List[str]) -> str:
     """
@@ -146,188 +112,118 @@ def find_common_base(paths: List[str]) -> str:
     # Ensure it ends with a separator if it's a directory
     return str(common_base) + "/" if common_base.is_dir() else str(common_base)
 
+################################## Shared Helpers for build_images_df_from functions ###################################
 
-def aggregate_processing_result(original_df: pl.DataFrame, processed_files: pl.DataFrame) -> pl.DataFrame:
+def _paths_from_dirs(
+    bases: List[Path],
+    accepted_extensions: Set[str]
+) -> List[Tuple[Path, Path]]:
     """
-    Aggregates the processed file metadata back into the original DataFrame.
+    Walk each base dir, filter by extension, and return a list of (file_path, base_dir) tuples.
     """
-    original_cols = set(original_df.columns)
-    # Use 'name' for joining as it's the common identifier used in extract_metadata
-    processed_full_dataframe = original_df.join(processed_files, on="path", how="left", suffix="_new")
+    matched: List[Tuple[Path, Path]] = []
+    for base in bases:
+        for root, _, files in os.walk(base):
+            for name in files:
+                ext = Path(name).suffix.lower().lstrip('.')
+                if ext in accepted_extensions:
+                    matched.append((Path(root) / name, base))
+    return matched
 
-    for col in processed_files.columns:
-        if col == "name":
-            continue
-        new_col_name = f"{col}_new"
-        if new_col_name in processed_full_dataframe.columns:  # Check if the new column exists after join
-            if col in original_cols:
-                # If the column already exists in original_df, update using coalesce:
-                # take the new value when present, otherwise the original.
-                processed_full_dataframe = processed_full_dataframe.with_columns(
-                    pl.coalesce(pl.col(new_col_name), pl.col(col)).alias(col)
-                ).drop(new_col_name)
-            else:
-                # If it's a completely new column, just rename the _new column
-                processed_full_dataframe = processed_full_dataframe.rename({new_col_name: col})
-    return processed_full_dataframe
+def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFrame:
+    """Return only file rows whose extension (lower-cased) is in our set."""
+    return paths_df.filter(
+        (pl.col("type") == "file")
+        & pl.col("file_extension").str.to_lowercase().is_in(list(extensions))
+    )
 
 
-def preprocess_files(df: pl.DataFrame) -> pl.DataFrame:
+def _get_deep_image_metadata_df(paths: List[Path], required_cols: List[str]) -> pl.DataFrame:
+    """Loop over paths, extract_image_metadata, return DataFrame (may be empty)."""
+    metadata = []
+    for p in paths:
+        try:
+            meta = extract_image_metadata(p, required_cols)
+            if meta:
+                metadata.append({"path": str(p), **meta})
+        except Exception as e:
+            logger.warning(f"Metadata extraction failed for {p}: {e}")
+    return pl.DataFrame(metadata)
+
+
+def _finalize(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
+    """Join basic + deep on 'path' and enforce schema order/types."""
+    joined = basic.join(deep, on="path", how="left")
+    # ensure all columns from PATHS_DF_EXPECTED_SCHEMA appear, cast appropriately
+    cols = []
+    for col_name, col_type in PATHS_DF_EXPECTED_SCHEMA.items():
+        if col_name in joined.columns:
+            cols.append(pl.col(col_name).cast(col_type))
+        else:
+            cols.append(pl.lit(None, dtype=col_type).alias(col_name))
+    return joined.select(cols)
+
+################################### Main Function to Build Images DataFrame ###################################
+
+def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str]) -> Optional[pl.DataFrame]:
     """
-    Preprocesses files by aggregating statistics from multiple imported paths
-    and filtering based on selected folders.
-
-    Parameters:
-    - dataframe: The Polars DataFrame containing raw file system data.
-
-    Returns:
-    - A Polars DataFrame containing the aggregated and processed file information.
-    """
-    if df.is_empty() or "imported_path" not in df.columns:
-        logger.warning("DataFrame is empty or missing 'imported_path' column. Skipping preprocessing.")
-        return df
-
-    # Get all unique values in the "imported_path" column
-    unique_folders = df["imported_path"].unique().to_list()
-
-    common_base = find_common_base(unique_folders)
-
-    df = df.with_columns([
-        pl.col("modification_date").dt.month().alias("modification_month"),
-        pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
-    ])
-
-    return df
-
-
-def build_images_df_from_paths_df(paths_df_subset: pl.DataFrame) -> Optional[pl.DataFrame]:
-    """
-    Extracts deep image-specific metadata for files already pre-filtered into `paths_df_subset`.
-    This function assumes `paths_df_subset` contains only the relevant image files.
+    Extracts deep image-specific metadata for files after filtering for file extensions.
 
     Args:
-        paths_df_subset: A Polars DataFrame containing basic file system metadata for image files.
-                         This DataFrame should already be filtered by file type and extension.
+        paths_df: A Polars DataFrame containing basic file system metadata for files.
+        extensions: A set of file extensions to filter image files (e.g., {".jpg", ".png"}).
     Returns:
         An Optional Polars DataFrame containing combined basic and image-specific metadata,
         or None if no valid image data is available.
     """
-    if paths_df_subset is None or paths_df_subset.is_empty():
-        logger.warning("Input paths_df_subset is empty. Cannot build images DataFrame.")
+    filtered_df = _filter_paths_df(paths_df, extensions)
+    if filtered_df.is_empty():
+        logger.warning(f"No image files found in paths_df for extensions {extensions}")
         return None
 
-    logger.info(f"Building images DataFrame from {paths_df_subset.height} pre-filtered image files...")
+    # Enforce match to PATHS_DF_EXPECTED_SCHEMA by casting existing columns and filling missing ones with nulls
+    # TODO: I'm pretty sure its not needed as we build paths_df with the same make_basic_record function
+    basic_file_df = filtered_df.select([
+        pl.col(c).cast(t)
+        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
+        if c in filtered_df.columns
+    ] + [
+        pl.lit(None, dtype=PATHS_DF_EXPECTED_SCHEMA[c]).alias(c)
+        for c in PATHS_DF_EXPECTED_SCHEMA
+        if c not in filtered_df.columns
+    ])
 
-    # Preprocess files (add short names, modification period, etc.)
-    # Note: `preprocess_files` now expects an `imported_path` column,
-    # which is assumed to be present in `paths_df_subset` if it came from build_paths_df
-    # or added by _build_images_df_from_file_system if it's the optimized path.
-    dataframe_images = preprocess_files(paths_df_subset)
-    logger.info(f"Images DataFrame preprocessed. Columns: {dataframe_images.columns}")
+    # TODO: speed test - paths to list instead of all polars native operations?
+    # but.. extract_image_metadata is operating on individual paths, so it should be fine
+    required = available_columns()
+    paths = [Path(p) for p in basic_file_df["path"].to_list()]
+    deep_image_df = _get_deep_image_metadata_df(paths, required)
 
-    required_columns = available_columns()
-    logger.info(f"Required columns for metadata extraction: {required_columns}")
-
-    # Extract metadata and process files
-    if required_columns:
-        logger.info("Extracting deep metadata for images...")
-
-        metadata_list = []
-        for path_str in dataframe_images["path"].to_list():
-            file_path = Path(path_str)
-            try:
-                image_specific_metadata = extract_image_metadata(file_path, required_columns)
-                if image_specific_metadata:
-                    metadata_list.append({**{"path": path_str}, **image_specific_metadata})
-            except Exception as e:
-                logger.warning(f"Error extracting image metadata for '{file_path}': {e}")
-
-        if metadata_list:
-            processed_metadata_df = pl.DataFrame(metadata_list)
-            # Ensure 'path' column is correctly used for joining
-            if "path" not in processed_metadata_df.columns:
-                logger.error("Internal error: 'path' column missing from processed_metadata_df after extraction.")
-                return None  # Or handle more gracefully
-
-            # Aggregate processing result (join metadata back to the main DataFrame)
-            dataframe_images = dataframe_images.join(processed_metadata_df, on="path", how="left")
-            logger.info("Deep metadata extraction and aggregation complete.")
-        else:
-            logger.warning("No valid deep metadata extracted for any images.")
-    else:
-        logger.info("No specific deep metadata columns required. Skipping deep metadata extraction.")
-
-    return dataframe_images
+    return _finalize(basic_file_df, deep_image_df)
 
 
-def build_images_df_from_file_system(paths: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
+def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
     """
     Performs a single-pass scan over the file system to find image files,
     collect their basic file system metadata, and extract deep image-specific metadata.
     Returns a complete images_df.
     """
-    logger.debug(f"DEBUG: Starting direct optimized scan for image files with extensions: {selected_extensions}")
-    all_image_data_records = []
-    lower_selected_ext = {ext.lower() for ext in selected_extensions}
-    required_metadata_cols = available_columns()
 
-    for base_path in paths:
-        if not base_path.is_dir():
-            logger.warning(f"Base path '{base_path}' is not a directory. Skipping direct image scan for this path.")
-            continue
-        try:
-            # Calculate depth of current base_path to ensure correct relative depths for files found within
-            # This is important for the 'depth' column in the resulting DataFrame
-            base_path_parts_len = len(base_path.parts)
-
-            for root, _, files in os.walk(base_path):
-                current_root_path = Path(root)
-                for file_name in files:
-                    file_path = current_root_path / file_name
-                    file_extension = file_path.suffix[1:].lower()
-
-                    # Only process files with selected extensions
-                    if file_extension in lower_selected_ext:
-                        try:
-                            stat = file_path.stat()
-                            basic_metadata = {
-                                "path": str(file_path),
-                                "name": file_name,
-                                "type": "file",
-                                "parent": str(file_path.parent),
-                                # Calculate depth relative to the `base_path` used in this specific os.walk
-                                "depth": len(file_path.parts) - base_path_parts_len,
-                                "size_bytes": stat.st_size,
-                                # Use timezone.utc to ensure timezone-aware datetime objects,
-                                # which is good practice for consistent timestamps.
-                                "modification_date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-                                "file_extension": file_extension,
-                                "size_readable": format_bytes_to_human_readable(stat.st_size),
-                                "imported_path": str(base_path)
-                            }
-                            # Extract deep image metadata in the same pass
-                            image_specific_metadata = extract_image_metadata(file_path, required_metadata_cols)
-                            # Combine all metadata for this file
-                            combined_metadata = {**basic_metadata, **image_specific_metadata}
-                            all_image_data_records.append(combined_metadata)
-                        except OSError as e:
-                            logger.warning(f"Could not stat or access file '{file_path}': {e}")
-                        except Exception as e:
-                            logger.warning(f"Error extracting image metadata for '{file_path}': {e}")
-        except Exception as e:
-            logger.error(f"Error during direct scan for path '{base_path}': {e}", exc_info=True)
-    if not all_image_data_records:
-        logger.info(f"No image files found for extensions {selected_extensions}.")
+    path_base_pairs = _paths_from_dirs(bases, selected_extensions)
+    if not path_base_pairs:
+        logger.warning(
+            f"No image files found in the provided directories for extensions: {selected_extensions}"
+        )
         return None
 
-    temp_df = pl.DataFrame(all_image_data_records)  # Create DataFrame from the collected records
-    # Ensure the DataFrame has all expected columns from PATHS_DF_EXPECTED_SCHEMA,
-    # filled with nulls if missing, and cast to correct types. This makes the output
-    # consistent with `paths_df` schema for basic file properties.
-    final_df = temp_df.select([pl.col(col).cast(PATHS_DF_EXPECTED_SCHEMA[col]) if col in temp_df.columns else pl.lit(
-        None, dtype=PATHS_DF_EXPECTED_SCHEMA[col]).alias(col) for col in PATHS_DF_EXPECTED_SCHEMA])
-    logger.debug(f"DEBUG: Direct image scan completed, found {final_df.height} files.")
-    return final_df
+    basic_file_df = pl.DataFrame([
+        make_basic_record(path, base=base, is_folder=False)
+        for path, base in path_base_pairs
+    ])
+
+    deep_image_df = _get_deep_image_metadata_df([p for p, _ in path_base_pairs], available_columns())
+
+    return _finalize(basic_file_df, deep_image_df)
 
 
 ###################################### Other #####################################################
