@@ -145,39 +145,35 @@ class Project:
 
     def process_images(self, settings: Optional[Settings] = None) -> "Project":
         """
-        Processes images in the project, building the `images_df`.
-
-        This method offers an optimized workflow:
-        - If `paths_df` does not exist, it performs a single, targeted file system scan
-          to build `images_df` directly.
-        - If `paths_df` already exists (meaning `process_paths()` was previously called),
-          it leverages this existing DataFrame, filters it, and then extracts image metadata.
-
-        Any `settings` provided as an argument will first be applied to the project
-        (validated and persisted), and then the image processing will use the project's
-        (potentially updated) settings for filtering and metadata extraction.
+        Processes images in the project, building `images_df`.
+        - If `paths_df` does not exist, it performs a single, targeted file system scan to build `images_df` directly.
+        - If `paths_df` already exists it leverages this existing DataFrame, filters it, and then extracts image metadata.
 
         Args:
-            settings: An optional Settings object to apply to the project
-                      before processing images. If None, the project's current
-                      settings (self.settings) will be used without modification.
+            settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
 
         Returns:
             The Project instance with the `images_df` updated.
         """
-        # Apply settings if provided (this also handles validation and persistence)
         if settings is not None:
             logger.info("Project Core: Applying provided settings before processing images.")
-            self.set_settings(settings)  # This method ensures validation and updates self.settings
+            self.set_settings(settings)
+        if not self.settings.selected_file_extensions:
+            raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
+        exts = self.settings.selected_file_extensions
 
-        if self.paths_df is None:
-            # Optimized path: paths_df is not built, so perform a targeted direct scan for images
-            self.images_df = self._process_images_from_file_system()
+        if self.paths_df is None or self.paths_df.is_empty():
+            self.images_df = processing.build_images_df_from_file_system(self.paths, exts)
         else:
-            # Standard Path: paths_df exists, filter it and then extract deep metadata
-            self.images_df = self._process_images_from_paths_df()
+            self.images_df = processing.build_images_df_from_paths_df(self.paths_df, exts)
+
+        if self.images_df is None or self.images_df.is_empty():
+            logger.warning(
+                "Project Core: No image files found/processed. images_df will be None.")
+            self.images_df = None
 
         return self
+
 
     def get_name(self) -> str:
         """Get the project name."""
@@ -246,62 +242,3 @@ class Project:
 
         new_settings.selected_file_extensions = new_extensions_input
         logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
-
-
-    def _process_images_from_file_system(self) -> Optional[pl.DataFrame]:
-        """
-        Private method to build images_df by performing a direct, single-pass scan
-        of the file system for specified image extensions when paths_df is not available.
-        """
-        # self.settings.selected_file_extensions is guaranteed to be a Set[str] here
-        actual_extensions_for_scan = self.settings.selected_file_extensions
-        assert isinstance(actual_extensions_for_scan, Set), "selected_file_extensions must be a Set[str] at this point."
-
-        if not actual_extensions_for_scan:
-            logger.warning(
-                "Project Core: No image file extensions selected. Cannot build images DataFrame via direct file system scan.")
-            return None
-
-        logger.info("Project Core: paths_df not built. Performing direct file system scan for images.")
-        # This function now returns the full images_df directly
-        images_df = processing.build_images_df_from_file_system(self.paths, actual_extensions_for_scan)
-
-        if images_df is None or images_df.is_empty():
-            logger.warning(
-                "Project Core: No image files found via direct file system scan for the specified extensions. images_df will be None.")
-            return None
-
-        return images_df
-
-
-    def _process_images_from_paths_df(self) -> Optional[pl.DataFrame]:
-        """
-        Private method to build images_df by leveraging an existing paths_df.
-        It filters paths_df for image files and then extracts deep metadata.
-        """
-        logger.info("Project Core: paths_df exists. Filtering it for images and extracting metadata.")
-
-        if self.paths_df.is_empty():
-            logger.warning("Project Core: Existing paths_df is empty. Cannot filter for images. images_df will be None.")
-            return None
-
-        # self.settings.selected_file_extensions is guaranteed to be a Set[str] here
-        actual_extensions_for_scan = self.settings.selected_file_extensions
-
-        if not actual_extensions_for_scan:
-            logger.warning("Project Core: No image file extensions selected. Cannot filter existing paths_df. images_df will be None.")
-            return None
-
-        # Filter the existing paths_df by the determined actual_extensions_for_scan
-        filtered_paths_df_for_images = self.paths_df.filter(
-            (pl.col("type") == "file") &
-            (pl.col("file_extension").str.to_lowercase().is_in(list(actual_extensions_for_scan)))
-        )
-
-        if filtered_paths_df_for_images.is_empty():
-            logger.warning(f"Project Core: No image files found in existing paths_df for extensions {actual_extensions_for_scan}. images_df will be None.")
-            return None
-
-        # Pass the already filtered DataFrame to _build_images_df_from_paths_df for deep metadata extraction
-        return processing.build_images_df_from_paths_df(filtered_paths_df_for_images)
-

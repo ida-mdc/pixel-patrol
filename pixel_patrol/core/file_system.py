@@ -4,8 +4,42 @@ import os
 from datetime import datetime
 from typing import Dict, Any, List
 import logging
+from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 logger = logging.getLogger(__name__)
+
+def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[str, Any]:
+    """
+    Create a basic metadata record for a file or folder,
+    computing depth relative to `base` and normalizing extensions.
+    """
+    try:
+        stat_func = path.stat if not is_folder else lambda: None
+        st = stat_func() if not is_folder else None
+    except Exception as e:
+        logger.warning(f"Failed stat for {path}: {e}")
+        return {}
+
+    depth = len(path.parts) - len(base.parts)
+
+    # TODO: I guess we're missing imported_path_short and modification_month that were created in preprocess_files
+    # common_base = find_common_base(unique_folders) - should be added after
+    # pl.col("modification_date").dt.month().alias("modification_month"),
+    # pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
+    record: Dict[str, Any] = {
+        "path": str(path),
+        "name": path.name,
+        "type": "folder" if is_folder else "file",
+        "parent": str(path.parent) if path != base else None,
+        "depth": depth,
+        "size_bytes": 0 if is_folder else st.st_size,
+        "size_readable": "0 Bytes" if is_folder else format_bytes_to_human_readable(st.st_size),
+        "modification_date": datetime.fromtimestamp(os.path.getmtime(path)),
+        "file_extension": None if is_folder else path.suffix.lstrip(".").lower(),
+        "imported_path": str(base),
+    }
+    return record
+
 
 def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
     """
@@ -17,52 +51,34 @@ def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
 
     tree_data: List[Dict[str, Any]] = []
 
-    for dirpath_str, dirnames, filenames in os.walk(base_path):
+    for dirpath_str, _, filenames in os.walk(base_path):
         dirpath = Path(dirpath_str)
-        current_depth = len(dirpath.parts) - len(base_path.parts)
-        parent_path_str = str(dirpath.parent) if dirpath != base_path else None
+        folder_record = make_basic_record(dirpath, base_path, is_folder=True)
+        if folder_record:
+            tree_data.append(folder_record)
 
-        # Add folder stats (initial size 0, will be aggregated later)
-        tree_data.append({
-            "path": str(dirpath),
-            "name": dirpath.name,
-            "type": "folder",
-            "parent": parent_path_str,
-            "depth": current_depth,
-            "size_bytes": 0, # Initial size, will be summed up
-            "modification_date": datetime.fromtimestamp(os.path.getmtime(dirpath)),
-            "file_extension": None, # Folders don't have file extensions
-        })
-
-        # Add file stats
+        # record files
         for filename in filenames:
             file_path = dirpath / filename
-            try:
-                file_size = os.path.getsize(file_path)
-                tree_data.append({
-                    "path": str(file_path),
-                    "name": filename,
-                    "type": "file",
-                    "parent": dirpath_str,
-                    "depth": current_depth + 1,
-                    "size_bytes": file_size,
-                    "modification_date": datetime.fromtimestamp(os.path.getmtime(file_path)),
-                    "file_extension": file_path.suffix[1:].lower() if file_path.suffix else "",
-                })
-            except FileNotFoundError:
-                logger.warning(f"File not found during traversal: {file_path}")
-            except PermissionError:  # Add specific handling for PermissionError
-                logger.warning(f"Permission denied for file: {file_path}")
-            except Exception as e:
-                logger.error(f"Could not get stats for file {file_path}: {e}",
-                             exc_info=True)  # Use error for general exceptions
+            file_record = make_basic_record(file_path, base_path, is_folder=False)
+            if file_record:
+                tree_data.append(file_record)
+
 
     if not tree_data:
-        return pl.DataFrame([], schema={ # Return empty DF with correct schema
-            "path": pl.String, "name": pl.String, "type": pl.String,
-            "parent": pl.String, "depth": pl.Int64, "size_bytes": pl.Int64,
-            "modification_date": pl.Datetime, "file_extension": pl.String
-        })
+        schema = {
+            "path":              pl.String,
+            "name":              pl.String,
+            "type":              pl.String,
+            "parent":            pl.String,
+            "depth":             pl.Int64,
+            "size_bytes":        pl.Int64,
+            "size_readable":     pl.String,
+            "modification_date": pl.Datetime(time_unit="us", time_zone=None),
+            "file_extension":    pl.String,
+            "imported_path":     pl.String,
+        }
+        return pl.DataFrame([], schema=schema)
 
     return pl.DataFrame(tree_data)
 
