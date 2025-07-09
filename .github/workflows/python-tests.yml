@@ -1,0 +1,30 @@
+name: Python Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install uv and project in editable mode
+      run: |
+        pip install uv           
+        uv pip install -e .     
+
+    - name: Run tests with pytest
+      run: |
+        uv run pytest # Use uv to run pytest within the managed environment
