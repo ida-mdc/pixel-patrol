@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "bioio>=1.6.1",
+    "bioio-ome-zarr>=1.2.0",
     "bioio-tifffile>=1.2.0",
     "click>=8.2.1",
     "dash-ag-grid>=31.3.1",
