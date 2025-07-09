@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 import zarr
 from bioio import BioImage
-from zarr.storage import LocalStore
+from zarr.storage import DirectoryStore as LocalStore
 
 from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata
 from pixel_patrol.core.processing import build_paths_df
