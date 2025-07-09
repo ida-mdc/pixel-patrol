@@ -8,6 +8,13 @@ from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 logger = logging.getLogger(__name__)
 
+FOLDER_EXTENSIONS_AS_FILES = {
+    ".zarr", ".ome.zarr", ".n5", ".imaris", ".napari", ".nd2folder"
+}
+
+def is_folder_like_file(path: Path) -> bool:
+    return any(str(path).endswith(ext) for ext in FOLDER_EXTENSIONS_AS_FILES)
+
 def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[str, Any]:
     """
     Create a basic metadata record for a file or folder,
@@ -40,7 +47,6 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
     }
     return record
 
-
 def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
     """
     Traverses a single local directory to collect its file and folder structure.
@@ -51,8 +57,38 @@ def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
 
     tree_data: List[Dict[str, Any]] = []
 
-    for dirpath_str, _, filenames in os.walk(base_path):
+    for dirpath_str, dirnames, filenames in os.walk(base_path):
         dirpath = Path(dirpath_str)
+
+        # Skip .zarr directories in folder walk, handle as image 'file' instead
+        if is_folder_like_file(dirpath):
+            try:
+                size = sum(
+                    os.path.getsize(os.path.join(dp, f))
+                    for dp, _, files in os.walk(dirpath)
+                    for f in files
+                )
+                ext_match = next(ext for ext in FOLDER_EXTENSIONS_AS_FILES if str(dirpath).endswith(ext))
+                record = {
+                    "path": str(dirpath),
+                    "name": dirpath.name,
+                    "type": "file",  # Treat as file
+                    "parent": str(dirpath.parent) if dirpath != base_path else None,
+                    "depth": len(dirpath.parts) - len(base_path.parts),
+                    "size_bytes": size,
+                    "size_readable": format_bytes_to_human_readable(size),
+                    "modification_date": datetime.fromtimestamp(os.path.getmtime(dirpath)),
+                    "file_extension": ext_match.lstrip("."),
+                    "imported_path": str(base_path),
+                }
+                tree_data.append(record)
+                # Prevent os.walk from descending into this folder
+                dirnames[:] = [d for d in dirnames if not is_folder_like_file(dirpath / d)]
+                continue
+            except Exception as e:
+                logger.error(f"Failed to process folder-like file {dirpath}: {e}", exc_info=True)
+                continue
+
         folder_record = make_basic_record(dirpath, base_path, is_folder=True)
         if folder_record:
             tree_data.append(folder_record)
@@ -63,7 +99,6 @@ def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
             file_record = make_basic_record(file_path, base_path, is_folder=False)
             if file_record:
                 tree_data.append(file_record)
-
 
     if not tree_data:
         schema = {
