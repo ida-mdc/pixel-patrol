@@ -21,6 +21,7 @@ dependencies = [
     "statsmodels>=0.14.4",
     "tensorboard>=2.18.0",
     "tensorboardx>=2.6.4",
+    "zarr>=2.0.0,<3.0.0",
 ]
 
 [tool.uv]
