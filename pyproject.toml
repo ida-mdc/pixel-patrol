@@ -3,7 +3,7 @@ name = "pixel-patrol"
 version = "0.2.0"
 description = "Image prevalidation tool"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "bioio>=1.6.1",
     "bioio-ome-zarr>=1.2.0",
