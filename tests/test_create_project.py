@@ -36,14 +36,12 @@ def test_create_project_base_dir_not_a_directory(mock_project_name: str, tmp_pat
         api.create_project(mock_project_name, test_file)
 
 def test_create_project_invalid_base_dir_type(mock_project_name: str):
-    expected_error_regex = r"str(?:, bytes)? or (?:an )?os\.PathLike object.*not 'int'" # Corrected line
+    expected_error_regex = r"^(?:argument should be a |expected )str(?:, bytes)? or (?:an )?os\.PathLike object(?: where __fspath__ returns a str)?, not 'int'$" # Corrected line
     with pytest.raises(TypeError, match=expected_error_regex):
         api.create_project(mock_project_name, 12345)  # An integer is an invalid type
 
-    # You might also consider a more general regex if different types produce slightly different messages,
-    # or separate tests for different invalid types if their error messages vary significantly.
     # For a list, pathlib will also raise a TypeError:
-    expected_error_regex_list = "argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'list'"
+    expected_error_regex_list = r"^(?:argument should be a |expected )str(?:, bytes)? or (?:an )?os\.PathLike object(?: where __fspath__ returns a str)?, not 'list'$"
     with pytest.raises(TypeError, match=expected_error_regex_list):
         api.create_project(mock_project_name, ["/invalid/path"])  # A list is an invalid type
 
