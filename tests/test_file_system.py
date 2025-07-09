@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import os
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
-from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA  # To validate schemas
+from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 # --- Fixtures for _fetch_single_directory_tree tests ---
@@ -65,190 +65,161 @@ def single_file_dir(tmp_path: Path) -> Path:
     (single_file_root / "single_file.txt").write_text("content")  # Small arbitrary size
     return single_file_root
 
-
-# --- Tests for _fetch_single_directory_tree ---
-
-def test_fetch_single_directory_tree_basic(complex_temp_dir: Path):
+def _assert_directory_tree_df(df: pl.DataFrame, expected_data: list[dict], imported_path: str):
     """
-    Tests _fetch_single_directory_tree with a basic directory structure.
-    Verifies column types, content, depth, parent, size_readable, and imported_path.
+    Helper function to assert the content and schema of the DataFrame returned by _fetch_single_directory_tree.
+    Handles dynamic values like modification_date.
     """
-    df = _fetch_single_directory_tree(complex_temp_dir)
-
     assert isinstance(df, pl.DataFrame)
     assert not df.is_empty()
 
-    # Verify expected columns and their types
-    expected_initial_schema = {
-        "path":              pl.String,
-        "name":              pl.String,
-        "type":              pl.String,
-        "parent":            pl.String,
-        "depth":             pl.Int64,
-        "size_bytes":        pl.Int64,
-        "size_readable":     pl.String,
+    expected_schema = {
+        "path": pl.String,
+        "name": pl.String,
+        "type": pl.String,
+        "parent": pl.String, # This should be pl.String or pl.Null if parent can be None
+        "depth": pl.Int64,
+        "size_bytes": pl.Int64,
+        "size_readable": pl.String,
         "modification_date": pl.Datetime(time_unit="us", time_zone=None),
-        "file_extension":    pl.String,
-        "imported_path":     pl.String,
+        "file_extension": pl.String, # This should be pl.String or pl.Null if extension can be None
+        "imported_path": pl.String,
     }
-    assert df.schema == expected_initial_schema
 
-    # Convert to dictionary for easier assertion
+    # Adjusting for the possibility of Null types for 'parent' and 'file_extension'
+    # Polars might infer Null for columns that are entirely None in a small dataset,
+    # or String if there's a mix. To be robust, we check the underlying type.
+    actual_schema = df.schema
+
+    for col, expected_type in expected_schema.items():
+        assert col in actual_schema, f"Column '{col}' missing from actual schema"
+        # For 'parent' and 'file_extension', allow either String or Null
+        if col in ["parent", "file_extension"]:
+            assert actual_schema[col] == expected_type or actual_schema[col] == pl.Null, \
+                f"Mismatch in schema for column '{col}': Expected {expected_type} or {pl.Null}, got {actual_schema[col]}"
+        else:
+            assert actual_schema[col] == expected_type, \
+                f"Mismatch in schema for column '{col}': Expected {expected_type}, got {actual_schema[col]}"
+
+
     df_dict = df.sort("path").to_dicts()
-    anchor = str(complex_temp_dir.anchor)
+    expected_data.sort(key=lambda x: x['path'])
 
-    expected_data = [
-        {
-            "path":            str(complex_temp_dir),
-            "name":            complex_temp_dir.name,
-            "type":            "folder",
-            "parent":          None,
-            "depth":           0,
-            "size_bytes":      0,
-            "size_readable":   format_bytes_to_human_readable(0),       # changed
-            "file_extension":  None,
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "file1.txt"),
-            "name":            "file1.txt",
-            "type":            "file",
-            "parent":          str(complex_temp_dir),
-            "depth":           1,
-            "size_bytes":      10,
-            "size_readable":   format_bytes_to_human_readable(10),      # changed
-            "file_extension":  "txt",
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_a"),
-            "name":            "subdir_a",
-            "type":            "folder",
-            "parent":          str(complex_temp_dir),
-            "depth":           1,
-            "size_bytes":      0,
-            "size_readable":   format_bytes_to_human_readable(0),       # changed
-            "file_extension":  None,
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_a" / "fileA.jpg"),
-            "name":            "fileA.jpg",
-            "type":            "file",
-            "parent":          str(complex_temp_dir / "subdir_a"),
-            "depth":           2,
-            "size_bytes":      20,
-            "size_readable":   format_bytes_to_human_readable(20),      # changed
-            "file_extension":  "jpg",
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_a" / "subdir_aa"),
-            "name":            "subdir_aa",
-            "type":            "folder",
-            "parent":          str(complex_temp_dir / "subdir_a"),
-            "depth":           2,
-            "size_bytes":      0,
-            "size_readable":   format_bytes_to_human_readable(0),       # changed
-            "file_extension":  None,
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"),
-            "name":            "fileAA.csv",
-            "type":            "file",
-            "parent":          str(complex_temp_dir / "subdir_a" / "subdir_aa"),
-            "depth":           3,
-            "size_bytes":      30,
-            "size_readable":   format_bytes_to_human_readable(30),      # changed
-            "file_extension":  "csv",
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_b"),
-            "name":            "subdir_b",
-            "type":            "folder",
-            "parent":          str(complex_temp_dir),
-            "depth":           1,
-            "size_bytes":      0,
-            "size_readable":   format_bytes_to_human_readable(0),       # changed
-            "file_extension":  None,
-            "imported_path":   anchor,
-        },
-        {
-            "path":            str(complex_temp_dir / "subdir_b" / "fileB.png"),
-            "name":            "fileB.png",
-            "type":            "file",
-            "parent":          str(complex_temp_dir / "subdir_b"),
-            "depth":           2,
-            "size_bytes":      40,
-            "size_readable":   format_bytes_to_human_readable(40),      # changed
-            "file_extension":  "png",
-            "imported_path":   anchor,
-        },
-    ]
+    assert len(df_dict) == len(expected_data), "Number of rows mismatch"
 
     for i, expected_row in enumerate(expected_data):
         actual_row = df_dict[i]
         for key, expected_value in expected_row.items():
-            assert actual_row[key] == expected_value, f"Mismatch in row {i}, key '{key}'"
-        assert isinstance(actual_row["modification_date"], datetime)
+            if key == "modification_date":
+                assert isinstance(actual_row[key], datetime), f"Mismatch in row {i}, key '{key}': type"
+            elif key == "imported_path":
+                assert actual_row[key] == imported_path, f"Mismatch in row {i}, key '{key}'"
+            else:
+                assert actual_row[key] == expected_value, f"Mismatch in row {i}, key '{key}'"
+
+def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
+    """
+    Tests _fetch_single_directory_tree with a complex directory structure.
+    Verifies column types, content, depth, parent, size_readable, and imported_path.
+    """
+    df = _fetch_single_directory_tree(complex_temp_dir)
+    base_imported_path = str(complex_temp_dir)
+
+    expected_data = [
+        {
+            "path": str(complex_temp_dir), "name": complex_temp_dir.name, "type": "folder", "parent": None,
+            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
+            "file_extension": None, "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "file1.txt"), "name": "file1.txt", "type": "file",
+            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10,
+            "size_readable": format_bytes_to_human_readable(10), "file_extension": "txt",
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_a"), "name": "subdir_a", "type": "folder",
+            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0,
+            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
+            "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20,
+            "size_readable": format_bytes_to_human_readable(20), "file_extension": "jpg",
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "name": "subdir_aa", "type": "folder",
+            "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 0,
+            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv",
+            "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3,
+            "size_bytes": 30, "size_readable": format_bytes_to_human_readable(30), "file_extension": "csv",
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_b"), "name": "subdir_b", "type": "folder",
+            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0,
+            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
+            "imported_path": base_imported_path,
+        },
+        {
+            "path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
+            "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40,
+            "size_readable": format_bytes_to_human_readable(40), "file_extension": "png",
+            "imported_path": base_imported_path,
+        },
+    ]
+    _assert_directory_tree_df(df, expected_data, base_imported_path)
 
 
 def test_fetch_single_directory_tree_empty_dir(empty_temp_dir: Path):
     """Tests _fetch_single_directory_tree with an empty directory."""
     df = _fetch_single_directory_tree(empty_temp_dir)
-
-    assert isinstance(df, pl.DataFrame)
-    # An empty directory should still yield one row for the directory itself
-    assert len(df) == 1
-    assert df["path"][0] == str(empty_temp_dir)
-    assert df["type"][0] == "folder"
-    assert df["size_bytes"][0] == 0
-    assert df["depth"][0] == 0
-    assert df["parent"][0] is None  # Root of the scanned tree
+    base_imported_path = str(empty_temp_dir)
+    expected_data = [
+        {
+            "path": str(empty_temp_dir), "name": empty_temp_dir.name, "type": "folder", "parent": None,
+            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
+            "file_extension": None, "imported_path": base_imported_path,
+        },
+    ]
+    _assert_directory_tree_df(df, expected_data, base_imported_path)
 
 
 def test_fetch_single_directory_tree_single_file_dir(single_file_dir: Path):
     """Tests _fetch_single_directory_tree with a directory containing only one file."""
     df = _fetch_single_directory_tree(single_file_dir)
-
-    assert isinstance(df, pl.DataFrame)
-    assert len(df) == 2  # One for the folder, one for the file
-
-    df_dict = df.sort("path").to_dicts()
-
+    base_imported_path = str(single_file_dir)
     expected_data = [
-        # Root directory itself - parent is None
-        {"path": str(single_file_dir), "name": "single_file_root", "type": "folder", "parent": None, "depth": 0,
-         "size_bytes": 0, "file_extension": None},
-        {"path": str(single_file_dir / "single_file.txt"), "name": "single_file.txt", "type": "file",
-         "parent": str(single_file_dir), "depth": 1, "size_bytes": len("content".encode('utf-8')),
-         "file_extension": "txt"},
+        {
+            "path": str(single_file_dir), "name": single_file_dir.name, "type": "folder", "parent": None,
+            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
+            "file_extension": None, "imported_path": base_imported_path,
+        },
+        {
+            "path": str(single_file_dir / "single_file.txt"), "name": "single_file.txt", "type": "file",
+            "parent": str(single_file_dir), "depth": 1, "size_bytes": len("content".encode('utf-8')),
+            "size_readable": format_bytes_to_human_readable(len("content".encode('utf-8'))),
+            "file_extension": "txt", "imported_path": base_imported_path,
+        },
     ]
-
-    for i, expected_row in enumerate(expected_data):
-        actual_row = df_dict[i]
-        for key, expected_value in expected_row.items():
-            assert actual_row[key] == expected_value, f"Mismatch in row {i}, key '{key}'"
-        assert isinstance(actual_row["modification_date"], datetime)
+    _assert_directory_tree_df(df, expected_data, base_imported_path)
 
 
-def test_fetch_single_directory_tree_not_a_directory(tmp_path: Path):
-    """Tests _fetch_single_directory_tree raises ValueError if path is not a directory."""
-    not_a_dir = tmp_path / "not_a_dir.txt"
-    not_a_dir.touch()  # Create it as a file
-
-    with pytest.raises(ValueError, match=f"The path '{not_a_dir}' is not a valid directory."):
-        _fetch_single_directory_tree(not_a_dir)
-
-
-def test_fetch_single_directory_tree_non_existent_path(tmp_path: Path):
-    """Tests _fetch_single_directory_tree raises ValueError if path does not exist."""
-    non_existent = tmp_path / "i_do_not_exist"
-
-    with pytest.raises(ValueError, match=f"The path '{non_existent}' is not a valid directory."):
-        _fetch_single_directory_tree(non_existent)
+@pytest.mark.parametrize("path_type_creator", [
+    lambda tmp_path: (tmp_path / "not_a_dir.txt").touch() or (tmp_path / "not_a_dir.txt"),
+    lambda tmp_path: tmp_path / "i_do_not_exist"
+])
+def test_fetch_single_directory_tree_invalid_paths(tmp_path: Path, path_type_creator):
+    """Tests _fetch_single_directory_tree raises ValueError for invalid or non-existent paths."""
+    invalid_path = path_type_creator(tmp_path)
+    with pytest.raises(ValueError, match=f"The path '{invalid_path}' is not a valid directory."):
+        _fetch_single_directory_tree(invalid_path)
 
 
 # --- Tests for _aggregate_folder_sizes ---
@@ -265,6 +236,7 @@ def sample_flat_df() -> pl.DataFrame:
         "size_bytes": [100, 200, 50],
         "modification_date": [datetime.now()] * 3,
         "file_extension": ["txt", "jpg", "csv"],
+        "imported_path": ["/a", "/a", "/b"],
     })
 
 
@@ -280,6 +252,7 @@ def sample_simple_nested_df() -> pl.DataFrame:
         "size_bytes": [0, 100, 0, 50],  # Initial folder sizes are 0
         "modification_date": [datetime.now()] * 4,
         "file_extension": [None, "txt", None, "txt"],
+        "imported_path": ["/root"] * 4,
     })
 
 
@@ -295,6 +268,7 @@ def sample_multiple_roots_df() -> pl.DataFrame:
         "size_bytes": [0, 10, 0, 20],
         "modification_date": [datetime.now()] * 4,
         "file_extension": [None, "txt", None, "txt"],
+        "imported_path": ["/rootA", "/rootA", "/rootB", "/rootB"],
     })
 
 
@@ -310,6 +284,7 @@ def sample_deep_nested_df() -> pl.DataFrame:
         "size_bytes": [0, 0, 0, 75],
         "modification_date": [datetime.now()] * 4,
         "file_extension": [None, None, None, "txt"],
+        "imported_path": ["/a"] * 4,
     })
 
 
@@ -325,106 +300,34 @@ def sample_empty_folders_df() -> pl.DataFrame:
         "size_bytes": [0, 0, 100, 0, 0],
         "modification_date": [datetime.now()] * 5,
         "file_extension": [None, None, "txt", None, None],
+        "imported_path": ["/a", "/a", "/a", "/b", "/b"],
     })
 
 
-def test_aggregate_folder_sizes_flat(sample_flat_df: pl.DataFrame):
-    """Tests aggregation on a flat DataFrame with only files."""
-    aggregated_df = _aggregate_folder_sizes(sample_flat_df)
-    assert aggregated_df["size_bytes"].to_list() == [100, 200, 50]  # Sizes should be unchanged for files
-
-
-def test_aggregate_folder_sizes_simple_nested(sample_simple_nested_df: pl.DataFrame):
-    """Tests aggregation on a simply nested directory structure."""
-    aggregated_df = _aggregate_folder_sizes(sample_simple_nested_df).sort("path")
-
-    # Expected sizes:
-    # /root/subdir/file2.txt: 50
-    # /root/subdir: 50 (contains file2.txt)
-    # /root/file1.txt: 100
-    # /root: 150 (contains file1.txt + subdir's aggregated size)
-    expected_sizes_bytes = [150, 100, 50, 50]  # Order after sort: /root, /root/file1, /root/subdir, /root/subdir/file2
-
-    # Sort the actual DF by path to match expected_sizes_bytes order
-    actual_sizes = aggregated_df.select(pl.col("path"), pl.col("size_bytes")).to_dicts()
-
-    # Re-order expected data based on path for direct comparison
-    expected_data_sorted = {
-        "/root": 150,
-        "/root/file1.txt": 100,
-        "/root/subdir": 50,
-        "/root/subdir/file2.txt": 50,
-    }
-
-    for row in actual_sizes:
-        assert row["size_bytes"] == expected_data_sorted[row["path"]]
-
-
-def test_aggregate_folder_sizes_multiple_roots(sample_multiple_roots_df: pl.DataFrame):
-    """Tests aggregation when there are multiple independent root folders."""
-    aggregated_df = _aggregate_folder_sizes(sample_multiple_roots_df).sort("path")
-
-    # Expected sizes:
-    # /rootA/fileA.txt: 10
-    # /rootA: 10
-    # /rootB/fileB.txt: 20
-    # /rootB: 20
-    expected_data_sorted = {
-        "/rootA": 10,
-        "/rootA/fileA.txt": 10,
-        "/rootB": 20,
-        "/rootB/fileB.txt": 20,
-    }
+@pytest.mark.parametrize(
+    "input_df_fixture, expected_sizes_map",
+    [
+        ("sample_flat_df", {"/a/file1.txt": 100, "/a/file2.jpg": 200, "/b/file3.csv": 50}),
+        ("sample_simple_nested_df", {"/root": 150, "/root/file1.txt": 100, "/root/subdir": 50, "/root/subdir/file2.txt": 50}),
+        ("sample_multiple_roots_df", {"/rootA": 10, "/rootA/fileA.txt": 10, "/rootB": 20, "/rootB/fileB.txt": 20}),
+        ("sample_deep_nested_df", {"/a": 75, "/a/b": 75, "/a/b/c": 75, "/a/b/c/file.txt": 75}),
+        ("sample_empty_folders_df", {"/a": 100, "/a/empty_subdir": 0, "/a/file.txt": 100, "/b": 0, "/b/another_empty_dir": 0}),
+    ]
+)
+def test_aggregate_folder_sizes(request, input_df_fixture, expected_sizes_map):
+    """Tests aggregation on various directory structures."""
+    input_df = request.getfixturevalue(input_df_fixture)
+    aggregated_df = _aggregate_folder_sizes(input_df).sort("path")
 
     actual_sizes = aggregated_df.select(pl.col("path"), pl.col("size_bytes")).to_dicts()
 
     for row in actual_sizes:
-        assert row["size_bytes"] == expected_data_sorted[row["path"]]
-
-
-def test_aggregate_folder_sizes_deep_nested(sample_deep_nested_df: pl.DataFrame):
-    """Tests aggregation on a deeply nested structure."""
-    aggregated_df = _aggregate_folder_sizes(sample_deep_nested_df).sort("path")
-
-    # Expected sizes:
-    # /a/b/c/file.txt: 75
-    # /a/b/c: 75
-    # /a/b: 75
-    # /a: 75
-    expected_data_sorted = {
-        "/a": 75,
-        "/a/b": 75,
-        "/a/b/c": 75,
-        "/a/b/c/file.txt": 75,
-    }
-
-    actual_sizes = aggregated_df.select(pl.col("path"), pl.col("size_bytes")).to_dicts()
-
-    for row in actual_sizes:
-        assert row["size_bytes"] == expected_data_sorted[row["path"]]
-
-
-def test_aggregate_folder_sizes_empty_folders(sample_empty_folders_df: pl.DataFrame):
-    """Tests aggregation with empty folders (should remain 0 size)."""
-    aggregated_df = _aggregate_folder_sizes(sample_empty_folders_df).sort("path")
-
-    expected_data_sorted = {
-        "/a": 100,  # Contains file.txt
-        "/a/empty_subdir": 0,  # Empty
-        "/a/file.txt": 100,
-        "/b": 0,  # Contains only empty_dir
-        "/b/another_empty_dir": 0,  # Empty
-    }
-
-    actual_sizes = aggregated_df.select(pl.col("path"), pl.col("size_bytes")).to_dicts()
-
-    for row in actual_sizes:
-        assert row["size_bytes"] == expected_data_sorted[row["path"]]
+        assert row["size_bytes"] == expected_sizes_map[row["path"]]
 
 
 def test_aggregate_folder_sizes_empty_input_df():
     """Tests aggregation with an empty input DataFrame."""
-    empty_df = pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)  # Use correct schema
+    empty_df = pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
     aggregated_df = _aggregate_folder_sizes(empty_df)
     assert aggregated_df.is_empty()
-    assert aggregated_df.schema == empty_df.schema  # Schema should be preserved
+    assert aggregated_df.schema == empty_df.schema

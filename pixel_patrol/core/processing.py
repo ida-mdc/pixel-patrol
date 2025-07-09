@@ -6,6 +6,8 @@ import logging
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes, make_basic_record
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol.utils.df_utils import normalize_file_extension
+from pixel_patrol.utils.path_utils import find_common_base
 from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata, available_columns
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,26 @@ PATHS_DF_EXPECTED_SCHEMA = {
     "imported_path": pl.String
 }
 
+
+def _postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
+    if df.is_empty():
+        return df
+
+    common_base = find_common_base(df["imported_path"].unique().to_list())
+
+    df = df.with_columns([
+        pl.col("modification_date").dt.month().alias("modification_month"),
+        pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
+        pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
+    ])
+
+    return df.select([
+        pl.col(c).cast(t) if c in df.columns
+        else pl.lit(None, dtype=t).alias(c)
+        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
+    ])
+
+
 # TODO: still needs some more clean up
 def build_paths_df(paths: List[Path]) -> Optional[pl.DataFrame]:
     """
@@ -41,80 +63,27 @@ def build_paths_df(paths: List[Path]) -> Optional[pl.DataFrame]:
             tree = tree.with_columns(pl.lit(str(base)).alias("imported_path"))
             all_trees.append(tree)
         except ValueError as e:
-            logger.warning(f"Skipping invalid directory {base!r}: {e}")
+            logger.warning(f"Error processing path {base!r}: {e}. Skipping")
         except OSError as e:
-            logger.warning(f"I/O error processing {base!r}: {e}")
+            logger.warning(f"I/O error processing {base!r}: {e}. Skipping")
         except Exception as e:
-            logger.error(f"Unexpected error processing {base!r}: {e}", exc_info=True)
+            logger.error(f"Unexpected error processing {base!r}: {e}. Skipping", exc_info=True)
 
     if not all_trees:
         return pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
 
     df = pl.concat(all_trees, how="vertical_relaxed")
 
-    # normalize file extensions
-    df = df.with_columns(
-        pl.when(pl.col("type") == "file")
-          .then(
-              pl.coalesce(
-                  pl.col("file_extension").str.to_lowercase().fill_null(""),
-                  pl.col("name").str.extract(r"\.([^.]+)$", 1).str.to_lowercase().fill_null("")
-              )
-          )
-          .otherwise(pl.lit(None))
-          .alias("file_extension")
-    )
+    df = normalize_file_extension(df)
 
     # aggregate folder sizes and add human-readable sizes
     df = _aggregate_folder_sizes(df)
-    df = df.with_columns(
-        pl.col("size_bytes")
-          .map_elements(format_bytes_to_human_readable)
-          .alias("size_readable")
-    )
 
-    # enforce schema order and types
-    return df.select([
-        pl.col(c).cast(t) if c in df.columns
-        else pl.lit(None, dtype=t).alias(c)
-        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
-    ])
-
-
-
-######### build_images_df helpers + function ##########
-
-def find_common_base(paths: List[str]) -> str:
-    """
-    Finds the common base path among a list of paths.
-    """
-    if not paths:
-        return ""
-    if len(paths) == 1:
-        return str(Path(paths[0]).parent) + "/"  # Ensure it ends with a slash if it's a directory
-
-    # Convert to Path objects to use their methods
-    path_objects = [Path(p) for p in paths]
-
-    # Find the shortest path, as it might be part of the common base
-    shortest_path = min(path_objects, key=lambda p: len(str(p)))
-
-    common_parts = []
-    for part in shortest_path.parts:
-        if all(part in p.parts for p in path_objects):
-            common_parts.append(part)
-        else:
-            break
-
-    # Reconstruct the common base
-    common_base = Path(*common_parts)
-
-    # Ensure it ends with a separator if it's a directory
-    return str(common_base) + "/" if common_base.is_dir() else str(common_base)
+    return _postprocess_basic_file_metadata_df(df)
 
 ################################## Shared Helpers for build_images_df_from functions ###################################
 
-def _paths_from_dirs(
+def _scan_dirs_for_extensions(
     bases: List[Path],
     accepted_extensions: Set[str]
 ) -> List[Tuple[Path, Path]]:
@@ -151,17 +120,18 @@ def _get_deep_image_metadata_df(paths: List[Path], required_cols: List[str]) -> 
     return pl.DataFrame(metadata)
 
 
-def _finalize(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
-    """Join basic + deep on 'path' and enforce schema order/types."""
+def _merge_basic_and_deep_image_metadata(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
     joined = basic.join(deep, on="path", how="left")
-    # ensure all columns from PATHS_DF_EXPECTED_SCHEMA appear, cast appropriately
-    cols = []
-    for col_name, col_type in PATHS_DF_EXPECTED_SCHEMA.items():
-        if col_name in joined.columns:
-            cols.append(pl.col(col_name).cast(col_type))
-        else:
-            cols.append(pl.lit(None, dtype=col_type).alias(col_name))
-    return joined.select(cols)
+    basic_cols = [
+        pl.col(name).cast(dtype).alias(name)
+        for name, dtype in PATHS_DF_EXPECTED_SCHEMA.items()
+    ]
+    deep_cols = [
+        pl.col(col)
+        for col in deep.columns
+        if col not in PATHS_DF_EXPECTED_SCHEMA
+    ]
+    return joined.select(*basic_cols, *deep_cols)
 
 ################################### Main Function to Build Images DataFrame ###################################
 
@@ -181,17 +151,7 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
         logger.warning(f"No image files found in paths_df for extensions {extensions}")
         return None
 
-    # Enforce match to PATHS_DF_EXPECTED_SCHEMA by casting existing columns and filling missing ones with nulls
-    # TODO: I'm pretty sure its not needed as we build paths_df with the same make_basic_record function
-    basic_file_df = filtered_df.select([
-        pl.col(c).cast(t)
-        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
-        if c in filtered_df.columns
-    ] + [
-        pl.lit(None, dtype=PATHS_DF_EXPECTED_SCHEMA[c]).alias(c)
-        for c in PATHS_DF_EXPECTED_SCHEMA
-        if c not in filtered_df.columns
-    ])
+    basic_file_df = _postprocess_basic_file_metadata_df(filtered_df)
 
     # TODO: speed test - paths to list instead of all polars native operations?
     # but.. extract_image_metadata is operating on individual paths, so it should be fine
@@ -199,7 +159,7 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
     paths = [Path(p) for p in basic_file_df["path"].to_list()]
     deep_image_df = _get_deep_image_metadata_df(paths, required)
 
-    return _finalize(basic_file_df, deep_image_df)
+    return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
 
 
 def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
@@ -209,7 +169,7 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
     Returns a complete images_df.
     """
 
-    path_base_pairs = _paths_from_dirs(bases, selected_extensions)
+    path_base_pairs = _scan_dirs_for_extensions(bases, selected_extensions)
     if not path_base_pairs:
         logger.warning(
             f"No image files found in the provided directories for extensions: {selected_extensions}"
@@ -221,9 +181,12 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
         for path, base in path_base_pairs
     ])
 
+    basic_file_df = normalize_file_extension(basic_file_df)
+    basic_file_df = _postprocess_basic_file_metadata_df(basic_file_df)
+
     deep_image_df = _get_deep_image_metadata_df([p for p, _ in path_base_pairs], available_columns())
 
-    return _finalize(basic_file_df, deep_image_df)
+    return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
 
 
 ###################################### Other #####################################################
