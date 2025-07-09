@@ -3,12 +3,14 @@ from pathlib import Path
 import polars as pl
 from typing import List
 from datetime import datetime
+from PIL import Image
+import numpy as np
 import logging
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
 from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
-from pixel_patrol.utils.utils import format_bytes_to_human_readable # For testing the formatted column
-
+from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol.core.file_system import _aggregate_folder_sizes
 
 @pytest.fixture
 def mock_project_name() -> str:
@@ -36,9 +38,10 @@ def temp_test_dirs(tmp_path: Path) -> List[Path]:
 
     # You might also want to create some files within these directories
     # if your processing.process_paths expects to find files.
-    (dir1 / "fileA.jpg").touch()
+    img = Image.fromarray(np.zeros((1, 1, 3), dtype=np.uint8))
+    img.save(dir1 / "fileA.jpg")
+    img.save(dir2 / "fileB.png")
     (subdir_a / "fileC.txt").touch()
-    (dir2 / "fileB.png").touch()
 
     return [dir1, dir2]
 
@@ -63,6 +66,36 @@ def mock_temp_file_system(tmp_path: Path) -> List[Path]:
     # Return the root paths that would be passed to build_paths_df
     return [dir1, dir2]
 
+
+@pytest.fixture
+def patch_tree(mocker):
+    return lambda df: mocker.patch(
+        "pixel_patrol.core.processing._fetch_single_directory_tree",
+        return_value=df,
+    )
+
+@pytest.fixture
+def build_expected_paths_df():
+    def _fn(rows: list[dict]) -> pl.DataFrame:
+        df = pl.DataFrame(rows)
+        if "size_bytes" not in df.columns and not df.is_empty():
+            df = df.with_columns(pl.lit(0).cast(pl.Int64).alias("size_bytes"))
+        if {"path", "parent", "type", "depth"}.issubset(df.columns) and not df.is_empty():
+            df = _aggregate_folder_sizes(df)
+
+        return (
+            df
+            .with_columns(
+                pl.col("size_bytes")
+                  .map_elements(format_bytes_to_human_readable, return_dtype=pl.String)
+                  .alias("size_readable")
+            )
+            .select(*PATHS_DF_EXPECTED_SCHEMA.keys())
+            .sort("path")
+        )
+    return _fn
+
+
 @pytest.fixture
 def mock_settings() -> Settings:
     """Provides a default Settings instance."""
@@ -76,24 +109,23 @@ def mock_paths_df_content(tmp_path: Path) -> pl.DataFrame:
     Ensures it matches PATHS_DF_EXPECTED_SCHEMA and uses dynamic paths relative to tmp_path.
     """
     # Use tmp_path to construct absolute paths
-    base_path_str = str(tmp_path)
     dir1_path = tmp_path / "test_dir1"
     dir2_path = tmp_path / "test_dir2"
     subdir_a_path = dir1_path / "subdir_a"
 
     data = [
-        {"path": str(dir1_path), "name": "test_dir1", "type": "folder", "parent": base_path_str, "depth": 0,
-         "size_bytes": 1024, "modification_date": datetime.now(), "file_extension": None},
+        {"path": str(dir1_path), "name": "test_dir1", "type": "folder", "parent": str(tmp_path), "depth": 0,
+         "size_bytes": 1024, "modification_date": datetime.now(), "file_extension": None, "imported_path": str(dir1_path)}, #
         {"path": str(dir1_path / "fileA.jpg"), "name": "fileA.jpg", "type": "file", "parent": str(dir1_path),
-         "depth": 1, "size_bytes": 512, "modification_date": datetime.now(), "file_extension": "jpg"},
+         "depth": 1, "size_bytes": 512, "modification_date": datetime.now(), "file_extension": "jpg", "imported_path": str(dir1_path)}, #
         {"path": str(subdir_a_path), "name": "subdir_a", "type": "folder", "parent": str(dir1_path), "depth": 1,
-         "size_bytes": 512, "modification_date": datetime.now(), "file_extension": None},
+         "size_bytes": 512, "modification_date": datetime.now(), "file_extension": None, "imported_path": str(dir1_path)}, #
         {"path": str(subdir_a_path / "fileC.txt"), "name": "fileC.txt", "type": "file", "parent": str(subdir_a_path),
-         "depth": 2, "size_bytes": 512, "modification_date": datetime.now(), "file_extension": "txt"},
-        {"path": str(dir2_path), "name": "test_dir2", "type": "folder", "parent": base_path_str, "depth": 0,
-         "size_bytes": 2048, "modification_date": datetime.now(), "file_extension": None},
+         "depth": 2, "size_bytes": 512, "modification_date": datetime.now(), "file_extension": "txt", "imported_path": str(dir1_path)}, #
+        {"path": str(dir2_path), "name": "test_dir2", "type": "folder", "parent": str(tmp_path), "depth": 0,
+         "size_bytes": 2048, "modification_date": datetime.now(), "file_extension": None, "imported_path": str(dir2_path)}, #
         {"path": str(dir2_path / "fileB.png"), "name": "fileB.png", "type": "file", "parent": str(dir2_path),
-         "depth": 1, "size_bytes": 2048, "modification_date": datetime.now(), "file_extension": "png"},
+         "depth": 1, "size_bytes": 2048, "modification_date": datetime.now(), "file_extension": "png", "imported_path": str(dir2_path)}, #
     ]
 
     df = pl.DataFrame(data).with_columns(

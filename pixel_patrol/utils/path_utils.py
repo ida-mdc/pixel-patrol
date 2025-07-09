@@ -61,3 +61,31 @@ def process_new_paths_for_redundancy(validated_paths: List[Path], existing_paths
 
     return final_paths_set
 
+
+def find_common_base(paths: List[str]) -> str:
+    """
+    Finds the common base path among a list of paths.
+    """
+    if not paths:
+        return ""
+    if len(paths) == 1:
+        return str(Path(paths[0]).parent) + "/"  # Ensure it ends with a slash if it's a directory
+
+    # Convert to Path objects to use their methods
+    path_objects = [Path(p) for p in paths]
+
+    # Find the shortest path, as it might be part of the common base
+    shortest_path = min(path_objects, key=lambda p: len(str(p)))
+
+    common_parts = []
+    for part in shortest_path.parts:
+        if all(part in p.parts for p in path_objects):
+            common_parts.append(part)
+        else:
+            break
+
+    # Reconstruct the common base
+    common_base = Path(*common_parts)
+
+    # Ensure it ends with a separator if it's a directory
+    return str(common_base) + "/"
