@@ -20,10 +20,14 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install uv and project in editable mode
+    - name: Install uv and create virtual environment
       run: |
-        pip install uv           
-        uv pip install -e .     
+        pip install uv # Install uv itself
+        uv venv        # Create the .venv virtual environment
+
+    - name: Install project in editable mode
+      run: |
+        uv pip install -e .   
 
     - name: Run tests with pytest
       run: |
