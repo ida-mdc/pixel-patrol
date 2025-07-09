@@ -36,8 +36,7 @@ def test_create_project_base_dir_not_a_directory(mock_project_name: str, tmp_pat
         api.create_project(mock_project_name, test_file)
 
 def test_create_project_invalid_base_dir_type(mock_project_name: str):
-    # Updated regex to match the TypeError from pathlib.Path
-    expected_error_regex = "argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'int'"
+    expected_error_regex = r"(?:argument should be a |expected )str(?:, bytes)? or (?:an )?os\.PathLike object(?: where __fspath__ returns a str)?, not 'int'" 
     with pytest.raises(TypeError, match=expected_error_regex):
         api.create_project(mock_project_name, 12345)  # An integer is an invalid type
 
