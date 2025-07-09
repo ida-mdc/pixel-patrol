@@ -11,6 +11,10 @@ DEFAULT_PRESELECTED_FILE_EXTENSIONS: Set[str] = {
     "jpg", "jpeg", "png", "bmp", "gif"
 }
 
+FOLDER_EXTENSIONS_AS_FILES = {
+    ".zarr", ".ome.zarr", ".n5", ".imaris", ".napari", ".nd2folder"
+}
+
 MIN_N_EXAMPLE_IMAGES: int = 1
 MAX_N_EXAMPLE_IMAGES: int = 20
 DEFAULT_N_EXAMPLE_IMAGES: int = 9

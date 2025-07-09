@@ -5,12 +5,9 @@ from datetime import datetime
 from typing import Dict, Any, List
 import logging
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol.config import FOLDER_EXTENSIONS_AS_FILES
 
 logger = logging.getLogger(__name__)
-
-FOLDER_EXTENSIONS_AS_FILES = {
-    ".zarr", ".ome.zarr", ".n5", ".imaris", ".napari", ".nd2folder"
-}
 
 def is_folder_like_file(path: Path) -> bool:
     return any(str(path).endswith(ext) for ext in FOLDER_EXTENSIONS_AS_FILES)
