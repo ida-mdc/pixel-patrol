@@ -5,7 +5,6 @@ from typing import List
 from datetime import datetime
 from PIL import Image
 import numpy as np
-import logging
 from pixel_patrol.core.project import Project
 from pixel_patrol.core.project_settings import Settings
 from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
@@ -26,22 +25,22 @@ def project_instance(mock_project_name: str, tmp_path: Path) -> Project:
 
 @pytest.fixture
 def temp_test_dirs(tmp_path: Path) -> List[Path]:
-    """Creates temporary directories for testing purposes."""
+    """
+    Creates temporary directories for testing purposes with a guaranteed set of processable images.
+    This fixture now serves as the consolidated "image-rich" temporary directory.
+    """
     dir1 = tmp_path / "test_dir1"
     dir2 = tmp_path / "test_dir2"
     subdir_a = dir1 / "subdir_a"
 
-    # Create the directories
     dir1.mkdir()
     dir2.mkdir()
     subdir_a.mkdir()
 
-    # You might also want to create some files within these directories
-    # if your processing.process_paths expects to find files.
-    img = Image.fromarray(np.zeros((1, 1, 3), dtype=np.uint8))
-    img.save(dir1 / "fileA.jpg")
-    img.save(dir2 / "fileB.png")
-    (subdir_a / "fileC.txt").touch()
+    img_array = np.random.randint(0, 256, (10, 10, 3), dtype=np.uint8)
+    Image.fromarray(img_array).save(dir1 / "valid_image1.jpg")
+    Image.fromarray(img_array).save(dir2 / "valid_image2.png")
+    (subdir_a / "fileC.txt").touch() # Still keep other file types
 
     return [dir1, dir2]
 
@@ -193,35 +192,25 @@ def project_with_minimal_data(project_instance: Project, temp_test_dirs: list[Pa
     return project
 
 @pytest.fixture
-def project_with_all_data(project_with_minimal_data: Project) -> Project:
+def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path]) -> Project:
     """
-    Provides a Project with base_dir, paths_df, images_df, and custom settings.
-    It interacts directly with the Project object methods.
-    Builds upon project_with_minimal_data.
+    Provides a Project with base_dir, paths_df, images_df, and custom settings,
+    guaranteeing processable images.
     """
-    project = project_with_minimal_data # Already has base_dir, paths, paths_df
+    project = project_instance # Already has base_dir set by fixture
 
-    # Set some custom settings for image processing that include actual image extensions
+    # Add paths from the image-rich directory structure
+    project.add_paths(temp_test_dirs)
+    project.process_paths()
+
+    # Set some custom settings for image processing
     new_settings = Settings(
         cmap="viridis",
         n_example_images=5,
-        selected_file_extensions={"jpg", "png", "gif"} # Match extensions in temp_test_dirs
+        selected_file_extensions={"jpg", "png", "gif"} # Match extensions
     )
-    project.set_settings(new_settings) # Direct call to Project method
+    project.set_settings(new_settings)
 
-    # Build images_df based on the dummy files created in temp_test_dirs
-    try:
-        project.process_images() # Direct call to Project method
-    except ValueError as e:
-        # If no images are found (e.g., due to specific test setup or filtering),
-        # log and optionally provide a mock images_df for consistent testing.
-        logging.warning(f"Could not build images_df for fixture project_with_all_data: {e}")
-        # Fallback to a mock images_df if real one couldn't be built
-        project.images_df = pl.DataFrame({
-            "image_path": [str(project.base_dir / "test_dir1" / "fileA.jpg"), str(project.base_dir / "test_dir2" / "fileB.png")],
-            "width": [100, 200],
-            "height": [150, 250],
-            "size_bytes": [1024, 2048],
-            "is_corrupt": [False, False]
-        })
+    project.process_images()
+
     return project
