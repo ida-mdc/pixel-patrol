@@ -3,12 +3,13 @@ from itertools import product
 from typing import Callable, Optional
 from typing import Dict, List, Tuple, Any
 
-import bioio_base
 import cv2
 import numpy as np
 # import pywt
 from PIL import Image
+import bioio_base
 from bioio import BioImage
+import bioio_imageio
 
 import logging
 from pathlib import Path
@@ -52,7 +53,7 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
     Maps requested metadata fields to functions that extract them from a BioImage object.
     These functions return a dictionary with the extracted key-value pair.
     """
-    # These functions return a dict, and extract_image_metadata will update the main metadata dict
+    # These functions return a dict, and get_all_image_properties will update the main metadata dict
     return {
         "dim_order": lambda img: {"dim_order": img.dims.order},
         "t_size": lambda img: {"t_size": img.dims.T},
@@ -77,7 +78,7 @@ def _mapping_for_png_metadata_by_column_name() -> Dict[str, Callable[[Image.Imag
     """
     Maps requested metadata fields to functions that extract them from a PIL Image object.
     """
-    # These functions return a dict, and extract_image_metadata will update the main metadata dict
+    # These functions return a dict, and get_all_image_properties will update the main metadata dict
     return {
         "dim_order": lambda img: {"dim_order": "XYC" if len(img.getbands()) > 1 else "XY"},
         "t_size": lambda img: {"t_size": 1},
@@ -103,25 +104,23 @@ def column_matches(column: str, columns_requested: List[str]) -> bool:
     return any(fnmatch.fnmatch(column, pattern) for pattern in columns_requested)
 
 
-def _load_image(file_path: Path) -> Tuple[Any, str | None]:
+def _load_image(file_path: Path) -> Any:
     """Helper to load an image, returning the image object and its type."""
     try:
         img = BioImage(file_path)
-        logger.debug(f"Successfully loaded '{file_path}' as BioImage.")
-        print(f"Image loaded from {file_path} with dimensions: {img.dims.order}, shape: {img.data.shape}")
-        return img, "bioimage"
     except bioio_base.exceptions.UnsupportedFileFormatError:
-        logger.debug(f"'{file_path}' is not a BioImage, attempting to load with PIL.")
         try:
-            img = Image.open(file_path)
-            logger.debug(f"Successfully loaded '{file_path}' with PIL.")
-            return img, "pil"
+            img = BioImage(file_path, reader=bioio_imageio.Reader)
         except Exception as e:
-            logger.warning(f"Could not load '{file_path}' with PIL: {e}")
-            return None, None
+            logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
+            return None
     except Exception as e:
-        logger.warning(f"Could not load '{file_path}' as BioImage: {e}")
-        return None, None
+        logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
+        return None
+
+    logger.info(f"Successfully loaded '{file_path}' with BioImage.")
+    return img
+
 
 def _extract_metadata_from_mapping(
     img: Any,
@@ -150,64 +149,41 @@ def _extract_metadata_from_mapping(
 
 
 
-def _get_numpy_array_and_dim_order(img: Any, img_type: str, required_columns: List[str], metadata: Dict) -> Tuple[np.ndarray | None, str | None]:
+def _get_numpy_array_and_dim_order(img: Any) -> Tuple[np.ndarray | None, str | None]:
     """
     Extracts NumPy array and infers dim_order based on image type.
     """
     np_array = None
     dim_order = None
 
-    if img_type == "bioimage":
-        try:
-            np_array = img.data
-            dim_order = img.dims.order
-        except Exception as e:
-            logger.warning(f"Could not load data from BioImage: {e}")
-    elif img_type == "pil":
-        try:
-            np_array = np.array(img)
-            # Basic inference for PIL images if dim_order is required and not already from mapping
-            if "dim_order" in required_columns:
-                if np_array.ndim == 3 and np_array.shape[-1] in [3, 4]:
-                    inferred_dim_order = "XYC"
-                elif np_array.ndim == 2:
-                    inferred_dim_order = "XY"
-                else:
-                    inferred_dim_order = ""  # Cannot infer
-                metadata["dim_order"] = inferred_dim_order
-            dim_order = metadata.get("dim_order") # Use the inferred or previously extracted dim_order
-        except Exception as e:
-            logger.warning(f"Could not convert PIL Image to NumPy array: {e}")
+    try:
+        np_array = img.data
+        dim_order = img.dims.order
+    except Exception as e:
+        logger.warning(f"Could not load data from BioImage: {e}")
 
     return np_array, dim_order
 
 
-def extract_image_metadata(file_path: Path, required_columns: List[str]) -> Dict:
+def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Dict:
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
-    img, img_type = _load_image(file_path)
-    if img is None:
-        logger.error(f"Failed to load image from '{file_path}'. Cannot extract metadata.")
-        return {}
+    img = _load_image(file_path)
 
-    metadata = {}
+    all_image_properties = {}
 
-    if img_type == "bioimage":
-        bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
-        _extract_metadata_from_mapping(img, bioimage_mapping, required_columns, metadata)
-    elif img_type == "pil":
-        pil_mapping = _mapping_for_png_metadata_by_column_name()
-        _extract_metadata_from_mapping(img, pil_mapping, required_columns, metadata)
+    bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
+    _extract_metadata_from_mapping(img, bioimage_mapping, required_columns, all_image_properties)
 
-    np_array, dim_order = _get_numpy_array_and_dim_order(img, img_type, required_columns, metadata)
+    np_array, dim_order = _get_numpy_array_and_dim_order(img)
 
     if np_array is not None and np_array.size > 0:
-        calculate_np_array_stats(required_columns, metadata, np_array, dim_order)
+        calculate_np_array_stats(required_columns, all_image_properties, np_array, dim_order)
     elif np_array is not None and np_array.size == 0:
         logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping array stats.")
 
-    return metadata
+    return all_image_properties
 
 
 def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray],

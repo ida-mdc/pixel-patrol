@@ -8,7 +8,7 @@ from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggrega
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
 from pixel_patrol.utils.df_utils import normalize_file_extension
 from pixel_patrol.utils.path_utils import find_common_base
-from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata, available_columns
+from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties, available_columns
 
 logger = logging.getLogger(__name__)
 
@@ -107,17 +107,17 @@ def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFra
     )
 
 
-def _get_deep_image_metadata_df(paths: List[Path], required_cols: List[str]) -> pl.DataFrame:
-    """Loop over paths, extract_image_metadata, return DataFrame (may be empty)."""
-    metadata = []
+def _get_deep_image_df(paths: List[Path], required_cols: List[str]) -> pl.DataFrame:
+    """Loop over paths, get_all_image_properties, return DataFrame (may be empty)."""
+    images_dicts = []
     for p in paths:
         try:
-            meta = extract_image_metadata(p, required_cols)
-            if meta:
-                metadata.append({"path": str(p), **meta})
+            image_dict = get_all_image_properties(p, required_cols)
+            if image_dict:
+                images_dicts.append({"path": str(p), **image_dict})
         except Exception as e:
             logger.warning(f"Metadata extraction failed for {p}: {e}")
-    return pl.DataFrame(metadata)
+    return pl.DataFrame(images_dicts)
 
 
 def _merge_basic_and_deep_image_metadata(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
@@ -154,10 +154,9 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
     basic_file_df = _postprocess_basic_file_metadata_df(filtered_df)
 
     # TODO: speed test - paths to list instead of all polars native operations?
-    # but.. extract_image_metadata is operating on individual paths, so it should be fine
-    required = available_columns()
+    # but.. get_all_image_properties is operating on individual paths, so it should be fine
     paths = [Path(p) for p in basic_file_df["path"].to_list()]
-    deep_image_df = _get_deep_image_metadata_df(paths, required)
+    deep_image_df = _get_deep_image_df(paths, available_columns())
 
     return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
 
@@ -184,7 +183,7 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
     basic_file_df = normalize_file_extension(basic_file_df)
     basic_file_df = _postprocess_basic_file_metadata_df(basic_file_df)
 
-    deep_image_df = _get_deep_image_metadata_df([p for p, _ in path_base_pairs], available_columns())
+    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], available_columns())
 
     return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
 

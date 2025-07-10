@@ -8,6 +8,7 @@ dependencies = [
     "bioio>=1.6.1",
     "bioio-ome-zarr>=1.2.0",
     "bioio-tifffile>=1.2.0",
+    "bioio-imageio==1.1.0",
     "click>=8.2.1",
     "dash-ag-grid>=31.3.1",
     "dash-bootstrap-components>=2.0.3",
