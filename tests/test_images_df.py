@@ -4,7 +4,7 @@ from typing import Dict
 from datetime import datetime
 import pytest
 
-from pixel_patrol.core.image_operations_and_metadata import extract_image_metadata
+from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 
@@ -45,25 +45,25 @@ def static_test_images(request) -> Dict[str, Path]:
     }
 
 
-def test_extract_image_metadata_png(static_test_images: Dict[str, Path]):
+def test_get_all_image_properties_png(static_test_images: Dict[str, Path]):
     pass
 
 
-def test_extract_image_metadata_tif(static_test_images: Dict[str, Path]):
+def test_get_all_image_properties_tif(static_test_images: Dict[str, Path]):
     pass
 
 
-def test_extract_image_metadata_invalid_file(static_test_images: Dict[str, Path]):
+def test_get_all_image_properties_invalid_file(static_test_images: Dict[str, Path]):
     invalid_path = static_test_images["invalid"]
-    metadata = extract_image_metadata(invalid_path, COMMON_REQUIRED_METADATA_COLS)
+    metadata = get_all_image_properties(invalid_path, COMMON_REQUIRED_METADATA_COLS)
 
     assert isinstance(metadata, dict)
     assert not metadata # Should be empty
 
 
-def test_extract_image_metadata_non_existent_file(static_test_images: Dict[str, Path]):
+def test_get_all_image_properties_non_existent_file(static_test_images: Dict[str, Path]):
     non_existent_path = static_test_images["non_existent"]
-    metadata = extract_image_metadata(non_existent_path, COMMON_REQUIRED_METADATA_COLS)
+    metadata = get_all_image_properties(non_existent_path, COMMON_REQUIRED_METADATA_COLS)
 
     assert isinstance(metadata, dict)
     assert not metadata # Should be empty
