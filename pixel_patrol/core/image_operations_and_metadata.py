@@ -14,6 +14,8 @@ import bioio_imageio
 import logging
 from pathlib import Path
 
+from pixel_patrol.config import STANDARD_DIM_ORDER
+
 logger = logging.getLogger(__name__)
 
 SPRITE_SIZE = 64
@@ -55,7 +57,7 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
     """
     # These functions return a dict, and get_all_image_properties will update the main metadata dict
     return {
-        "dim_order": lambda img: {"dim_order": img.dims.order},
+        "dim_order": lambda img: {"dim_order": STANDARD_DIM_ORDER},
         "t_size": lambda img: {"t_size": img.dims.T},
         "c_size": lambda img: {"c_size": img.dims.C},
         "z_size": lambda img: {"z_size": img.dims.Z},
@@ -74,37 +76,13 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
     }
 
 
-def _mapping_for_png_metadata_by_column_name() -> Dict[str, Callable[[Image.Image], Dict]]:
-    """
-    Maps requested metadata fields to functions that extract them from a PIL Image object.
-    """
-    # These functions return a dict, and get_all_image_properties will update the main metadata dict
-    return {
-        "dim_order": lambda img: {"dim_order": "XYC" if len(img.getbands()) > 1 else "XY"},
-        "t_size": lambda img: {"t_size": 1},
-        "c_size": lambda img: {"c_size": len(img.getbands())},  # Number of channels
-        "z_size": lambda img: {"z_size": 1},
-        "y_size": lambda img: {"y_size": img.height},
-        "x_size": lambda img: {"x_size": img.width},
-        "s_size": lambda img: {"s_size": 1},
-        "m_size": lambda img: {"m_size": 1},
-        "n_images": lambda img: {"n_images": 1},
-        "dtype": lambda img: {"dtype": str(img.mode)},  # PIL mode as dtype
-        "pixel_size_X": lambda img: {"pixel_size_X": 1.0},  # Default if not found
-        "pixel_size_Y": lambda img: {"pixel_size_Y": 1.0},  # Default if not found
-        "pixel_size_Z": lambda img: {"pixel_size_Z": 1.0},  # Default if not found
-        "pixel_size_t": lambda img: {"pixel_size_t": 1.0},  # Default if not found
-        "channel_names": lambda img: {"channel_names": list(img.getbands())},  # PIL getbands() for channel names
-    }
-
-
 def column_matches(column: str, columns_requested: List[str]) -> bool:
     """Check if column matches any entry in columns_requested (supporting wildcards)."""
     # Using fnmatch for proper wildcard support as in the old code
     return any(fnmatch.fnmatch(column, pattern) for pattern in columns_requested)
 
 
-def _load_image(file_path: Path) -> Any:
+def _load_bioio_image(file_path: Path) -> Any:
     """Helper to load an image, returning the image object and its type."""
     try:
         img = BioImage(file_path)
@@ -122,15 +100,13 @@ def _load_image(file_path: Path) -> Any:
     return img
 
 
-def _extract_metadata_from_mapping(
-    img: Any,
-    mapping: Dict[str, Any], # Changed from Any to avoid circular imports if BioImage is not defined
-    required_columns: List[str],
-    metadata: Dict
-):
+def _extract_metadata_from_mapping(img: Any, mapping: Dict[str, Any], required_columns: List[str]):
     """
     Extracts metadata using a given mapping, handling individual column failures.
     """
+
+    metadata: dict[str, Any] = {}
+
     for column_name, extractor_func in mapping.items():
         if column_matches(column_name, required_columns):
             try:
@@ -147,6 +123,20 @@ def _extract_metadata_from_mapping(
                     f"Failed to extract metadata for column '{column_name}' from image. Error: {e}"
                 )
 
+    return metadata
+
+
+def _get_standardized_image_array(img: Any) -> np.ndarray:
+    np_array = img.get_image_data()
+    dim_order = img.dims.order
+
+    if dim_order != STANDARD_DIM_ORDER:
+        for i, d in enumerate(STANDARD_DIM_ORDER):
+            if d not in dim_order:
+                np_array = np.expand_dims(np_array, axis=i)
+                dim_order = dim_order[:i] + d + dim_order[i:]
+    np_array = np.transpose(np_array, [dim_order.index(d) for d in STANDARD_DIM_ORDER])
+    return np_array
 
 
 def _get_numpy_array_and_dim_order(img: Any) -> Tuple[np.ndarray | None, str | None]:
@@ -166,24 +156,25 @@ def _get_numpy_array_and_dim_order(img: Any) -> Tuple[np.ndarray | None, str | N
 
 
 def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Dict:
+
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
-    img = _load_image(file_path)
+    img = _load_bioio_image(file_path)
 
-    all_image_properties = {}
-
-    bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
-    _extract_metadata_from_mapping(img, bioimage_mapping, required_columns, all_image_properties)
-
-    np_array, dim_order = _get_numpy_array_and_dim_order(img)
+    if img is None:
+        logger.warning(f"Failed to load image from '{file_path}'. Cannot extract metadata.")
+        return {}
+    np_array = _get_standardized_image_array(img)
 
     if np_array is not None and np_array.size > 0:
-        calculate_np_array_stats(required_columns, all_image_properties, np_array, dim_order)
-    elif np_array is not None and np_array.size == 0:
-        logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping array stats.")
-
-    return all_image_properties
+        bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
+        all_image_properties = _extract_metadata_from_mapping(img, bioimage_mapping, required_columns)
+        calculate_np_array_stats(required_columns, all_image_properties, np_array, STANDARD_DIM_ORDER)
+        return all_image_properties
+    else:
+        logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping image.")
+        return {}
 
 
 def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray],
