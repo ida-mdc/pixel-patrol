@@ -106,7 +106,7 @@ def test_extract_image_metadata_from_zarr(zarr_folder: Path):
 
     assert isinstance(metadata, dict)
 
-    assert metadata.get("dim_order") in ["TCZYX", "TCYX", "CZYX", "CXY", "TYX"]  # Flexible
+    assert metadata.get("dim_order") in ["TCZYXS", "TCZYX", "TCYX", "CZYX", "CXY", "TYX"]  # TODO: probably need to change so dim order is always TCZYXS
     assert metadata.get("dtype") == "uint16"
     assert metadata.get("t_size") == 1
     assert metadata.get("c_size") == 2
@@ -115,5 +115,5 @@ def test_extract_image_metadata_from_zarr(zarr_folder: Path):
     assert metadata.get("x_size") == 10
 
     assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
-    assert "shape" in metadata and metadata["shape"] in [(1, 2, 1, 10, 10), str((1, 2, 1, 10, 10))]
-    assert "ndim" in metadata and metadata["ndim"] == 5
+    assert "shape" in metadata and metadata["shape"] in [(1, 2, 1, 10, 10, 1), str((1, 2, 1, 10, 10, 1))]
+    assert "ndim" in metadata and metadata["ndim"] == 6
