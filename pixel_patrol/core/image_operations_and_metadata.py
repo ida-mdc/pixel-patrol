@@ -1,12 +1,11 @@
 import fnmatch
 from itertools import product
 from typing import Callable, Optional
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, NamedTuple
 
 import cv2
 import numpy as np
 # import pywt
-from PIL import Image
 import bioio_base
 from bioio import BioImage
 import bioio_imageio
@@ -14,12 +13,18 @@ import bioio_imageio
 import logging
 from pathlib import Path
 
-from pixel_patrol.config import STANDARD_DIM_ORDER
+from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS #,STATS_THAT_NEED_GRAY_SCALE
 
 logger = logging.getLogger(__name__)
 
-SPRITE_SIZE = 64
 
+class SliceAxisSpec(NamedTuple):
+    dim: str    # e.g. "T", "C" or "Z"
+    idx: int   # index in dim_order
+    size: int   # shape along that axis
+
+
+SPRITE_SIZE = 64
 
 
 def available_columns() -> List[str]:
@@ -78,7 +83,7 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
 
 def column_matches(column: str, columns_requested: List[str]) -> bool:
     """Check if column matches any entry in columns_requested (supporting wildcards)."""
-    # Using fnmatch for proper wildcard support as in the old code
+    # Using fn-match for proper wildcard support as in the old code
     return any(fnmatch.fnmatch(column, pattern) for pattern in columns_requested)
 
 
@@ -170,70 +175,34 @@ def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Di
     if np_array is not None and np_array.size > 0:
         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
         all_image_properties = _extract_metadata_from_mapping(img, bioimage_mapping, required_columns)
-        calculate_np_array_stats(required_columns, all_image_properties, np_array, STANDARD_DIM_ORDER)
+        calculate_np_array_stats(required_columns, all_image_properties, np_array)
         return all_image_properties
     else:
         logger.warning(f"NumPy array for file '{file_path}' is empty. Skipping image.")
         return {}
 
 
-def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray],
-                             dim_order: Optional[str]):
+def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray]):
     """
     Calculates various NumPy array-based statistics and updates the metadata dictionary.
     This integrates the logic from the old `calculate_np_array_stats` (preprocessing.py).
     """
-    if np_array is None or np_array.size == 0:
-        return
 
     original_np_array = np_array
-    original_dim_order = dim_order
 
-    stats_that_need_grayscale = [
-        "mean_intensity", "median_intensity", "std_intensity", "min_intensity", "max_intensity",
-        "laplacian_variance", "tenengrad", "brenner", "noise_std",
-        "wavelet_energy", "blocking_artifacts", "ringing_artifacts"
-    ]
-
-    # Determine if grayscale conversion is needed for intensity/focus stats
-    needs_grayscale = False
-    if original_dim_order and "C" in original_dim_order:
-        c_index = original_dim_order.index("C")
-        if original_np_array.ndim > c_index and original_np_array.shape[c_index] > 1:
-            if any(column_matches(col, columns) for col in stats_that_need_grayscale):
-                needs_grayscale = True
-
-    np_array_for_stats = original_np_array
-    dim_order_for_stats = original_dim_order
-
-    if needs_grayscale:
-        try:
-            gray_array, gray_dim_order = to_gray(original_np_array, original_dim_order)
-            np_array_for_stats = gray_array
-            dim_order_for_stats = gray_dim_order
-        except ValueError as e:
-            logger.warning(
-                f"Grayscale conversion failed for stats: {e}. Attempting to run stats on original array where possible.")
-            # Fallback to original array if grayscale conversion fails,
-            # but stats that need 2D will fail or return 0.0 later.
+    np_array_for_stats = _maybe_gray_scale(original_np_array)
 
     mapping = _mapping_for_np_array_processing_by_column_name()
-    for column_name, func in mapping.items():
+    for column_name, generate_statistics_func in mapping.items():
         if column_matches(column_name, columns):
             try:
                 # Special handling for thumbnail: needs original array
                 if column_name == "thumbnail":
-                    result = func(original_np_array, original_dim_order)
-                # For stats requiring 2D input (after grayscale conversion)
-                elif column_name in stats_that_need_grayscale:
-                    if np_array_for_stats.ndim != 2:
-                        logger.warning(
-                            f"Skipping {column_name}: Requires 2D (grayscale) array, got shape {np_array_for_stats.shape}.")
-                        continue
-                    result = func(np_array_for_stats, dim_order_for_stats)
+                    result = generate_statistics_func(original_np_array, STANDARD_DIM_ORDER)
                 else:
-                    # Other numerical stats can operate on the possibly-grayscale array
-                    result = func(np_array_for_stats, dim_order_for_stats)
+                    # TODO: I think this workflow is a mistake, as we do checks and process the images per stats function while they essentially all do the same thing
+                    # Should probably call compute_hierarchical_stats from here and it should loop over call all the functions.
+                    result = generate_statistics_func(np_array_for_stats, STANDARD_DIM_ORDER)
 
                 if result is not None:
                     metadata.update(result)
@@ -248,284 +217,156 @@ def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optio
     if "shape" in columns and "shape" not in metadata:
         metadata["shape"] = str(original_np_array.shape)
     if "ndim" in columns and "ndim" not in metadata:
-        metadata["ndim"] = int(original_np_array.ndim)
-    if "dim_order" in columns and "dim_order" not in metadata:
-        metadata["dim_order"] = original_dim_order if original_dim_order else (
-            "YX" if original_np_array.ndim == 2 else "CZYX")
+        metadata["ndim"] = original_np_array.ndim
+
+# --- Helper functions for array processing ---
+
+def _maybe_gray_scale(array):
+    s_idx = STANDARD_DIM_ORDER.index("S")
+    if array.shape[s_idx] > 1: # and any(column_matches(col, stats_cols) for col in STATS_THAT_NEED_GRAY_SCALE):
+        try:
+            array = to_gray(array, s_idx)
+        except ValueError as e: # TODO: check!! Can we have cased of S!=1/3/4? If not, should remove the try block
+            logger.warning(f"Gray conversion failed: {e}")
+    return array
 
 
-# --- Helper functions for array processing (moved directly from old preprocessing.py) ---
-
-def to_gray(image: np.array, dim_order: str) -> tuple[np.array, str]:
+def to_gray(array: np.array, color_dim_idx: int) -> np.array:
     """
     Convert an image (or higher-dimensional array) to grayscale without reordering any dimensions.
     Converts to float for calculation to ensure accuracy, then converts back to original dtype.
     """
-    if "C" not in dim_order:
-        return image, dim_order
 
-    c_index = dim_order.index("C")
-    n_channels = image.shape[c_index]
+    color_dim_size = array.shape[color_dim_idx]
+    original_dtype = array.dtype
 
-    if n_channels == 1:
-        gray = np.squeeze(image, axis=c_index)
-        new_dim_order = dim_order.replace("C", "")
-        return gray, new_dim_order
-
-    if n_channels < 3:
+    if color_dim_size not in (3, 4):
         raise ValueError(
-            f"Cannot convert to grayscale for {n_channels} channels. Expected 1, 3 (RGB/BGR), or 4 (RGBA).")
+            f"Cannot convert to grayscale for {color_dim_size} channels. "
+            "Expected 3 (RGB) or 4 (RGBA)."
+        )
 
-    # Store original dtype and its maximum value for proper scaling back
-    original_dtype = image.dtype
     if np.issubdtype(original_dtype, np.integer):
-        # For integer types (like uint8), get the max representable value (e.g., 255 for uint8)
-        max_val_original_dtype = np.iinfo(original_dtype).max
+        max_val = np.iinfo(original_dtype).max
+    elif np.issubdtype(original_dtype, np.floating):
+        max_val = np.finfo(original_dtype).max
     else:
-        # For float types, assume the range is 0-1, so max value is 1.0
-        max_val_original_dtype = 1.0
+        max_val = float(np.nanmax(array))
 
-    # Convert image to float for accurate grayscale conversion.
-    # It's crucial to perform the weighted sum in floating point.
-    image_float = image.astype(np.float32)
+    arr_float = array.astype(np.float32)
 
-    # Move channel axis to the end for easier dot product
-    image_transposed_for_dot = np.moveaxis(image_float, c_index, -1)
-
-    # Standard grayscale conversion weights (luminosity method)
-    # Ensure weights are float32 to avoid truncation
-    weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float32)
-
-    if n_channels == 4:
-        # For RGBA, use only the RGB channels for grayscale conversion
-        gray_float = np.dot(image_transposed_for_dot[..., :3], weights)
+    if color_dim_size == 4:
+        arr_rgb = np.take(arr_float, indices=[0, 1, 2], axis=color_dim_idx)
     else:
-        gray_float = np.dot(image_transposed_for_dot, weights)
+        arr_rgb = arr_float
 
-    # Normalize and convert back to the original data type.
-    # The grayscale_float result will be in a range roughly corresponding to the input's max value.
-    # Clip to ensure values are within the valid range before casting to the original integer type.
-    gray = np.clip(gray_float, 0, max_val_original_dtype).astype(original_dtype)
+    weights = np.array(RGB_WEIGHTS, dtype=np.float32)
 
-    new_dim_order = dim_order.replace("C", "")
-    return gray, new_dim_order
+    # dot along color axis, result drops that axis
+    gray_float = np.tensordot(arr_rgb, weights, axes=([color_dim_idx], [0]))
+    # reinsert axis with length=1 at same position
+    gray_float = np.expand_dims(gray_float, axis=color_dim_idx)
+
+    gray_array = np.clip(gray_float, 0, max_val).astype(original_dtype)
+
+    return gray_array
 
 
 def compute_hierarchical_stats(
         arr: np.ndarray,
         dim_order: str,
-        func: Callable[[np.ndarray, str], float],  # Func now takes array AND dim_order, returns float
-        func_name: str,
+        extract_metric_func: Callable[[np.ndarray], float],  # Func now takes array AND dim_order, returns float
+        metric_name: str,
         agg_func: Optional[Callable[[np.ndarray], float]] = None,
-        priority_order: str = "CTZ",
+        priority_order: str = "".join(SLICE_AXES),
 ) -> Dict[str, float]:
     """
-    Computes hierarchical statistics for a multi-dimensional array.
+    Computes hierarchical statistics for a multidimensional array.
     This function processes the array slices and then aggregates results.
     """
     if len(dim_order) != arr.ndim:
-        # Adjusting the error message to be more specific to array dimensions
         raise ValueError(f"Dimension order string '{dim_order}' length ({len(dim_order)}) does not match "
                          f"the number of array dimensions ({arr.ndim}).")
-    if "X" not in dim_order or "Y" not in dim_order:
-        # Warn instead of error if XY are not present, as some images might be non-spatial data
-        logger.warning(
-            "Dim order does not contain 'X' or 'Y' spatial dimensions. Hierarchical stats might not be meaningful.")
-        # If no spatial dimensions, treat as a single slice for global stat
-        global_stat = func(arr, dim_order)  # Pass dim_order to func
-        return {func_name: global_stat} if global_stat is not None else {}
 
-    # Identify non-spatial dimensions: (letter, axis_index)
-    non_spatial = [(dim, i) for i, dim in enumerate(dim_order) if dim not in ["X", "Y"]]
+    slice_axes_specs: List[SliceAxisSpec] = [
+        SliceAxisSpec(dim, idx, arr.shape[idx])
+        for idx, dim in enumerate(dim_order)
+        if dim in SLICE_AXES
+    ]
 
-    # If there are no non-spatial dimensions, compute the metric directly on the entire array (assuming 2D)
-    if not non_spatial:
-        if arr.ndim == 2:  # Ensure it's a 2D array if no non-spatial dimensions
-            global_stat = func(arr, dim_order)  # Pass dim_order to func
-            return {func_name: global_stat} if global_stat is not None else {}
-        else:
-            logger.warning(
-                f"Array has {arr.ndim} dimensions but no non-spatial dims specified. Cannot compute 2D stat.")
-            return {}  # Cannot compute 2D stat on non-2D array
+    degenerate = (
+        "X" not in dim_order
+        or "Y" not in dim_order
+        or arr.shape[dim_order.index("X")] == 1
+        or arr.shape[dim_order.index("Y")] == 1
+        or not slice_axes_specs
+        or all(spec.size == 1 for spec in slice_axes_specs)
+        )
 
-    # Compute the lowest level statistics (leaves of the tree)
-    detailed_stats = _compute_lowest_level_stats(arr, dim_order, non_spatial, func, func_name)
+    if degenerate:
+        slicer = tuple(
+            0 if dim not in ("X", "Y") else slice(None)
+            for dim in dim_order
+        )
+        arr_squeezed = arr[slicer]
+        arr_squeezed = np.squeeze(arr_squeezed)
+        entire_image_metrics = extract_metric_func(arr_squeezed)
+        logging.info(f"Degenerate case detected. Calculated {metric_name} for entire image")
+        return {metric_name: entire_image_metrics} if entire_image_metrics is not None else {}
 
-    # If no aggregation is required (e.g., for direct per-slice metrics)
-    if agg_func is None:
-        higher_level_stats = _compute_higher_level_stats(arr, dim_order, non_spatial, func, func_name)
-        return {**detailed_stats, **higher_level_stats}
+    all_slices_combo_metrics = _compute_all_slices_combo_metrics(arr, slice_axes_specs, extract_metric_func, metric_name)
 
-    # Compute aggregated statistics for each level of the hierarchy
-    agg_stats = _compute_aggregated_stats(detailed_stats, non_spatial, agg_func, func_name, priority_order)
+    if agg_func:
+        all_parent_combo_agg_metrics = _compute_aggregated_combo_metrics(all_slices_combo_metrics, slice_axes_specs, agg_func, metric_name,
+                                                      priority_order)
+        return {**all_slices_combo_metrics, **all_parent_combo_agg_metrics}
 
-    # Combine results
-    result = {**detailed_stats, **agg_stats}
-    return result
+    all_parent_combo_metrics = _compute_parent_slice_combo_metrics(arr, slice_axes_specs, extract_metric_func, metric_name)
+    return {**all_slices_combo_metrics, **all_parent_combo_metrics}
 
 
-def _compute_lowest_level_stats(
+
+def _compute_all_slices_combo_metrics(
         arr: np.ndarray,
-        dim_order: str,
-        non_spatial: List[tuple],
-        func: Callable[[np.ndarray, str], float],  # Func takes array AND dim_order, returns float
-        func_name: str,
+        slice_axes_specs: List[SliceAxisSpec],
+        extract_metric_func: Callable[[np.ndarray], float],  # Func takes array AND dim_order, returns float
+        metric_name: str,
 ) -> Dict[str, float]:
     """
     Computes the lowest level statistics for each slice along non-spatial dimensions.
     """
     detailed_stats = {}
-    non_spatial_ranges = [range(arr.shape[i]) for _, i in non_spatial]
+    slice_axes_ranges = [range(spec.size) for spec in slice_axes_specs]
 
-    for idx_tuple in product(*non_spatial_ranges):
+    for idx_tuple in product(*slice_axes_ranges):
         slicer = [slice(None)] * arr.ndim
-        current_slice_dim_order = list(dim_order)  # Start with full dim_order
 
-        for (dim, axis), idx in zip(non_spatial, idx_tuple):
-            slicer[axis] = idx
-            current_slice_dim_order[axis] = ''  # Mark as removed
-
-        # Remove empty strings from current_slice_dim_order to get actual slice dim_order
-        slice_dim_order_str = "".join([d for d in current_slice_dim_order if d != ''])
+        for spec, slice_index in zip(slice_axes_specs, idx_tuple):
+            dim, axis = spec.dim, spec.idx
+            slicer[axis] = slice_index
 
         sliced_arr = arr[tuple(slicer)]
 
-        # If a channel dimension exists in the slice and it's a singleton (e.g., C=1), squeeze it
-        if "C" in slice_dim_order_str:
-            c_idx_in_slice = slice_dim_order_str.find("C")
-            if sliced_arr.ndim > c_idx_in_slice and sliced_arr.shape[c_idx_in_slice] == 1:
-                sliced_arr = np.squeeze(sliced_arr, axis=c_idx_in_slice)
-                slice_dim_order_str = slice_dim_order_str.replace("C", "")
-
-        # Ensure the array slice is 2D for computation functions expecting 2D
-        if sliced_arr.ndim > 2 and "C" in slice_dim_order_str:
-            # Try to convert to grayscale 2D if multiple channels are left
-            try:
-                sliced_arr, slice_dim_order_str = to_gray(sliced_arr, slice_dim_order_str)
-            except ValueError:
-                logger.warning(f"Could not convert slice to 2D grayscale for lowest level stats. Skipping stat.")
-                continue  # Skip if we can't get it to 2D
-        elif sliced_arr.ndim > 2 and "C" not in slice_dim_order_str:
-            # If still >2D and no C, try averaging remaining non-XY dims
-            original_ndim = sliced_arr.ndim
-            while sliced_arr.ndim > 2:
-                sliced_arr = np.mean(sliced_arr, axis=0)  # Average along first non-XY axis
-                slice_dim_order_str = slice_dim_order_str[1:]  # Remove first char
-            logger.warning(
-                f"Lowest level stats: Reduced {original_ndim}D slice to 2D by averaging. Final shape: {sliced_arr.shape}")
-
-        if sliced_arr.ndim != 2:  # Final check for functions expecting 2D
+        squeezed_arr = np.squeeze(sliced_arr)
+        if squeezed_arr.ndim != 2:  # Final check for functions expecting 2D
             logger.warning(f"Skipping stat for slice: Array not 2D after processing (shape: {sliced_arr.shape}).")
             continue
-
-        stat_value = func(sliced_arr, slice_dim_order_str)  # Pass slice dim_order
+        stat_value = extract_metric_func(squeezed_arr)
 
         if stat_value is not None:
             # Construct key: e.g., "mean_C0Z1"
-            key_parts = []
-            for (dim_char, _), idx in zip(non_spatial, idx_tuple):
-                key_parts.append(f"{dim_char.lower()}{idx}")
-            key = f"{func_name}_" + "".join(key_parts)  # Combine parts with no underscore if that's desired
+            key_parts = [f"{spec.dim.lower()}{idx}" for spec, idx in zip(slice_axes_specs, idx_tuple)]
+            key = f"{metric_name}_" + "_".join(key_parts)  # Combine parts with no underscore if that's desired
             detailed_stats[key] = stat_value
 
     return detailed_stats
 
 
-def _compute_higher_level_stats(
-        arr: np.ndarray,
-        dim_order: str,
-        non_spatial: List[tuple],
-        func: Callable[[np.ndarray, str], float],  # Func takes array AND dim_order, returns float
-        func_name: str,
-) -> Dict[str, float]:
-    """
-    Computes metrics directly on higher-level splits when no aggregation is possible.
-    """
-    higher_level_stats = {}
-
-    # Iterate over each non-spatial dimension and compute metrics for higher-level splits
-    # These are slices where only one non-spatial dim is fixed, and others are `slice(None)`
-    for dim_fixed, axis_fixed in non_spatial:
-        for idx in range(arr.shape[axis_fixed]):
-            slicer = [slice(None)] * arr.ndim
-            slicer[axis_fixed] = idx
-
-            slice_dim_order_list = list(dim_order)
-            slice_dim_order_list[axis_fixed] = ''  # Mark fixed dim as removed for slice's dim_order
-            slice_dim_order_str = "".join([d for d in slice_dim_order_list if d != ''])
-
-            sliced_arr = arr[tuple(slicer)]
-
-            # Similar dimension reduction logic as in _compute_lowest_level_stats
-            if "C" in slice_dim_order_str:
-                c_idx_in_slice = slice_dim_order_str.find("C")
-                if sliced_arr.ndim > c_idx_in_slice and sliced_arr.shape[c_idx_in_slice] == 1:
-                    sliced_arr = np.squeeze(sliced_arr, axis=c_idx_in_slice)
-                    slice_dim_order_str = slice_dim_order_str.replace("C", "")
-
-            if sliced_arr.ndim > 2 and "C" in slice_dim_order_str:
-                try:
-                    sliced_arr, slice_dim_order_str = to_gray(sliced_arr, slice_dim_order_str)
-                except ValueError:
-                    logger.warning(f"Could not convert slice to 2D grayscale for higher-level stats. Skipping stat.")
-                    continue
-            elif sliced_arr.ndim > 2 and "C" not in slice_dim_order_str:
-                original_ndim = sliced_arr.ndim
-                while sliced_arr.ndim > 2:
-                    sliced_arr = np.mean(sliced_arr, axis=0)
-                    slice_dim_order_str = slice_dim_order_str[1:]
-                logger.warning(
-                    f"Higher level stats: Reduced {original_ndim}D slice to 2D by averaging. Final shape: {sliced_arr.shape}")
-
-            if sliced_arr.ndim != 2:
-                logger.warning(
-                    f"Skipping stat for higher-level slice: Array not 2D after processing (shape: {sliced_arr.shape}).")
-                continue
-
-            stat_value = func(sliced_arr, slice_dim_order_str)  # Pass slice dim_order
-
-            if stat_value is not None:
-                key = f"{func_name}_{dim_fixed.lower()}{idx}"
-                higher_level_stats[key] = stat_value
-
-    # Compute the metric on the entire array (global stat)
-    # Ensure the main array is reduced to 2D for the global stat if needed
-    global_arr = arr.copy()
-    global_dim_order = dim_order
-
-    if "C" in global_dim_order:
-        c_idx = global_dim_order.find("C")
-        if global_arr.ndim > c_idx and global_arr.shape[c_idx] > 1:
-            try:
-                global_arr, global_dim_order = to_gray(global_arr, global_dim_order)
-            except ValueError:
-                logger.warning("Could not convert global array to 2D grayscale for global stat. Skipping.")
-                global_arr = np.array([])  # Ensure it's empty to skip stat
-
-    if global_arr.ndim > 2:
-        original_ndim = global_arr.ndim
-        while global_arr.ndim > 2:
-            global_arr = np.mean(global_arr, axis=0)
-            global_dim_order = global_dim_order[1:]
-        logger.warning(
-            f"Global stat: Reduced {original_ndim}D array to 2D by averaging. Final shape: {global_arr.shape}")
-
-    if global_arr.ndim == 2 and global_arr.size > 0:  # Ensure it's a 2D array and not empty
-        global_stat = func(global_arr, global_dim_order)
-        if global_stat is not None:
-            higher_level_stats[func_name] = global_stat
-    else:
-        logger.warning(
-            f"Cannot compute global stat for {func_name}: Array is not 2D or is empty (shape: {global_arr.shape}).")
-
-    return higher_level_stats
-
-
-def _compute_aggregated_stats(
+def _compute_aggregated_combo_metrics(
         detailed_stats: Dict[str, float],
-        non_spatial: List[tuple],
+        slice_axes_specs: List[SliceAxisSpec],
         agg_func: Callable[[np.ndarray], float],
-        func_name: str,
+        metric_name: str,
         priority_order: str,
 ) -> Dict[str, float]:
     """
@@ -535,11 +376,12 @@ def _compute_aggregated_stats(
 
     # Iterate over each non-spatial dimension and aggregate
     # This aggregates the 'detailed_stats' (e.g., C0Z0, C0Z1) into C0, C1, Z0, Z1 etc.
-    for dim, axis in non_spatial:
+    for spec in slice_axes_specs:
+        dim = spec.dim
         group = {}
         for key, stat_value in detailed_stats.items():
             # Extract parts like "C0", "Z1" from "func_name_C0Z1"
-            key_suffix = key[len(func_name) + 1:]  # "C0Z1"
+            key_suffix = key[len(metric_name) + 1:]  # "C0Z1"
             parts = [s for s in key_suffix.split('_') if s]  # Split by underscore if present, remove empty
 
             # Find the part corresponding to the current 'dim'
@@ -549,19 +391,18 @@ def _compute_aggregated_stats(
                 group.setdefault(dim_part, []).append(stat_value)
 
         for part, values in group.items():
-            agg_key = f"{func_name}_{part}"  # e.g., "mean_C0"
+            agg_key = f"{metric_name}_{part}"  # e.g., "mean_C0"
             agg_stats[agg_key] = agg_func(np.array(values))
 
     # Compute the final aggregated statistic based on priority order
-    final_key = func_name  # This is the global stat name (e.g., "mean_intensity")
+    final_key = metric_name  # This is the global stat name (e.g., "mean_intensity")
     final_values = []
 
     # Iterate through priority order to find a dimension to aggregate from
     for dim_char in priority_order:
         # Check if this dimension was one of our non-spatial dimensions
-        if dim_char in [d for d, _ in non_spatial]:
-            # Collect all aggregated stats for this dimension (e.g., mean_C0, mean_C1)
-            dim_keys = [k for k in agg_stats.keys() if k.startswith(f"{func_name}_{dim_char.lower()}")]
+        if dim_char in [spec.dim for spec in slice_axes_specs]:
+            dim_keys = [k for k in agg_stats.keys() if k.startswith(f"{metric_name}_{dim_char.lower()}")]
             if dim_keys:
                 final_values.extend([agg_stats[k] for k in dim_keys])
                 break  # Found the highest priority dimension to aggregate
@@ -579,30 +420,71 @@ def _compute_aggregated_stats(
     return agg_stats
 
 
-# Individual stat functions (wrappers for compute_hierarchical_stats)
+def _compute_parent_slice_combo_metrics(
+        arr: np.ndarray,
+        slice_axes_specs: List[SliceAxisSpec],
+        extract_metric_func: Callable[[np.ndarray], float],  # Func takes array AND dim_order, returns float
+        metric_name: str,
+) -> Dict[str, float]:
+    """
+    Computes metrics directly on higher-level splits when no aggregation is possible.
+    """
+    higher_level_stats = {}
+
+    # Iterate over each non-spatial dimension and compute metrics for higher-level splits
+    # These are slices where only one non-spatial dim is fixed, and others are `slice(None)`
+    for spec in slice_axes_specs:
+        dim_fixed = spec.dim
+        axis_fixed = spec.idx
+        for idx in range(spec.size):
+            slicer = [slice(None)] * arr.ndim
+            slicer[axis_fixed] = idx
+
+            sliced_arr = arr[tuple(slicer)]
+
+            sliced_arr = np.squeeze(sliced_arr)
+            stat_value = extract_metric_func(sliced_arr)
+
+            if stat_value is not None:
+                key = f"{metric_name}_{dim_fixed.lower()}{idx}"
+                higher_level_stats[key] = stat_value
+
+    global_arr = np.squeeze(arr)
+    global_stat = extract_metric_func(global_arr)
+    if global_stat is not None:
+        higher_level_stats[metric_name] = global_stat
+    else:
+        logger.warning(
+            f"Cannot compute global stat for {metric_name}: Array is not 2D or is empty (shape: {global_arr.shape}).")
+
+    return higher_level_stats
+
+
+###### Individual stat functions (wrappers for compute_hierarchical_stats) ######
+
 # These now also take `dim_order` as per the updated `compute_hierarchical_stats` signature
 def calculate_mean(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a, d: float(np.mean(a)) if a.size > 0 else 0.0,
+    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.mean(a)) if a.size > 0 else 0.0,
                                       "mean_intensity", agg_func=np.mean)
 
 
 def calculate_median(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a, d: float(np.median(a)) if a.size > 0 else 0.0,
+    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.median(a)) if a.size > 0 else 0.0,
                                       "median_intensity", agg_func=np.median)
 
 
 def calculate_std(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a, d: float(np.std(a)) if a.size > 0 else 0.0,
+    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.std(a)) if a.size > 0 else 0.0,
                                       "std_intensity", agg_func=np.std)
 
 
 def calculate_min(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a, d: float(np.min(a)) if a.size > 0 else 0.0,
+    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.min(a)) if a.size > 0 else 0.0,
                                       "min_intensity", agg_func=np.min)
 
 
 def calculate_max(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a, d: float(np.max(a)) if a.size > 0 else 0.0,
+    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.max(a)) if a.size > 0 else 0.0,
                                       "max_intensity", agg_func=np.max)
 
 
@@ -641,106 +523,99 @@ def calculate_ringing_artifacts(arr: np.ndarray, dim_order: str) -> Dict[str, fl
 def get_thumbnail(arr: np.array, dim_order: str) -> Dict[str, List[List[List[int]]]]:
     """Wrapper to generate and return thumbnail as a list for JSON compatibility."""
     thumbnail_array = _generate_thumbnail_internal(arr, dim_order)
-    return {"thumbnail": thumbnail_array.tolist()}  # Convert to list for Polars/JSON serializability
+    return {"thumbnail": thumbnail_array.tolist()}  # Convert to list for Polars/JSON serialize
 
 
 # --- 2D-specific stat functions (internal, called by hierarchical wrappers) ---
-# These functions expect a 2D numpy array and don't need dim_order as much,
-# but are kept for consistency with the signature of func in compute_hierarchical_stats.
 
-def _variance_of_laplacian_2d(image: np.ndarray, dim_order: str) -> float:
-    if image.ndim != 2:
-        return 0.0  # Should be handled by calling function
-    gray = image.astype(np.float64)
-    if np.all(gray == gray.flat[0]) or gray.size == 0:
-        return 0.0
-    lap = cv2.Laplacian(gray, cv2.CV_64F)
+def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
+    if image.ndim != 2 or image.size == 0:
+        return None
+    img2d = image.astype(np.float32)
+    return img2d
+
+def _variance_of_laplacian_2d(image: np.ndarray) -> float:
+    image = _prepare_2d_image(image)
+    if image is None:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+    lap = cv2.Laplacian(image, cv2.CV_32F)
     return lap.var()
 
 
-def _tenengrad_2d(image: np.ndarray, dim_order: str) -> float:
-    if image.ndim != 2:
-        return 0.0
-    gray = image.astype(np.float64)
-    if np.all(gray == gray.flat[0]) or gray.size == 0:
-        return 0.0
-    gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-    gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+def _tenengrad_2d(image: np.ndarray) -> float:
+    image = _prepare_2d_image(image)
+    if image is None or np.all(image == image.flat[0]):
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+    gx = cv2.Sobel(image, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(image, cv2.CV_32F, 0, 1, ksize=3)
     mag = np.sqrt(gx ** 2 + gy ** 2)
     return np.mean(mag) if mag.size > 0 else 0.0
 
 
-def _brenner_2d(image: np.ndarray, dim_order: str) -> float:
-    if image.ndim != 2:
-        return 0.0
-    gray = image.astype(np.float32)
-    if gray.size == 0 or gray.shape[1] < 3:
-        return 0.0
-    diff = gray[:, 2:] - gray[:, :-2]
+def _brenner_2d(image: np.ndarray) -> float:
+    image = _prepare_2d_image(image)
+    if image is None or image.shape[1] < 3:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+    diff = image[:, 2:] - image[:, :-2]
     return np.mean(diff ** 2) if diff.size > 0 else 0.0
 
 
-def _noise_estimation_2d(image: np.ndarray, dim_order: str) -> float:
-    if image.ndim != 2:
-        return 0.0
-    gray = image.astype(np.float32)
-    if gray.size == 0:
-        return 0.0
-    median = cv2.medianBlur(gray, 3)
-    noise = gray - median
+def _noise_estimation_2d(image: np.ndarray) -> float:
+    image = _prepare_2d_image(image)
+    if image is None:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+    median = cv2.medianBlur(image, 3)
+    noise = image - median
     return float(np.std(noise))
 
 
 # def _wavelet_energy_2d(image: np.ndarray, dim_order: str, wavelet='db1', level=1) -> float:
-#     if image.ndim != 2:
-#         return 0.0
-#     gray = np.float32(image)
-#     if gray.size == 0:
+#     image = _prepare_2d_image(image)
+#     if image is None:
 #         return 0.0
 #     try:
-#         coeffs = pywt.wavedec2(gray, wavelet, level=level)
+#         co_effs = pywt.wavedec2(gray, wavelet, level=level)
 #         energy = 0.0
-#         for detail in coeffs[1:]:
-#             for subband in detail:
-#                 energy += np.sum(np.abs(subband))
+#         for detail in co_effs[1:]:
+#             for sub_band in detail:
+#                 energy += np.sum(np.abs(sub_band))
 #         return energy
 #     except ValueError:
 #         logger.warning("Error in _wavelet_energy_2d calculation. Returning 0.0.")
 #         return 0.0
 
 
-def _check_blocking_artifacts_2d(gray: np.ndarray, dim_order: str) -> float:
-    if gray.ndim != 2:
-        return 0.0
-    gray = np.float32(gray)
-    if gray.size == 0:
-        return 0.0
+def _check_blocking_artifacts_2d(image: np.ndarray) -> float:
+    image = _prepare_2d_image(image)
+    if image is None:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
 
     block_size = 8
-    height, width = gray.shape
+    height, width = image.shape
     blocking_effect = 0.0
     num_boundaries = 0
 
     for i in range(block_size, height, block_size):
         if i < height:
-            blocking_effect += np.mean(np.abs(gray[i, :] - gray[i - 1, :]))
+            blocking_effect += np.mean(np.abs(image[i, :] - image[i - 1, :]))
             num_boundaries += 1
     for j in range(block_size, width, block_size):
         if j < width:
-            blocking_effect += np.mean(np.abs(gray[:, j] - gray[:, j - 1]))
+            blocking_effect += np.mean(np.abs(image[:, j] - image[:, j - 1]))
             num_boundaries += 1
 
     return blocking_effect / num_boundaries if num_boundaries > 0 else 0.0
 
 
-def _check_ringing_artifacts_2d(gray: np.ndarray, dim_order: str) -> float:
-    if gray.ndim != 2:
-        return 0.0
-    if gray.size == 0 or gray.shape[0] < 3 or gray.shape[1] < 3:
-        return 0.0
+def _check_ringing_artifacts_2d(image: np.ndarray) -> float:
+    image = np.squeeze(image)
+    if image.ndim != 2:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+    if image.size == 0 or image.shape[0] < 3 or image.shape[1] < 3:
+        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
 
-    normalized_gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    edges = cv2.Canny(normalized_gray, 50, 150)
+    normalized_image = (cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8))
+    edges = cv2.Canny(normalized_image, 50, 150)
     if np.sum(edges) == 0:
         return 0.0
 
@@ -751,7 +626,7 @@ def _check_ringing_artifacts_2d(gray: np.ndarray, dim_order: str) -> float:
     if np.sum(edge_neighborhood > 0) == 0:
         return 0.0
 
-    ringing_variance = np.var(gray[edge_neighborhood > 0])
+    ringing_variance = np.var(image[edge_neighborhood > 0])
     return float(ringing_variance)
 
 
@@ -785,7 +660,6 @@ def _generate_thumbnail_internal(np_array: np.array, dim_order: str) -> np.array
             c_idx = current_dim_order.index("C")
             if arr_to_process.shape[c_idx] > 0:
                 arr_to_process = np.take(arr_to_process, indices=0, axis=c_idx)
-            current_dim_order = current_dim_order.replace("C", "")
 
     if arr_to_process.ndim > 2:
         logger.warning(f"Thumbnail: Array still multi-dimensional after reduction ({arr_to_process.ndim}D). "
@@ -809,9 +683,13 @@ def _generate_thumbnail_internal(np_array: np.array, dim_order: str) -> np.array
         if normalized_array.ndim == 3 and normalized_array.shape[0] == 1:
             normalized_array = np.squeeze(normalized_array, axis=0)
 
-        img = Image.fromarray(normalized_array)
-        img = img.resize((SPRITE_SIZE, SPRITE_SIZE), Image.LANCZOS)
-        return np.array(img)
+        thumbnail = cv2.resize(
+            normalized_array,
+            (SPRITE_SIZE, SPRITE_SIZE),
+            interpolation=cv2.INTER_LANCZOS4
+        )
+
+        return thumbnail
     except TypeError as e:
         logger.error(
             f"Error converting array to PIL Image or resizing for thumbnail: {e}. Array shape: {normalized_array.shape}, dtype: {normalized_array.dtype}")
