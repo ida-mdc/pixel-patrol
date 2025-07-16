@@ -20,3 +20,13 @@ MAX_N_EXAMPLE_IMAGES: int = 20
 DEFAULT_N_EXAMPLE_IMAGES: int = 9
 
 STANDARD_DIM_ORDER = "TCZYXS"
+SLICE_AXES = ("T", "C", "Z")
+
+# STATS_THAT_NEED_GRAY_SCALE = [
+#     "mean_intensity", "median_intensity", "std_intensity", "min_intensity", "max_intensity",
+#     "laplacian_variance", "tenengrad", "brenner", "noise_std",
+#     "wavelet_energy", "blocking_artifacts", "ringing_artifacts"
+# ]
+
+RGB_WEIGHTS = [0.2989, 0.5870, 0.1140]
+
