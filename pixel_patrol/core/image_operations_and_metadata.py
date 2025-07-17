@@ -1,7 +1,9 @@
 import fnmatch
-from itertools import product
-from typing import Callable, Optional
-from typing import Dict, List, Tuple, Any, NamedTuple
+from itertools import product, combinations
+from typing import Callable, Tuple ,Dict, List, Any, NamedTuple, Optional
+
+import logging
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -10,57 +12,37 @@ import bioio_base
 from bioio import BioImage
 import bioio_imageio
 
-import logging
-from pathlib import Path
-
-from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS #,STATS_THAT_NEED_GRAY_SCALE
+from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS
 
 logger = logging.getLogger(__name__)
-
+SPRITE_SIZE = 64
 
 class SliceAxisSpec(NamedTuple):
     dim: str    # e.g. "T", "C" or "Z"
     idx: int   # index in dim_order
     size: int   # shape along that axis
 
-
-SPRITE_SIZE = 64
-
-
-def available_columns() -> List[str]:
-    keys = list(_mapping_for_np_array_processing_by_column_name().keys())
-    keys.extend(_mapping_for_bioimage_metadata_by_column_name())
-    return keys
-
-
-def _mapping_for_np_array_processing_by_column_name() -> Dict[str, Callable]:
-    """
-    Maps column names (requested metadata fields) to functions that compute
-    statistics on a NumPy array, potentially with hierarchical aggregation.
-    """
+def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
     return {
-        "mean_intensity": calculate_mean,
-        "median_intensity": calculate_median,
-        "std_intensity": calculate_std,
-        "min_intensity": calculate_min,
-        "max_intensity": calculate_max,
-        "laplacian_variance": calculate_variance_of_laplacian,
-        "tenengrad": calculate_tenengrad,
-        "brenner": calculate_brenner,
-        "noise_std": calculate_noise_estimation,
-        # "wavelet_energy": calculate_wavelet_energy,
-        "blocking_artifacts": calculate_blocking_artifacts,
-        "ringing_artifacts": calculate_ringing_artifacts,
-        "thumbnail": get_thumbnail  # Note: get_thumbnail is a wrapper for generate_thumbnail
+        'mean_intensity': {'fn': lambda a: float(np.mean(a)) if a.size else np.nan, 'agg': np.mean},
+        'median_intensity': {'fn': lambda a: float(np.median(a)) if a.size else np.nan, 'agg': np.median},
+        'std_intensity': {'fn': lambda a: float(np.std(a)) if a.size else np.nan, 'agg': np.mean},
+        'min_intensity': {'fn': lambda a: float(np.min(a)) if a.size else np.nan, 'agg': np.min},
+        'max_intensity': {'fn': lambda a: float(np.max(a)) if a.size else np.nan, 'agg': np.max},
+        'laplacian_variance': {'fn': _variance_of_laplacian_2d, 'agg': np.mean},
+        'tenengrad': {'fn': _tenengrad_2d, 'agg': np.mean},
+        'brenner': {'fn': _brenner_2d, 'agg': np.mean},
+        'noise_std': {'fn': _noise_estimation_2d, 'agg': np.mean},
+        'blocking_artifacts': {'fn': _check_blocking_artifacts_2d, 'agg': np.mean},
+        'ringing_artifacts': {'fn': _check_ringing_artifacts_2d, 'agg': np.mean},
+        'thumbnail': {'fn': _generate_thumbnail, 'agg': None},  # No aggregation needed
     }
-
 
 def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioImage], Dict]]:
     """
     Maps requested metadata fields to functions that extract them from a BioImage object.
     These functions return a dictionary with the extracted key-value pair.
     """
-    # These functions return a dict, and get_all_image_properties will update the main metadata dict
     return {
         "dim_order": lambda img: {"dim_order": STANDARD_DIM_ORDER},
         "t_size": lambda img: {"t_size": img.dims.T},
@@ -81,9 +63,14 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
     }
 
 
-def column_matches(column: str, columns_requested: List[str]) -> bool:
+def available_columns() -> List[str]:
+    keys = list(_column_fn_registry().keys())
+    keys.extend(_mapping_for_bioimage_metadata_by_column_name())
+    return keys
+
+
+def is_column_matches(column: str, columns_requested: List[str]) -> bool:
     """Check if column matches any entry in columns_requested (supporting wildcards)."""
-    # Using fn-match for proper wildcard support as in the old code
     return any(fnmatch.fnmatch(column, pattern) for pattern in columns_requested)
 
 
@@ -109,23 +96,20 @@ def _extract_metadata_from_mapping(img: Any, mapping: Dict[str, Any], required_c
     """
     Extracts metadata using a given mapping, handling individual column failures.
     """
-
     metadata: dict[str, Any] = {}
-
-    for column_name, extractor_func in mapping.items():
-        if column_matches(column_name, required_columns):
+    for key, fn in mapping.items():
+        if is_column_matches(key, required_columns):
             try:
-                result = extractor_func(img)
-                # Ensure the result is a dictionary before updating
+                result = fn(img)
                 if isinstance(result, dict):
                     metadata.update(result)
                 else:
                     logger.warning(
-                        f"Extractor for column '{column_name}' returned non-dictionary result: {result}. Skipping update."
+                        f"Extractor for column '{key}' returned non-dictionary result: {result}. Skipping update."
                     )
             except Exception as e:
                 logger.warning(
-                    f"Failed to extract metadata for column '{column_name}' from image. Error: {e}"
+                    f"Failed to extract metadata for column '{key}' from image. Error: {e}"
                 )
 
     return metadata
@@ -142,22 +126,6 @@ def _get_standardized_image_array(img: Any) -> np.ndarray:
                 dim_order = dim_order[:i] + d + dim_order[i:]
     np_array = np.transpose(np_array, [dim_order.index(d) for d in STANDARD_DIM_ORDER])
     return np_array
-
-
-def _get_numpy_array_and_dim_order(img: Any) -> Tuple[np.ndarray | None, str | None]:
-    """
-    Extracts NumPy array and infers dim_order based on image type.
-    """
-    np_array = None
-    dim_order = None
-
-    try:
-        np_array = img.data
-        dim_order = img.dims.order
-    except Exception as e:
-        logger.warning(f"Could not load data from BioImage: {e}")
-
-    return np_array, dim_order
 
 
 def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Dict:
@@ -182,55 +150,16 @@ def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Di
         return {}
 
 
-def calculate_np_array_stats(columns: List[str], metadata: Dict, np_array: Optional[np.ndarray]):
-    """
-    Calculates various NumPy array-based statistics and updates the metadata dictionary.
-    This integrates the logic from the old `calculate_np_array_stats` (preprocessing.py).
-    """
-
-    original_np_array = np_array
-
-    np_array_for_stats = _maybe_gray_scale(original_np_array)
-
-    mapping = _mapping_for_np_array_processing_by_column_name()
-    for column_name, generate_statistics_func in mapping.items():
-        if column_matches(column_name, columns):
-            try:
-                # Special handling for thumbnail: needs original array
-                if column_name == "thumbnail":
-                    result = generate_statistics_func(original_np_array, STANDARD_DIM_ORDER)
-                else:
-                    # TODO: I think this workflow is a mistake, as we do checks and process the images per stats function while they essentially all do the same thing
-                    # Should probably call compute_hierarchical_stats from here and it should loop over call all the functions.
-                    result = generate_statistics_func(np_array_for_stats, STANDARD_DIM_ORDER)
-
-                if result is not None:
-                    metadata.update(result)
-            except Exception as e:
-                logger.warning(f"Error calculating '{column_name}' for array stats: {e}")
-
-    # Ensure general properties are added if requested and not already present
-    if "num_pixels" in columns and "num_pixels" not in metadata:
-        metadata["num_pixels"] = int(original_np_array.size)
-    if "dtype" in columns and "dtype" not in metadata:
-        metadata["dtype"] = str(original_np_array.dtype)
-    if "shape" in columns and "shape" not in metadata:
-        metadata["shape"] = str(original_np_array.shape)
-    if "ndim" in columns and "ndim" not in metadata:
-        metadata["ndim"] = original_np_array.ndim
-
-# --- Helper functions for array processing ---
-
 def _maybe_gray_scale(array):
     s_idx = STANDARD_DIM_ORDER.index("S")
-    if array.shape[s_idx] > 1: # and any(column_matches(col, stats_cols) for col in STATS_THAT_NEED_GRAY_SCALE):
+    if array.shape[s_idx] > 1:
         try:
             array = to_gray(array, s_idx)
         except ValueError as e: # TODO: check!! Can we have cased of S!=1/3/4? If not, should remove the try block
             logger.warning(f"Gray conversion failed: {e}")
     return array
 
-
+# TODO: Func is too long and complex. Improve!
 def to_gray(array: np.array, color_dim_idx: int) -> np.array:
     """
     Convert an image (or higher-dimensional array) to grayscale without reordering any dimensions.
@@ -255,7 +184,7 @@ def to_gray(array: np.array, color_dim_idx: int) -> np.array:
 
     arr_float = array.astype(np.float32)
 
-    if color_dim_size == 4:
+    if color_dim_size == 4: # TODO: we assume RGBA - need to check all types of S dim.
         arr_rgb = np.take(arr_float, indices=[0, 1, 2], axis=color_dim_idx)
     else:
         arr_rgb = arr_float
@@ -272,92 +201,97 @@ def to_gray(array: np.array, color_dim_idx: int) -> np.array:
     return gray_array
 
 
-def compute_hierarchical_stats(
-        arr: np.ndarray,
-        dim_order: str,
-        extract_metric_func: Callable[[np.ndarray], float],  # Func now takes array AND dim_order, returns float
-        metric_name: str,
-        agg_func: Optional[Callable[[np.ndarray], float]] = None,
-        priority_order: str = "".join(SLICE_AXES),
-) -> Dict[str, float]:
-    """
-    Computes hierarchical statistics for a multidimensional array.
-    This function processes the array slices and then aggregates results.
-    """
+def _add_basic_array_props(metadata: Dict[str, Any], array: np.ndarray, columns: List[str]) -> None:
+    """Populate metadata with basic array properties if requested."""
+    if "num_pixels" in columns and "num_pixels" not in metadata:
+        metadata["num_pixels"] = int(array.size)
+    if "dtype" in columns and "dtype" not in metadata:
+        metadata["dtype"] = str(array.dtype)
+    if "shape" in columns and "shape" not in metadata:
+        metadata["shape"] = str(array.shape)
+    if "ndim" in columns and "ndim" not in metadata:
+        metadata["ndim"] = array.ndim
+
+
+def calculate_np_array_stats(columns: List[str], all_image_properties: Dict[str, Any], array: np.ndarray) -> None:
+    gray_arr = _maybe_gray_scale(array)
+    registry = _column_fn_registry()
+    all_metrics = {k: v['fn'] for k, v in registry.items() if k in columns and k != 'thumbnail'}
+    all_aggregators = {k: v['agg'] for k, v in registry.items() if k in columns and v['agg'] is not None}
+    if all_metrics:
+        results = compute_hierarchical_stats(gray_arr, STANDARD_DIM_ORDER, all_metrics, all_aggregators)
+        for name in all_metrics:
+            all_image_properties[name] = results[name]
+    if 'thumbnail' in columns:
+        try:
+            all_image_properties['thumbnail'] = _generate_thumbnail(array, STANDARD_DIM_ORDER)
+        except (ValueError, IOError) as e:
+            logger.warning(f"Error generating thumbnail - {e}.")
+    _add_basic_array_props(all_image_properties, array, columns)
+
+
+def compute_hierarchical_stats(arr: np.ndarray, dim_order: str, metrics_fns: Dict[str, Callable[[np.ndarray], Any]], agg_fns: Dict[str, Callable[[np.ndarray], Any]]) -> Dict[str, float]:
     if len(dim_order) != arr.ndim:
         raise ValueError(f"Dimension order string '{dim_order}' length ({len(dim_order)}) does not match "
                          f"the number of array dimensions ({arr.ndim}).")
 
-    slice_axes_specs: List[SliceAxisSpec] = [
+    slice_axes_specs = [
         SliceAxisSpec(dim, idx, arr.shape[idx])
         for idx, dim in enumerate(dim_order)
         if dim in SLICE_AXES
     ]
 
-    degenerate = (
-        "X" not in dim_order
-        or "Y" not in dim_order
-        or arr.shape[dim_order.index("X")] == 1
-        or arr.shape[dim_order.index("Y")] == 1
-        or not slice_axes_specs
-        or all(spec.size == 1 for spec in slice_axes_specs)
-        )
+    if "X" not in dim_order or "Y" not in dim_order or arr.shape[dim_order.index("X")] == 1 or arr.shape[
+        dim_order.index("Y")] == 1:
+        logger.warning("Image lacks 2D spatial dimensions or has 1-pixel X/Y. Skipping.")
+        return {}
 
-    if degenerate:
-        slicer = tuple(
-            0 if dim not in ("X", "Y") else slice(None)
-            for dim in dim_order
-        )
-        arr_squeezed = arr[slicer]
-        arr_squeezed = np.squeeze(arr_squeezed)
-        entire_image_metrics = extract_metric_func(arr_squeezed)
-        logging.info(f"Degenerate case detected. Calculated {metric_name} for entire image")
-        return {metric_name: entire_image_metrics} if entire_image_metrics is not None else {}
+    elif not slice_axes_specs or all(spec.size == 1 for spec in slice_axes_specs):
+        logger.info("Image has only one sliceable instance. Calculating global metrics for the 2D plane.")
+        arr_squeezed = np.squeeze(arr)
+        return {name: fn(arr_squeezed) for name, fn in metrics_fns.items()}
 
-    all_slices_combo_metrics = _compute_all_slices_combo_metrics(arr, slice_axes_specs, extract_metric_func, metric_name)
+    results = {}
 
-    if agg_func:
-        all_parent_combo_agg_metrics = _compute_aggregated_combo_metrics(all_slices_combo_metrics, slice_axes_specs, agg_func, metric_name,
-                                                      priority_order)
-        return {**all_slices_combo_metrics, **all_parent_combo_agg_metrics}
+    detailed_metrics = _compute_all_slices_combo_metrics(arr, slice_axes_specs, metrics_fns)
+    results.update(detailed_metrics)
 
-    all_parent_combo_metrics = _compute_parent_slice_combo_metrics(arr, slice_axes_specs, extract_metric_func, metric_name)
-    return {**all_slices_combo_metrics, **all_parent_combo_metrics}
+    if agg_fns:
+        aggregated_metrics = _compute_aggregated_combo_metrics(detailed_metrics, slice_axes_specs, agg_fns)
+        results.update(aggregated_metrics)
+
+    no_agg = {m: fn for m, fn in metrics_fns.items() if m not in agg_fns}
+    if no_agg:
+        parent_metrics = _compute_parent_slice_combo_metrics(arr, slice_axes_specs, no_agg)
+        results.update(parent_metrics)
+
+    return results
 
 
+def _compute_all_slices_combo_metrics(arr: np.ndarray,
+                                      slice_axes_specs: List[SliceAxisSpec],
+                                      metrics_fns: Dict[str, Callable]
+                                      ) -> Dict[str, Any]:
 
-def _compute_all_slices_combo_metrics(
-        arr: np.ndarray,
-        slice_axes_specs: List[SliceAxisSpec],
-        extract_metric_func: Callable[[np.ndarray], float],  # Func takes array AND dim_order, returns float
-        metric_name: str,
-) -> Dict[str, float]:
-    """
-    Computes the lowest level statistics for each slice along non-spatial dimensions.
-    """
     detailed_stats = {}
     slice_axes_ranges = [range(spec.size) for spec in slice_axes_specs]
 
     for idx_tuple in product(*slice_axes_ranges):
         slicer = [slice(None)] * arr.ndim
+        key_suffix = []
 
-        for spec, slice_index in zip(slice_axes_specs, idx_tuple):
-            dim, axis = spec.dim, spec.idx
-            slicer[axis] = slice_index
+        for spec, slice_idx in zip(slice_axes_specs, idx_tuple):
+            slicer[spec.idx] = slice_idx
+            key_suffix.append(f"{spec.dim.lower()}{slice_idx}")
 
-        sliced_arr = arr[tuple(slicer)]
+        sliced_arr = np.squeeze(arr[tuple(slicer)])
 
-        squeezed_arr = np.squeeze(sliced_arr)
-        if squeezed_arr.ndim != 2:  # Final check for functions expecting 2D
+        if sliced_arr.ndim != 2:  # Final check for functions expecting 2D
             logger.warning(f"Skipping stat for slice: Array not 2D after processing (shape: {sliced_arr.shape}).")
             continue
-        stat_value = extract_metric_func(squeezed_arr)
 
-        if stat_value is not None:
-            # Construct key: e.g., "mean_C0Z1"
-            key_parts = [f"{spec.dim.lower()}{idx}" for spec, idx in zip(slice_axes_specs, idx_tuple)]
-            key = f"{metric_name}_" + "_".join(key_parts)  # Combine parts with no underscore if that's desired
-            detailed_stats[key] = stat_value
+        for metric_name, fn in metrics_fns.items():
+            detailed_stats[f"{metric_name}_{'_'.join(key_suffix)}"] = fn(sliced_arr)
 
     return detailed_stats
 
@@ -365,57 +299,49 @@ def _compute_all_slices_combo_metrics(
 def _compute_aggregated_combo_metrics(
         detailed_stats: Dict[str, float],
         slice_axes_specs: List[SliceAxisSpec],
-        agg_func: Callable[[np.ndarray], float],
-        metric_name: str,
-        priority_order: str,
+        agg_funcs: Dict[str, Callable[[np.ndarray], float]],
 ) -> Dict[str, float]:
-    """
-    Computes aggregated statistics for each level of the hierarchy.
-    """
     agg_stats = {}
 
-    # Iterate over each non-spatial dimension and aggregate
-    # This aggregates the 'detailed_stats' (e.g., C0Z0, C0Z1) into C0, C1, Z0, Z1 etc.
-    for spec in slice_axes_specs:
-        dim = spec.dim
-        group = {}
-        for key, stat_value in detailed_stats.items():
-            # Extract parts like "C0", "Z1" from "func_name_C0Z1"
-            key_suffix = key[len(metric_name) + 1:]  # "C0Z1"
-            parts = [s for s in key_suffix.split('_') if s]  # Split by underscore if present, remove empty
+    # 1) drop any axis that can't slice
+    active = [s for s in slice_axes_specs if s.size > 1]
+    axes   = [spec.dim.lower()       for spec in active]
+    n      = len(axes)
 
-            # Find the part corresponding to the current 'dim'
-            dim_part = next((p for p in parts if p.lower().startswith(dim.lower())), None)
+    # 2) parse per‐metric entries
+    parsed: Dict[str, List[Tuple[Dict[str,str], float]]] = {}
 
-            if dim_part:
-                group.setdefault(dim_part, []).append(stat_value)
+    axis_prefixes = {spec.dim.lower()[0] for spec in slice_axes_specs}
+    for key, val in detailed_stats.items():
+        parts = key.split("_")
+        split_i = next(
+            (i for i, p in enumerate(parts) if p[0].lower() in axis_prefixes and p[1:].isdigit()),
+            len(parts))
+        metric = "_".join(parts[:split_i])
+        suffix = "_".join(parts[split_i:])
 
-        for part, values in group.items():
-            agg_key = f"{metric_name}_{part}"  # e.g., "mean_C0"
-            agg_stats[agg_key] = agg_func(np.array(values))
+        parts = suffix.split("_")                 # ["t0","c1","z2"]
+        dmap  = {p[0].lower(): p for p in parts}  # {'t':"t0", 'c':"c1", 'z':"z2"}
+        parsed.setdefault(metric, []).append((dmap, val))
 
-    # Compute the final aggregated statistic based on priority order
-    final_key = metric_name  # This is the global stat name (e.g., "mean_intensity")
-    final_values = []
+    # 3) for each metric, build all parent aggregates
+    for metric, entries in parsed.items():
+        agg = agg_funcs[metric]
 
-    # Iterate through priority order to find a dimension to aggregate from
-    for dim_char in priority_order:
-        # Check if this dimension was one of our non-spatial dimensions
-        if dim_char in [spec.dim for spec in slice_axes_specs]:
-            dim_keys = [k for k in agg_stats.keys() if k.startswith(f"{metric_name}_{dim_char.lower()}")]
-            if dim_keys:
-                final_values.extend([agg_stats[k] for k in dim_keys])
-                break  # Found the highest priority dimension to aggregate
+        # a) every subset of axes size 1..n-1
+        for r in range(1, n):
+            for dims in combinations(axes, r):
+                bucket: Dict[str, List[float]] = {}
+                for dmap, val in entries:
+                    if all(d in dmap for d in dims):
+                        combo_key = "_".join(dmap[d] for d in dims)
+                        bucket.setdefault(combo_key, []).append(val)
+                for combo_key, vals in bucket.items():
+                    agg_stats[f"{metric}_{combo_key}"] = float(agg(np.array(vals)))
 
-    # If we collected values, compute the final global aggregated stat
-    if final_values:
-        agg_stats[final_key] = agg_func(np.array(final_values))
-    else:
-        # Fallback: if no hierarchical aggregation happened, compute global stat from all detailed stats
-        if detailed_stats:
-            agg_stats[final_key] = agg_func(np.array(list(detailed_stats.values())))
-        else:
-            agg_stats[final_key] = 0.0  # Default if no data
+        # b) global
+        all_vals = [val for _, val in entries]
+        agg_stats[metric] = float(agg(np.array(all_vals)))
 
     return agg_stats
 
@@ -423,110 +349,35 @@ def _compute_aggregated_combo_metrics(
 def _compute_parent_slice_combo_metrics(
         arr: np.ndarray,
         slice_axes_specs: List[SliceAxisSpec],
-        extract_metric_func: Callable[[np.ndarray], float],  # Func takes array AND dim_order, returns float
-        metric_name: str,
+        metrics_fns: Dict[str, Callable[[np.ndarray], float]],
 ) -> Dict[str, float]:
-    """
-    Computes metrics directly on higher-level splits when no aggregation is possible.
-    """
-    higher_level_stats = {}
+    parent_stats = {}
+    # only axes with more than one slice
+    active = [s for s in slice_axes_specs if s.size > 1]
+    n = len(active)
 
-    # Iterate over each non-spatial dimension and compute metrics for higher-level splits
-    # These are slices where only one non-spatial dim is fixed, and others are `slice(None)`
-    for spec in slice_axes_specs:
-        dim_fixed = spec.dim
-        axis_fixed = spec.idx
-        for idx in range(spec.size):
-            slicer = [slice(None)] * arr.ndim
-            slicer[axis_fixed] = idx
+    # all actual slice‐combos of size 1..n−1
+    for r in range(1, n):
+        for specs in combinations(active, r):
+            ranges = [range(s.size) for s in specs]
+            for idxs in product(*ranges):
+                slicer = [slice(None)] * arr.ndim
+                parts = []
+                for spec, idx in zip(specs, idxs):
+                    slicer[spec.idx] = idx
+                    parts.append(f"{spec.dim.lower()}{idx}")
+                sub = np.squeeze(arr[tuple(slicer)])
+                for name, fn in metrics_fns.items():
+                    parent_stats[f"{name}_{'_'.join(parts)}"] = fn(sub)
 
-            sliced_arr = arr[tuple(slicer)]
+    # global
+    whole = np.squeeze(arr)
+    for name, fn in metrics_fns.items():
+        parent_stats[name] = fn(whole)
 
-            sliced_arr = np.squeeze(sliced_arr)
-            stat_value = extract_metric_func(sliced_arr)
-
-            if stat_value is not None:
-                key = f"{metric_name}_{dim_fixed.lower()}{idx}"
-                higher_level_stats[key] = stat_value
-
-    global_arr = np.squeeze(arr)
-    global_stat = extract_metric_func(global_arr)
-    if global_stat is not None:
-        higher_level_stats[metric_name] = global_stat
-    else:
-        logger.warning(
-            f"Cannot compute global stat for {metric_name}: Array is not 2D or is empty (shape: {global_arr.shape}).")
-
-    return higher_level_stats
+    return parent_stats
 
 
-###### Individual stat functions (wrappers for compute_hierarchical_stats) ######
-
-# These now also take `dim_order` as per the updated `compute_hierarchical_stats` signature
-def calculate_mean(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.mean(a)) if a.size > 0 else 0.0,
-                                      "mean_intensity", agg_func=np.mean)
-
-
-def calculate_median(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.median(a)) if a.size > 0 else 0.0,
-                                      "median_intensity", agg_func=np.median)
-
-
-def calculate_std(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.std(a)) if a.size > 0 else 0.0,
-                                      "std_intensity", agg_func=np.std)
-
-
-def calculate_min(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.min(a)) if a.size > 0 else 0.0,
-                                      "min_intensity", agg_func=np.min)
-
-
-def calculate_max(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, lambda a: float(np.max(a)) if a.size > 0 else 0.0,
-                                      "max_intensity", agg_func=np.max)
-
-
-# For focus metrics, pass the specific 2D function directly.
-# The compute_hierarchical_stats will handle the slicing and ensure 2D input.
-def calculate_variance_of_laplacian(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _variance_of_laplacian_2d, "laplacian_variance", agg_func=np.mean)
-
-
-def calculate_tenengrad(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _tenengrad_2d, "tenengrad", agg_func=np.mean)
-
-
-def calculate_brenner(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _brenner_2d, "brenner", agg_func=np.mean)
-
-
-def calculate_noise_estimation(arr: np.array, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _noise_estimation_2d, "noise_std", agg_func=np.mean)
-
-
-# def calculate_wavelet_energy(arr: np.array, dim_order: str) -> Dict[str, float]:
-#     return compute_hierarchical_stats(arr, dim_order, _wavelet_energy_2d, "wavelet_energy", agg_func=np.mean)
-
-
-def calculate_blocking_artifacts(arr: np.ndarray, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _check_blocking_artifacts_2d, "blocking_artifacts",
-                                      agg_func=np.mean)
-
-
-def calculate_ringing_artifacts(arr: np.ndarray, dim_order: str) -> Dict[str, float]:
-    return compute_hierarchical_stats(arr, dim_order, _check_ringing_artifacts_2d, "ringing_artifacts",
-                                      agg_func=np.mean)
-
-
-def get_thumbnail(arr: np.array, dim_order: str) -> Dict[str, List[List[List[int]]]]:
-    """Wrapper to generate and return thumbnail as a list for JSON compatibility."""
-    thumbnail_array = _generate_thumbnail_internal(arr, dim_order)
-    return {"thumbnail": thumbnail_array.tolist()}  # Convert to list for Polars/JSON serialize
-
-
-# --- 2D-specific stat functions (internal, called by hierarchical wrappers) ---
 
 def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
     if image.ndim != 2 or image.size == 0:
@@ -537,7 +388,7 @@ def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
 def _variance_of_laplacian_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+        return np.nan
     lap = cv2.Laplacian(image, cv2.CV_32F)
     return lap.var()
 
@@ -545,7 +396,7 @@ def _variance_of_laplacian_2d(image: np.ndarray) -> float:
 def _tenengrad_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None or np.all(image == image.flat[0]):
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+        return np.nan
     gx = cv2.Sobel(image, cv2.CV_32F, 1, 0, ksize=3)
     gy = cv2.Sobel(image, cv2.CV_32F, 0, 1, ksize=3)
     mag = np.sqrt(gx ** 2 + gy ** 2)
@@ -555,7 +406,7 @@ def _tenengrad_2d(image: np.ndarray) -> float:
 def _brenner_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None or image.shape[1] < 3:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+        return np.nan
     diff = image[:, 2:] - image[:, :-2]
     return np.mean(diff ** 2) if diff.size > 0 else 0.0
 
@@ -563,32 +414,16 @@ def _brenner_2d(image: np.ndarray) -> float:
 def _noise_estimation_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+        return np.nan
     median = cv2.medianBlur(image, 3)
     noise = image - median
     return float(np.std(noise))
 
 
-# def _wavelet_energy_2d(image: np.ndarray, dim_order: str, wavelet='db1', level=1) -> float:
-#     image = _prepare_2d_image(image)
-#     if image is None:
-#         return 0.0
-#     try:
-#         co_effs = pywt.wavedec2(gray, wavelet, level=level)
-#         energy = 0.0
-#         for detail in co_effs[1:]:
-#             for sub_band in detail:
-#                 energy += np.sum(np.abs(sub_band))
-#         return energy
-#     except ValueError:
-#         logger.warning("Error in _wavelet_energy_2d calculation. Returning 0.0.")
-#         return 0.0
-
-
 def _check_blocking_artifacts_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
+        return np.nan
 
     block_size = 8
     height, width = image.shape
@@ -609,11 +444,8 @@ def _check_blocking_artifacts_2d(image: np.ndarray) -> float:
 
 def _check_ringing_artifacts_2d(image: np.ndarray) -> float:
     image = np.squeeze(image)
-    if image.ndim != 2:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
-    if image.size == 0 or image.shape[0] < 3 or image.shape[1] < 3:
-        return 0.0 # TODO: check if makes sense to return zero instead of nan or None as we aggregate this value
-
+    if image.ndim != 2 or image.size == 0 or image.shape[0] < 3 or image.shape[1] < 3:
+        return np.nan
     normalized_image = (cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8))
     edges = cv2.Canny(normalized_image, 50, 150)
     if np.sum(edges) == 0:
@@ -630,7 +462,7 @@ def _check_ringing_artifacts_2d(image: np.ndarray) -> float:
     return float(ringing_variance)
 
 
-def _generate_thumbnail_internal(np_array: np.array, dim_order: str) -> np.array:
+def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
     """
     Internal function to generate a thumbnail (NumPy array) without direct dict wrapping.
     """
