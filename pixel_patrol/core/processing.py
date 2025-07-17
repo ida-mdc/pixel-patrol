@@ -117,11 +117,18 @@ def _get_deep_image_df(paths: List[Path], required_cols: List[str]) -> pl.DataFr
                 images_dicts.append({"path": str(p), **image_dict})
         except Exception as e:
             logger.warning(f"Metadata extraction failed for {p}: {e}")
+
     return pl.DataFrame(images_dicts)
 
 
 def _merge_basic_and_deep_image_metadata(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
+    # joined = basic.join(deep, on="path", how="left") # TODO: Keep this line.
+
+    if deep is None or "path" not in deep.columns: # TODO: Remove this patch once deep is fixed.
+        return basic
     joined = basic.join(deep, on="path", how="left")
+
+
     basic_cols = [
         pl.col(name).cast(dtype).alias(name)
         for name, dtype in PATHS_DF_EXPECTED_SCHEMA.items()
