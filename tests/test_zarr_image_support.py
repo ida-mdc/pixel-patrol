@@ -1,3 +1,4 @@
+# TODO: many of the set up here should be moved to a common file that tests many image types.
 from pathlib import Path
 
 import numpy as np
