@@ -220,8 +220,8 @@ def calculate_np_array_stats(columns: List[str], all_image_properties: Dict[str,
     all_aggregators = {k: v['agg'] for k, v in registry.items() if k in columns and v['agg'] is not None}
     if all_metrics:
         results = compute_hierarchical_stats(gray_arr, STANDARD_DIM_ORDER, all_metrics, all_aggregators)
-        for name in all_metrics:
-            all_image_properties[name] = results[name]
+        for key, value in results.items():
+            all_image_properties[key] = value
     if 'thumbnail' in columns:
         try:
             all_image_properties['thumbnail'] = _generate_thumbnail(array, STANDARD_DIM_ORDER)
@@ -380,7 +380,7 @@ def _compute_parent_slice_combo_metrics(
 
 
 def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
-    if image.ndim != 2 or image.size == 0:
+    if image.ndim != 2 or image.size == 0: # TODO: Remove cols (and maybe cols that are all nans) - look into polars check of column empty
         return None
     img2d = image.astype(np.float32)
     return img2d
@@ -461,7 +461,7 @@ def _check_ringing_artifacts_2d(image: np.ndarray) -> float:
     ringing_variance = np.var(image[edge_neighborhood > 0])
     return float(ringing_variance)
 
-
+# TODO: decide how we create thumbnail for images with S (probably call to gray) and C
 def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
     """
     Internal function to generate a thumbnail (NumPy array) without direct dict wrapping.
@@ -475,23 +475,13 @@ def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
     i = 0
     while arr_to_process.ndim > 2 and i < len(current_dim_order):
         dim = current_dim_order[i]
-        if dim not in ["X", "Y", "C"]:  # Reduce non-spatial, non-channel dimensions
+        if dim not in ["X", "Y"]:  # Reduce non-spatial, non-channel dimensions
             center_index = arr_to_process.shape[i] // 2
             arr_to_process = np.take(arr_to_process, indices=center_index, axis=i)
             current_dim_order = current_dim_order.replace(dim, "")
             # Do not increment i, as the array shrinks and the next dim is now at current i
         else:
             i += 1
-
-    if arr_to_process.ndim == 3 and "C" in current_dim_order:
-        try:
-            arr_to_process, _ = to_gray(arr_to_process, current_dim_order)
-        except ValueError as e:
-            logger.warning(f"Could not convert to grayscale for thumbnail: {e}. Keeping original channels.")
-            # Fallback for failed grayscale: take first channel or average
-            c_idx = current_dim_order.index("C")
-            if arr_to_process.shape[c_idx] > 0:
-                arr_to_process = np.take(arr_to_process, indices=0, axis=c_idx)
 
     if arr_to_process.ndim > 2:
         logger.warning(f"Thumbnail: Array still multi-dimensional after reduction ({arr_to_process.ndim}D). "
