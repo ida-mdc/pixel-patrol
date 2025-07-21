@@ -120,26 +120,6 @@ def _get_deep_image_df(paths: List[Path], required_cols: List[str]) -> pl.DataFr
 
     return pl.DataFrame(images_dicts)
 
-
-def _merge_basic_and_deep_image_metadata(basic: pl.DataFrame, deep: pl.DataFrame) -> pl.DataFrame:
-    # joined = basic.join(deep, on="path", how="left") # TODO: Keep this line.
-
-    if deep is None or "path" not in deep.columns: # TODO: Remove this patch once deep is fixed.
-        return basic
-    joined = basic.join(deep, on="path", how="left")
-
-
-    basic_cols = [
-        pl.col(name).cast(dtype).alias(name)
-        for name, dtype in PATHS_DF_EXPECTED_SCHEMA.items()
-    ]
-    deep_cols = [
-        pl.col(col)
-        for col in deep.columns
-        if col not in PATHS_DF_EXPECTED_SCHEMA
-    ]
-    return joined.select(*basic_cols, *deep_cols)
-
 ################################### Main Function to Build Images DataFrame ###################################
 
 def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str]) -> Optional[pl.DataFrame]:
@@ -165,7 +145,9 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
     paths = [Path(p) for p in basic_file_df["path"].to_list()]
     deep_image_df = _get_deep_image_df(paths, available_columns())
 
-    return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
+    joined = basic_file_df.join(deep_image_df, on="path", how="left")
+
+    return joined
 
 
 def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
@@ -192,7 +174,9 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
 
     deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], available_columns())
 
-    return _merge_basic_and_deep_image_metadata(basic_file_df, deep_image_df)
+    joined = basic_file_df.join(deep_image_df, on="path", how="left")
+
+    return joined
 
 
 ###################################### Other #####################################################
