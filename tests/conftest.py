@@ -214,3 +214,9 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
     project.process_images()
 
     return project
+
+
+@pytest.fixture(scope="session")
+def test_data_dir() -> Path:
+    """Provides the path to the 'tests/data' directory."""
+    return Path(__file__).parent / "data"

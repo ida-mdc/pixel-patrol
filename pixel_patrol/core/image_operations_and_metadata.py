@@ -12,10 +12,9 @@ import bioio_base
 from bioio import BioImage
 import bioio_imageio
 
-from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS
+from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS, SPRITE_SIZE
 
 logger = logging.getLogger(__name__)
-SPRITE_SIZE = 64
 
 class SliceAxisSpec(NamedTuple):
     dim: str    # e.g. "T", "C" or "Z"
@@ -44,20 +43,11 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
     These functions return a dictionary with the extracted key-value pair.
     """
     return {
-        "dim_order": lambda img: {"dim_order": STANDARD_DIM_ORDER},
-        "t_size": lambda img: {"t_size": img.dims.T},
-        "c_size": lambda img: {"c_size": img.dims.C},
-        "z_size": lambda img: {"z_size": img.dims.Z},
-        "y_size": lambda img: {"y_size": img.dims.Y},
-        "x_size": lambda img: {"x_size": img.dims.X},
-        "s_size": lambda img: {"s_size": img.dims.S if "S" in img.dims.order else None},
-        "m_size": lambda img: {"m_size": img.dims.M if "M" in img.dims.order else None},
         "n_images": lambda img: {"n_images": len(img.scenes) if hasattr(img, 'scenes') else 1},
-        "dtype": lambda img: {"dtype": str(img.dtype)},
-        "pixel_size_X": lambda img: {"pixel_size_X": img.physical_pixel_sizes.X if img.physical_pixel_sizes.X else 1.0},
-        "pixel_size_Y": lambda img: {"pixel_size_Y": img.physical_pixel_sizes.Y if img.physical_pixel_sizes.Y else 1.0},
-        "pixel_size_Z": lambda img: {"pixel_size_Z": img.physical_pixel_sizes.Z if img.physical_pixel_sizes.Z else 1.0},
-        "pixel_size_t": lambda img: {"pixel_size_t": img.physical_pixel_sizes.T if img.physical_pixel_sizes.T else 1.0},
+        "pixel_size_X": lambda img: {"pixel_size_X": getattr(img.physical_pixel_sizes, 'X', None)},
+        "pixel_size_Y": lambda img: {"pixel_size_Y": getattr(img.physical_pixel_sizes, 'Y', None)},
+        "pixel_size_Z": lambda img: {"pixel_size_Z": getattr(img.physical_pixel_sizes, 'Z', None)},
+        "pixel_size_t": lambda img: {"pixel_size_t": getattr(img.physical_pixel_sizes, 'T', None)},
         "channel_names": lambda img: {"channel_names": img.channel_names},
         "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
     }
@@ -66,6 +56,8 @@ def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioIm
 def available_columns() -> List[str]:
     keys = list(_column_fn_registry().keys())
     keys.extend(_mapping_for_bioimage_metadata_by_column_name())
+    # TODO: probably hard coded should be removed
+    keys.extend(["dim_order", "t_size", "c_size", "z_size", "y_size", "x_size", "s_size", "ndim", "shape", "dtype", "num_pixels"])
     return keys
 
 
@@ -114,18 +106,41 @@ def _extract_metadata_from_mapping(img: Any, mapping: Dict[str, Any], required_c
 
     return metadata
 
+def _get_standardized_array_and_dim_metadata(np_array: Any, dim_order: str) -> Tuple[np.ndarray, Dict[str, Any]]:
+    """
+    Retrieves the image data, standardizes its STANDARD_DIM_ORDER,
+    and extracts all dimension-related metadata from the standardized array.
 
-def _get_standardized_image_array(img: Any) -> np.ndarray:
-    np_array = img.get_image_data()
-    dim_order = img.dims.order
+    Returns:
+        A tuple containing:
+        - np_array: The standardized NumPy array.
+        - dim_metadata: A dictionary with dimension-related metadata (t_size, c_size, etc., ndim, shape, dtype).
+    """
 
     if dim_order != STANDARD_DIM_ORDER:
+        # Pad missing dimensions with size 1
         for i, d in enumerate(STANDARD_DIM_ORDER):
             if d not in dim_order:
                 np_array = np.expand_dims(np_array, axis=i)
                 dim_order = dim_order[:i] + d + dim_order[i:]
-    np_array = np.transpose(np_array, [dim_order.index(d) for d in STANDARD_DIM_ORDER])
-    return np_array
+        # Transpose to the standard dimension order
+        np_array = np.transpose(np_array, [dim_order.index(d) for d in STANDARD_DIM_ORDER])
+
+    # Extract dimension-related metadata from the standardized array
+    dim_metadata: Dict[str, Any] = {"dim_order": STANDARD_DIM_ORDER, "shape": str(np_array.shape),
+                                    "ndim": np_array.ndim, "dtype": str(np_array.dtype),
+                                    "num_pixels": int(np_array.size)}
+
+    # Extract individual dimension sizes from the standardized shape
+    shape_map = dict(zip(STANDARD_DIM_ORDER, np_array.shape))
+    dim_metadata["t_size"] = shape_map.get("T")
+    dim_metadata["c_size"] = shape_map.get("C")
+    dim_metadata["z_size"] = shape_map.get("Z")
+    dim_metadata["y_size"] = shape_map.get("Y")
+    dim_metadata["x_size"] = shape_map.get("X")
+    dim_metadata["s_size"] = shape_map.get("S")
+
+    return np_array, dim_metadata
 
 
 def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Dict:
@@ -138,11 +153,12 @@ def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Di
     if img is None:
         logger.warning(f"Failed to load image from '{file_path}'. Cannot extract metadata.")
         return {}
-    np_array = _get_standardized_image_array(img)
+    np_array = img.get_image_data() # TODO: test speed with .compute() at the end and without it
 
     if np_array is not None and np_array.size > 0:
+        np_array, all_image_properties = _get_standardized_array_and_dim_metadata(np_array, img.dims.order)
         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
-        all_image_properties = _extract_metadata_from_mapping(img, bioimage_mapping, required_columns)
+        all_image_properties.update(_extract_metadata_from_mapping(img, bioimage_mapping, required_columns))
         calculate_np_array_stats(required_columns, all_image_properties, np_array)
         return all_image_properties
     else:
@@ -201,18 +217,6 @@ def to_gray(array: np.array, color_dim_idx: int) -> np.array:
     return gray_array
 
 
-def _add_basic_array_props(metadata: Dict[str, Any], array: np.ndarray, columns: List[str]) -> None:
-    """Populate metadata with basic array properties if requested."""
-    if "num_pixels" in columns and "num_pixels" not in metadata:
-        metadata["num_pixels"] = int(array.size)
-    if "dtype" in columns and "dtype" not in metadata:
-        metadata["dtype"] = str(array.dtype)
-    if "shape" in columns and "shape" not in metadata:
-        metadata["shape"] = str(array.shape)
-    if "ndim" in columns and "ndim" not in metadata:
-        metadata["ndim"] = array.ndim
-
-
 def calculate_np_array_stats(columns: List[str], all_image_properties: Dict[str, Any], array: np.ndarray) -> None:
     gray_arr = _maybe_gray_scale(array)
     registry = _column_fn_registry()
@@ -227,7 +231,6 @@ def calculate_np_array_stats(columns: List[str], all_image_properties: Dict[str,
             all_image_properties['thumbnail'] = _generate_thumbnail(array, STANDARD_DIM_ORDER)
         except (ValueError, IOError) as e:
             logger.warning(f"Error generating thumbnail - {e}.")
-    _add_basic_array_props(all_image_properties, array, columns)
 
 
 def compute_hierarchical_stats(arr: np.ndarray, dim_order: str, metrics_fns: Dict[str, Callable[[np.ndarray], Any]], agg_fns: Dict[str, Callable[[np.ndarray], Any]]) -> Dict[str, float]:
