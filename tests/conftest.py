@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 import polars as pl
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime
 from PIL import Image
 import numpy as np
@@ -99,6 +99,12 @@ def build_expected_paths_df():
 def mock_settings() -> Settings:
     """Provides a default Settings instance."""
     return Settings(selected_file_extensions={"jpg", "png", "tif", "jpeg"})
+
+
+@pytest.fixture
+def mock_empty_paths_df() -> pl.DataFrame:
+    """An empty paths_df with the correct schema."""
+    return pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
 
 
 @pytest.fixture
@@ -220,3 +226,90 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
 def test_data_dir() -> Path:
     """Provides the path to the 'tests/data' directory."""
     return Path(__file__).parent / "data"
+
+
+@pytest.fixture(scope="module")
+def expected_image_data() -> Dict[str, Dict[str, Any]]:
+    """
+    Defines expected properties for each test image file.
+    Adjust y_size and x_size if your actual images are not 16x16.
+    """
+    return {
+        "cyx_16bit.tif": {
+            "c_size": 2,
+            "y_size": 35,
+            "x_size": 39,
+            "z_size": 1,
+            "t_size": 1,
+            "s_size": 1,
+            "m_size": None,
+            "dtype": "uint16",
+            "ndim": 6,
+        },
+        "rgb.bmp": {
+            "c_size": 1,
+            "y_size": 48,
+            "x_size": 48,
+            "z_size": 1,
+            "t_size": 1,
+            "s_size": 3,
+            "m_size": None,
+            "dtype": "uint8",
+            "ndim": 6,
+        },
+        "tcyx_8bit.tif": {
+            "t_size": 10,
+            "c_size": 3,
+            "y_size": 31,
+            "x_size": 33,
+            "z_size": 1,
+            "s_size": 1,
+            "m_size": None,
+            "dtype": "uint8",
+            "ndim": 6,
+        },
+        "yx_8bit.jpeg": {
+            "c_size": 1,
+            "y_size": 78,
+            "x_size": 180,
+            "z_size": 1,
+            "t_size": 1,
+            "s_size": 3,
+            "m_size": None,
+            "dtype": "uint8",
+            "ndim": 6,
+        },
+        "yx_8bit.png": {
+            "c_size": 1,
+            "y_size": 33,
+            "x_size": 33,
+            "z_size": 1,
+            "t_size": 1,
+            "s_size": 1,
+            "m_size": None,
+            "dtype": "uint8",
+            "ndim": 6,
+        },
+        "yx_rgb.png": {
+            "c_size": 1,
+            "y_size": 111,
+            "x_size": 322,
+            "z_size": 1,
+            "t_size": 1,
+            "s_size": 3,
+            "m_size": None,
+            "dtype": "uint8",
+            "ndim": 6,
+        },
+        "zyx_16bit.tif": {
+            "z_size": 5,
+            "c_size": 1,
+            "y_size": 25,
+            "x_size": 26,
+            "t_size": 1,
+            "s_size": 1,
+            "m_size": None,
+            "dtype": "uint16",
+            "ndim": 6,
+        },
+    }

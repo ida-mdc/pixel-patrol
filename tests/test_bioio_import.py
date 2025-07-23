@@ -18,92 +18,6 @@ def standard_dim_order():
     """Provide the standard dimension order from your config."""
     return STANDARD_DIM_ORDER
 
-@pytest.fixture(scope="module")
-def expected_image_data() -> Dict[str, Dict[str, Any]]:
-    """
-    Defines expected properties for each test image file.
-    Adjust y_size and x_size if your actual images are not 16x16.
-    """
-    return {
-        "cyx_16bit.tif": {
-            "c_size": 2,
-            "y_size": 35,
-            "x_size": 39,
-            "z_size": 1,
-            "t_size": 1,
-            "s_size": 1,
-            "m_size": None,
-            "dtype": "uint16",
-            "ndim": 6,
-        },
-        "rgb.bmp": {
-            "c_size": 1,
-            "y_size": 48,
-            "x_size": 48,
-            "z_size": 1,
-            "t_size": 1,
-            "s_size": 3,
-            "m_size": None,
-            "dtype": "uint8",
-            "ndim": 6,
-        },
-        "tcyx_8bit.tif": {
-            "t_size": 10,
-            "c_size": 3,
-            "y_size": 31,
-            "x_size": 33,
-            "z_size": 1,
-            "s_size": 1,
-            "m_size": None,
-            "dtype": "uint8",
-            "ndim": 6,
-        },
-        "yx_8bit.jpeg": {
-            "c_size": 1,
-            "y_size": 78,
-            "x_size": 180,
-            "z_size": 1,
-            "t_size": 1,
-            "s_size": 3,
-            "m_size": None,
-            "dtype": "uint8",
-            "ndim": 6,
-        },
-        "yx_8bit.png": {
-            "c_size": 1,
-            "y_size": 33,
-            "x_size": 33,
-            "z_size": 1,
-            "t_size": 1,
-            "s_size": 1,
-            "m_size": None,
-            "dtype": "uint8",
-            "ndim": 6,
-        },
-        "yx_rgb.png": {
-            "c_size": 1,
-            "y_size": 111,
-            "x_size": 322,
-            "z_size": 1,
-            "t_size": 1,
-            "s_size": 3,
-            "m_size": None,
-            "dtype": "uint8",
-            "ndim": 6,
-        },
-        "zyx_16bit.tif": {
-            "z_size": 5,
-            "c_size": 1,
-            "y_size": 25,
-            "x_size": 26,
-            "t_size": 1,
-            "s_size": 1,
-            "m_size": None,
-            "dtype": "uint16",
-            "ndim": 6,
-        },
-    }
-
 
 def get_image_files_from_data_dir(test_data_dir: Path):
     """Helper to get all image files from the test_data_dir, excluding non-image files."""
@@ -114,6 +28,11 @@ def get_image_files_from_data_dir(test_data_dir: Path):
     return image_files
 
 
+def test_nonexistent_path_raises(tmp_path, image_properties_to_check):
+    missing = tmp_path / "nope.png"
+    assert get_all_image_properties(missing, required_columns=image_properties_to_check) == {}
+
+
 def test_unsupported_file(test_data_dir: Path, image_properties_to_check: list):
     """
     Test that a non-image file returns an empty dictionary, indicating it's not processed as an image.
@@ -121,6 +40,12 @@ def test_unsupported_file(test_data_dir: Path, image_properties_to_check: list):
     non_image_file = test_data_dir / "not_an_image.txt"
     properties = get_all_image_properties(non_image_file, required_columns=image_properties_to_check)
     assert properties == {}, f"Expected empty dict for non-image file, got {properties}"
+
+
+def test_empty_or_corrupt_image(tmp_path, image_properties_to_check):
+    f = tmp_path / "zero.tif"
+    f.write_bytes(b"")
+    assert get_all_image_properties(f, required_columns=image_properties_to_check) == {}
 
 
 @pytest.mark.parametrize("image_file_path", get_image_files_from_data_dir(Path(__file__).parent / "data"))

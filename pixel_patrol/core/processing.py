@@ -40,11 +40,7 @@ def _postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
     ])
 
-    return df.select([
-        pl.col(c).cast(t) if c in df.columns
-        else pl.lit(None, dtype=t).alias(c)
-        for c, t in PATHS_DF_EXPECTED_SCHEMA.items()
-    ])
+    return df
 
 
 # TODO: still needs some more clean up
