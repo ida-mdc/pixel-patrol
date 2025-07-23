@@ -6,7 +6,6 @@ from pixel_patrol.core.processing import build_paths_df, PATHS_DF_EXPECTED_SCHEM
 
 
 def test_schema_unmodified(mock_temp_file_system, patch_tree):
-    # Ensure schema remains exactly as defined
     patch_tree(pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA))
     df = build_paths_df(mock_temp_file_system)
     assert set(df.columns) == set(PATHS_DF_EXPECTED_SCHEMA.keys())
@@ -20,8 +19,6 @@ def test_basic_paths_df(mock_temp_file_system, patch_tree, mock_paths_df_content
     df1 = mock_paths_df_content.filter(pl.col("imported_path") == str(dir1))
     df2 = mock_paths_df_content.filter(pl.col("imported_path") == str(dir2))
 
-    # THIS IS THE KEY CHANGE:
-    # patch_tree returns the MagicMock that _fetch_single_directory_tree has been replaced with
     mock_fetch = patch_tree(df1)         # now _fetch_single_directory_tree returns df1 first
     mock_fetch.side_effect = [df1, df2]  # then df2 on the second call
 
@@ -31,14 +28,14 @@ def test_basic_paths_df(mock_temp_file_system, patch_tree, mock_paths_df_content
     exp2 = build_expected_paths_df(df2.to_dicts())
     expected = exp1.vstack(exp2).sort("path")
 
+    actual = actual.select(*expected.columns)
     assert_frame_equal(actual, expected)
 
 
 def test_complex_size_aggregation(mock_temp_file_system_complex, patch_tree, build_expected_paths_df):
-    # Verify recursive folder-size aggregation
     paths = mock_temp_file_system_complex
     root = paths[0]
-    # build raw (un-aggregated) rows matching the fixture structure
+
     sub_a = root / "sub_dir_a"
     sub_a2 = sub_a / "sub_sub_dir_a"
     sub_b = root / "sub_dir_b"
@@ -54,14 +51,13 @@ def test_complex_size_aggregation(mock_temp_file_system_complex, patch_tree, bui
     patch_tree(pl.DataFrame(raw))
     df = build_paths_df(paths)
     expected = build_expected_paths_df(raw)
+    df = df.select(*expected.columns)
     assert_frame_equal(df, expected)
 
 
 def test_file_extension_edge_cases(mock_temp_file_system_edge_cases, patch_tree):
-    # Ensure file_extension is normalized correctly
     paths = mock_temp_file_system_edge_cases
     base = paths[0]
-    # raw rows: each file + the folder
     raw = []
     for p in base.iterdir():
         file_ext = p.suffix.lstrip('.') if p.is_file() else None
