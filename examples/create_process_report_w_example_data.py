@@ -40,7 +40,7 @@ data_subdirectories_to_process = [
 
 
 # --- Configuration for plankton download (Example Data) ---
-plankton_sync_share_folder_link = "https://syncandshare.desy.de/index.php/s/dWboGBXT4qyaRfj"
+plankton_sync_share_folder_link = "https://syncandshare.desy.de/index.php/s/wsNgyjpXJQMJpML"
 plankton_file_name = "plankton_filtered_processed.tar.gz"
 plankton_direct_download_url = f"{plankton_sync_share_folder_link}/download?path=/&files={plankton_file_name}"
 download_filename = plankton_file_name
