@@ -21,36 +21,65 @@ class SliceAxisSpec(NamedTuple):
     idx: int   # index in dim_order
     size: int   # shape along that axis
 
+
 def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
     return {
-        "mean_intensity": calculate_mean,
-        "median_intensity": calculate_median,
-        "std_intensity": calculate_std,
-        "min_intensity": calculate_min,
-        "max_intensity": calculate_max,
-        "laplacian_variance": calculate_variance_of_laplacian,
-        "tenengrad": calculate_tenengrad,
-        "brenner": calculate_brenner,
-        "noise_std": calculate_noise_estimation,
-        # "wavelet_energy": calculate_wavelet_energy,
-        "blocking_artifacts": calculate_blocking_artifacts,
-        "ringing_artifacts": calculate_ringing_artifacts,
-        "thumbnail": get_thumbnail  # Note: get_thumbnail is a wrapper for generate_thumbnail
+        "mean_intensity": {
+            "fn": lambda a: float(np.mean(a)) if a.size else np.nan,
+            "agg": np.mean,
+        },
+        "median_intensity": {
+            "fn": lambda a: float(np.median(a)) if a.size else np.nan,
+            "agg": np.median,
+        },
+        "std_intensity": {
+            "fn": lambda a: float(np.std(a)) if a.size else np.nan,
+            "agg": np.mean,
+        },
+        "min_intensity": {
+            "fn": lambda a: float(np.min(a)) if a.size else np.nan,
+            "agg": np.min,
+        },
+        "max_intensity": {
+            "fn": lambda a: float(np.max(a)) if a.size else np.nan,
+            "agg": np.max,
+        },
+        "laplacian_variance": {"fn": _variance_of_laplacian_2d, "agg": np.mean},
+        "tenengrad": {"fn": _tenengrad_2d, "agg": np.mean},
+        "brenner": {"fn": _brenner_2d, "agg": np.mean},
+        "noise_std": {"fn": _noise_estimation_2d, "agg": np.mean},
+        "blocking_artifacts": {"fn": _check_blocking_artifacts_2d, "agg": np.mean},
+        "ringing_artifacts": {"fn": _check_ringing_artifacts_2d, "agg": np.mean},
+        "thumbnail": {"fn": _generate_thumbnail, "agg": None},  # No aggregation needed
+        "histogram": {"fn": _histogram_func, "agg": _histogram_agg},
     }
 
-def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioImage], Dict]]:
+
+def _mapping_for_bioimage_metadata_by_column_name() -> (
+    Dict[str, Callable[[BioImage], Dict]]
+):
     """
     Maps requested metadata fields to functions that extract them from a BioImage object.
     These functions return a dictionary with the extracted key-value pair.
     """
     return {
-        "n_images": lambda img: {"n_images": len(img.scenes) if hasattr(img, 'scenes') else 1},
-        "pixel_size_X": lambda img: {"pixel_size_X": getattr(img.physical_pixel_sizes, 'X', None)},
-        "pixel_size_Y": lambda img: {"pixel_size_Y": getattr(img.physical_pixel_sizes, 'Y', None)},
-        "pixel_size_Z": lambda img: {"pixel_size_Z": getattr(img.physical_pixel_sizes, 'Z', None)},
-        "pixel_size_t": lambda img: {"pixel_size_t": getattr(img.physical_pixel_sizes, 'T', None)},
+        "n_images": lambda img: {
+            "n_images": len(img.scenes) if hasattr(img, "scenes") else 1
+        },
+        "pixel_size_X": lambda img: {
+            "pixel_size_X": getattr(img.physical_pixel_sizes, "X", None)
+        },
+        "pixel_size_Y": lambda img: {
+            "pixel_size_Y": getattr(img.physical_pixel_sizes, "Y", None)
+        },
+        "pixel_size_Z": lambda img: {
+            "pixel_size_Z": getattr(img.physical_pixel_sizes, "Z", None)
+        },
+        "pixel_size_t": lambda img: {
+            "pixel_size_t": getattr(img.physical_pixel_sizes, "T", None)
+        },
         "channel_names": lambda img: {"channel_names": img.channel_names},
-        "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
+        # "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
     }
 
 
@@ -521,20 +550,20 @@ def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
         return np.array([])
 
 
-def histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
+def _histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
     """
     Calculate histogram of an array using numpy's histogram function, but ensure it uses 256 bins.
     """
-    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, 256))
+    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, image_array.max()))
     return hist
 
 
-def _histogram_agg(hist_list: list[np.ndarray]) -> np.ndarray:
+def _histogram_agg(hist_list: list[np.ndarray], bins: int = 256) -> np.ndarray:
     """
     Aggregate a list of histograms by summing them.
     """
     if len(hist_list) == 0:
-        return np.zeros(256, dtype=int)
+        return np.zeros(bins, dtype=int)
     return np.sum(np.stack(hist_list), axis=0)
 
 
@@ -548,7 +577,7 @@ def calculate_histogram(
     return compute_hierarchical_stats(
         arr,
         dim_order,
-        lambda a, d: histogram_func(a, bins),  # Accepts both array and dim_order
+        lambda a, d: _histogram_func(a, bins),  # Accepts both array and dim_order
         "histogram",
         agg_func=_histogram_agg,
     )
