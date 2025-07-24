@@ -68,7 +68,7 @@ class SummaryWidget(PixelPatrolWidget):
             intro_md = [html.P(f"This dataset compares {folder_details.height} folders.")]
 
             for row in folder_details.iter_rows(named=True):
-                dt_str = ", ".join(row["data_types"])
+                dt_str = ", ".join(str(x) if x is not None else "" for x in row["data_types"])
                 ft_str = ", ".join(row["file_types"])
                 intro_md.append(html.P(
                     f"{row['imported_path_short']}: {row['image_count']} images ({row['total_size_mb']:.1f} MB), "
