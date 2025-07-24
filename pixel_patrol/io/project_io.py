@@ -1,4 +1,5 @@
 import zipfile
+import numpy as np
 import yaml
 import polars as pl
 import tempfile
@@ -95,6 +96,48 @@ def _handle_object_columns(df: pl.DataFrame) -> pl.DataFrame:
     return current_df
 
 
+def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Serializes columns containing numpy ndarrays to lists of int64 for compatibility with Parquet.
+    This is necessary because Polars does not support direct serialization of numpy ndarrays.
+    Args:
+        df: The Polars DataFrame to process.
+    Returns:
+        A Polars DataFrame with ndarray columns serialized to lists.
+    """
+    for col in polars_df.columns:
+        if polars_df[col].dtype == pl.Object:
+            try:
+                # Attempt to convert ndarray columns to lists
+                polars_df = polars_df.with_columns(
+                    pl.col(col).map_elements(lambda x: x.tolist() if isinstance(x, np.ndarray) else x, return_dtype=pl.List(pl.Int64))
+                )
+                logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
+            except Exception as e:
+                logger.warning(f"Project IO: Failed to serialize column '{col}' to list. Error: {e}. This column will be excluded from the Parquet export.")
+                polars_df = polars_df.drop(col)
+    return polars_df
+
+def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Deserializes columns containing lists of int32 back to numpy ndarrays.
+    Args:
+        polars_df: The Polars DataFrame to process.
+    Returns:
+        A Polars DataFrame with list columns deserialized to ndarrays.
+    """
+    for col in polars_df.columns:
+        if polars_df[col].dtype == pl.List(pl.Int32):
+            try:
+                polars_df = polars_df.with_columns(
+                    pl.col(col).map_elements(lambda x: np.array(x) if isinstance(x, list) else x, return_dtype=pl.Object)
+                )
+                logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
+            except Exception as e:
+                logger.warning(f"Project IO: Failed to deserialize column '{col}' to ndarray. Error: {e}. This column will be excluded from the DataFrame.")
+                polars_df = polars_df.drop(col)
+    return polars_df
+
 def _write_dataframe_to_parquet(
         df: Optional[pl.DataFrame],
         base_filename: str,
@@ -103,6 +146,8 @@ def _write_dataframe_to_parquet(
     """Helper to write an optional Polars DataFrame to a Parquet file in a temporary path."""
     if df is None:
         return None
+
+    df = _serialize_ndarray_columns_dataframe(df)
 
     # TODO: This might be a bit of a patch and should be revisited.
     df = _handle_object_columns(df)
@@ -206,6 +251,7 @@ def _read_dataframe_from_parquet(
     data_name = file_path.stem
     try:
         df = pl.read_parquet(file_path)
+        df = _deserialize_ndarray_columns_dataframe(df)
         return df
     except Exception as e:
         logger.warning(f"Project IO: Could not read {data_name} data from '{file_path.name}' "
