@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Union, List
 import logging
 
@@ -87,5 +87,7 @@ def find_common_base(paths: List[str]) -> str:
     # Reconstruct the common base
     common_base = Path(*common_parts)
 
-    # Ensure it ends with a separator if it's a directory
-    return str(common_base) + "/"
+    # Ensure it ends with the correct separator regarding the system's flavor, e.g. / or \
+    system_path_ending = "/" if isinstance(common_base, PurePosixPath) else "\\"
+
+    return str(common_base) + system_path_ending
