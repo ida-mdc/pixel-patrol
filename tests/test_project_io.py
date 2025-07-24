@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from pathlib import Path
 import polars as pl
@@ -122,6 +123,14 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             # Ensure column order matches for strict .equals() comparison
             # by selecting columns from loaded_df in the order of expected_df.
             loaded_df_reordered = loaded_df[expected_df_for_comparison.columns]
+
+            if "histogram" in expected_df_for_comparison.columns and "histogram" in loaded_df_reordered.columns:
+                expected_df_for_comparison = expected_df_for_comparison.with_columns(
+                    pl.col("histogram").map_elements(lambda x: list(x) if isinstance(x, (np.ndarray, list)) else x, return_dtype=pl.List(pl.Int64))
+                )
+                loaded_df_reordered = loaded_df_reordered.with_columns(
+                    pl.col("histogram").map_elements(lambda x: list(x) if isinstance(x, (np.ndarray, list)) else x, return_dtype=pl.List(pl.Int64))
+                )
 
             assert loaded_df_reordered.equals(expected_df_for_comparison)
 
