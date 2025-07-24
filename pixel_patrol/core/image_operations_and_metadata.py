@@ -51,7 +51,7 @@ def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
         "blocking_artifacts": {"fn": _check_blocking_artifacts_2d, "agg": np.mean},
         "ringing_artifacts": {"fn": _check_ringing_artifacts_2d, "agg": np.mean},
         "thumbnail": {"fn": _generate_thumbnail, "agg": None},  # No aggregation needed
-        "histogram": {"fn": _histogram_func, "agg": _histogram_agg},
+        "histogram": {"fn": lambda a: _histogram_func(a) if a.size else np.nan, "agg": _histogram_agg},
     }
 
 
