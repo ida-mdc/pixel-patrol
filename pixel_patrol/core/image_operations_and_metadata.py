@@ -79,7 +79,7 @@ def _mapping_for_bioimage_metadata_by_column_name() -> (
             "pixel_size_t": getattr(img.physical_pixel_sizes, "T", None)
         },
         "channel_names": lambda img: {"channel_names": img.channel_names},
-        # "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
+        "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
     }
 
 
@@ -189,6 +189,7 @@ def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Di
         np_array, all_image_properties = _get_standardized_array_and_dim_metadata(np_array, img.dims.order)
         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
         all_image_properties.update(_extract_metadata_from_mapping(img, bioimage_mapping, required_columns))
+
         calculate_np_array_stats(required_columns, all_image_properties, np_array)
         return all_image_properties
     else:
@@ -370,11 +371,21 @@ def _compute_aggregated_combo_metrics(
                         combo_key = "_".join(dmap[d] for d in dims)
                         bucket.setdefault(combo_key, []).append(val)
                 for combo_key, vals in bucket.items():
-                    agg_stats[f"{metric}_{combo_key}"] = float(agg(np.array(vals)))
+                    result = agg(np.array(vals))
+                    # Don't convert arrays to float (e.g., histograms should remain as arrays)
+                    if isinstance(result, np.ndarray) and result.size > 1:
+                        agg_stats[f"{metric}_{combo_key}"] = result
+                    else:
+                        agg_stats[f"{metric}_{combo_key}"] = float(result)
 
         # b) global
         all_vals = [val for _, val in entries]
-        agg_stats[metric] = float(agg(np.array(all_vals)))
+        result = agg(np.array(all_vals))
+        # Don't convert arrays to float (e.g., histograms should remain as arrays)
+        if isinstance(result, np.ndarray) and result.size > 1:
+            agg_stats[metric] = result
+        else:
+            agg_stats[metric] = float(result)
 
     return agg_stats
 
