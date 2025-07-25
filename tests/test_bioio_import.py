@@ -21,11 +21,8 @@ def standard_dim_order():
 
 def get_image_files_from_data_dir(test_data_dir: Path):
     """Helper to get all image files from the test_data_dir, excluding non-image files."""
-    image_files = []
-    for f in test_data_dir.iterdir():
-        if f.is_file() and f.name != "not_an_image.txt":
-            image_files.append(f)
-    return image_files
+    return [f for f in test_data_dir.rglob("*")
+        if f.is_file() and f.name != "not_an_image.txt"]
 
 
 def test_nonexistent_path_raises(tmp_path, image_properties_to_check):
