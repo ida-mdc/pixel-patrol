@@ -1,0 +1,6 @@
+demo_data_2d/
+.venv/
+**/__pycache__/
+.vscode/
+pixel_patrol.egg-info/
+uv.lock

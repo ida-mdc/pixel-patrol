@@ -21,33 +21,63 @@ class SliceAxisSpec(NamedTuple):
     idx: int   # index in dim_order
     size: int   # shape along that axis
 
+
 def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
     return {
-        'mean_intensity': {'fn': lambda a: float(np.mean(a)) if a.size else np.nan, 'agg': np.mean},
-        'median_intensity': {'fn': lambda a: float(np.median(a)) if a.size else np.nan, 'agg': np.median},
-        'std_intensity': {'fn': lambda a: float(np.std(a)) if a.size else np.nan, 'agg': np.mean},
-        'min_intensity': {'fn': lambda a: float(np.min(a)) if a.size else np.nan, 'agg': np.min},
-        'max_intensity': {'fn': lambda a: float(np.max(a)) if a.size else np.nan, 'agg': np.max},
-        'laplacian_variance': {'fn': _variance_of_laplacian_2d, 'agg': np.mean},
-        'tenengrad': {'fn': _tenengrad_2d, 'agg': np.mean},
-        'brenner': {'fn': _brenner_2d, 'agg': np.mean},
-        'noise_std': {'fn': _noise_estimation_2d, 'agg': np.mean},
-        'blocking_artifacts': {'fn': _check_blocking_artifacts_2d, 'agg': np.mean},
-        'ringing_artifacts': {'fn': _check_ringing_artifacts_2d, 'agg': np.mean},
-        'thumbnail': {'fn': _generate_thumbnail, 'agg': None},  # No aggregation needed
+        "mean_intensity": {
+            "fn": lambda a: float(np.mean(a)) if a.size else np.nan,
+            "agg": np.mean,
+        },
+        "median_intensity": {
+            "fn": lambda a: float(np.median(a)) if a.size else np.nan,
+            "agg": np.median,
+        },
+        "std_intensity": {
+            "fn": lambda a: float(np.std(a)) if a.size else np.nan,
+            "agg": np.mean,
+        },
+        "min_intensity": {
+            "fn": lambda a: float(np.min(a)) if a.size else np.nan,
+            "agg": np.min,
+        },
+        "max_intensity": {
+            "fn": lambda a: float(np.max(a)) if a.size else np.nan,
+            "agg": np.max,
+        },
+        "laplacian_variance": {"fn": _variance_of_laplacian_2d, "agg": np.mean},
+        "tenengrad": {"fn": _tenengrad_2d, "agg": np.mean},
+        "brenner": {"fn": _brenner_2d, "agg": np.mean},
+        "noise_std": {"fn": _noise_estimation_2d, "agg": np.mean},
+        "blocking_artifacts": {"fn": _check_blocking_artifacts_2d, "agg": np.mean},
+        "ringing_artifacts": {"fn": _check_ringing_artifacts_2d, "agg": np.mean},
+        "thumbnail": {"fn": _generate_thumbnail, "agg": None},  # No aggregation needed
+        "histogram": {"fn": lambda a: _histogram_func(a) if a.size else np.nan, "agg": _histogram_agg},
     }
 
-def _mapping_for_bioimage_metadata_by_column_name() -> Dict[str, Callable[[BioImage], Dict]]:
+
+def _mapping_for_bioimage_metadata_by_column_name() -> (
+    Dict[str, Callable[[BioImage], Dict]]
+):
     """
     Maps requested metadata fields to functions that extract them from a BioImage object.
     These functions return a dictionary with the extracted key-value pair.
     """
     return {
-        "n_images": lambda img: {"n_images": len(img.scenes) if hasattr(img, 'scenes') else 1},
-        "pixel_size_X": lambda img: {"pixel_size_X": getattr(img.physical_pixel_sizes, 'X', None)},
-        "pixel_size_Y": lambda img: {"pixel_size_Y": getattr(img.physical_pixel_sizes, 'Y', None)},
-        "pixel_size_Z": lambda img: {"pixel_size_Z": getattr(img.physical_pixel_sizes, 'Z', None)},
-        "pixel_size_t": lambda img: {"pixel_size_t": getattr(img.physical_pixel_sizes, 'T', None)},
+        "n_images": lambda img: {
+            "n_images": len(img.scenes) if hasattr(img, "scenes") else 1
+        },
+        "pixel_size_X": lambda img: {
+            "pixel_size_X": getattr(img.physical_pixel_sizes, "X", None)
+        },
+        "pixel_size_Y": lambda img: {
+            "pixel_size_Y": getattr(img.physical_pixel_sizes, "Y", None)
+        },
+        "pixel_size_Z": lambda img: {
+            "pixel_size_Z": getattr(img.physical_pixel_sizes, "Z", None)
+        },
+        "pixel_size_t": lambda img: {
+            "pixel_size_t": getattr(img.physical_pixel_sizes, "T", None)
+        },
         "channel_names": lambda img: {"channel_names": img.channel_names},
         "ome_metadata": lambda img: {"ome_metadata": img.ome_metadata},
     }
@@ -159,6 +189,7 @@ def get_all_image_properties(file_path: Path, required_columns: List[str]) -> Di
         np_array, all_image_properties = _get_standardized_array_and_dim_metadata(np_array, img.dims.order)
         bioimage_mapping = _mapping_for_bioimage_metadata_by_column_name()
         all_image_properties.update(_extract_metadata_from_mapping(img, bioimage_mapping, required_columns))
+
         calculate_np_array_stats(required_columns, all_image_properties, np_array)
         return all_image_properties
     else:
@@ -340,11 +371,21 @@ def _compute_aggregated_combo_metrics(
                         combo_key = "_".join(dmap[d] for d in dims)
                         bucket.setdefault(combo_key, []).append(val)
                 for combo_key, vals in bucket.items():
-                    agg_stats[f"{metric}_{combo_key}"] = float(agg(np.array(vals)))
+                    result = agg(np.array(vals))
+                    # Don't convert arrays to float (e.g., histograms should remain as arrays)
+                    if isinstance(result, np.ndarray) and result.size > 1:
+                        agg_stats[f"{metric}_{combo_key}"] = result
+                    else:
+                        agg_stats[f"{metric}_{combo_key}"] = float(result)
 
         # b) global
         all_vals = [val for _, val in entries]
-        agg_stats[metric] = float(agg(np.array(all_vals)))
+        result = agg(np.array(all_vals))
+        # Don't convert arrays to float (e.g., histograms should remain as arrays)
+        if isinstance(result, np.ndarray) and result.size > 1:
+            agg_stats[metric] = result
+        else:
+            agg_stats[metric] = float(result)
 
     return agg_stats
 
@@ -379,7 +420,6 @@ def _compute_parent_slice_combo_metrics(
         parent_stats[name] = fn(whole)
 
     return parent_stats
-
 
 
 def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
@@ -519,3 +559,36 @@ def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
         logger.error(
             f"Error converting array to PIL Image or resizing for thumbnail: {e}. Array shape: {normalized_array.shape}, dtype: {normalized_array.dtype}")
         return np.array([])
+
+
+def _histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
+    """
+    Calculate histogram of an array using numpy's histogram function, but ensure it uses 256 bins.
+    """
+    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, image_array.max()))
+    return hist
+
+
+def _histogram_agg(hist_list: list[np.ndarray], bins: int = 256) -> np.ndarray:
+    """
+    Aggregate a list of histograms by summing them.
+    """
+    if len(hist_list) == 0:
+        return np.zeros(bins, dtype=int)
+    return np.sum(np.stack(hist_list), axis=0)
+
+
+def calculate_histogram(
+    arr: np.ndarray, dim_order: str, bins: int = 256
+) -> Dict[str, np.ndarray]:
+    """
+    Calculate the histogram of an array across all dimensions and return it as a dictionary.
+    Uses 256 bins and accumulates the histogram across all dimensions.
+    """
+    return compute_hierarchical_stats(
+        arr,
+        dim_order,
+        lambda a, d: _histogram_func(a, bins),  # Accepts both array and dim_order
+        "histogram",
+        agg_func=_histogram_agg,
+    )
