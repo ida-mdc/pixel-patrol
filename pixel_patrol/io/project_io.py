@@ -120,17 +120,22 @@ def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFram
 
 def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Deserializes columns containing lists of int32 back to numpy ndarrays.
+    Deserializes columns containing lists of int64 back to numpy ndarrays.
     Args:
         polars_df: The Polars DataFrame to process.
     Returns:
         A Polars DataFrame with list columns deserialized to ndarrays.
     """
     for col in polars_df.columns:
-        if polars_df[col].dtype == pl.List(pl.Int32):
+        if polars_df[col].dtype == pl.List(pl.Int64):
             try:
                 polars_df = polars_df.with_columns(
-                    pl.col(col).map_elements(lambda x: np.array(x) if isinstance(x, list) else x, return_dtype=pl.Object)
+                    pl.col(col)
+                    .map_elements(
+                        lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x, # in case a series appears in a saved dataframe.
+                        return_dtype=pl.Object,
+                    )
+                    .cast(pl.Object)
                 )
                 logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
             except Exception as e:
@@ -422,4 +427,3 @@ def import_project(src: Path) -> Project:
         project.images_df = imported_images_df # Assign the already read images_df
 
         return project
-
