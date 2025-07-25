@@ -372,20 +372,12 @@ def _compute_aggregated_combo_metrics(
                         bucket.setdefault(combo_key, []).append(val)
                 for combo_key, vals in bucket.items():
                     result = agg(np.array(vals))
-                    # Don't convert arrays to float (e.g., histograms should remain as arrays)
-                    if isinstance(result, np.ndarray) and result.size > 1:
-                        agg_stats[f"{metric}_{combo_key}"] = result
-                    else:
-                        agg_stats[f"{metric}_{combo_key}"] = float(result)
+                    agg_stats[f"{metric}_{combo_key}"] = result
 
         # b) global
         all_vals = [val for _, val in entries]
         result = agg(np.array(all_vals))
-        # Don't convert arrays to float (e.g., histograms should remain as arrays)
-        if isinstance(result, np.ndarray) and result.size > 1:
-            agg_stats[metric] = result
-        else:
-            agg_stats[metric] = float(result)
+        agg_stats[metric] = result
 
     return agg_stats
 
