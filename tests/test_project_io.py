@@ -112,7 +112,6 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             # HOTFIX:
             loaded_df = _deserialize_ndarray_columns_dataframe(loaded_df)
 
-
             # TODO: this is a patch - need to handle thumbnail column (and future object columns) properly
             # Prepare the expected DataFrame for comparison by excluding the 'thumbnail' column.
             # This is a temporary patch to allow the test to pass if 'thumbnail' handling
@@ -128,7 +127,63 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             # by selecting columns from loaded_df in the order of expected_df.
             loaded_df_reordered = loaded_df[expected_df_for_comparison.columns]
 
-            assert loaded_df_reordered.equals(expected_df_for_comparison)
+            # Use a more robust comparison that handles floating-point precision and numpy array differences
+            # First check that shapes and columns match
+            assert (
+                loaded_df_reordered.shape
+                == expected_df_for_comparison.shape
+            )
+            assert (
+                loaded_df_reordered.columns
+                == expected_df_for_comparison.columns
+            )
+
+            # Compare column by column
+            for col in expected_df_for_comparison.columns:
+                expected_col = expected_df_for_comparison[col]
+                imported_col = loaded_df_reordered[col]
+
+                if expected_col.dtype == pl.Object:
+                    # For object columns (like histogram numpy arrays), compare element by element
+                    for i in range(len(expected_col)):
+                        expected_val = expected_col[i]
+                        imported_val = imported_col[i]
+                        if isinstance(expected_val, np.ndarray) and isinstance(
+                            imported_val, np.ndarray
+                        ):
+                            np.testing.assert_array_equal(
+                                expected_val,
+                                imported_val,
+                                err_msg=f"Numpy arrays in column '{col}' at row {i} are not equal",
+                            )
+                        else:
+                            assert (
+                                expected_val == imported_val
+                            ), f"Values in column '{col}' at row {i} are not equal: {expected_val} != {imported_val}"
+                elif expected_col.dtype in [pl.Float32, pl.Float64]:
+                    # For floating-point columns, use approximate equality but with zero tolerance
+                    for i in range(len(expected_col)):
+                        expected_val = expected_col[i]
+                        imported_val = imported_col[i]
+                        if expected_val is None and imported_val is None:
+                            continue
+                        elif expected_val is None or imported_val is None:
+                            assert (
+                                False
+                            ), f"One value is None in column '{col}' at row {i}: {expected_val} != {imported_val}"
+                        else:
+                            np.testing.assert_allclose(
+                                expected_val,
+                                desired=imported_val,
+                                rtol=0,
+                                atol=0,
+                                err_msg=f"Float values in column '{col}' at row {i} are not close: {expected_val} != {imported_val}",
+                            )
+                else:
+                    # For other columns, use exact equality
+                    assert expected_col.equals(
+                        imported_col
+                    ), f"Column '{col}' values are not equal"
 
 
 def test_export_project_creates_parent_directories(project_instance: Project, tmp_path: Path):
@@ -211,7 +266,7 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
     assert imported_images_df_for_comparison.shape == expected_images_df_for_comparison.shape
     assert imported_images_df_for_comparison.columns == expected_images_df_for_comparison.columns
     
-    # Compare column by column with appropriate tolerance for numerical columns
+    # Compare column by column
     for col in expected_images_df_for_comparison.columns:
         expected_col = expected_images_df_for_comparison[col]
         imported_col = imported_images_df_for_comparison[col]
@@ -236,12 +291,11 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
                 elif expected_val is None or imported_val is None:
                     assert False, f"One value is None in column '{col}' at row {i}: {expected_val} != {imported_val}"
                 else:
-                    np.testing.assert_allclose(expected_val, imported_val, rtol=0, atol=0, 
+                    np.testing.assert_allclose(expected_val, desired=imported_val, rtol=0, atol=0, 
                                              err_msg=f"Float values in column '{col}' at row {i} are not close: {expected_val} != {imported_val}")
         else:
             # For other columns, use exact equality
             assert expected_col.equals(imported_col), f"Column '{col}' values are not equal"
-    
     # Final validation: the filtered and reordered DataFrames should be equal, but they just aren't for some reason. Are there metadata differences in these two pl.df?
     # assert imported_images_df_for_comparison.equals(expected_images_df_for_comparison)
 
@@ -403,7 +457,44 @@ def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_pa
 
     # Exclude 'thumbnail' column from comparison as it's not being exported/imported correctly
     columns_to_compare = [col for col in project_with_all_data.images_df.columns if col != 'thumbnail']
-    assert imported_project.images_df[columns_to_compare].equals(project_with_all_data.images_df[columns_to_compare])
+    imported_images_df_for_comparison = imported_project.images_df[columns_to_compare]
+    expected_images_df_for_comparison = project_with_all_data.images_df[columns_to_compare]
+
+    # Use a more robust comparison that handles floating-point precision and numpy array differences
+    # First check that shapes and columns match
+    assert imported_images_df_for_comparison.shape == expected_images_df_for_comparison.shape
+    assert imported_images_df_for_comparison.columns == expected_images_df_for_comparison.columns
+    
+    # Compare column by column
+    for col in expected_images_df_for_comparison.columns:
+        expected_col = expected_images_df_for_comparison[col]
+        imported_col = imported_images_df_for_comparison[col]
+        
+        if expected_col.dtype == pl.Object:
+            # For object columns (like histogram numpy arrays), compare element by element
+            for i in range(len(expected_col)):
+                expected_val = expected_col[i]
+                imported_val = imported_col[i]
+                if isinstance(expected_val, np.ndarray) and isinstance(imported_val, np.ndarray):
+                    np.testing.assert_array_equal(expected_val, imported_val, 
+                                                err_msg=f"Numpy arrays in column '{col}' at row {i} are not equal")
+                else:
+                    assert expected_val == imported_val, f"Values in column '{col}' at row {i} are not equal: {expected_val} != {imported_val}"
+        elif expected_col.dtype in [pl.Float32, pl.Float64]:
+            # For floating-point columns, use approximate equality but with zero tolerance
+            for i in range(len(expected_col)):
+                expected_val = expected_col[i]
+                imported_val = imported_col[i]
+                if expected_val is None and imported_val is None:
+                    continue
+                elif expected_val is None or imported_val is None:
+                    assert False, f"One value is None in column '{col}' at row {i}: {expected_val} != {imported_val}"
+                else:
+                    np.testing.assert_allclose(expected_val, desired=imported_val, rtol=0, atol=0, 
+                                             err_msg=f"Float values in column '{col}' at row {i} are not close: {expected_val} != {imported_val}")
+        else:
+            # For other columns, use exact equality
+            assert expected_col.equals(imported_col), f"Column '{col}' values are not equal"
 
 def create_mock_project_zip(
         tmp_path: Path,
