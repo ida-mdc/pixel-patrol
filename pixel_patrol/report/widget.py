@@ -1,9 +1,6 @@
-import importlib.util
 from collections import defaultdict, OrderedDict
-from typing import List
 
 from pixel_patrol.report.widget_categories import WidgetCategories
-from pixel_patrol.report.widget_interface import PixelPatrolWidget
 
 
 def organize_widgets_by_tab(widgets):

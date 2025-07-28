@@ -19,7 +19,7 @@ class FileTimestampWidget(PixelPatrolWidget):
         return "File Modification Date Distribution"
 
     def required_columns(self) -> List[str]:
-        return ["modification_date", "imported_path", "name"]
+        return ["modification_date"]
 
     def layout(self) -> List:
         return [
@@ -33,10 +33,6 @@ class FileTimestampWidget(PixelPatrolWidget):
         )
         def update_file_timestamp_chart(color_map: Dict[str, str]):
             df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
                 pl.col("modification_date").cast(pl.Datetime).alias("modification_date")
             ]).filter(
                 pl.col("modification_date").is_not_null()

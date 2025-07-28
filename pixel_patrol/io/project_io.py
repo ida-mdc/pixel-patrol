@@ -105,7 +105,17 @@ def _write_dataframe_to_parquet(
         return None
 
     # TODO: This might be a bit of a patch and should be revisited.
-    df = _handle_object_columns(df)
+    # df = _handle_object_columns(df)
+
+    # Identify columns with empty Struct types
+    empty_struct_cols = [
+        name for name, dtype in df.schema.items()
+        if isinstance(dtype, pl.Struct) and not dtype.fields
+    ]
+
+    # Add a dummy field to each problematic column
+    for col in empty_struct_cols:
+        df = df.with_columns(pl.lit(None).alias(col))
 
     file_path = tmp_path / base_filename
     data_name = file_path.stem

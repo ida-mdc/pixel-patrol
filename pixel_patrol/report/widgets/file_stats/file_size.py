@@ -20,7 +20,7 @@ class FileSizeWidget(PixelPatrolWidget):
 
     def required_columns(self) -> List[str]:
         # 'size' for binning, 'imported_path' for color, 'name' for hover
-        return ["size_bytes", "imported_path", "name"]
+        return ["size_bytes"]
 
     def layout(self) -> List:
         """Defines the layout of the File Size Distribution widget."""
@@ -57,10 +57,6 @@ class FileSizeWidget(PixelPatrolWidget):
             # --- Data Preprocessing (all in Polars) ---
             # Extract short folder name and create size_bin
             processed_df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
                 pl.col("size_bytes").cut(bins, labels=labels).alias("size_bin"),
             ]).filter(
                 pl.col("size_bin").is_not_null() & # Filter out entries that didn't fall into a bin

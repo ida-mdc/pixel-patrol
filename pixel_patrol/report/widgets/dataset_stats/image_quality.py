@@ -4,12 +4,14 @@ from typing import List, Dict
 
 import plotly.graph_objects as go
 import polars as pl
-import statsmodels.stats.multitest as smm  # For Bonferroni correction
-from dash import html, dcc, Input, Output  # Import necessary Dash components
-from scipy.stats import mannwhitneyu  # For statistical tests
+import statsmodels.stats.multitest as smm
+from dash import html, dcc, Input, Output
+from scipy.stats import mannwhitneyu
 
-from pixel_patrol.report.widget_interface import PixelPatrolWidget  # Corrected import path
+from pixel_patrol.core.processors.quality_metrics_processor import QualityMetricsProcessor
+from pixel_patrol.core.spec_provider import get_requirements_as_patterns
 from pixel_patrol.report.widget_categories import WidgetCategories
+from pixel_patrol.report.widget_interface import PixelPatrolWidget
 
 
 class ImageQualityWidget(PixelPatrolWidget):
@@ -22,12 +24,7 @@ class ImageQualityWidget(PixelPatrolWidget):
         return "Image Quality"
 
     def required_columns(self) -> List[str]:
-        return [
-            "laplacian_variance", "tenengrad", "brenner",
-            "noise_estimation", "wavelet_energy",
-            "blocking_artifacts", "ringing_artifacts",
-            "name", "imported_path"
-        ]
+        return get_requirements_as_patterns(QualityMetricsProcessor())
 
     def layout(self) -> List:  # Removed df from layout function
         return [

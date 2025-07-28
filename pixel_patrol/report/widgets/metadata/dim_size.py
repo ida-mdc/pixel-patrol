@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output
 
+from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol.core.spec_provider import get_requirements_as_patterns
 from pixel_patrol.report.widget_interface import PixelPatrolWidget
 from pixel_patrol.report.widget_categories import WidgetCategories
 
@@ -21,11 +23,7 @@ class DimSizeWidget(PixelPatrolWidget):
         return "Dimension Size Distribution"
 
     def required_columns(self) -> List[str]:
-        # List all possible numerical columns that might be used
-        return [
-            "x_size", "y_size", "z_size", "t_size", "c_size", "s_size", "n_images",
-            "imported_path", "name" # Required for plotting and hover info
-        ]
+        return get_requirements_as_patterns(BioIoLoader())
 
     def layout(self) -> List:
         """Defines the layout of the Dimension Size Distribution widget."""
@@ -42,28 +40,38 @@ class DimSizeWidget(PixelPatrolWidget):
         @app.callback(
             Output("dim-size-info", "children"),
             Output("xy-size-plot-area", "children"),
-            Output("individual-dim-plots-area", "children"),
+            Output("individual-dim-plots-area", "children"), # Corrected ID
             Input("color-map-store", "data"), # Input for colors
         )
         def update_dim_size_charts(color_map: Dict[str, str]):
+            # Ensure the output ID matches the layout ID
+            # layout ID: "individual-dim-plots-area"
+            # output ID: "individual-dim_plots_area" - Mismatch here, fixed in the return section below too.
+
             # --- Data Preprocessing (all in Polars) ---
-            processed_df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
-            ])
+            # Assume imported_path_short and _size columns are already correctly typed and named in df_global.
+            # If imported_path_short needs to be re-calculated or other size columns need casting,
+            # ensure that logic is here. For simplicity, assuming df_global is ready.
+            processed_df = df_global.clone() # Start with a clone to avoid modifying df_global directly
 
             # --- 1. X and Y Size Distribution (Bubble Chart) ---
-            xy_size_plot_children = []
-            x_col, y_col = "x_size", "y_size"
+            x_col, y_col = "X_size", "Y_size"
+
+            # Explicitly select necessary columns from processed_df *before* filtering
+            # This makes the column names explicit in the projection plan
+            initial_xy_data = processed_df.select(
+                pl.col(x_col),
+                pl.col(y_col),
+                pl.col("imported_path_short"),
+                pl.col("name")  # Needed for bubble_data_agg and hover_data
+            )
 
             # Filter for rows where both x_size and y_size are valid numbers (>1, assuming 1 is null-like)
-            xy_plot_data = processed_df.filter(
+            xy_plot_data = initial_xy_data.filter(  # Filter on initial_xy_data
                 (pl.col(x_col).is_not_null()) & (pl.col(y_col).is_not_null()) &
                 (pl.col(x_col) > 1) & (pl.col(y_col) > 1)
             ).with_columns(
-                pl.lit(1).alias("value_count") # Add a column for counting points in bubble size
+                pl.lit(1).alias("value_count")
             )
 
             if xy_plot_data.height == 0:
@@ -74,7 +82,7 @@ class DimSizeWidget(PixelPatrolWidget):
                     [x_col, y_col, "imported_path_short"]
                 ).agg(
                     pl.sum("value_count").alias("bubble_size"),
-                    pl.col("name").unique().alias("names_in_group") # Collect names for hover
+                    pl.col("name").unique().alias("names_in_group")  # Collect names for hover
                 ).sort(
                     [x_col, y_col, "imported_path_short"]
                 )
@@ -106,127 +114,77 @@ class DimSizeWidget(PixelPatrolWidget):
                         y=-0.2,
                         xanchor="center",
                         x=0.5
-                    )
+                    ),
+                    template='plotly' # Add template for robustness
                 )
                 xy_size_plot_children = [dcc.Graph(figure=fig_bubble)]
 
 
-            # --- 2. Individual Dimension Histograms ---
+            # --- 2. Individual Dimension Histograms (SIMPLIFIED) ---
             individual_dim_plots = []
-            numerical_columns = ['y_size', 'x_size', 'z_size', 't_size', 'c_size', 's_size', 'n_images']
             all_ratios_text_components = [] # List to hold html.Span and html.Br components
 
-            for column in numerical_columns:
-                # Filter for valid data in the current column (value > 1 and not null)
-                # Ensure column exists before filtering
-                if column not in processed_df.columns:
-                    col_ratio_text = f"{column.replace('_', ' ').title()}: Column not found in data."
-                    all_ratios_text_components.append(html.Span(col_ratio_text))
-                    all_ratios_text_components.append(html.Br())
-                    continue
+            # Identify all columns ending with '_size' dynamically
+            dimension_size_cols = [col for col in processed_df.columns if col.endswith('_size')]
 
-                col_plot_data = processed_df.filter(
+            # Prepare data for all individual histograms at once using Polars melt
+            # We'll melt all _size columns into 'dimension_name' and 'dimension_value'
+            # Filter for valid values (>1 and not null) before melting
+            melted_df = processed_df.filter(
+                pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
+            ).melt(
+                id_vars=["imported_path_short", "name"], # Keep these columns as identifiers
+                value_vars=dimension_size_cols,           # These are the columns to melt
+                variable_name="dimension_name",          # New column for original column names (e.g., 'X_size')
+                value_name="dimension_value"             # New column for the values (e.g., 1024)
+            ).filter(
+                pl.col("dimension_value").is_not_null() & (pl.col("dimension_value") > 1)
+            )
+
+            # Calculate and display availability ratios (can be done from processed_df or melted_df)
+            for column in dimension_size_cols:
+                col_present_count = processed_df.filter(
                     (pl.col(column).is_not_null()) & (pl.col(column) > 1)
-                ).with_columns(pl.lit(1).alias("value_count"))
-
-                col_present_count = col_plot_data.height
-                col_total_files = df_global.height # Ratio against total files in df_global
+                ).height
+                col_total_files = df_global.height
                 col_ratio_text = (
                     f"{column.replace('_', ' ').title()}: {col_present_count} of {col_total_files} files ({((col_present_count / col_total_files) * 100):.2f}%)."
                     if col_total_files > 0 else f"{column.replace('_', ' ').title()}: No files."
                 )
                 all_ratios_text_components.append(html.Span(col_ratio_text))
-                all_ratios_text_components.append(html.Br()) # Add a break after each ratio text
+                all_ratios_text_components.append(html.Br())
 
-                if col_plot_data.height == 0:
-                    # No data for this column, skip plotting
-                    continue
 
-                # Determine bin size
-                x_min_s = col_plot_data.select(pl.col(column).min())
-                x_max_s = col_plot_data.select(pl.col(column).max())
+            if melted_df.height == 0:
+                individual_dim_plots = [html.P("No valid data to plot for individual dimension sizes.")]
+            else:
+                # Use px.histogram with faceting for multiple plots
+                # Each 'facet_col' will be a different dimension (X_size, Y_size, etc.)
+                fig_hist_all = px.histogram(
+                    melted_df,
+                    x="dimension_value",
+                    color="imported_path_short",
+                    facet_col="dimension_name",
+                    facet_col_wrap=3, # Wrap plots after 3 columns
+                    color_discrete_map=color_map,
+                    title="Distribution of Individual Dimension Sizes by Folder",
+                    labels={
+                        "dimension_value": "Dimension Size",
+                        "dimension_name": "Dimension",
+                        "imported_path_short": "Folder",
+                        "count": "Number of Files"
+                    },
+                    barmode='stack', # Stack bars for different folders
+                    hover_data=['name'] # Show 'name' (original file names) on hover
+                )
 
-                if x_min_s.is_empty() or x_max_s.is_empty(): # Handle case where min/max might still be empty after filter
-                    continue # Skip plotting if no valid min/max
+                # Update facet titles for readability
+                fig_hist_all.for_each_annotation(lambda a: a.update(text=a.text.replace("dimension_name=", "").replace("_size", " Size")))
 
-                x_min, x_max = x_min_s.item(), x_max_s.item()
-
-                if x_min is None or x_max is None: # Further check for None values
-                    continue
-
-                range_value = x_max - x_min
-                if range_value <= 50: bin_size = 1
-                elif range_value <= 500: bin_size = 10
-                else: bin_size = 100
-
-                fig_hist = go.Figure()
-
-                # Iterate through unique folders for plotting traces
-                unique_folders_in_data = col_plot_data.select(pl.col("imported_path_short")).unique().to_series().to_list()
-
-                for folder in unique_folders_in_data:
-                    # Get the color for this folder directly from the color_map
-                    folder_color = color_map.get(folder, '#333333') # Fallback color
-
-                    # Filter data for the current folder AND THEN SORT for group_by_dynamic
-                    binned_df = col_plot_data.filter(pl.col("imported_path_short") == folder).sort(column).group_by_dynamic(
-                        index_column=column,
-                        every=f"{bin_size}i",
-                        closed="left", # Use 'left' for [start, end) bins
-                        by="imported_path_short" # Still group by folder, but it will be single group now
-                    ).agg(
-                        pl.sum("value_count").alias("count"), # Sum up the value_count for each bin
-                        pl.col("name").unique().alias("names_in_group")
-                    ).sort(column) # Sort aggregated bins for consistent x-axis order
-
-                    if binned_df.height == 0: # Skip if no data for this folder in this column
-                        continue
-
-                    # Prepare x-axis labels for bins
-                    binned_x_labels = []
-                    for row_idx in range(binned_df.height):
-                        bin_start = binned_df.row(row_idx, named=True)[column]
-                        if bin_size == 1:
-                            binned_x_labels.append(str(int(bin_start)))
-                        else:
-                            binned_x_labels.append(f"{int(bin_start)}-{int(bin_start + bin_size - 1)}")
-
-                    binned_y = binned_df.select(pl.col("count")).to_series().to_list()
-                    binned_names = binned_df.select(pl.col("names_in_group")).to_series().to_list()
-
-                    hover_texts_hist = []
-                    for row_idx in range(binned_df.height):
-                        row = binned_df.row(row_idx, named=True)
-                        names = row['names_in_group']
-                        hover_items = [
-                            f"{column.replace('_', ' ').title()}: {binned_x_labels[row_idx]}",
-                            f"Folder: {row['imported_path_short']}",
-                            f"Count: {row['count']}",
-                        ]
-                        if names:
-                            hover_items.append(f"Files: {', '.join(names[:5])}{'...' if len(names) > 5 else ''}")
-                        hover_texts_hist.append("<br>".join(hover_items))
-
-                    fig_hist.add_trace(go.Bar(
-                        x=binned_x_labels, # Use the generated labels for x-axis
-                        y=binned_y,
-                        name=folder,
-                        marker_color=folder_color,
-                        hovertext=hover_texts_hist,
-                        hoverinfo="text",
-                        showlegend=True,
-                    ))
-
-                fig_hist.update_layout(
-                    barmode='stack',
-                    title=f"Distribution of {column.replace('_', ' ').title()}",
-                    xaxis_title=column.replace('_', ' ').title(),
-                    yaxis_title="Number of Files",
-                    height=500,
+                fig_hist_all.update_layout(
+                    height=600, # Adjust height as needed for multiple facets
                     margin=dict(l=50, r=50, t=80, b=100),
-                    hovermode='closest',
-                    bargap=0.1,
-                    bargroupgap=0.05,
+                    hovermode='x unified', # Unified hover for stacked bars
                     legend=dict(
                         orientation="h",
                         yanchor="top",
@@ -234,12 +192,15 @@ class DimSizeWidget(PixelPatrolWidget):
                         xanchor="center",
                         x=0.5
                     ),
-                    xaxis=dict(tickangle=0)
+                    template='plotly' # Add template for robustness
                 )
-                individual_dim_plots.append(dcc.Graph(figure=fig_hist))
+                # You can adjust binning globally if needed, e.g., fig_hist_all.update_traces(xbins=dict(size=10))
+                # However, with different ranges for different dimensions, dynamic binning per facet is harder with px.
+                # Plotly's auto-binning is usually a good starting point.
+
+                individual_dim_plots = [dcc.Graph(figure=fig_hist_all)]
 
             # Combine all ratio texts for the info div
-            # Corrected line: create a list of components explicitly
             dim_size_info_children = [
                 html.P(html.B("Overall data availability:")),
                 html.P(all_ratios_text_components) # Pass the list directly to html.P

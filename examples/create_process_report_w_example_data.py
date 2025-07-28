@@ -11,7 +11,7 @@ from pixel_patrol.api import (
     set_settings,
     process_images,
     get_images_df,
-    show_report,
+    show_report, export_project,
 )
 from pixel_patrol.core.project_settings import Settings
 
@@ -54,6 +54,12 @@ downloaded_tar_path = Path(__file__).parent / download_filename
 extraction_base_dir = Path(__file__).parent / "downloaded_plankton_data"
 downloaded_processed_data_path = extraction_base_dir / "plankton_filtered_processed"
 
+# Define the output directory for the exported project
+output_directory = Path(__file__).parent / "exported_projects"
+output_directory.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
+
+# Define the path for the exported zip file
+exported_project_path = output_directory / "plankton_data_exported.zip"
 
 if __name__ == "__main__":
     base_path_for_processing = None # This will be the parent path for add_paths
@@ -164,6 +170,10 @@ if __name__ == "__main__":
     else:
         print("\nNo images DataFrame was generated or it is empty.")
         print("Please check your input data, file extensions settings, or the processing logic.")
+
+    print(my_project.images_df.get_columns())
+
+    export_project(my_project, exported_project_path)
 
     # 7. Show the report (using API) - Called without an output_path, as per your working script
     logger.info("API Call: Showing report for project 'Test Project for API Run'.")

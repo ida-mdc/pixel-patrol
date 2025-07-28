@@ -9,7 +9,7 @@ from pixel_patrol.api import (
     set_settings,
     process_images,
     get_images_df,
-    show_report,
+    show_report, export_project,
 )
 from pixel_patrol.core.project_settings import Settings
 
@@ -31,6 +31,13 @@ if __name__ == "__main__":
         logger.error(f"No subdirectories found in {base_path}")
         exit(1)
     logger.info(f"Found subdirectories: {[d.name for d in subdirs]}")
+
+    # Define the output directory for the exported project
+    output_directory = Path(__file__).parent / "exported_projects"
+    output_directory.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
+
+    # Define the path for the exported zip file
+    exported_project_path = output_directory / "example_data_exported.zip"
 
     # Initialize project with the base directory
     project = create_project("Local Test Image Collections", base_path)
@@ -61,6 +68,4 @@ if __name__ == "__main__":
     else:
         logger.warning("No images were found or the DataFrame is empty.")
 
-    # Launch the interactive report
-    logger.info("Opening report in your browser...")
-    show_report(project)
+    export_project(project, exported_project_path)

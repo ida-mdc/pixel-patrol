@@ -1,3 +1,6 @@
+import importlib
+import re
+
 import polars as pl
 from pathlib import Path
 import os
@@ -5,10 +8,13 @@ from typing import List, Optional, Dict, Set, Tuple
 import logging
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes, make_basic_record
+from pixel_patrol.core.loader_interface import PixelPatrolLoader
+from pixel_patrol.core.processor_interface import PixelPatrolProcessor
+from pixel_patrol.plugins import discover_processing_plugins
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
 from pixel_patrol.utils.df_utils import normalize_file_extension
 from pixel_patrol.utils.path_utils import find_common_base
-from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties, available_columns
+from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
 
 logger = logging.getLogger(__name__)
 
@@ -103,18 +109,95 @@ def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFra
     )
 
 
-def _get_deep_image_df(paths: List[Path], required_cols: List[str]) -> pl.DataFrame:
-    """Loop over paths, get_all_image_properties, return DataFrame (may be empty)."""
-    images_dicts = []
-    for p in paths:
-        try:
-            image_dict = get_all_image_properties(p, required_cols)
-            if image_dict:
-                images_dicts.append({"path": str(p), **image_dict})
-        except Exception as e:
-            logger.warning(f"Metadata extraction failed for {p}: {e}")
+def _get_deep_image_df(paths: List[Path], read_pixel_data: bool = True) -> pl.DataFrame:
+    """Loop over paths, get_all_image_properties, return DataFrame (may be empty).
+    Optimized to minimize Python loop overhead where possible.
+    """
+    plugins = discover_processing_plugins()
+    loaders = plugins["loaders"]
+    processors = plugins["processors"]
 
-    return pl.DataFrame(images_dicts)
+    # 1. Collect all static and dynamic schema patterns first
+    static_features_specs: Dict[str, pl.DataType] = {}
+    dynamic_schema_patterns: List[Tuple[str, pl.DataType]] = []
+
+    for processor in processors:
+        static_features_specs.update(processor.get_specification())
+        dynamic_schema_patterns.extend(processor.get_dynamic_specification_patterns())
+
+    images_dicts = []
+    # Use a pre-allocated list or generator for potentially faster appends
+    # Though Python list append is already quite optimized.
+
+    # 2. Process each path, collecting dictionaries
+    for p in paths:
+        # try:
+        # get_all_image_properties is still the bottleneck here if it reads pixels
+        # This part remains in the Python loop as it depends on external I/O and Dask/NumPy processing.
+        image_dict = get_all_image_properties(p, read_pixel_data, loaders, processors)
+        if image_dict:
+            # Add 'path' at this stage, as it's directly available from the loop
+            images_dicts.append({"path": str(p), **image_dict})
+        # except Exception as e:
+        #     logger.warning(f"Metadata extraction failed for {p}: {e}")
+
+    if not images_dicts:
+        # Return an empty DataFrame with a predefined schema if no data was processed
+        # This prevents an empty DataFrame with inferred 'Object' types from being created.
+        # We'll build the final schema first.
+        # Find all unique keys across all collected dicts
+        all_discovered_keys = set()
+        for row_dict in images_dicts:
+            all_discovered_keys.update(row_dict.keys())
+
+        # Combine static schema with types derived from dynamic patterns
+        final_polars_schema = static_features_specs.copy()
+        for key in all_discovered_keys:
+            if key in final_polars_schema:
+                continue  # Already defined statically
+
+            for pattern_str, dtype in dynamic_schema_patterns:
+                if re.match(pattern_str, key):
+                    final_polars_schema[key] = dtype
+                    break  # Move to next key once a pattern matches
+
+        # Ensure 'path' is also in the schema, as it's added here
+        if 'path' not in final_polars_schema:
+            final_polars_schema['path'] = pl.Utf8
+
+        return pl.DataFrame(images_dicts, schema=final_polars_schema)
+
+    # 3. Create initial DataFrame from collected dictionaries
+    #    This is the first point where Polars takes over efficiently.
+
+    # Get all unique keys found in the processed data (this will include dynamic keys)
+    all_discovered_keys = set()
+    for row_dict in images_dicts:
+        all_discovered_keys.update(row_dict.keys())
+
+    # Combine static schema with types derived from dynamic patterns
+    # Start with a copy to avoid modifying the original static_features_specs
+    final_polars_schema = static_features_specs.copy()
+
+    for key in all_discovered_keys:
+        if key in final_polars_schema:
+            continue  # Already defined statically
+
+        for pattern_str, dtype in dynamic_schema_patterns:
+            if re.match(pattern_str, key):
+                final_polars_schema[key] = dtype
+                break  # Move to next key once a pattern matches
+
+    # Ensure 'path' is also explicitly in the schema, as it's added here
+    if 'path' not in final_polars_schema:
+        final_polars_schema['path'] = pl.Utf8
+
+    # Create the DataFrame using the computed schema
+    # This avoids 'Object' types for dynamic columns and ensures proper typing.
+    # df = pl.DataFrame(images_dicts, schema=final_polars_schema)
+    df = pl.DataFrame(images_dicts)
+
+    return df
 
 ################################### Main Function to Build Images DataFrame ###################################
 
@@ -139,11 +222,13 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
     # TODO: speed test - paths to list instead of all polars native operations?
     # but.. get_all_image_properties is operating on individual paths, so it should be fine
     paths = [Path(p) for p in basic_file_df["path"].to_list()]
-    deep_image_df = _get_deep_image_df(paths, available_columns())
+    deep_image_df = _get_deep_image_df(paths)
 
-    joined = basic_file_df.join(deep_image_df, on="path", how="left")
-
-    return joined
+    if len(deep_image_df) > 0:
+        joined = basic_file_df.join(deep_image_df, on="path", how="left")
+        return joined
+    else:
+        return basic_file_df
 
 
 def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
@@ -168,7 +253,7 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
     basic_file_df = normalize_file_extension(basic_file_df)
     basic_file_df = _postprocess_basic_file_metadata_df(basic_file_df)
 
-    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], available_columns())
+    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs])
 
     joined = basic_file_df.join(deep_image_df, on="path", how="left")
 
@@ -213,3 +298,21 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     result["all_files"] = df_files.height
 
     return result
+
+
+def load_loaders() -> List[PixelPatrolLoader]:
+    loaders: List[PixelPatrolLoader] = []
+    for entry_point in importlib.metadata.entry_points().select(group='pixel_patrol.loaders'):
+        loader_class = entry_point.load()
+        loader_instance = loader_class()
+        loaders.append(loader_instance)
+    return loaders
+
+
+def load_processors() -> List[PixelPatrolProcessor]:
+    processors: List[PixelPatrolProcessor] = []
+    for entry_point in importlib.metadata.entry_points().select(group='pixel_patrol.processors'):
+        processor_class = entry_point.load()
+        processor_instance = processor_class()
+        processors.append(processor_instance)
+    return processors

@@ -1,4 +1,4 @@
-import os
+import re
 from typing import List, Dict
 
 import numpy as np
@@ -7,8 +7,9 @@ import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output
 
-from pixel_patrol.report.widget_interface import PixelPatrolWidget
+from pixel_patrol.report.utils import get_sortable_columns
 from pixel_patrol.report.widget_categories import WidgetCategories
+from pixel_patrol.report.widget_interface import PixelPatrolWidget
 
 # Assume SPRITE_SIZE is defined or imported globally
 SPRITE_SIZE = 32
@@ -102,9 +103,7 @@ class ImageMosaikWidget(PixelPatrolWidget):
         return "Image Mosaic"
 
     def required_columns(self) -> List[str]:
-        # 'thumbnail' is crucial for the mosaic, 'imported_path' for color, 'name' for info
-        # '*' means all columns are potentially needed for sorting
-        return ["thumbnail", "imported_path", "name", "*"]
+        return ["thumbnail"]
 
     def layout(self) -> List: # Removed df parameter
         """Defines the layout of the Image Mosaic widget."""
@@ -137,23 +136,11 @@ class ImageMosaikWidget(PixelPatrolWidget):
             prevent_initial_call=False # Allow this callback to run on initial load
         )
         def set_mosaic_sort_options(color_map: Dict[str, str]):
-            # Dynamically generate dropdown options from the dataframe columns
-            # Exclude 'thumbnail' as it's not suitable for sorting this way
-            # and only include columns that are present in df_global
-            sortable_columns = [
-                col for col in df_global.columns
-                if col != "thumbnail" and df_global[col].dtype not in [pl.List, pl.Struct]
-            ]
-
-            # Create options for the dropdown
+            sortable_columns = get_sortable_columns(df_global)
             dropdown_options = [{'label': col, 'value': col} for col in sortable_columns]
-
-            # Set a default value if possible
             default_sort_column = 'name' if 'name' in sortable_columns else (
                 sortable_columns[0] if sortable_columns else None)
-
             return dropdown_options, default_sort_column
-
 
         @app.callback(
             Output("image-mosaic-graph", "figure"),
@@ -165,12 +152,7 @@ class ImageMosaikWidget(PixelPatrolWidget):
             # Only include rows with a thumbnail and process imported_path_short
             processed_df = df_global.filter(
                 pl.col("thumbnail").is_not_null()
-            ).with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
-            ])
+            )
 
             # Apply sorting if a column is selected and exists in the DataFrame
             files_dataframe_sorted = processed_df

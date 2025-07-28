@@ -22,7 +22,7 @@ class FileExtensionWidget(PixelPatrolWidget):
 
     def required_columns(self) -> List[str]:
         # 'file_extension' for x-axis, 'size' for size option, 'imported_path' for color, 'name' for hover
-        return ["file_extension", "size_bytes", "imported_path", "name"]
+        return ["file_extension", "size_bytes"]
 
     def layout(self) -> List:
         """Defines the layout of the File Extension Distribution widget."""
@@ -52,14 +52,6 @@ class FileExtensionWidget(PixelPatrolWidget):
         def update_file_extension_chart(color_map: Dict[str, str], y_axis_param: str):
             # --- Data Preprocessing (all in Polars) ---
 
-            # Prepare common columns: short folder name
-            processed_df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
-            ])
-
             # Determine the value column and its aggregation based on y_axis_param
             y_col_name = "count"
             y_axis_title = "Number of Files"
@@ -69,7 +61,7 @@ class FileExtensionWidget(PixelPatrolWidget):
                 y_col_name = "total_size_bytes"
                 y_axis_title = "Total Size (Bytes)"
                 # Ensure 'size' column is present and is a numerical type before summing
-                if "size_bytes" in processed_df.columns:
+                if "size_bytes" in df_global.columns:
                     aggregation_expression = pl.sum("size_bytes").alias("total_size_bytes")
                 else:
                     # Fallback if 'size' column is missing, though required_columns should prevent this
@@ -79,7 +71,7 @@ class FileExtensionWidget(PixelPatrolWidget):
 
 
             # Aggregate data by file_extension and imported_path_short
-            plot_data_agg = processed_df.group_by(
+            plot_data_agg = df_global.group_by(
                 ["file_extension", "imported_path_short"]
             ).agg(
                 aggregation_expression,

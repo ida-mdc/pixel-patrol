@@ -1,0 +1,7 @@
+examples/data
+examples/downloaded_plankton_data
+build
+.venv
+.ipynb_checkpoints
+bioio
+*__pycache__*
