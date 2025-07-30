@@ -61,10 +61,13 @@ class BaseDynamicTableWidget(PixelPatrolWidget, ABC):
                 dropdowns.append(
                     html.Div([
                         html.Label(f"Dimension '{dim_name.upper()}'"),
-                        dcc.Dropdown(id=dropdown_id,
-                                     options=[{'label': 'All', 'value': 'all'}] + [{'label': i, 'value': i} for i in
-                                                                                   sorted(indices)], value='all',
-                                     clearable=False)
+                        dcc.Dropdown(
+                            id=dropdown_id,
+                            options=[{'label': 'All', 'value': 'all'}] + [{'label': i, 'value': i} for i in
+                                                                          sorted(indices)],
+                            value='all',
+                            clearable=False
+                        )
                     ], className="three columns")
                 )
             return dropdowns
@@ -103,12 +106,17 @@ class BaseDynamicTableWidget(PixelPatrolWidget, ABC):
                                 cols_for_cell.append(pc['col'])
 
                     if cols_for_cell:
-                        cell_content = dcc.Graph(figure=_create_sparkline(df_global, plot_dim, cols_for_cell),
-                                                 config={'displayModeBar': False})
+                        cell_content = dcc.Graph(
+                            figure=_create_sparkline(df_global, plot_dim, cols_for_cell),
+                            config={'displayModeBar': False}
+                        )
                     else:
                         cell_content = html.Div("N/A", style={'textAlign': 'center', 'padding': '15px'})
                     row_cells.append(html.Td(cell_content))
                 table_rows.append(html.Tr(row_cells))
 
-            return html.Table([html.Thead(html.Tr(header)), html.Tbody(table_rows)], className="striped-table",
-                              style={'width': '100%'})
+            return html.Table(
+                [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
+                className="striped-table",
+                style={'width': '100%'}
+            )

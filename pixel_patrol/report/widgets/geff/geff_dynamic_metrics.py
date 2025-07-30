@@ -24,4 +24,7 @@ class GeffDynamicMetricsWidget(BaseDynamicTableWidget):
         """
         Specifies that this widget uses metrics from the BasicStatsProcessor.
         """
-        return list(GeffLoader().get_specification().keys())
+        metrics = list(GeffLoader().get_specification().keys())
+        metrics.append("geff_node_attr")
+        metrics.append("geff_edge_attr")
+        return metrics

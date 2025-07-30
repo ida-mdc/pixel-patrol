@@ -24,6 +24,7 @@ from pixel_patrol.report.widgets.summary.dataframe import DataFrameWidget
 from pixel_patrol.report.widgets.summary.file_summary import FileSummaryWidget
 from pixel_patrol.report.widgets.geff.traccuracy_summary import TraccuracySummaryWidget
 from pixel_patrol.report.widgets.geff.geff_summary import GeffSummaryWidget
+from pixel_patrol.report.widgets.summary.sunburst import FileSunburstWidget
 from pixel_patrol.report.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol.report.widgets.visualization.image_mosaik import ImageMosaikWidget
 
@@ -110,10 +111,11 @@ def register_report_plugins():
             DataFrameWidget,
             TraccuracySummaryWidget,
             GeffSummaryWidget,
-        ],
-        "individual_widgets": [
+            FileSunburstWidget,
             DynamicStatsWidget,
             DynamicQualityMetricsWidget,
             GeffDynamicMetricsWidget
+        ],
+        "individual_widgets": [
         ]
     }

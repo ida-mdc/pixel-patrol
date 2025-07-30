@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     # Base folder containing multiple test-image subdirectories
-    exported_project_path = Path(__file__).parent / "exported_projects" / "zarr_exported.zip"
+    exported_project_path = Path(__file__).parent / "exported_projects" / "geff_exported.zip"
 
     project = import_project(exported_project_path)
 

@@ -57,60 +57,101 @@ def _create_app(
     Instantiate Dash app, register callbacks, and assign layout.
     Accepts DataFrame and palette name as arguments.
     """
-    # Add a stable, unique ID for row selection in the dropdown
-    df = df.with_row_count(name="unique_id")
-
+    df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP, 'https://codepen.io/chriddyp/pen/bWLwgP.css']
     app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
-
     group_widgets, individual_widgets = load_widgets()
 
-    all_widgets = group_widgets + individual_widgets
-    for w in all_widgets:
+    for w in group_widgets:
         if hasattr(w, 'register_callbacks'):
             w.register_callbacks(app, df)
+
+    for w in individual_widgets:
+        if hasattr(w, 'register_callbacks'):
+            w.register_callbacks(app, 'individual-data-store')
 
     def serve_layout_closure() -> html.Div:
         DEFAULT_WIDGET_WIDTH = 12
 
-        # --- Header and Global Controls ---
-        header = dbc.Row(dbc.Col(html.H1('Pixel Patrol', className='mt-3 mb-2')))
+        # --- Header (Unchanged) ---
+        header_row = dbc.Row(
+            [
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.Img(src=app.get_asset_url('prevalidation.png'),
+                                     style={'height': '110px', 'marginRight': '15px'}),
+                            html.H1('Pixel Patrol', className='m-0'),
+                            html.Span(
+                                "..but for GEFF!",
+                                style={
+                                    'color': '#d9534f', 'fontSize': '2rem', 'fontWeight': 'bold',
+                                    'fontFamily': 'cursive', 'transform': 'rotate(-6deg)',
+                                    'marginLeft': '15px', 'marginTop': '10px'
+                                }
+                            ),
+                            dbc.Col(
+                                html.Div(),
+                                width="auto",
+                            ),
+                        ],
+                        className="d-flex align-items-center"
+                    ),
+                    width=True,
+                ),
+                dbc.Col(html.Div(["This is a prototype. Data may be incomplete or inaccurate.",
+                                    html.Br(),"Use for experimental purposes only."], style={"color": '#d9534f', "textAlign": "right"}), width="auto"),
+            ],
+            align="center",
+            className="my-3"
+        )
 
-        disclaimer = dbc.Row(
-            dbc.Col(
-                dbc.Alert(
+        # --- NEW: Individual Item Selector (Moved and Restyled) ---
+        label_col = 'name' if 'name' in df.columns else 'imported_path_short'
+        item_selector_controls = dbc.Row(
+            [
+                dbc.Col(
+                    html.Div(
+                    ),
+                    width=True,
+                ),
+                dbc.Col(
+                html.Div(
                     [
-                        html.P(
-                            "This application is a prototype. "
-                            "The data may be inaccurate, incomplete, or subject to change. "
-                            "Please use this tool for experimental purposes only and do not rely on its "
-                            "output for critical decisions."
-                        ),
-                        html.Hr(),
-                        html.P("Your feedback is welcome!", className="mb-0"),
+                        html.Label('Color Palette:', className='me-2'),
+                        dcc.Dropdown(
+                            id='palette-selector',
+                            options=[{'label': name, 'value': name} for name in sorted(plt.colormaps())],
+                            value=default_palette_name,
+                            clearable=False,
+                            style={'width': '200px'}
+                        )
                     ],
-                    color="warning",
-                    className="my-4"
-                )
-            )
+                    className="d-flex align-items-center justify-content-end"
+                ),
+                width="auto",
+            ),
+            # dbc.Col(html.Div([
+            #     html.Label("Highlight a specific item in the report:", className="me-2"),
+            #     dcc.Dropdown(
+            #         id='item-selector',
+            #         options=[
+            #             {'label': row[label_col], 'value': row['unique_id']}
+            #             for row in df.select(['unique_id', label_col]).to_dicts()
+            #         ],
+            #         placeholder="Select an item to highlight...",
+            #         clearable=True,
+            #         style={'width': '300px'}
+            #     )], className="d-flex align-items-center justify-content-end"), width="auto")
+            ]
         )
 
-        palette_dropdown = dcc.Dropdown(
-            id='palette-selector',
-            options=[{'label': name, 'value': name} for name in sorted(plt.colormaps())],
-            value=default_palette_name,
-            clearable=False,
-            style={'width': '250px'}
-        )
-        palette_row = dbc.Row(
-            dbc.Col(html.Div([html.Label('Color Palette:'), palette_dropdown]), className='mb-3')
-        )
-
-        # --- Group Widget Layout (Left Column) ---
+        # --- Group Widget Layout Generation (Logic Unchanged) ---
         group_widget_content = []
         tabbed_group_widgets = organize_widgets_by_tab(group_widgets)
         for group_name, ws in tabbed_group_widgets.items():
             group_widget_content.append(dbc.Row(dbc.Col(html.H3(group_name, className='my-3 text-primary'))))
+            # This logic remains the same, building rows of widgets
             current_group_cols = []
             current_row_width = 0
             for w in ws:
@@ -127,74 +168,35 @@ def _create_app(
             if current_group_cols:
                 group_widget_content.append(dbc.Row(current_group_cols, className='g-4 p-3'))
 
-        # --- Individual Item Selector and Plotting Area (Right Column) ---
-
-        # Use 'name' for the dropdown label if it exists, otherwise fall back.
-        label_col = 'name' if 'name' in df.columns else 'imported_path_short'
-
-        item_selector_dropdown = dcc.Dropdown(
-            id='item-selector',
-            options=[
-                {'label': row[label_col], 'value': row['unique_id']}
-                for row in df.select(['unique_id', label_col]).to_dicts()
-            ],
-            placeholder="Select an item to analyze...",
-            clearable=True,
-        )
-
-        individual_item_panel = html.Div([
-            html.H3("Individual Item Analysis", className="mt-3 text-primary"),
-            html.P("Select an item from the dropdown to view its specific plots."),
-            item_selector_dropdown,
-            html.Div(id='individual-widgets-container', className='mt-4'),  # Container for individual plots
-        ])
-
         # --- Data Stores ---
         stores = html.Div([
             dcc.Store(id='color-map-store'),
             dcc.Store(id='tb-process-store-tensorboard-embedding-projector', data={}),
-            dcc.Store(id='individual-data-store'),  # Store for the selected single row data
+            dcc.Store(id='individual-data-store'),
         ])
 
-        # --- Final Layout Assembly (with independent scrolling) ---
-        # Set a fixed height for scrollable areas, subtracting the approx height of header/disclaimer
-        scrollable_area_style = {
-            'height': 'calc(100vh - 250px)',  # Adjust 250px based on actual header height
-            'overflowY': 'auto',
-            'padding': '15px'
-        }
-
+        # --- Final Layout Assembly (Single Column) ---
         return html.Div(
             dbc.Container(
                 [
-                    header,
-                    disclaimer,
+                    header_row,
                     stores,
-                    dbc.Row(
-                        [
-                            # Left Column for Group Widgets
-                            dbc.Col(
-                                html.Div([palette_row] + group_widget_content, style=scrollable_area_style),
-                                width=8,
-                            ),
-                            # Right Column for Individual Analysis
-                            dbc.Col(
-                                html.Div(individual_item_panel, style=scrollable_area_style),
-                                width=4,
-                                style={'borderLeft': '1px solid #ddd'}
-                            ),
-                        ]
-                    ),
+                    item_selector_controls, # Add the new global item selector here
+                    html.Hr(),
+                    # The container for the highlighted individual analysis.
+                    # It's empty and invisible by default.
+                    html.Div(id='highlighted-individual-wrapper'),
+                    # All the standard group widgets are placed after the highlight section.
+                    *group_widget_content,
                 ],
                 fluid=True,
-                style={'maxWidth': '1800px', 'margin': '0 auto'},
+                style={'maxWidth': '1200px', 'margin': '0 auto'},
             )
         )
 
     app.layout = serve_layout_closure
 
-    # --- Callbacks ---
-
+    # --- Callbacks (update_individual_widgets_layout is modified) ---
     @app.callback(
         Output('color-map-store', 'data'),
         Input('palette-selector', 'value')
@@ -212,26 +214,36 @@ def _create_app(
         Input('item-selector', 'value')
     )
     def update_individual_store(selected_item_id: int):
-        """When an item is selected, filter the main df and store the single row data."""
         if selected_item_id is None:
             return None
-
-        filtered_df = df.filter(pl.col("unique_id") == selected_item_id)
-        return filtered_df.to_dicts()
+        df_single_row = df.filter(pl.col("unique_id") == selected_item_id)
+        if df_single_row.is_empty():
+            return None
+        df_cleaned = df_single_row.select([s.name for s in df_single_row if not s.is_null().all()])
+        return df_cleaned.to_dicts()
 
     @app.callback(
-        Output('individual-widgets-container', 'children'),
+        Output('highlighted-individual-wrapper', 'children'),
+        Output('highlighted-individual-wrapper', 'style'),
         Input('individual-data-store', 'data')
     )
-    def update_individual_widgets_layout(item_data: List[Dict]):
-        """Renders the layout for individual widgets, after cleaning the data."""
+    def update_highlighted_individual_section(item_data: List[Dict]):
+        # Define the style for the highlighted container
+        highlight_style = {
+            'border': '3px dashed #d9534f', # A prominent red-orange border
+            'borderRadius': '10px',
+            'backgroundColor': 'rgba(252, 248, 227, 0.6)', # A light warning/info background
+            'padding': '1.5rem',
+            'marginBottom': '2rem', # Space between this and the group widgets
+            'transition': 'all 0.3s ease-in-out'
+        }
+
+        # If no item is selected, hide the container completely
         if not item_data:
-            return html.P("Select an item to view details.", className="text-muted mt-3")
+            return None, {'display': 'none'}
 
-        df_single_row = pl.from_dicts(item_data)
-
-        # PERFORMANCE: Drop columns that are all null for this row before rendering.
-        df_cleaned = df_single_row.select([s.name for s in df_single_row if not s.is_null().all()])
+        df_cleaned = pl.from_dicts(item_data)
+        item_name = df_cleaned.item(0, 'name') if 'name' in df_cleaned.columns else "Selected Item"
 
         individual_widget_layouts = []
         for w in individual_widgets:
@@ -244,12 +256,20 @@ def _create_app(
                 individual_widget_layouts.extend(layout_content)
 
         if not individual_widget_layouts:
-            return html.P("No applicable widgets for this item.", className="text-warning mt-3")
+            children = [html.P("No applicable widgets for this item.", className="text-warning mt-3")]
+        else:
+            # Build the full content for the highlighted box
+            children = [
+                html.H3(f"🔎 Analysis for: {Path(item_name).name}", className="text-danger"),
+                html.P("This section shows a detailed breakdown of the item selected above."),
+                html.Hr(className="my-3"),
+                *individual_widget_layouts
+            ]
 
-        return individual_widget_layouts
+        # Return the content and the style to make it visible
+        return children, highlight_style
 
     return app
-
 
 def should_display_widget(widget: PixelPatrolWidget, available_columns: List[str]) -> bool:
     """

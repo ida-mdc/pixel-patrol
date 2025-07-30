@@ -7,7 +7,7 @@ import dask.array as da
 import geff
 import networkx as nx
 import numpy as np
-import zarr
+
 from pixel_patrol.core.loader_interface import PixelPatrolLoader
 
 logger = logging.getLogger(__name__)
@@ -38,12 +38,10 @@ def _summarize_numerical_attributes(graph_view: Any, entity_type: str) -> Dict[s
             continue
         values_np = np.array(values)
         prefix = f"{entity_type}_attr_{attr_name}"
-        summary_stats[f"geff_mean_{prefix}"] = np.mean(values_np)
-        summary_stats[f"geff_std_{prefix}"] = np.std(values_np)
-        summary_stats[f"geff_min_{prefix}"] = np.min(values_np)
-        summary_stats[f"geff_max_{prefix}"] = np.max(values_np)
+        summary_stats[f"geff_{prefix}"] = np.mean(values_np)
 
     return summary_stats
+
 
 def _summarize_numerical_attributes_edges(graph_view: Any, entity_type: str) -> Dict[str, Any]:
     """Dynamically finds and summarizes all numerical attributes for nodes or edges."""
@@ -59,10 +57,7 @@ def _summarize_numerical_attributes_edges(graph_view: Any, entity_type: str) -> 
             continue
         values_np = np.array(values)
         prefix = f"{entity_type}_attr_{attr_name}"
-        summary_stats[f"geff_mean_{prefix}"] = np.mean(values_np)
-        summary_stats[f"geff_std_{prefix}"] = np.std(values_np)
-        summary_stats[f"geff_min_{prefix}"] = np.min(values_np)
-        summary_stats[f"geff_max_{prefix}"] = np.max(values_np)
+        summary_stats[f"geff_{prefix}"] = np.mean(values_np)
 
     return summary_stats
 
@@ -80,7 +75,7 @@ def _calculate_timesliced_metrics(nx_graph: nx.DiGraph, geff_spec: Dict[str, Any
 
     timesliced_metrics = {}
     for t, nodes_at_t in sorted(nodes_by_time.items()):
-        prefix = f"_T{t}"
+        prefix = f"_T{int(t)}"
         timesliced_metrics[f"geff_num_nodes{prefix}"] = len(nodes_at_t)
 
         out_degrees = [nx_graph.out_degree(n_id) for n_id, _ in nodes_at_t]
@@ -93,10 +88,59 @@ def _calculate_timesliced_metrics(nx_graph: nx.DiGraph, geff_spec: Dict[str, Any
 
         # Rename keys to be time-specific
         for key, value in slice_attr_stats.items():
-            new_key = key.replace("geff_node_attr", f"{prefix}_attr")
+            new_key = key + prefix
             timesliced_metrics[new_key] = value
 
     return timesliced_metrics
+
+
+def _extract_axis_information(nx_graph: nx.DiGraph, geff_spec: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extracts axis dimension order, names, and sizes from the GEFF spec and graph nodes.
+    This mimics the output of bioio for dimensions.
+    """
+    axis_metadata = {}
+    if 'axes' not in geff_spec or not isinstance(geff_spec['axes'], list):
+        return {}
+
+    axis_names_map = {}
+    dim_order_list = []
+
+    axis_full_names = {ax.get('name') for ax in geff_spec['axes'] if ax.get('name')}
+    node_attr_values = defaultdict(list)
+    for _, data in nx_graph.nodes(data=True):
+        for key, value in data.items():
+            if key in axis_full_names:
+                node_attr_values[key].append(value)
+
+    for axis in geff_spec['axes']:
+        full_name = axis.get('name')
+        if not full_name:
+            continue
+
+        single_letter = full_name[0].upper()
+        if single_letter in axis_names_map:
+            logger.warning(
+                f"Duplicate single-letter axis '{single_letter}' from '{full_name}'. "
+                f"Skipping to avoid overwriting '{axis_names_map[single_letter]}'."
+            )
+            continue
+
+        dim_order_list.append(single_letter)
+        axis_names_map[single_letter] = full_name
+
+        size = 1
+        if full_name in node_attr_values:
+            numeric_vals = [v for v in node_attr_values[full_name] if isinstance(v, (int, float))]
+            if numeric_vals:
+                size = int(max(numeric_vals)) + 1
+
+        axis_metadata[f"{single_letter}_size"] = size
+
+    axis_metadata['dim_order'] = "".join(dim_order_list)
+    axis_metadata['axis_names'] = axis_names_map
+
+    return axis_metadata
 
 
 class GeffLoader(PixelPatrolLoader):
@@ -134,7 +178,10 @@ class GeffLoader(PixelPatrolLoader):
         # Add all raw, flattened GEFF spec metadata
         metadata.update(self._flatten_dict(geff_spec, parent_key='geff'))
 
-        # Add computed metrics by calling helper functions
+        # Extract axis information (dim_order, sizes, etc.) like bioio
+        metadata.update(_extract_axis_information(nx_graph, geff_spec))
+
+        # Add computed graph metrics
         metadata.update(_calculate_global_graph_metrics(nx_graph))
         metadata.update(_summarize_numerical_attributes(nx_graph.nodes(data=True), "node"))
         metadata.update(_summarize_numerical_attributes_edges(nx_graph.edges(data=True), "edge"))
@@ -157,16 +204,15 @@ class GeffLoader(PixelPatrolLoader):
             'geff_num_lineages': int,
             'geff_num_divisions': int,
             'geff_num_terminations': int,
+            'dim_order': str,
+            'axis_names': dict,
         }
 
     def get_dynamic_specification_patterns(self) -> List[Tuple[str, Any]]:
         """
         Defines patterns for dynamically generated GEFF metadata columns.
-        Note: Bio-IO patterns like 'pixel_size' and '[LETTER]_size' are omitted
-        as that information is not available from the GEFF spec alone.
         """
         return [
-            (r'^geff_axes_\d+_name$', str),
-            (r'^geff_axes_\d+_type$', str),
-            (r'^geff_axes_\d+_unit$', str),
+            (r'^[a-zA-Z]_size$', int),
+            (r'^geff_(node|edge)_attr_.*$', float),
         ]

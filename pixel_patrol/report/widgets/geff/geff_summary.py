@@ -115,7 +115,7 @@ class GeffSummaryWidget(PixelPatrolWidget):
                         ), row=row, col=col)
 
                 fig.update_layout(
-                    showlegend=len(folders) > 1,
+                    showlegend=False,
                     height=num_rows * 350,
                     margin=dict(t=60, b=20, l=40, r=20),
                     title_text="Distribution of Key GEFF Metrics"
@@ -126,34 +126,35 @@ class GeffSummaryWidget(PixelPatrolWidget):
                     dcc.Graph(figure=fig)
                 ]), className="mb-4")
 
-            # 4. Detailed Data Table
-            table_cols = (["name", "imported_path_short"] +
-                          sorted(df.select(pl.col("^geff_metric_.*$")).columns))
+            # table_cols = (["name", "imported_path_short"] +
+            #               sorted(
+            #                   df.select(pl.col("^geff_(num|mean|std|min|max|version|axes|dim|axis).*$")).columns))
 
-            table_df = df.select(pl.col(table_cols))
-
-            # Clean up column names for display
-            clean_column_names = {col: col.replace("geff_metric_", "").replace("_", " ").title() for col in
-                                  table_df.columns}
-
-            table_grid = dag.AgGrid(
-                rowData=table_df.to_dicts(),
-                columnDefs=[
-                    {"field": col, "headerName": clean_column_names[col], "sortable": True, "filter": True, "flex": 1}
-                    for col in table_df.columns],
-                dashGridOptions={"domLayout": "autoHeight"},
-                defaultColDef={"resizable": True}
-            )
-
-            table_card = dbc.Card(dbc.CardBody([
-                html.H4("Detailed GEFF Data", className="card-title"),
-                table_grid
-            ]), className="mb-4")
+            # table_df = df.select(pl.col(table_cols))
+            #
+            # clean_column_names = {
+            #     col: col.replace("geff_", "").replace("_", " ").replace("attr", "").strip().title()
+            #     for col in table_df.columns
+            # }
+            #
+            # table_grid = dag.AgGrid(
+            #     rowData=table_df.to_dicts(),
+            #     columnDefs=[
+            #         {"field": col, "headerName": clean_column_names.get(col, col), "sortable": True,
+            #          "flex": 1}
+            #         for col in table_df.columns],
+            #     dashGridOptions={"domLayout": "autoHeight"},
+            #     defaultColDef={"resizable": True}
+            # )
+            # table_card = dbc.Card(dbc.CardBody([
+            #     html.H4("Detailed GEFF Data", className="card-title"),
+            #     table_grid
+            # ]), className="mb-4")
 
             # Assemble final layout
             layout_content = [summary_card]
             if plots_card:
                 layout_content.append(plots_card)
-            layout_content.append(table_card)
+            # layout_content.append(table_card)
 
             return layout_content

@@ -56,10 +56,6 @@ def get_all_image_properties(file_path: Path, read_pixel_data: bool, loaders, pr
                 if da_array is not None and da_array.size > 0:
                     loader_successful = True
                     logger.info(f"Loaded Dask array shape: {da_array.shape}, dtype: {da_array.dtype}, chunks: {da_array.chunksize}")
-                    # Calculate approximate size in MB for the Dask array
-                    # Note: This is the size of the *data*, not necessarily memory usage, which depends on chunks.
-                    approx_size_mb = (da_array.nbytes / (1024 * 1024)) if da_array.nbytes is not None else "Unknown"
-                    logger.info(f"Approximate Dask array size: {approx_size_mb:.2f} MB")
                 else:
                     logger.warning(
                         f"Loader {loader_name} for '{file_path}' returned an empty or None Dask array. Trying next loader if available.")

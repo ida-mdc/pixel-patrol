@@ -8,7 +8,7 @@ from pixel_patrol.api import (
     set_settings,
     process_images,
     get_images_df,
-    export_project,
+    export_project, add_paths,
 )
 from pixel_patrol.core.project_settings import Settings
 
@@ -35,14 +35,14 @@ if __name__ == "__main__":
     # Initialize project with the base directory
     project = create_project("Local Test Image Collections", base_path)
 
-    # project = add_paths(project, ["group0"])
+    project = add_paths(project, ["anniek", "georgeos", "morgan", "teun"])
 
     # Discover and process all image paths
     project = process_paths(project)
 
     # Configure image-processing settings
     settings = Settings(
-        selected_file_extensions={"zarr", "tiff"},
+        selected_file_extensions={"zarr", "tiff", "json"},
         cmap="viridis",
         n_example_images=5,
     )

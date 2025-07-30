@@ -1,12 +1,13 @@
 from typing import List, Dict
-from dash import html, dcc, Input, Output
-import polars as pl
-import plotly.express as px
-import dash_bootstrap_components as dbc
-import dash_ag_grid as dag
 
-from pixel_patrol.report.widget_interface import PixelPatrolWidget
+import dash_ag_grid as dag
+import plotly.express as px
+import polars as pl
+from dash import html, dcc, Input, Output
+
 from pixel_patrol.report.widget_categories import WidgetCategories
+from pixel_patrol.report.widget_interface import PixelPatrolWidget
+
 
 class FileStatisticsWidget(PixelPatrolWidget):
 
@@ -37,8 +38,16 @@ class FileStatisticsWidget(PixelPatrolWidget):
             report_elements = []
             constant_values_data = []
 
+            df_filtered = df_global.select(
+                pl.col("name"),
+                pl.col("file_extension"),
+                pl.col("imported_path_short"),
+                pl.col("size_bytes"),
+                pl.col("modification_date"),
+            )
+
             # --- 1. File Extension Analysis ---
-            ext_agg = df_global.group_by("file_extension").agg(pl.count()).drop_nulls()
+            ext_agg = df_filtered.group_by("file_extension").agg(pl.count()).drop_nulls()
             if ext_agg.height <= 1:
                 if not ext_agg.is_empty():
                     constant_values_data.append({
@@ -47,13 +56,13 @@ class FileStatisticsWidget(PixelPatrolWidget):
                     })
             else:
                 # Plot for Number of Files
-                plot_data_ext_count = df_global.group_by(["file_extension", "imported_path_short"]).agg(pl.count())
+                plot_data_ext_count = df_filtered.group_by(["file_extension", "imported_path_short"]).agg(pl.count())
                 fig_ext_count = px.bar(plot_data_ext_count, x='file_extension', y='count', color='imported_path_short',
                                        barmode='stack', color_discrete_map=color_map, title="File Count by Extension")
                 report_elements.append(dcc.Graph(figure=fig_ext_count))
 
                 # Plot for Total Size
-                plot_data_ext_size = df_global.group_by(["file_extension", "imported_path_short"]).agg(pl.sum("size_bytes"))
+                plot_data_ext_size = df_filtered.group_by(["file_extension", "imported_path_short"]).agg(pl.sum("size_bytes"))
                 fig_ext_size = px.bar(plot_data_ext_size, x='file_extension', y='size_bytes', color='imported_path_short',
                                       barmode='stack', color_discrete_map=color_map, title="Total Size by Extension")
                 report_elements.append(dcc.Graph(figure=fig_ext_size))
@@ -62,7 +71,7 @@ class FileStatisticsWidget(PixelPatrolWidget):
             # --- 2. File Size Analysis ---
             bins = [1024*1024, 10*1024*1024, 100*1024*1024, 1024*1024*1024, 10*1024*1024*1024]
             labels = ["<1 MB", "1-10 MB", "10-100 MB", "100MB-1GB", "1-10 GB", ">10 GB"]
-            size_df = df_global.with_columns(pl.col("size_bytes").cut(bins, labels=labels).alias("size_bin"))
+            size_df = df_filtered.with_columns(pl.col("size_bytes").cut(bins, labels=labels).alias("size_bin"))
             size_agg = size_df.group_by("size_bin").agg(pl.count()).drop_nulls()
 
             if size_agg.height <= 1:
@@ -80,7 +89,7 @@ class FileStatisticsWidget(PixelPatrolWidget):
 
 
             # --- 3. File Timestamp Analysis ---
-            ts_df = df_global.with_columns(pl.col("modification_date").cast(pl.Datetime))
+            ts_df = df_filtered.with_columns(pl.col("modification_date").cast(pl.Datetime))
             # Group by day for a cleaner plot
             ts_agg = ts_df.group_by(ts_df["modification_date"].dt.truncate("1d")).agg(pl.count()).drop_nulls()
 
