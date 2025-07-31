@@ -1,0 +1,111 @@
+{
+    "traccuracy": [
+    {
+        "version": "0.3.1.dev44+ged80104.d20250726",
+        "results": {
+            "AOGM": 627.5,
+            "fp_nodes": 0,
+            "fn_nodes": 39,
+            "ns_nodes": 0,
+            "fp_edges": 60,
+            "fn_edges": 87,
+            "ws_edges": 47,
+            "TRA": 0.993676498745377,
+            "DET": 0.9954855886097927,
+            "LNK": 0.9815074359573308
+        },
+        "matcher": {
+            "name": "CTCMatcher",
+            "matching type": "one-to-one"
+        },
+        "metric": {
+            "name": "CTCMetrics",
+            "valid_match_types": [
+                "one-to-one",
+                "many-to-one"
+            ],
+            "v_weights": {
+                "ns": 5,
+                "fp": 1,
+                "fn": 10
+            },
+            "e_weights": {
+                "fp": 1,
+                "fn": 1.5,
+                "ws": 1
+            },
+            "relax_skips_gt": false,
+            "relax_skips_pred": false
+        },
+        "gt": "Hela-01_GT",
+        "pred": "Hela-01_RES"
+    },
+    {
+        "version": "0.3.1.dev44+ged80104.d20250726",
+        "results": {
+            "Frame Buffer 0": {
+                "Division Recall": 0.7340425531914894,
+                "Division Precision": 0.6509433962264151,
+                "Division F1": 0.6900000000000001,
+                "Mitotic Branching Correctness": 0.552,
+                "Total GT Divisions": 94,
+                "Total Predicted Divisions": 106,
+                "True Positive Divisions": 69,
+                "False Positive Divisions": 31,
+                "False Negative Divisions": 19,
+                "Wrong Children Divisions": 6
+            }
+        },
+        "matcher": {
+            "name": "CTCMatcher",
+            "matching type": "one-to-one"
+        },
+        "metric": {
+            "name": "DivisionMetrics",
+            "valid_match_types": [
+                "one-to-one"
+            ],
+            "frame_buffer": 0,
+            "relax_skips_gt": false,
+            "relax_skips_pred": false
+        },
+        "gt": "Hela-01_GT",
+        "pred": "Hela-01_RES"
+    },
+    {
+        "version": "0.3.1.dev44+ged80104.d20250726",
+        "results": {
+            "Total GT Nodes": 8639,
+            "Total Pred Nodes": 8600,
+            "True Positive Nodes": 0,
+            "False Positive Nodes": 0,
+            "False Negative Nodes": 0,
+            "Node Recall": 0.0,
+            "Node Precision": 0.0,
+            "Node F1": NaN,
+            "Total GT Edges": 8562,
+            "Total Pred Edges": 8535,
+            "True Positive Edges": 0,
+            "False Positive Edges": 0,
+            "False Negative Edges": 0,
+            "Edge Recall": 0.0,
+            "Edge Precision": 0.0,
+            "Edge F1": NaN
+        },
+        "matcher": {
+            "name": "CTCMatcher",
+            "matching type": "one-to-one"
+        },
+        "metric": {
+            "name": "BasicMetrics",
+            "valid_match_types": [
+                "one-to-one"
+            ],
+            "relax_skips_gt": false,
+            "relax_skips_pred": false
+        },
+        "gt": "Hela-01_GT",
+        "pred": "Hela-01_RES"
+    }
+]
+}
