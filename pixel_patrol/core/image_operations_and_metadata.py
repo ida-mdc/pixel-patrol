@@ -581,7 +581,7 @@ def _histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
     if image_array.max() <= 1 and np.issubdtype(image_array.dtype, np.floating):
         logger.warning(f"Image array max value {image_array.max()} is <= 1. It probably was [0, 1] normalized. Calculation {bins} in the range [0,1] for a histogram comparable with other image types.")
         max_value = 1.0  # For normalized images, we use 1 as the max value
-    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, max_value), density=True)
+    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, max_value))
     return hist
 
 

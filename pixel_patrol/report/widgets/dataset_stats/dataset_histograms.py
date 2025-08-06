@@ -146,6 +146,7 @@ class DatasetHistogramsWidget(PixelPatrolWidget):
                 color = color_map.get(folder, None) if color_map else None
                 # Plot individual histograms as semi-transparent lines
                 for h, file_name in zip(histograms, df_group["name"].to_list()):
+                    # normalize frequency to sum to 1 per histogram. This is not a density histogram, but a normalized frequency histogram.
                     h_norm = h / h.sum() if h.sum() > 0 else h
                     chart.add_trace(
                         go.Scatter(
