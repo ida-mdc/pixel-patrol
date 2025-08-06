@@ -1,3 +1,4 @@
+from email.mime import image
 import fnmatch
 from itertools import product, combinations
 from typing import Callable, Tuple ,Dict, List, Any, NamedTuple, Optional
@@ -13,6 +14,7 @@ from bioio import BioImage
 import bioio_imageio
 
 from pixel_patrol.config import STANDARD_DIM_ORDER, SLICE_AXES, RGB_WEIGHTS, SPRITE_SIZE
+from pixel_patrol.utils.utils import dtype_max
 
 logger = logging.getLogger(__name__)
 
@@ -563,9 +565,23 @@ def _generate_thumbnail(np_array: np.array, dim_order: str) -> np.array:
 
 def _histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
     """
-    Calculate histogram of an array using numpy's histogram function, but ensure it uses 256 bins.
+    Calculate histogram of an array using numpy's histogram function, but ensure it uses the specified bins.
+    We expect the image to be in range [0, max_value_of_your_data_type] for correct histogram calculation.
+    Images of type any float type should be in range [0, 1] or [0, max(float)] (not [-inf, inf]). 
+    When `image_array` is in the range [0, 1], 1 will be considered as the maximum value for compatibility with most image types. Then, #`bins` will be calculated in the range [0, 1].
     """
-    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, image_array.max()))
+    # TODO: Distinguish between float[0,1] normalized images and float[-inf, inf] images.
+    max_value = dtype_max(image_array.dtype)
+    if max_value is None:
+        logger.warning(f"Could not determine max value for dtype {image_array.dtype}. Using default 255.")
+        max_value = 255  # Default for most image types
+    if image_array.min() < 0:
+        logger.warning(f"Image array contains negative values. Clipping to [0, {max_value}].")
+        image_array = np.clip(image_array, 0, max_value)
+    if image_array.max() <= 1 and np.issubdtype(image_array.dtype, np.floating):
+        logger.warning(f"Image array max value {image_array.max()} is <= 1. It probably was [0, 1] normalized. Calculation {bins} in the range [0,1] for a histogram comparable with other image types.")
+        max_value = 1.0  # For normalized images, we use 1 as the max value
+    hist, _ = np.histogram(a=image_array, bins=bins, range=(0, max_value), density=True)
     return hist
 
 
