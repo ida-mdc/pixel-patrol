@@ -1,4 +1,3 @@
-from email.mime import image
 import fnmatch
 from itertools import product, combinations
 from typing import Callable, Tuple ,Dict, List, Any, NamedTuple, Optional
@@ -570,7 +569,6 @@ def _histogram_func(image_array: np.ndarray, bins: int = 256) -> np.ndarray:
     Images of type any float type should be in range [0, 1] or [0, max(float)] (not [-inf, inf]). 
     When `image_array` is in the range [0, 1], 1 will be considered as the maximum value for compatibility with most image types. Then, #`bins` will be calculated in the range [0, 1].
     """
-    # TODO: Distinguish between float[0,1] normalized images and float[-inf, inf] images.
     max_value = dtype_max(image_array.dtype)
     if max_value is None:
         logger.warning(f"Could not determine max value for dtype {image_array.dtype}. Using default 255.")
