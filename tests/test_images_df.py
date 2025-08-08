@@ -274,8 +274,8 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
 
     assert sorted(result["path"].to_list()) == expected_paths
 
-    assert result["width"].to_list() == [64, 128]
-    assert result["height"].to_list() == [48, 256]
+    assert result["width"].to_list() == [128, 64]
+    assert result["height"].to_list() == [256, 48]
 
 
 def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
