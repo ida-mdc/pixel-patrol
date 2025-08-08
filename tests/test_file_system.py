@@ -3,6 +3,8 @@ import polars as pl
 from pathlib import Path
 from datetime import datetime, timezone
 import os
+import re
+
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
 from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
@@ -218,7 +220,7 @@ def test_fetch_single_directory_tree_single_file_dir(single_file_dir: Path):
 def test_fetch_single_directory_tree_invalid_paths(tmp_path: Path, path_type_creator):
     """Tests _fetch_single_directory_tree raises ValueError for invalid or non-existent paths."""
     invalid_path = path_type_creator(tmp_path)
-    with pytest.raises(ValueError, match=f"The path '{invalid_path}' is not a valid directory."):
+    with pytest.raises(ValueError, match=re.escape(f"The path '{invalid_path}' is not a valid directory.")):
         _fetch_single_directory_tree(invalid_path)
 
 
