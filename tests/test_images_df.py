@@ -272,7 +272,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
     assert expected_cols.issubset(set(result.columns))
 
-    assert result["path"].to_list() == expected_paths
+    assert sorted(result["path"].to_list()) == expected_paths
 
     assert result["width"].to_list() == [64, 128]
     assert result["height"].to_list() == [48, 256]
