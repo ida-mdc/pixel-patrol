@@ -10,7 +10,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: ${{ github.ref == 'refs/heads/dataset_histograms' || github.event.pull_request.base.ref == 'dataset_histograms' && fromJson('["ubuntu-latest", "windows-latest", "macos-latest"]') || fromJson('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
