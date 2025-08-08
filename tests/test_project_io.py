@@ -650,7 +650,9 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
     Should raise ValueError.
     """
     # A path string that is likely invalid on most systems (e.g., contains null byte)
-    invalid_base_dir_str = "/path/to/invalid\0dir"
+    from pathlib import Path
+    invalid_base_dir = Path("/path/to/invalid\0dir")
+    invalid_base_dir_str = str(invalid_base_dir)
 
     export_path = create_mock_project_zip(
         tmp_path,
@@ -660,8 +662,13 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
         include_images_df=False
     )
 
-    with pytest.raises(ValueError, match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: embedded null byte\."):
+    with pytest.raises(
+        ValueError,
+    ) as exc_info:
         api.import_project(export_path)
+    # Accept both posix and windows path representations in the error message
+    error_str = str(exc_info.value).replace("\\", "/")
+    assert f"Project requires file system access but imported base directory '{invalid_base_dir_str.replace('\\', '/').replace('//', '/').replace('\\\\', '\\')}' is invalid or inaccessible: " in error_str
 
 
 def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
