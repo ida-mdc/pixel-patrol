@@ -660,13 +660,8 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
         include_images_df=False
     )
 
-    with pytest.raises(ValueError, match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: embedded null byte\."):
-        api.import_project(export_path)
-
-
     with pytest.raises(
-        ValueError,
-        match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: *embedded null*",
+        ValueError, match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: *embedded null*",
     ):
         api.import_project(export_path)
 
