@@ -661,9 +661,11 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
     )
 
     with pytest.raises(
-        ValueError, match=r"Project requires file system access but imported base directory '.*' is invalid or inaccessible: *embedded null*",
-    ):
+        ValueError,
+    ) as exc_info:
         api.import_project(export_path)
+    # Ensure our f-string is present in the exception message as the ending might differ based on the os. 
+    assert f"Project requires file system access but imported base directory {invalid_base_dir_str} is invalid or inaccessible: " in str(exc_info.value)
 
 
 def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
