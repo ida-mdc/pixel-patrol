@@ -250,7 +250,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     img2 = base / "graphic.png"; img2.write_text("dummy")
     (base / "notes.txt").write_text("not an image")
 
-    expected_paths = [str(img1), str(img2)]
+    expected_paths = sorted([str(img1), str(img2)])
 
     deep_df = pl.DataFrame({
         "path": expected_paths,
