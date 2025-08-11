@@ -278,7 +278,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     result_dict = { 
         row["path"]: (row["width"], row["height"]) for row in result.iter_rows(named=True)
     }
-    expected_dict = deep_df.to_dict()
+    expected_dict = dict(zip(expected_paths, zip([64, 128], [48, 256])))
     assert result_dict == expected_dict
 
 def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
