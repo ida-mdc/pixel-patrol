@@ -250,7 +250,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     img2 = base / "graphic.png"; img2.write_text("dummy")
     (base / "notes.txt").write_text("not an image")
 
-    expected_paths = sorted([str(img1), str(img2)])
+    expected_paths = [str(img1), str(img2)]
 
     deep_df = pl.DataFrame({
         "path": expected_paths,
@@ -272,11 +272,14 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
     assert expected_cols.issubset(set(result.columns))
 
-    assert sorted(result["path"].to_list()) == expected_paths
+    assert set(result["path"].to_list()) == set(expected_paths)
 
-    assert result["width"].to_list() == [128, 64]
-    assert result["height"].to_list() == [256, 48]
-
+    # Check that width/height values match for each path
+    result_dict = { 
+        row["path"]: (row["width"], row["height"]) for row in result.iter_rows(named=True)
+    }
+    expected_dict = deep_df.to_dict()
+    assert result_dict == expected_dict
 
 def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
 
@@ -362,7 +365,6 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path):
     mip = { Path(p).name: v for p, v in zip(df["path"].to_list(), df["mean_intensity"].to_list()) }
     assert mip["zero.png"] == 0.0
     assert mip["full.png"] == 255.0
-
 
 
 def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path):
