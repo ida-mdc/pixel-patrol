@@ -312,13 +312,14 @@ def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correct
     assert df["height"].to_list() == [15, 25]
 
 
-def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported_path_short():
-    base = "/data/project"
+def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported_path_short(tmp_path):
+    from pathlib import Path
+    base = tmp_path
     df = pl.DataFrame({
-        "path": [f"{base}/sub/a.txt", f"{base}/sub/b.txt"],
+        "path": [str(base / "sub" / "a.txt"), str(base / "sub" / "b.txt")],
         "name": ["a.txt", "b.txt"],
         "type": ["file", "file"],
-        "parent": [f"{base}/sub", f"{base}/sub"],
+        "parent": [str(base / "sub"), str(base / "sub")],
         "depth": [2, 2],
         "size_bytes": [1024, 2048],
         "modification_date": [
@@ -328,14 +329,16 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
         "file_extension": ["txt", "txt"],
         # size_readable will be recomputed by the function
         "size_readable": ["", ""],
-        "imported_path": [base, base],
+        "imported_path": [str(base), str(base)],
     })
 
     out = _postprocess_basic_file_metadata_df(df)
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
-    assert out["imported_path_short"].to_list() == ["project", "project"]
+    # imported_path_short is the full base path if imported_path == common_base
+    expected_short = [str(base), str(base)]
+    assert out["imported_path_short"].to_list() == expected_short
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 def test_full_images_df_computes_real_mean_intensity(tmp_path):
