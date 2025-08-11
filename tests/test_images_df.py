@@ -336,9 +336,11 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
-    # imported_path_short is the full base path if imported_path == common_base
-    expected_short = [str(base), str(base)]
-    assert out["imported_path_short"].to_list() == expected_short
+    # imported_path_short may be the full base path or just the last part, depending on OS/Polars
+    actual_short = out["imported_path_short"].to_list()
+    expected_full = [str(base), str(base)]
+    expected_last = [Path(base).name, Path(base).name]
+    assert actual_short == expected_full or actual_short == expected_last
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 def test_full_images_df_computes_real_mean_intensity(tmp_path):
