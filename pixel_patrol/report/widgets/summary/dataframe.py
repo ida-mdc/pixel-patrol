@@ -36,12 +36,13 @@ class DataFrameWidget(PixelPatrolWidget):
         )
         def update_table(color_map: Dict[str, str]):
             intro = html.P(f"This is the whole image collection table this report is based on.")
-    
-            # AgGrid table component
+
+            max_cols = 500
+            cols_to_display = df_global.columns[:max_cols]
+
             grid = dag.AgGrid(
                 rowData=df_global.to_dicts(),
-                columnDefs=[{"field": col} for col in df_global.columns],
-                # columnSize="autoSize",
+                columnDefs=[{"field": col} for col in cols_to_display],
                 id="summary_grid"
             )
             table_div = html.Div([grid])

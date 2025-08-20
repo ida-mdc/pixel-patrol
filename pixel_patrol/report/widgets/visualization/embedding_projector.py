@@ -79,6 +79,8 @@ def _generate_projector_checkpoint(
     """Creates TensorBoard embedding files."""
     writer = SummaryWriter(logdir=str(log_dir))
 
+    meta_df = meta_df.clone()
+
     # Convert metadata DataFrame to Pandas, handling 'thumbnail' column as well
     # Metadata for TensorBoardX should be a Pandas DataFrame
     metadata_for_tb = meta_df.drop("thumbnail",
@@ -155,7 +157,7 @@ class EmbeddingProjectorWidget(PixelPatrolWidget):
 
     def required_columns(self) -> List[str]:
         """Returns required data column names."""
-        return ["*", "imported_path", "name"]
+        return []
 
     def layout(self) -> List:
         """
@@ -212,6 +214,7 @@ class EmbeddingProjectorWidget(PixelPatrolWidget):
                 port: int,
                 tb_state: Dict  # tb_state holds the current data from the dcc.Store
         ):
+
             # Determine which input triggered the callback
             ctx = callback_context  # Use the imported callback_context
             triggered_id = ctx.triggered_id if ctx.triggered else None
