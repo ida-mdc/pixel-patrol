@@ -20,7 +20,7 @@ class DimOrderWidget(PixelPatrolWidget):
 
     def required_columns(self) -> List[str]:
         # These are the columns directly used for this simplified plot
-        return ["dim_order", "imported_path", "name"]
+        return ["dim_order"]
 
     def layout(self) -> List:
         """Defines the layout of the Dim Order Distribution widget."""
@@ -41,10 +41,6 @@ class DimOrderWidget(PixelPatrolWidget):
 
             # Extract short folder name, filter out null dim_orders, and add a 'value_count' column
             processed_df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
                 pl.lit(1).alias("value_count") # Column for counting files
             ]).filter(pl.col("dim_order").is_not_null()) # Ensure 'dim_order' is not null
 

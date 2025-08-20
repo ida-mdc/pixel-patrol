@@ -20,7 +20,7 @@ class DataTypeWidget(PixelPatrolWidget):
 
     def required_columns(self) -> List[str]:
         # Only these columns are strictly needed for the simplified plot
-        return ["dtype", "imported_path", "name"]
+        return ["dtype"]
 
     def layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""
@@ -41,10 +41,6 @@ class DataTypeWidget(PixelPatrolWidget):
 
             # Prepare data: extract short folder name, filter null dtypes, add 'value' for counting
             processed_df = df_global.with_columns([
-                pl.col("imported_path").map_elements(
-                    lambda x: os.path.basename(x) if x is not None else "Unknown Folder",
-                    return_dtype=pl.String
-                ).alias("imported_path_short"),
                 pl.lit(1).alias("value_count") # Add a column for counting
             ]).filter(pl.col("dtype").is_not_null()) # Filter out rows with null dtype
 

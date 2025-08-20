@@ -6,6 +6,8 @@ import polars as pl
 from dash import html, dcc, Input, Output
 from plotly.subplots import make_subplots
 
+from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol.core.spec_provider import get_requirements_as_patterns
 from pixel_patrol.report.widget_categories import WidgetCategories
 from pixel_patrol.report.widget_interface import PixelPatrolWidget
 
@@ -20,10 +22,7 @@ class SummaryWidget(PixelPatrolWidget):
         return "Dataset overview"
 
     def required_columns(self) -> List[str]:
-        return [
-            "imported_path_short", "n_images", "size_bytes", "mean_intensity", "x_size",
-            "file_extension", "dtype"
-        ]
+        return get_requirements_as_patterns(BioIoLoader())
 
     def layout(self) -> List:
         intro = html.Div(id="summary-intro", style={"marginBottom": "20px"})
@@ -48,12 +47,11 @@ class SummaryWidget(PixelPatrolWidget):
             intensity_stats = df.group_by("imported_path_short").agg(
                 pl.mean("mean_intensity"),
                 pl.mean("std_intensity"),
-                pl.mean("median_intensity"),
                 (pl.quantile("mean_intensity",0.75)-pl.quantile("mean_intensity",0.25)).alias("intensity_iqr")
             ).sort("imported_path_short")
             dimension_stats = df.group_by("imported_path_short").agg(
-                pl.mean("x_size").alias("mean_x_size"),
-                pl.std("x_size").alias("std_x_size")
+                pl.mean("X_size").alias("mean_x_size"),
+                pl.std("X_size").alias("std_x_size")
             ).sort("imported_path_short")
             summary = folder_content.join(intensity_stats, on="imported_path_short").join(dimension_stats, on="imported_path_short")
 
