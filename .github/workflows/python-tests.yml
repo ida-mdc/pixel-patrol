@@ -3,14 +3,17 @@ name: Python Tests
 on:
   push:
     branches:
-      - main
+      - '**'
   pull_request:
     branches:
-      - main
+      - '**'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: ${{ github.ref == 'refs/heads/main' || github.event.pull_request.base.ref == 'main' && fromJson('["ubuntu-latest", "windows-latest", "macos-latest"]') || fromJson('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
