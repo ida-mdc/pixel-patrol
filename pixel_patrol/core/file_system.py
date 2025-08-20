@@ -1,16 +1,45 @@
-import polars as pl
-from pathlib import Path
+import logging
 import os
 from datetime import datetime
 from typing import Dict, Any, List
-import logging
+
+import polars as pl
+
 from pixel_patrol.utils.utils import format_bytes_to_human_readable
-from pixel_patrol.config import FOLDER_EXTENSIONS_AS_FILES
 
 logger = logging.getLogger(__name__)
 
-def is_folder_like_file(path: Path) -> bool:
-    return any(str(path).endswith(ext) for ext in FOLDER_EXTENSIONS_AS_FILES)
+from pathlib import Path
+
+import zarr
+from pathlib import Path
+
+def is_zarr_store(path: Path) -> bool:
+    """
+    Robustly checks if a given path is a Zarr store (v2 or v3).
+
+    This function uses the zarr library to attempt opening the store, which
+    correctly handles both Zarr v2 and v3 specifications.
+
+    Args:
+        path: The pathlib.Path object to check.
+
+    Returns:
+        True if the path is a valid Zarr store, False otherwise.
+    """
+    try:
+        store_obj = zarr.open(store=str(path.absolute()), mode='r')
+
+        if isinstance(store_obj, zarr.Group):
+            # A group is "processable" if it has any custom attributes.
+            # A generic container group will have empty attrs.
+            return bool(store_obj.attrs)
+
+        return True
+
+    except Exception as e:
+        # Catches any error, indicating it's not a valid or accessible Zarr store.
+        return False
 
 def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[str, Any]:
     """
@@ -44,58 +73,79 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
     }
     return record
 
+
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
+
+import polars as pl
+
+
 def _fetch_single_directory_tree(base_path: Path) -> pl.DataFrame:
     """
-    Traverses a single local directory to collect its file and folder structure.
-    Returns a DataFrame representing the tree structure with initial sizes.
+    Traverses a local directory, treating Zarr stores as single files and
+    preventing traversal into them.
     """
     if not base_path.is_dir():
         raise ValueError(f"The path '{base_path}' is not a valid directory.")
 
     tree_data: List[Dict[str, Any]] = []
+    logger.debug(f"--- 🚀 Starting traversal of '{base_path}' ---")
 
-    for dirpath_str, dirnames, filenames in os.walk(base_path):
+    # We must use topdown=True to modify dirnames and control the walk
+    for dirpath_str, dirnames, filenames in os.walk(base_path, topdown=True):
         dirpath = Path(dirpath_str)
+        logger.debug(f"\n[WALK] Visiting directory: '{dirpath}'")
+        logger.debug(f"[WALK]   Subdirectories to check: {dirnames}")
 
-        # Skip .zarr directories in folder walk, handle as image 'file' instead
-        if is_folder_like_file(dirpath):
-            try:
-                size = sum(
-                    os.path.getsize(os.path.join(dp, f))
-                    for dp, _, files in os.walk(dirpath)
-                    for f in files
-                )
-                ext_match = next(ext for ext in FOLDER_EXTENSIONS_AS_FILES if str(dirpath).endswith(ext))
-                record = {
-                    "path": str(dirpath),
-                    "name": dirpath.name,
-                    "type": "file",  # Treat as file
-                    "parent": str(dirpath.parent) if dirpath != base_path else None,
-                    "depth": len(dirpath.parts) - len(base_path.parts),
-                    "size_bytes": size,
-                    "size_readable": format_bytes_to_human_readable(size),
-                    "modification_date": datetime.fromtimestamp(os.path.getmtime(dirpath)),
-                    "file_extension": ext_match.lstrip("."),
-                    "imported_path": str(base_path),
-                }
-                tree_data.append(record)
-                # Prevent os.walk from descending into this folder
-                dirnames[:] = [d for d in dirnames if not is_folder_like_file(dirpath / d)]
-                continue
-            except Exception as e:
-                logger.error(f"Failed to process folder-like file {dirpath}: {e}", exc_info=True)
-                continue
-
-        folder_record = make_basic_record(dirpath, base_path, is_folder=True)
-        if folder_record:
-            tree_data.append(folder_record)
-
-        # record files
+        # Process regular files in the current directory
+        # This part is likely not the issue, but logging is added for completeness
         for filename in filenames:
             file_path = dirpath / filename
+            # logger.debug(f"  [FILE] Found regular file: '{file_path}'")
             file_record = make_basic_record(file_path, base_path, is_folder=False)
             if file_record:
                 tree_data.append(file_record)
+
+        # Look ahead at subdirectories to decide their fate
+        dirs_to_continue_walking = []
+        for dirname in dirnames:
+            sub_dir_path = dirpath / dirname
+
+            is_zarr = is_zarr_store(sub_dir_path)
+            logger.info(f"  [CHECK] Checking '{sub_dir_path}' -> is_zarr_store? {is_zarr}")
+
+            if is_zarr:
+                # This subdirectory is a Zarr store. Treat it as a single file.
+                logger.info(f"    ✅ [ZARR] Found Zarr store: '{sub_dir_path}'. Adding as file and stopping traversal.")
+                try:
+                    size = sum(f.stat().st_size for f in sub_dir_path.rglob('*') if f.is_file())
+                    record = {
+                        "path": str(sub_dir_path), "name": sub_dir_path.name, "type": "file",
+                        "parent": str(sub_dir_path.parent), "depth": len(sub_dir_path.parts) - len(base_path.parts),
+                        "size_bytes": size, "size_readable": format_bytes_to_human_readable(size),
+                        "modification_date": datetime.fromtimestamp(sub_dir_path.stat().st_mtime),
+                        "file_extension": "zarr", "imported_path": str(base_path),
+                    }
+                    tree_data.append(record)
+                except Exception as e:
+                    logger.error(f"    ❌ [ERROR] Failed to process Zarr store {sub_dir_path}: {e}", exc_info=True)
+
+            else:
+                # This is a regular folder. Add it and allow traversal.
+                logger.info(
+                    f"    [FOLDER] Regular folder: '{sub_dir_path}'. Adding record and queueing for traversal.")
+                folder_record = make_basic_record(sub_dir_path, base_path, is_folder=True)
+                if folder_record:
+                    tree_data.append(folder_record)
+
+                dirs_to_continue_walking.append(dirname)
+
+        # Prune the dirnames list to control the subsequent traversal
+        logger.debug(f"[PRUNE] Original dirnames for '{dirpath}': {dirnames}")
+        dirnames[:] = dirs_to_continue_walking
+        logger.info(f"[PRUNE] For next loop, continuing walk into: {dirnames}")
 
     if not tree_data:
         schema = {
