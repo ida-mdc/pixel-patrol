@@ -6,6 +6,7 @@ from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
 from pixel_patrol.core.loaders.zarr_loader import ZarrLoader
 from pixel_patrol.core.processor_interface import PixelPatrolProcessor
 from pixel_patrol.core.processors.basic_stats_processor import BasicStatsProcessor
+from pixel_patrol.core.processors.histogram_processor import HistogramProcessor
 from pixel_patrol.core.processors.quality_metrics_processor import QualityMetricsProcessor
 from pixel_patrol.core.processors.thumbnail_processor import ThumbnailProcessor
 from pixel_patrol.report.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
@@ -21,7 +22,8 @@ from pixel_patrol.report.widgets.summary.file_summary import FileSummaryWidget
 from pixel_patrol.report.widgets.summary.sunburst import FileSunburstWidget
 from pixel_patrol.report.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol.report.widgets.visualization.image_mosaik import ImageMosaikWidget
-from report.widget_interface import PixelPatrolWidget
+from pixel_patrol.report.widget_interface import PixelPatrolWidget
+from pixel_patrol.report.widgets.dataset_stats.dynamic_histograms import SlicedHistogramsWidget
 
 PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
@@ -69,6 +71,7 @@ def register_processor_plugins():
         BasicStatsProcessor,
         QualityMetricsProcessor,
         ThumbnailProcessor,
+        HistogramProcessor,
     ]
 
 def register_widget_plugins():
@@ -86,4 +89,5 @@ def register_widget_plugins():
         FileSunburstWidget,
         DynamicStatsWidget,
         DynamicQualityMetricsWidget,
+        SlicedHistogramsWidget,
     ]
