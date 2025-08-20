@@ -8,10 +8,10 @@ import zarr
 from bioio import BioImage
 from zarr.storage import LocalStore
 
-from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
-from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
-from pixel_patrol.core.processing import build_paths_df
-from pixel_patrol.plugins import discover_processor_plugins
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_base.core.processing import build_paths_df
+from pixel_patrol_base.plugins import discover_processor_plugins
 
 
 @pytest.fixture

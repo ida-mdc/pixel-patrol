@@ -4,10 +4,10 @@ from typing import Dict, Any
 import numpy as np
 import pytest
 
-from pixel_patrol.config import STANDARD_DIM_ORDER, SPRITE_SIZE
-from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
-from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
-from pixel_patrol.plugins import discover_processor_plugins
+from pixel_patrol_base.config import STANDARD_DIM_ORDER, SPRITE_SIZE
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_base.plugins import discover_processor_plugins
 
 
 @pytest.fixture(scope="module")

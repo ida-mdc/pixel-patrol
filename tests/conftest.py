@@ -5,11 +5,11 @@ from typing import List, Dict, Any
 from datetime import datetime
 from PIL import Image
 import numpy as np
-from pixel_patrol.core.project import Project
-from pixel_patrol.core.project_settings import Settings
-from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
-from pixel_patrol.utils.utils import format_bytes_to_human_readable
-from pixel_patrol.core.file_system import _aggregate_folder_sizes
+from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
+from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
+from pixel_patrol_base.core.file_system import _aggregate_folder_sizes
 
 @pytest.fixture
 def mock_project_name() -> str:
@@ -19,7 +19,7 @@ def mock_project_name() -> str:
 @pytest.fixture
 def project_instance(mock_project_name: str, tmp_path: Path) -> Project:
     """Provides a Project instance with a base directory set (e.g., tmp_path) directly upon creation."""
-    from pixel_patrol import api
+    from pixel_patrol_base import api
     return api.create_project(mock_project_name, tmp_path)
 
 
@@ -69,7 +69,7 @@ def mock_temp_file_system(tmp_path: Path) -> List[Path]:
 @pytest.fixture
 def patch_tree(mocker):
     return lambda df: mocker.patch(
-        "pixel_patrol.core.processing._fetch_single_directory_tree",
+        "pixel_patrol_base.core.processing._fetch_single_directory_tree",
         return_value=df,
     )
 

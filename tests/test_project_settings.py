@@ -2,10 +2,10 @@ import pytest
 import logging
 from pathlib import Path
 
-from pixel_patrol.core.project import Project
-from pixel_patrol.core.project_settings import Settings
-from pixel_patrol import api
-from pixel_patrol.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
+from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base import api
+from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 logging.basicConfig(level=logging.INFO)
 

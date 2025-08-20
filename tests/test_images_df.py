@@ -8,11 +8,11 @@ import pytest
 import tifffile
 from PIL import Image
 
-from pixel_patrol.config import STANDARD_DIM_ORDER
-from pixel_patrol.core import processing
-from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
-from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
-from pixel_patrol.core.processing import (
+from pixel_patrol_base.config import STANDARD_DIM_ORDER
+from pixel_patrol_base.core import processing
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_base.core.processing import (
     build_images_df_from_paths_df,
     build_images_df_from_file_system,
     _scan_dirs_for_extensions,
@@ -21,7 +21,7 @@ from pixel_patrol.core.processing import (
     PATHS_DF_EXPECTED_SCHEMA,
     _postprocess_basic_file_metadata_df
 )
-from pixel_patrol.plugins import discover_processor_plugins
+from pixel_patrol_base.plugins import discover_processor_plugins
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +57,7 @@ def test_build_images_df_from_file_system_no_images(tmp_path):
     paths = [non_image_dir]
     extensions = {"png", "jpg"}
 
-    with patch('pixel_patrol.core.processing._get_deep_image_df', return_value=pl.DataFrame()) as mock_get_deep_image_df:
+    with patch('pixel_patrol_base.core.processing._get_deep_image_df', return_value=pl.DataFrame()) as mock_get_deep_image_df:
         images_df = build_images_df_from_file_system(paths, extensions, "bioio")
         assert images_df is None
         mock_get_deep_image_df.assert_not_called()
@@ -133,7 +133,7 @@ def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, l
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
-    monkeypatch.setattr("pixel_patrol.core.loaders.bioio_loader._load_bioio_image", lambda p: None)
+    monkeypatch.setattr("pixel_patrol_base.core.loaders.bioio_loader._load_bioio_image", lambda p: None)
     assert get_all_image_properties(img_file, read_pixel_data=True, loader=loader, processors=processors) == {}
 
 
@@ -154,7 +154,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
     img_file.write_bytes(b"")
 
     monkeypatch.setattr(
-        "pixel_patrol.core.loaders.bioio_loader._load_bioio_image",
+        "pixel_patrol_base.core.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
     props = get_all_image_properties(
@@ -179,7 +179,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         return {"width": 10, "height": 20} if path == p_valid else {}
 
     monkeypatch.setattr(
-        "pixel_patrol.core.processing.get_all_image_properties",
+        "pixel_patrol_base.core.processing.get_all_image_properties",
         fake_get_all_image_properties
     )
 
@@ -207,7 +207,7 @@ def test_build_images_df_from_paths_df_with_valid_paths_df_returns_expected_colu
         "height": [150 + i*100 for i in range(len(valid_paths))],
     })
     monkeypatch.setattr(
-        "pixel_patrol.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_image_df",
         lambda paths, cols: deep_df
     )
 
@@ -237,7 +237,7 @@ def test_build_images_df_from_paths_df__returns_nulls_for_missing_deep_metadata(
         "height": [456],
     })
     monkeypatch.setattr(
-        "pixel_patrol.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_image_df",
         lambda paths, cols: stubbed
     )
 
@@ -270,7 +270,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
         "height": [48, 256],
     })
     monkeypatch.setattr(
-        "pixel_patrol.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_image_df",
         lambda paths, cols: deep_df
     )
 
@@ -307,7 +307,7 @@ def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correct
         "height": [15, 25],
     })
     monkeypatch.setattr(
-        "pixel_patrol.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_image_df",
         lambda paths, cols: deep_df
     )
 

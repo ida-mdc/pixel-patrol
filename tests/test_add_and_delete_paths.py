@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import List
 import logging
 
-from pixel_patrol import api
-from pixel_patrol.core.project import Project
+from pixel_patrol_base import api
+from pixel_patrol_base.core.project import Project
 
 
 # Fixture for project_instance is already in conftest.py, using that.

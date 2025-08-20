@@ -1,5 +1,5 @@
 [project]
-name = "pixel-patrol"
+name = "pixel-patrol-base"
 version = "0.2.0"
 description = "Image prevalidation tool"
 readme = "README.md"
@@ -28,19 +28,19 @@ package = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["pixel_patrol*"]
+include = ["pixel_patrol_base*"]
 
 [project.scripts]
-pixel-patrol = "pixel_patrol.cli:cli"
+pixel-patrol-base = "pixel_patrol_base.cli:cli"
 
 [project.entry-points."pixel_patrol.loader_plugins"]
-pixel_patrol_loader_builtins = "pixel_patrol.plugins:register_loader_plugins"
+pixel_patrol_loader_builtins = "pixel_patrol_base.plugins:register_loader_plugins"
 
 [project.entry-points."pixel_patrol.processor_plugins"]
-pixel_patrol_processing_builtins = "pixel_patrol.plugins:register_processor_plugins"
+pixel_patrol_processing_builtins = "pixel_patrol_base.plugins:register_processor_plugins"
 
 [project.entry-points."pixel_patrol.widget_plugins"]
-pixel_patrol_widget_builtins = "pixel_patrol.plugins:register_widget_plugins"
+pixel_patrol_widget_builtins = "pixel_patrol_base.plugins:register_widget_plugins"
 
 [dependency-groups]
 dev = [

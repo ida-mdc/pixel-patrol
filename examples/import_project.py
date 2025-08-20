@@ -3,7 +3,7 @@ from pathlib import Path
 import polars as pl
 
 # Import necessary API functions
-from pixel_patrol.api import (
+from pixel_patrol_base.api import (
     import_project,
     get_images_df,
     get_paths_df,  # Also useful for verification
