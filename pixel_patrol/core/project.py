@@ -15,19 +15,21 @@ logger = logging.getLogger(__name__)
 
 class Project:
 
-    def __init__(self, name: str, base_dir: Union[str, Path]): # base_dir is now mandatory
+    def __init__(self, name: str, base_dir: Union[str, Path], loader: str):
 
         validation.validate_project_name(name)
         self.name: str = name
 
         self.base_dir = base_dir
 
+        self.loader = loader
+
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
         self.images_df: Optional[pl.DataFrame] = None
 
-        logger.info(f"Project Core: Project '{self.name}' initialized with base dir: {self.base_dir}.")
+        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader} and base dir: {self.base_dir}.")
 
 
     @property
@@ -163,9 +165,9 @@ class Project:
         exts = self.settings.selected_file_extensions
 
         if self.paths_df is None or self.paths_df.is_empty():
-            self.images_df = processing.build_images_df_from_file_system(self.paths, exts)
+            self.images_df = processing.build_images_df_from_file_system(self.paths, exts, loader=self.loader)
         else:
-            self.images_df = processing.build_images_df_from_paths_df(self.paths_df, exts)
+            self.images_df = processing.build_images_df_from_paths_df(self.paths_df, exts, loader=self.loader)
 
         if self.images_df is None or self.images_df.is_empty():
             logger.warning(
@@ -198,6 +200,8 @@ class Project:
         """Get the single DataFrame containing processed data."""
         return self.images_df
 
+    def get_loader(self) -> str:
+        return self.loader
 
     def _set_selected_file_extensions(self, new_settings: Settings) -> None:
         """

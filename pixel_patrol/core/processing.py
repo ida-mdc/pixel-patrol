@@ -1,18 +1,23 @@
-import polars as pl
-from pathlib import Path
-import os
-from typing import List, Optional, Dict, Set, Tuple
+import importlib
 import logging
+import os
+import re
+from pathlib import Path
+from typing import List, Optional, Dict, Set, Tuple, Type
+
+import polars as pl
 
 from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes, make_basic_record
-from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol.core.loader_interface import PixelPatrolLoader
+from pixel_patrol.core.processor_interface import PixelPatrolProcessor
+from pixel_patrol.plugins import discover_loader, discover_processor_plugins
 from pixel_patrol.utils.df_utils import normalize_file_extension
 from pixel_patrol.utils.path_utils import find_common_base
-from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties, available_columns
+from pixel_patrol.utils.utils import format_bytes_to_human_readable
 
 logger = logging.getLogger(__name__)
 
-########### build_paths_df ##########
 
 PATHS_DF_EXPECTED_SCHEMA = {
     "path": pl.String,
@@ -77,7 +82,6 @@ def build_paths_df(paths: List[Path]) -> Optional[pl.DataFrame]:
 
     return _postprocess_basic_file_metadata_df(df)
 
-################################## Shared Helpers for build_images_df_from functions ###################################
 
 def _scan_dirs_for_extensions(
     bases: List[Path],
@@ -95,6 +99,7 @@ def _scan_dirs_for_extensions(
                     matched.append((Path(root) / name, base))
     return matched
 
+
 def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFrame:
     """Return only file rows whose extension (lower-cased) is in our set."""
     return paths_df.filter(
@@ -103,28 +108,66 @@ def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFra
     )
 
 
-def _get_deep_image_df(paths: List[Path], required_cols: List[str]) -> pl.DataFrame:
-    """Loop over paths, get_all_image_properties, return DataFrame (may be empty)."""
+def _get_deep_image_df(paths: List[Path], loader: str, read_pixel_data: bool = True) -> pl.DataFrame:
+    """Loop over paths, get_all_image_properties, return DataFrame (may be empty).
+    Optimized to minimize Python loop overhead where possible.
+    """
+    loader_instance = discover_loader(loader_id=loader)
+    processors = discover_processor_plugins()
+
+    static_features_specs: Dict[str, pl.DataType] = {}
+    dynamic_schema_patterns: List[Tuple[str, pl.DataType]] = []
+
+    for processor in processors:
+        static_features_specs.update(processor.get_specification())
+        dynamic_schema_patterns.extend(processor.get_dynamic_specification_patterns())
+
     images_dicts = []
+
     for p in paths:
-        try:
-            image_dict = get_all_image_properties(p, required_cols)
-            if image_dict:
-                images_dicts.append({"path": str(p), **image_dict})
-        except Exception as e:
-            logger.warning(f"Metadata extraction failed for {p}: {e}")
+        # try:
+        # get_all_image_properties is still the bottleneck here if it reads pixels
+        # This part remains in the Python loop as it depends on external I/O and Dask/NumPy processing.
+        image_dict = get_all_image_properties(p, read_pixel_data, loader_instance, processors)
+        if image_dict:
+            # Add 'path' at this stage, as it's directly available from the loop
+            images_dicts.append({"path": str(p), **image_dict})
+        # except Exception as e:
+        #     logger.warning(f"Metadata extraction failed for {p}: {e}")
+
+    if not images_dicts:
+        # Return an empty DataFrame with a predefined schema if no data was processed
+        # This prevents an empty DataFrame with inferred 'Object' types from being created.
+        # We'll build the final schema first.
+        # Find all unique keys across all collected dicts
+        all_discovered_keys = set()
+        for row_dict in images_dicts:
+            all_discovered_keys.update(row_dict.keys())
+
+        # Combine static schema with types derived from dynamic patterns
+        final_polars_schema = static_features_specs.copy()
+        for key in all_discovered_keys:
+            if key in final_polars_schema:
+                continue  # Already defined statically
+
+            for pattern_str, dtype in dynamic_schema_patterns:
+                if re.match(pattern_str, key):
+                    final_polars_schema[key] = dtype
+                    break  # Move to next key once a pattern matches
+
+        return pl.DataFrame(images_dicts, schema=final_polars_schema)
 
     return pl.DataFrame(images_dicts)
 
-################################### Main Function to Build Images DataFrame ###################################
 
-def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str]) -> Optional[pl.DataFrame]:
+def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str], loader: str) -> Optional[pl.DataFrame]:
     """
     Extracts deep image-specific metadata for files after filtering for file extensions.
 
     Args:
         paths_df: A Polars DataFrame containing basic file system metadata for files.
         extensions: A set of file extensions to filter image files (e.g., {".jpg", ".png"}).
+        loader: The identifier of the loader to be used for processing files.
     Returns:
         An Optional Polars DataFrame containing combined basic and image-specific metadata,
         or None if no valid image data is available.
@@ -139,14 +182,16 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str])
     # TODO: speed test - paths to list instead of all polars native operations?
     # but.. get_all_image_properties is operating on individual paths, so it should be fine
     paths = [Path(p) for p in basic_file_df["path"].to_list()]
-    deep_image_df = _get_deep_image_df(paths, available_columns())
+    deep_image_df = _get_deep_image_df(paths, loader)
 
-    joined = basic_file_df.join(deep_image_df, on="path", how="left")
+    if len(deep_image_df) > 0:
+        joined = basic_file_df.join(deep_image_df, on="path", how="left")
+        return joined
+    else:
+        return basic_file_df
 
-    return joined
 
-
-def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str]) -> Optional[pl.DataFrame]:
+def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str], loader: str) -> Optional[pl.DataFrame]:
     """
     Performs a single-pass scan over the file system to find image files,
     collect their basic file system metadata, and extract deep image-specific metadata.
@@ -168,14 +213,12 @@ def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set
     basic_file_df = normalize_file_extension(basic_file_df)
     basic_file_df = _postprocess_basic_file_metadata_df(basic_file_df)
 
-    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], available_columns())
+    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], loader)
 
     joined = basic_file_df.join(deep_image_df, on="path", how="left")
 
     return joined
 
-
-###################################### Other #####################################################
 
 def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     """

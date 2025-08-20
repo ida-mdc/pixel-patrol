@@ -739,7 +739,7 @@ def test_import_project_malformed_metadata_base_dir_none_with_images_df(tmp_path
     dummy_base_dir_for_creation = tmp_path / "dummy_base_dir"
     dummy_base_dir_for_creation.mkdir(exist_ok=True) # Create the directory
 
-    dummy_project = Project(name="DummyProject", base_dir=dummy_base_dir_for_creation)
+    dummy_project = Project(name="DummyProject", base_dir=dummy_base_dir_for_creation, loader="bioio")
     dummy_project.images_df = pl.DataFrame({
         "path": ["/dummy/path/image1.jpg"],
         "filename": ["image1.jpg"],

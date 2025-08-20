@@ -12,6 +12,7 @@ from dash.dependencies import Input, Output
 from pixel_patrol.core.project import Project
 from pixel_patrol.report.widget import organize_widgets_by_tab
 from pixel_patrol.report.widget_interface import PixelPatrolWidget
+from pixel_patrol.plugins import discover_widget_plugins
 
 
 def load_and_concat_parquets(
