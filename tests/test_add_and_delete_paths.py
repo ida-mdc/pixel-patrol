@@ -1,4 +1,5 @@
 import pytest
+import re
 from pathlib import Path
 from typing import List
 import logging
@@ -279,25 +280,26 @@ def test_delete_path_invalid_or_outside_base(project_instance: Project, tmp_path
     Tests deleting a path that is either invalid (e.g., non-existent, not a dir)
     or outside the project's base, which should raise a ValueError.
     """
+
     # Scenario 1: Path outside project base
     outside_dir = tmp_path.parent / "outside_project_dir_to_delete"
     outside_dir.mkdir(exist_ok=True)
     with pytest.raises(ValueError,
-                       match=f"Cannot delete path: '{outside_dir}' is invalid, inaccessible, or outside the project base."):
+                       match=re.escape(f"Cannot delete path: '{outside_dir}' is invalid, inaccessible, or outside the project base.")):
         api.delete_path(project_instance, str(outside_dir))
     outside_dir.rmdir()  # Clean up
 
     # Scenario 2: Non-existent path within project base (but not added)
     non_existent_path = project_instance.get_base_dir() / "non_existent_path_to_delete"
     with pytest.raises(ValueError,
-                       match=f"Cannot delete path: '{non_existent_path}' is invalid, inaccessible, or outside the project base."):
+                       match=re.escape(f"Cannot delete path: '{non_existent_path}' is invalid, inaccessible, or outside the project base.")):
         api.delete_path(project_instance, str(non_existent_path))
 
     # Scenario 3: A file (not a directory) within project base
     test_file = project_instance.get_base_dir() / "test_file_to_delete.txt"
     test_file.touch()
     with pytest.raises(ValueError,
-                       match=f"Cannot delete path: '{test_file}' is invalid, inaccessible, or outside the project base."):
+                       match=re.escape(f"Cannot delete path: '{test_file}' is invalid, inaccessible, or outside the project base.")):
         api.delete_path(project_instance, str(test_file))
     test_file.unlink()  # Clean up
 
