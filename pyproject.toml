@@ -21,6 +21,8 @@ dependencies = [
     "tensorboard>=2.18.0",
     "tensorboardx>=2.6.4",
     "zarr>=3.1.0",
+    "traccuracy>=0.3.0",
+    "geff>=0.4.1",
 ]
 
 [tool.uv]
