@@ -1,12 +1,11 @@
 import os
 import webbrowser
-from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Timer
-from typing import Set, Union, Literal
 
 import click
 
+from pixel_patrol import Settings
 from pixel_patrol.api import (
     create_project,
     add_paths,
@@ -18,15 +17,6 @@ from pixel_patrol.api import (
     show_report,
 )
 
-
-# Your provided Settings class
-@dataclass
-class Settings:
-    cmap: str = "rainbow"
-    n_example_images: int = 9
-    selected_file_extensions: Union[Set[str], Literal["all"]] = field(default_factory=set)
-
-# --- CLI Tool ---
 
 @click.group()
 def cli():
@@ -57,8 +47,10 @@ def cli():
 @click.option('--file-extension', '-e', multiple=True,
               help='Optional: File extensions to include (e.g., png, jpg). Can be specified multiple times. '
                    'If not specified, all supported extensions will be used.')
+@click.option('--flavor', type=str, default="", show_default=True,
+              help='Name of pixel patrol configuration, will be displayed next to the tool name.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
-           cmap: str, n_example_images: int, file_extension: tuple[str, ...]):
+           cmap: str, n_example_images: int, file_extension: tuple[str, ...], flavor: str):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -98,7 +90,8 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     initial_settings = Settings(
         cmap=cmap,
         n_example_images=n_example_images,
-        selected_file_extensions=selected_extensions
+        selected_file_extensions=selected_extensions,
+        pixel_patrol_flavor=flavor
     )
     click.echo(f"Setting project settings: {initial_settings}")
     set_settings(my_project, initial_settings)
