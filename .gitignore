@@ -1,6 +1,11 @@
-demo_data_2d/
 .venv/
 **/__pycache__/
 .vscode/
 pixel_patrol.egg-info/
+uv.lock
+examples/data
+examples/exported_projects
+build
+.ipynb_checkpoints
+.idea
 uv.lock
