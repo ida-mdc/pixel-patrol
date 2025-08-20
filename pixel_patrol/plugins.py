@@ -8,11 +8,16 @@ from pixel_patrol.core.processors.basic_stats_processor import BasicStatsProcess
 from pixel_patrol.core.processors.quality_metrics_processor import QualityMetricsProcessor
 from pixel_patrol.core.processors.thumbnail_processor import ThumbnailProcessor
 from pixel_patrol.report.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
+from pixel_patrol.report.widgets.dataset_stats.dynamic_dataset_metrics import DynamicStatsWidget
+from pixel_patrol.report.widgets.dataset_stats.dynamic_quality_metrics import DynamicQualityMetricsWidget
 from pixel_patrol.report.widgets.dataset_stats.image_quality import ImageQualityWidget
+from pixel_patrol.report.widgets.file_stats.file_stats import FileStatisticsWidget
 from pixel_patrol.report.widgets.metadata.data_type import DataTypeWidget
 from pixel_patrol.report.widgets.metadata.dim_order import DimOrderWidget
 from pixel_patrol.report.widgets.metadata.dim_size import DimSizeWidget
 from pixel_patrol.report.widgets.summary.dataframe import DataFrameWidget
+from pixel_patrol.report.widgets.summary.file_summary import FileSummaryWidget
+from pixel_patrol.report.widgets.summary.sunburst import FileSunburstWidget
 from pixel_patrol.report.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol.report.widgets.visualization.image_mosaik import ImageMosaikWidget
 from report.widget_interface import PixelPatrolWidget
@@ -66,6 +71,7 @@ def register_processor_plugins():
 
 def register_widget_plugins():
     return [
+        FileStatisticsWidget,
         DataTypeWidget,
         DimOrderWidget,
         DimSizeWidget,
@@ -73,5 +79,9 @@ def register_widget_plugins():
         DatasetStatsWidget,
         EmbeddingProjectorWidget,
         ImageQualityWidget,
+        FileSummaryWidget,
         DataFrameWidget,
+        FileSunburstWidget,
+        DynamicStatsWidget,
+        DynamicQualityMetricsWidget,
     ]
