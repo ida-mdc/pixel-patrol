@@ -2,9 +2,9 @@ import pytest
 from pathlib import Path
 import os
 
-from pixel_patrol import api
-from pixel_patrol.core.project import Project
-from pixel_patrol.core.project_settings import Settings
+from pixel_patrol_base import api
+from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project_settings import Settings
 
 def test_create_project_basic(mock_project_name: str, tmp_path: Path):
     project = api.create_project(mock_project_name, tmp_path)

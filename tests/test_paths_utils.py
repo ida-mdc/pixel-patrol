@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from pixel_patrol.utils.path_utils import find_common_base
+from pixel_patrol_base.utils.path_utils import find_common_base
 import os
 
 

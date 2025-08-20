@@ -2,7 +2,7 @@ import pytest
 import polars as pl
 from datetime import datetime
 from polars.testing import assert_frame_equal
-from pixel_patrol.core.processing import build_paths_df, PATHS_DF_EXPECTED_SCHEMA
+from pixel_patrol_base.core.processing import build_paths_df, PATHS_DF_EXPECTED_SCHEMA
 
 
 def test_schema_unmodified(mock_temp_file_system, patch_tree):

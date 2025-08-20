@@ -6,9 +6,9 @@ import os
 import re
 
 
-from pixel_patrol.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
-from pixel_patrol.core.processing import PATHS_DF_EXPECTED_SCHEMA
-from pixel_patrol.utils.utils import format_bytes_to_human_readable
+from pixel_patrol_base.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
+from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
+from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 
 # --- Fixtures for _fetch_single_directory_tree tests ---
 
