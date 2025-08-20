@@ -36,20 +36,14 @@ include = ["pixel_patrol*"]
 [project.scripts]
 pixel-patrol = "pixel_patrol.cli:cli"
 
-[project.entry-points."pixel_patrol.widgets"]
-file_timestamp = "pixel_patrol.report.widgets.file_stats.file_timestamp:FileTimestampWidget"
-file_size = "pixel_patrol.report.widgets.file_stats.file_size:FileSizeWidget"
-file_extension = "pixel_patrol.report.widgets.file_stats.file_extension:FileExtensionWidget"
-data_type = "pixel_patrol.report.widgets.metadata.data_type:DataTypeWidget"
-dim_order = "pixel_patrol.report.widgets.metadata.dim_order:DimOrderWidget"
-dim_size = "pixel_patrol.report.widgets.metadata.dim_size:DimSizeWidget"
-image_mosaik = "pixel_patrol.report.widgets.visualization.image_mosaik:ImageMosaikWidget"
-dataset_stats = "pixel_patrol.report.widgets.dataset_stats.dataset_stats:DatasetStatsWidget"
-dataset_histograms = "pixel_patrol.report.widgets.dataset_stats.dataset_histograms:DatasetHistogramsWidget"
-embedding_projector = "pixel_patrol.report.widgets.visualization.embedding_projector:EmbeddingProjectorWidget"
-image_quality = "pixel_patrol.report.widgets.dataset_stats.image_quality:ImageQualityWidget"
-summary = "pixel_patrol.report.widgets.summary.summary:SummaryWidget"
-dataframe = "pixel_patrol.report.widgets.summary.dataframe:DataFrameWidget"
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_builtins = "pixel_patrol.plugins:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+pixel_patrol_processing_builtins = "pixel_patrol.plugins:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.widget_plugins"]
+pixel_patrol_widget_builtins = "pixel_patrol.plugins:register_widget_plugins"
 
 [dependency-groups]
 dev = [

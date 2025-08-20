@@ -6,19 +6,12 @@ import polars as pl
 import pytest
 import zarr
 from bioio import BioImage
-from zarr.storage import DirectoryStore as LocalStore
+from zarr.storage import LocalStore
 
 from pixel_patrol.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
 from pixel_patrol.core.processing import build_paths_df
-
-COMMON_REQUIRED_METADATA_COLS = [
-    "dim_order",
-    "dtype",
-    "t_size", "c_size", "z_size", "y_size", "x_size",
-    "mean_intensity", "std_intensity", "min_intensity", "max_intensity",
-    "num_pixels", "shape", "ndim"
-]
-
+from pixel_patrol.plugins import discover_processor_plugins
 
 
 @pytest.fixture
@@ -39,7 +32,7 @@ def zarr_folder(tmp_path: Path) -> Path:
     store = LocalStore(str(zarr_path))
     root = zarr.group(store=store)
 
-    arr = root.create_dataset(
+    arr = root.create_array(
         "0",
         shape=shape,
         chunks=chunks,
@@ -103,18 +96,18 @@ def test_extract_image_metadata_from_zarr(zarr_folder: Path):
     """
     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
     """
-    metadata = get_all_image_properties(zarr_folder, COMMON_REQUIRED_METADATA_COLS)
+    metadata = get_all_image_properties(zarr_folder, read_pixel_data=True, loader=BioIoLoader(), processors=discover_processor_plugins())
 
     assert isinstance(metadata, dict)
 
     assert metadata.get("dim_order") in ["TCZYXS", "TCZYX", "TCYX", "CZYX", "CXY", "TYX"]  # TODO: probably need to change so dim order is always TCZYXS
     assert metadata.get("dtype") == "uint16"
-    assert metadata.get("t_size") == 1
-    assert metadata.get("c_size") == 2
-    assert metadata.get("z_size") == 1
-    assert metadata.get("y_size") == 10
-    assert metadata.get("x_size") == 10
+    assert metadata.get("T_size") == 1
+    assert metadata.get("C_size") == 2
+    assert metadata.get("Z_size") == 1
+    assert metadata.get("Y_size") == 10
+    assert metadata.get("X_size") == 10
 
     assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
-    assert "shape" in metadata and metadata["shape"] in [(1, 2, 1, 10, 10, 1), str((1, 2, 1, 10, 10, 1))]
-    assert "ndim" in metadata and metadata["ndim"] == 6
+    assert "shape" in metadata and metadata["shape"].tolist()  == [1, 2, 1, 10, 10]
+    assert "ndim" in metadata and metadata["ndim"] == 5
