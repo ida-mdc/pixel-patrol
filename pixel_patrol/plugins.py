@@ -3,6 +3,7 @@ from typing import Type, Union, List
 
 from pixel_patrol.core.loader_interface import PixelPatrolLoader
 from pixel_patrol.core.loaders.bioio_loader import BioIoLoader
+from pixel_patrol.core.loaders.zarr_loader import ZarrLoader
 from pixel_patrol.core.processor_interface import PixelPatrolProcessor
 from pixel_patrol.core.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol.core.processors.quality_metrics_processor import QualityMetricsProcessor
@@ -60,6 +61,7 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
 def register_loader_plugins():
     return [
         BioIoLoader,
+        ZarrLoader,
     ]
 
 def register_processor_plugins():
