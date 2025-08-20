@@ -69,33 +69,6 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
         return Settings()
 
 
-def _handle_object_columns(df: pl.DataFrame) -> pl.DataFrame:
-
-    current_df = df.clone()  # Create a clone to avoid modifying the original DataFrame
-
-    object_cols_to_process = [col for col, dtype in current_df.schema.items() if dtype == pl.Object]
-
-    for col in object_cols_to_process:
-        try:
-            current_df = current_df.with_columns(
-                pl.col(col).cast(pl.Utf8)
-            )
-            logger.info(f"Project IO: Successfully converted column '{col}' from Object to Utf8.")
-        except pl.ComputeError as e:
-            logger.warning(
-                f"Project IO: Failed to convert column '{col}' (Object to Utf8) to string. "
-                f"Error: {e}. This column contains values that cannot be stringified and will be excluded from the Parquet export."
-            )
-            current_df = current_df.drop(col)
-        except Exception as e:
-            logger.error(
-                f"Project IO: An unexpected error occurred while processing column '{col}'. "
-                f"Error: {e}. This column will be excluded from the Parquet export."
-            )
-            current_df = current_df.drop(col)
-    return current_df
-
-
 def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
     """
     Serializes columns containing numpy ndarrays to lists of int64 for compatibility with Parquet.
@@ -154,8 +127,15 @@ def _write_dataframe_to_parquet(
 
     df = _serialize_ndarray_columns_dataframe(df)
 
-    # TODO: This might be a bit of a patch and should be revisited.
-    df = _handle_object_columns(df)
+    # Identify columns with empty Struct types
+    empty_struct_cols = [
+        name for name, dtype in df.schema.items()
+        if isinstance(dtype, pl.Struct) and not dtype.fields
+    ]
+
+    # Add a dummy field to each problematic column
+    for col in empty_struct_cols:
+        df = df.with_columns(pl.lit(None).alias(col))
 
     file_path = tmp_path / base_filename
     data_name = file_path.stem
