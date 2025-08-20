@@ -5,10 +5,7 @@ DEFAULT_PRESELECTED_FILE_EXTENSIONS: Set[str] = {
     "czi", "tif", "tiff", "nd2", "lif",
     # Additional Common Image Formats
     "jpg", "jpeg", "png", "bmp", # "gif" TODO: gif support is not implemented yet - produces errors.
-}
-
-FOLDER_EXTENSIONS_AS_FILES = {
-    ".zarr", ".ome.zarr", ".n5", ".imaris", ".napari", ".nd2folder"
+    "zarr", "json"
 }
 
 MIN_N_EXAMPLE_IMAGES: int = 1
@@ -21,4 +18,3 @@ STANDARD_DIM_ORDER = "TCZYXS"
 NO_SLICE_AXES = ("X", "Y")
 
 RGB_WEIGHTS = [0.2989, 0.5870, 0.1140]
-
