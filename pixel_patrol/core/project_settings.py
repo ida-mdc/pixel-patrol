@@ -7,3 +7,4 @@ class Settings: # TODO: change default values to not be hard coded
     cmap: str                                                   = "rainbow"
     n_example_images: int                                       = DEFAULT_N_EXAMPLE_IMAGES
     selected_file_extensions: Union[Set[str], Literal["all"]]   = field(default_factory=set)
+    pixel_patrol_flavor: str                                    = "" # use this for indicating specific custom configurations of pixel patrol

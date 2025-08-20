@@ -36,13 +36,13 @@ def load_and_concat_parquets(
 def create_app(
         project: Project
 ) -> Dash:
-    return _create_app(project.images_df, project.get_settings().cmap)
+    return _create_app(project.images_df, project.get_settings().cmap, pixel_patrol_flavor=project.get_settings().pixel_patrol_flavor)
 
 
 def _create_app(
         df: pl.DataFrame,
         default_palette_name: str = 'tab10',
-        widget_root: str = "widgets"
+        pixel_patrol_flavor = ""
 ) -> Dash:
     """
     Instantiate Dash app, register callbacks, and assign layout.
@@ -70,7 +70,7 @@ def _create_app(
                                      style={'height': '110px', 'marginRight': '15px'}),
                             html.H1('Pixel Patrol', className='m-0'),
                             html.Span(
-                                "..for AqQua!",
+                                pixel_patrol_flavor,
                                 style={
                                     'color': '#d9534f', 'fontSize': '2rem', 'fontWeight': 'bold',
                                     'fontFamily': 'cursive', 'transform': 'rotate(-6deg)',
