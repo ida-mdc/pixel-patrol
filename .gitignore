@@ -1,7 +1,7 @@
 .venv/
 **/__pycache__/
 .vscode/
-pixel_patrol.egg-info/
+*.egg-info/
 uv.lock
 examples/data
 examples/exported_projects
