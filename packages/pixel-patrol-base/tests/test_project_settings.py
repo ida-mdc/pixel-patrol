@@ -21,17 +21,17 @@ def test_get_settings_initial(named_project_with_base_dir: Project):
     settings = api.get_settings(named_project_with_base_dir)
     assert isinstance(settings, Settings)
     assert settings.cmap == "rainbow"
-    assert settings.n_example_images == 9
+    assert settings.n_example_files == 9
     assert settings.selected_file_extensions == set()
 
 
 def test_set_settings_valid(named_project_with_base_dir: Project):
     """Test setting and retrieving valid new settings."""
-    new_settings = Settings(cmap="viridis", n_example_images=5, selected_file_extensions={"jpg", "png"})
+    new_settings = Settings(cmap="viridis", n_example_files=5, selected_file_extensions={"jpg", "png"})
     updated_project = api.set_settings(named_project_with_base_dir, new_settings)
     retrieved_settings = api.get_settings(updated_project)
     assert retrieved_settings.cmap == "viridis"
-    assert retrieved_settings.n_example_images == 5
+    assert retrieved_settings.n_example_files == 5
     assert retrieved_settings.selected_file_extensions == {"jpg", "png"}
 
 
@@ -45,15 +45,15 @@ def test_set_settings_invalid_cmap(named_project_with_base_dir: Project):
 def test_set_settings_invalid_n_example_images(named_project_with_base_dir: Project):
     """Test setting n_example_images with invalid values (too low, too high, wrong type)."""
     # Test too low
-    invalid_settings_low = Settings(n_example_images=0)
+    invalid_settings_low = Settings(n_example_files=0)
     with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_low)
 
-    invalid_settings_high = Settings(n_example_images=20)
+    invalid_settings_high = Settings(n_example_files=20)
     with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_high)
 
-    invalid_settings_type = Settings(n_example_images=9.5)
+    invalid_settings_type = Settings(n_example_files=9.5)
     with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_type)
 

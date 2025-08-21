@@ -41,7 +41,7 @@ if __name__ == "__main__":
     settings = Settings(
         selected_file_extensions={"png", "jpg", "jpeg", "bmp", "tif", "tiff"},
         cmap="viridis",
-        n_example_images=5,
+        n_example_files=5,
     )
     project = set_settings(project, settings)
 

@@ -215,7 +215,7 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
     # Set some custom settings for image processing
     new_settings = Settings(
         cmap="viridis",
-        n_example_images=5,
+        n_example_files=5,
         selected_file_extensions={"jpg", "png", "gif"} # Match extensions
     )
     project.set_settings(new_settings)

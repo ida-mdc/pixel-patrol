@@ -4,7 +4,7 @@ from typing import List, Union, Iterable, Optional, Set
 
 import polars as pl
 
-from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS, MIN_N_EXAMPLE_IMAGES, MAX_N_EXAMPLE_IMAGES
+from pixel_patrol_base.config import MIN_N_EXAMPLE_FILES, MAX_N_EXAMPLE_FILES
 from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
@@ -132,11 +132,11 @@ class Project:
             logger.error(f"Project Core: Invalid colormap name '{settings.cmap}'.")
             raise ValueError(f"Invalid colormap name: '{settings.cmap}'. It is not a recognized Matplotlib colormap.")
 
-        if not isinstance(settings.n_example_images, int) or \
-            settings.n_example_images < MIN_N_EXAMPLE_IMAGES or \
-            settings.n_example_images >= MAX_N_EXAMPLE_IMAGES:
-            logger.error(f"Project Core: Invalid n_example_images value: {settings.n_example_images}.")
-            raise ValueError("Number of example images must be an integer between 1 and 19 (i.e., positive and below 20).")
+        if not isinstance(settings.n_example_files, int) or \
+            settings.n_example_files < MIN_N_EXAMPLE_FILES or \
+            settings.n_example_files >= MAX_N_EXAMPLE_FILES:
+            logger.error(f"Project Core: Invalid n_example_files value: {settings.n_example_files}.")
+            raise ValueError("Number of example files must be an integer between 1 and 19 (i.e., positive and below 20).")
 
         # All validations passed, apply the new settings.
         self.settings = settings
