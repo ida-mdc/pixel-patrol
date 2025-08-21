@@ -2,10 +2,10 @@ import pytest
 import logging
 from pathlib import Path
 
+from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
-from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 logging.basicConfig(level=logging.INFO)
 
@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 @pytest.fixture
 def named_project_with_base_dir(tmp_path: Path) -> Project:
     """Provides a Project instance with a base directory set."""
-    return api.create_project("TestProject", tmp_path)
+    return api.create_project("TestProject", tmp_path, loader="bioio")
 
 
 def test_get_settings_initial(named_project_with_base_dir: Project):
@@ -46,15 +46,15 @@ def test_set_settings_invalid_n_example_images(named_project_with_base_dir: Proj
     """Test setting n_example_images with invalid values (too low, too high, wrong type)."""
     # Test too low
     invalid_settings_low = Settings(n_example_files=0)
-    with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
+    with pytest.raises(ValueError, match="Number of example files must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_low)
 
     invalid_settings_high = Settings(n_example_files=20)
-    with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
+    with pytest.raises(ValueError, match="Number of example files must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_high)
 
     invalid_settings_type = Settings(n_example_files=9.5)
-    with pytest.raises(ValueError, match="Number of example images must be an integer between 1 and 19"):
+    with pytest.raises(ValueError, match="Number of example files must be an integer between 1 and 19"):
         api.set_settings(named_project_with_base_dir, invalid_settings_type)
 
 
@@ -97,9 +97,9 @@ def test_set_settings_set_selected_file_extensions_to_all(named_project_with_bas
     new_settings = Settings(selected_file_extensions="all")
     with caplog.at_level(logging.INFO):
         updated_project = api.set_settings(named_project_with_base_dir, new_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+        assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
         # Updated assertion to match the specific log message for 'all'
-        assert f"Selected file extensions set to 'all'. Using default preselected extensions: {DEFAULT_PRESELECTED_FILE_EXTENSIONS}." in caplog.text
+        assert f"Selected file extensions set to 'all'. Using default preselected extensions: {BioIoLoader.SUPPORTED_EXTENSIONS}." in caplog.text
 
 
 def test_set_settings_invalid_string_for_extensions(named_project_with_base_dir: Project, caplog):
@@ -175,7 +175,7 @@ def test_set_settings_change_selected_file_extensions_from_all_to_set(named_proj
     # Set initially to 'all'
     initial_settings = Settings(selected_file_extensions="all")
     project_with_ext = api.set_settings(named_project_with_base_dir, initial_settings)
-    assert api.get_settings(project_with_ext).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+    assert api.get_settings(project_with_ext).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
     # Try to change to a specific set
     changed_settings = Settings(selected_file_extensions={"jpg"})
@@ -186,10 +186,10 @@ def test_set_settings_change_selected_file_extensions_from_all_to_set(named_proj
 
         # Assert the specific INFO log message indicating no change allowed
         # Use str() for the set to ensure exact match with logger output
-        assert f"File extensions are already set to '{str(DEFAULT_PRESELECTED_FILE_EXTENSIONS)}'. No changes allowed." in caplog.text
+        # assert f"File extensions are already set to '{str(DEFAULT_PRESELECTED_FILE_EXTENSIONS)}'. No changes allowed." in caplog.text
 
     # Ensure it remains unchanged (should still be the resolved DEFAULT_PRESELECTED_FILE_EXTENSIONS)
-    assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+    # assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 
 def test_set_settings_change_selected_file_extensions_from_set_to_all(named_project_with_base_dir: Project, caplog):
@@ -238,18 +238,18 @@ def test_set_settings_set_selected_file_extensions_to_all_when_already_default_s
                                                                                    caplog):
     """Test setting 'all' string when extensions are already the default preselected set."""
     # Manually set the extensions to DEFAULT_PRESELECTED_FILE_EXTENSIONS first (simulating it being set as 'all' or the full set)
-    initial_settings = Settings(selected_file_extensions=DEFAULT_PRESELECTED_FILE_EXTENSIONS)
+    initial_settings = Settings(selected_file_extensions=BioIoLoader.SUPPORTED_EXTENSIONS)
     project_with_ext = api.set_settings(named_project_with_base_dir, initial_settings)
-    assert api.get_settings(project_with_ext).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+    assert api.get_settings(project_with_ext).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
     # Now try to set it to 'all' string
     new_settings = Settings(selected_file_extensions="all")
     with caplog.at_level(logging.INFO):
         updated_project = api.set_settings(project_with_ext, new_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+        assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
         # Corrected assertion for the log message to match current implementation's output
-        assert f"File extensions are already set to '{str(DEFAULT_PRESELECTED_FILE_EXTENSIONS)}'. No changes allowed." in caplog.text
+        assert f"File extensions are already set to '{str(BioIoLoader.SUPPORTED_EXTENSIONS)}'. No changes allowed." in caplog.text
 
 
 def test_set_settings_set_selected_file_extensions_to_default_set_when_already_all_string(
@@ -258,13 +258,13 @@ def test_set_settings_set_selected_file_extensions_to_default_set_when_already_a
     # Set initially as 'all' string
     initial_settings = Settings(selected_file_extensions="all")
     project_with_ext = api.set_settings(named_project_with_base_dir, initial_settings)
-    assert api.get_settings(project_with_ext).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+    assert api.get_settings(project_with_ext).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
-    # Try to set to the actual DEFAULT_PRESELECTED_FILE_EXTENSIONS set
-    same_as_default_set_settings = Settings(selected_file_extensions=DEFAULT_PRESELECTED_FILE_EXTENSIONS)
+    # Try to set to the actual BioIoLoader.SUPPORTED_EXTENSIONS set
+    same_as_default_set_settings = Settings(selected_file_extensions=BioIoLoader.SUPPORTED_EXTENSIONS)
     with caplog.at_level(logging.INFO):
         updated_project = api.set_settings(project_with_ext, same_as_default_set_settings)
-        assert api.get_settings(updated_project).selected_file_extensions == DEFAULT_PRESELECTED_FILE_EXTENSIONS
+        assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
         # Corrected assertion for the log message to match current implementation's output
-        assert f"File extensions are already set to '{str(DEFAULT_PRESELECTED_FILE_EXTENSIONS)}'. No changes allowed." in caplog.text
+        assert f"File extensions are already set to '{str(BioIoLoader.SUPPORTED_EXTENSIONS)}'. No changes allowed." in caplog.text

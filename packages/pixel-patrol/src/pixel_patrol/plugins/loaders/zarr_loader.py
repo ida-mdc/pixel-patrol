@@ -1,7 +1,7 @@
 import logging
 import string
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import dask.array as da
 import zarr
@@ -84,7 +84,7 @@ class ZarrLoader:
 
     NAME = "zarr"
 
-    SUPPORTED_EXTENSIONS: Dict[str, Any] = ["zarr"]
+    SUPPORTED_EXTENSIONS: Set[str] = {"zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,

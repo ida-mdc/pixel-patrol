@@ -8,7 +8,7 @@ import pytest
 import tifffile
 from PIL import Image
 
-from pixel_patrol_base.config import STANDARD_DIM_ORDER
+from pixel_patrol.config import STANDARD_DIM_ORDER
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
@@ -103,7 +103,7 @@ def test_filter_paths_df_excludes_folders_and_unaccepted_extensions():
     assert result.select("path").to_series().to_list() == ["img1.jpg", "img2.png"]
 
 
-def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch):
+def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
     p1 = tmp_path / "img1.jpg"; p1.write_bytes(b"")
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
@@ -114,7 +114,7 @@ def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, mon
         return {"width": 100, "height": 200}
     monkeypatch.setattr(processing, "get_all_image_properties", fake_get_all_image_properties)
 
-    df = _get_deep_image_df(paths, "bioio")
+    df = _get_deep_image_df(paths, loader)
 
     assert isinstance(df, pl.DataFrame)
     assert set(df.columns) == {"path", "width", "height"}
@@ -182,7 +182,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         fake_get_all_image_properties
     )
 
-    df = _get_deep_image_df([p_valid, p_invalid], loader="bioio")
+    df = _get_deep_image_df([p_valid, p_invalid], loader_instance=loader)
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 1
@@ -356,7 +356,7 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
     assert actual_short == expected_full or actual_short == expected_last
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
-def test_full_images_df_computes_real_mean_intensity(tmp_path):
+def test_full_images_df_computes_real_mean_intensity(tmp_path, loader):
     # Create a directory with two 2×2 images of known values
     img_dir = tmp_path / "imgs"
     img_dir.mkdir()
@@ -373,7 +373,7 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path):
     df = build_images_df_from_file_system(
         bases=[img_dir],
         selected_extensions={"png"},
-        loader="bioio"
+        loader=loader
     )
     assert isinstance(df, pl.DataFrame)
     paths = df["path"].to_list()
@@ -386,7 +386,7 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path):
     assert mip["full.png"] == 255.0
 
 
-def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path):
+def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
 
     t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
     arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
@@ -401,7 +401,7 @@ def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path):
     df = build_images_df_from_file_system(
         bases=[tmp_path],
         selected_extensions={"tif"},
-        loader="bioio"
+        loader=loader
     )
 
     expected_cols = {
@@ -450,7 +450,7 @@ def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path):
     assert df[0,"mean_intensity"] == overall_expected
 
 
-def test_full_images_df_handles_png_gray(tmp_path):
+def test_full_images_df_handles_png_gray(tmp_path, loader):
 
     arr = np.zeros((2, 2, 3), dtype=np.uint8)
     arr[..., 0] = 10  # R
@@ -463,7 +463,7 @@ def test_full_images_df_handles_png_gray(tmp_path):
     df = build_images_df_from_file_system(
         bases=[tmp_path],
         selected_extensions={"png"},
-        loader="bioio"
+        loader=loader
     )
 
     assert "mean_intensity" in df.columns

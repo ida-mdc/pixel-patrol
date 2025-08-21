@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List, Optional, Any, Set
+from typing import List, Optional, Set
 
 from pixel_patrol_base.core.artifact import Artifact
 
@@ -28,7 +28,7 @@ def _parse_header(text: str) -> tuple[Optional[str], List[str], str]:
 class MarkdownDiaryLoader:
     NAME = "markdown-diary"
 
-    SUPPORTED_EXTENSIONS: Set[str, Any] = ["md"]
+    SUPPORTED_EXTENSIONS: Set[str] = {"md"}
 
     def load(self, source: str) -> Artifact:
         p = Path(source)
@@ -43,7 +43,7 @@ class MarkdownDiaryLoader:
         return Artifact(
             data=None,
             axes=set(),
-            kind="text",
+            kind="text/markdown",
             meta=meta,
             capabilities=set(),
         )
