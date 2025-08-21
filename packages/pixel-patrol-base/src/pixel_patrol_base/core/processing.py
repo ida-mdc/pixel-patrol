@@ -5,10 +5,11 @@ from typing import List, Optional, Dict, Set, Tuple
 
 import polars as pl
 
+from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
 from pixel_patrol_base.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes, make_basic_record
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
-from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
+from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension
 from pixel_patrol_base.utils.path_utils import find_common_base
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
@@ -105,11 +106,10 @@ def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFra
     )
 
 
-def _get_deep_image_df(paths: List[Path], loader: str) -> pl.DataFrame:
+def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
     """Loop over paths, get_all_image_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
     """
-    loader_instance = discover_loader(loader_id=loader)
     processors = discover_processor_plugins()
 
     static, patterns = merge_output_schemas(processors)
@@ -131,7 +131,7 @@ def _get_deep_image_df(paths: List[Path], loader: str) -> pl.DataFrame:
     return pl.DataFrame(rows)
 
 
-def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str], loader: str) -> Optional[pl.DataFrame]:
+def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str], loader: PixelPatrolLoader) -> Optional[pl.DataFrame]:
     """
     Extracts deep image-specific metadata for files after filtering for file extensions.
 
@@ -162,7 +162,7 @@ def build_images_df_from_paths_df(paths_df: pl.DataFrame,  extensions: Set[str],
         return basic_file_df
 
 
-def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str], loader: str) -> Optional[pl.DataFrame]:
+def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str], loader: PixelPatrolLoader) -> Optional[pl.DataFrame]:
     """
     Performs a single-pass scan over the file system to find image files,
     collect their basic file system metadata, and extract deep image-specific metadata.

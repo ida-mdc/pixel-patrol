@@ -6,7 +6,9 @@ import polars as pl
 
 from pixel_patrol_base.config import MIN_N_EXAMPLE_FILES, MAX_N_EXAMPLE_FILES
 from pixel_patrol_base.core import processing, validation
+from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.plugin_registry import discover_loader
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 
 logger = logging.getLogger(__name__)
@@ -21,14 +23,14 @@ class Project:
 
         self.base_dir = base_dir
 
-        self.loader = loader
+        self.loader = discover_loader(loader_id=loader)
 
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
         self.images_df: Optional[pl.DataFrame] = None
 
-        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader} and base dir: {self.base_dir}.")
+        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME} and base dir: {self.base_dir}.")
 
 
     @property
@@ -199,7 +201,7 @@ class Project:
         """Get the single DataFrame containing processed data."""
         return self.images_df
 
-    def get_loader(self) -> str:
+    def get_loader(self) -> PixelPatrolLoader:
         return self.loader
 
     def _set_selected_file_extensions(self, new_settings: Settings) -> None:
@@ -218,7 +220,7 @@ class Project:
             return
 
         if isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
-            new_extensions_input = DEFAULT_PRESELECTED_FILE_EXTENSIONS
+            new_extensions_input = self.loader.SUPPORTED_EXTENSIONS
             new_settings.selected_file_extensions = new_extensions_input
             logger.info(
                 f"Project Core: Selected file extensions set to 'all'. Using default preselected extensions: {new_extensions_input}.")

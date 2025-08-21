@@ -11,7 +11,6 @@ import dataclasses
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core import validation
-from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +51,7 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
             s_dict['selected_file_extensions'] = set(s_dict['selected_file_extensions'])
     except Exception as e:
         logger.warning(
-            f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}. Defaulting to preselected extensions.")
-        s_dict['selected_file_extensions'] = DEFAULT_PRESELECTED_FILE_EXTENSIONS  # Fallback
+            f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}.")
 
     # Reconstruct the Settings object
     # Filter out keys not present in Settings dataclass to avoid TypeError
