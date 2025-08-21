@@ -1,0 +1,28 @@
+[project]
+name = "markdown-diary-tracker"
+version = "0.1.0"
+description = "Example extension demonstrating the pixel patrol reporting base functionality."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pixel_patrol_base>=0.1.0",
+    "wordcloud>=1.9.4",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_pixel_patrol_extension"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+traxel_patrol_loaders = "my_pixel_patrol_extension.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+traxel_patrol_widgets = "my_pixel_patrol_extension.plugin_registry:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.widget_plugins"]
+traxel_patrol_widgets = "my_pixel_patrol_extension.plugin_registry:register_widget_plugins"
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../../packages/pixel-patrol-base" }
