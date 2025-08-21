@@ -1,128 +1,114 @@
 import logging
 import string
 from pathlib import Path
-from typing import Any, Tuple, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import dask.array as da
 import zarr
 
-from pixel_patrol_base.core.loader_interface import PixelPatrolLoader
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_base.core.artifact import artifact_from
 
 logger = logging.getLogger(__name__)
 
 
-class ZarrLoader(PixelPatrolLoader):
+def _load_zarr_array(path: Path) -> Optional[da.Array]:
+    """Load a Zarr array as a Dask array, or return None on failure."""
+    try:
+        data = da.from_zarr(str(path))
+        logger.info(f"Successfully loaded '{path}' as a Zarr array.")
+        return data
+    except Exception as e:
+        logger.warning(f"Could not load '{path}' as a Zarr array: {e}")
+        return None
+
+
+def _infer_dim_order(shape: tuple[int, ...]) -> str:
     """
-    A PixelPatrolLoader implementation for loading N-dimensional Zarr arrays.
-    It assumes the last dimension is 'x' and the second to last is 'z'.
+    Infer a simple dim order assuming the last two dims are YX.
+    Preceding dims are assigned A,B,C,... in order.
+    """
+    n = len(shape)
+    if n <= 2:
+        return ("YX"[-n:])  # n==0 -> "", n==1 -> "X", n==2 -> "YX"
+    return string.ascii_uppercase[: n - 2] + "YX"
+
+
+def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
+    """
+    Build a flat metadata dict from a zarr-backed dask array and its container.
+    """
+    meta: Dict[str, Any] = {}
+    meta["shape"] = tuple(int(s) for s in arr.shape)
+    meta["dtype"] = str(arr.dtype)
+    meta["n_dimensions"] = arr.ndim
+
+    # chunksize may be missing for irregular chunks; fall back to .chunks
+    chunks = getattr(arr, "chunksize", None)
+    meta["chunks"] = chunks if chunks is not None else arr.chunks
+
+    # Infer dim order and per-dimension sizes
+    dim_order = _infer_dim_order(arr.shape)
+    meta["dim_order"] = dim_order
+    for i, name in enumerate(dim_order):
+        meta[f"{name}_size"] = int(arr.shape[i])
+
+    # Zarr generally represents a single "image"
+    meta["n_images"] = 1
+    meta["channel_names"] = []
+
+    # Read zarr attributes (array or group)
+    try:
+        root = zarr.open(str(path), mode="r")
+        if isinstance(root, zarr.Array):
+            meta["zarr_attributes"] = dict(root.attrs)
+        elif isinstance(root, zarr.Group):
+            attrs = dict(root.attrs)
+            # Common conventions: arrays named "data" or "0" (multiscales)
+            for name, item in list(root.arrays()):
+                if name in ("data", "0"):
+                    attrs.update(dict(item.attrs))
+                    break
+            meta["zarr_attributes"] = attrs
+    except Exception as e:
+        logger.warning(f"Could not read Zarr attributes from '{path}': {e}")
+
+    return meta
+
+
+class ZarrLoader:
+    """
+    Loader that produces an Artifact from Zarr (or OME-Zarr via BioIO fallback).
+    Protocol: single `load()` returning an Artifact.
     """
 
-    @staticmethod
-    def id() -> str:
-        return "zarr"
+    NAME = "zarr"
 
-    def _load_zarr_array(self, path: Path) -> Optional[da.Array]:
-        """Helper to load a Zarr array as a Dask array."""
-        try:
-            # Use dask.array.from_zarr to get a Dask array directly
-            data = da.from_zarr(str(path))
-            logger.info(f"Successfully loaded '{path}' as a Zarr array.")
-            return data
-        except Exception as e:
-            logger.warning(f"Could not load '{path}' as a Zarr array: {e}")
-            return None
+    # ---- Declarative table schema (no methods) ----
+    OUTPUT_SCHEMA: Dict[str, Any] = {
+        "dim_order": str,
+        "n_images": int,
+        "channel_names": list,
+        "dtype": str,
+        "zarr_attributes": dict,
+    }
+    OUTPUT_SCHEMA_PATTERNS = [
+        (r"^[A-Za-z]_size$", int),
+    ]
 
-    def read_metadata(self, path: Path) -> Dict[str, Any]:
-        """
-        Reads metadata from a Zarr array.
-        Assumes the last dimension is 'x' and the second to last is 'z'.
-        """
+    def load(self, source: str):
+        path = Path(source)
 
         try:
-            # try bioio first in case of ome zarr
-            metadata = BioIoLoader().read_metadata(path)
-            logger.error("metadata from bioio: " + metadata)
-            if metadata is {}:
-                metadata, zarr_array = self._load_parse_zarr(path)
-                return metadata
+            bio_art = BioIoLoader().load(str(path))
+            return bio_art
         except Exception:
-            logger.error("exception in bioio")
-            metadata, zarr_array = self._load_parse_zarr(path)
-            return metadata
+            # fall back to raw zarr loading
+            pass
 
-    def _load_parse_zarr(self, path: Path):
-        zarr_array = self._load_zarr_array(path)
-        if zarr_array is None:
-            logger.error("cant read zarr array")
-            return {}
+        arr = _load_zarr_array(path)
+        if arr is None:
+            raise RuntimeError(f"Cannot read Zarr array at: {source}")
 
-        metadata: Dict[str, Any] = {
-            "shape": zarr_array.shape,
-            "dtype": str(zarr_array.dtype),
-            "n_dimensions": zarr_array.ndim,
-            "chunks": zarr_array.chunksize,
-            "dim_order": string.ascii_uppercase[:len(zarr_array.shape) - 2] + "YX"
-        }
-
-        # Basic array properties
-
-        # Inferring dim_order based on the 'x' and 'z' assumption
-        for i, name in enumerate(metadata["dim_order"]):
-            metadata[name + "_size"] = zarr_array.shape[i]
-
-        # Zarr arrays don't have inherent concepts of 'scenes', 'channel_names', or 'physical_pixel_sizes'
-        # unless stored as custom attributes. We can add a placeholder or rely on user-defined attributes.
-        metadata["n_images"] = 1  # Zarr typically represents a single array/image
-        metadata["channel_names"] = []  # No direct equivalent in Zarr by default
-
-        # You can also include any user-defined attributes stored in the Zarr array
-        try:
-            root_group = zarr.open(str(path), mode='r')
-            if isinstance(root_group, zarr.Array):
-                metadata["zarr_attributes"] = dict(root_group.attrs)
-            elif isinstance(root_group, zarr.Group):
-                # If it's a group, you might need to specify which array to load,
-                # or iterate through arrays in the group.
-                # For simplicity, this example assumes a direct array at the path.
-                # If your Zarrs are always groups, you'll need to extend this.
-                metadata["zarr_attributes"] = dict(root_group.attrs)  # Group attributes
-                for name, item in root_group.arrays():
-                    if name == "data":  # Common convention for the actual data array
-                        metadata["zarr_attributes"].update(dict(item.attrs))
-                        break
-        except Exception as e:
-            logger.warning(f"Could not read Zarr attributes from '{path}': {e}")
-        return metadata, zarr_array
-
-    def read_metadata_and_data(self, path: Path) -> Tuple[Dict[str, Any], da.Array]:
-        """
-        Reads metadata and the Dask array data from a Zarr array.
-        Assumes the last dimension is 'x' and the second to last is 'z'.
-        """
-        try:
-            # try bioio first in case of ome zarr
-            metadata = BioIoLoader().read_metadata(path)
-            logger.error("metadata from bioio: " + metadata)
-            if metadata is {}:
-                return self._load_parse_zarr(path)
-        except Exception:
-            logger.error("exception in bioio")
-            return self._load_parse_zarr(path)
-
-    def get_specification(self) -> Dict[str, Any]:
-        """
-        Defines the expected Polars data types for the output of this processor.
-        """
-        return {
-            'dim_order': str,
-            'n_images': int,
-            'channel_names': list,
-            'dtype': str,
-            'zarr_attributes': dict,
-        }
-
-    def get_dynamic_specification_patterns(self) -> List[Tuple[str, Any]]:
-        return [
-            (r'^[a-zA-Z]_size$', int)
-        ]
+        meta = _extract_zarr_metadata(arr, path)
+        return artifact_from(arr, meta, kind="intensity")

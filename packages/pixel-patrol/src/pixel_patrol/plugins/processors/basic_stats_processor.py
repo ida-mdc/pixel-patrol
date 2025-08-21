@@ -1,11 +1,11 @@
 import logging
-from typing import Dict, Callable, Any, Tuple, List
+from typing import Dict, Callable
 
 import dask.array as da
 import numpy as np
 
-from pixel_patrol_base.core.image_operations_and_metadata import calculate_sliced_stats
-from pixel_patrol_base.core.processor_interface import PixelPatrolProcessor
+from pixel_patrol.plugins.array_slicing import calculate_sliced_stats
+from pixel_patrol_base.core.specs import ArtifactSpec
 
 logger = logging.getLogger(__name__)
 
@@ -23,27 +23,16 @@ def calculate_np_array_stats(array: da.array, dim_order: str) -> dict[str, float
     all_aggregators = {k: v['agg'] for k, v in registry.items() if v['agg'] is not None}
     return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
 
-class BasicStatsProcessor(PixelPatrolProcessor):
+class BasicStatsProcessor:
+    NAME = "basic-stats"
+    INPUT = ArtifactSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+    OUTPUT = "features"
 
-    @property
-    def name(self) -> str:
-        return type(self).__name__
+    OUTPUT_SCHEMA = {name: float for name in _column_fn_registry().keys()}
+    OUTPUT_SCHEMA_PATTERNS = [(rf"^(?:{name})_[a-zA-Z]\d+(_[a-zA-Z]\d+)*$", float) for name in _column_fn_registry().keys()]
 
-    @property
-    def description(self) -> str:
-        return "Extracts basic image statistics such as mean, min, max."
+    DESCRIPTION = "Extracts basic image statistics such as mean, min, max."
 
-    def process(self, data: da.array, dim_order: str) -> dict:
-        return calculate_np_array_stats(data, dim_order)
-
-    def get_specification(self) -> Dict[str, Any]:
-        res = {}
-        for name in _column_fn_registry().keys():
-            res[name] = float
-        return res
-
-    def get_dynamic_specification_patterns(self) -> List[Tuple[str, Any]]:
-        res = []
-        for name in _column_fn_registry().keys():
-            res.append((rf"^(?:{name})_[a-zA-Z]\d+(_[a-zA-Z]\d+)*$", float))
-        return res
+    def run(self, art):
+        dim_order = art.meta.get("dim_order", "")
+        return calculate_np_array_stats(art.data, dim_order)

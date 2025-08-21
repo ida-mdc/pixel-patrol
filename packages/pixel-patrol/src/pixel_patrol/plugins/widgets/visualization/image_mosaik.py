@@ -1,5 +1,4 @@
-import re
-from typing import List, Dict
+from typing import List, Dict, Set
 
 import numpy as np
 import plotly.express as px
@@ -9,202 +8,189 @@ from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.utils import get_sortable_columns
 from pixel_patrol_base.report.widget_categories import WidgetCategories
-from pixel_patrol_base.report.widget_interface import PixelPatrolWidget
 
-# Assume SPRITE_SIZE is defined or imported globally
 SPRITE_SIZE = 32
 
 
-def _create_sprite_image(df: pl.DataFrame, color_map: Dict[str, str], border: bool = False, border_size: int = 0):
+def _create_sprite_image(
+    df: pl.DataFrame,
+    color_map: Dict[str, str],
+    border: bool = False,
+    border_size: int = 0,
+):
     """
-    Creates a sprite image from 'thumbnail' data in a Polars DataFrame,
-    with an optional border colored by 'imported_path_short' using color_map.
-    Assumes 'thumbnail' and 'imported_path_short' columns exist.
+    Create a sprite image from 'thumbnail' cells, optionally adding a border
+    colored by 'imported_path_short' using color_map.
     """
     try:
         from PIL import Image
 
         if "thumbnail" not in df.columns or df.get_column("thumbnail").is_empty():
-            return Image.new('RGBA', (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))  # Transparent if no thumbnails
+            return Image.new("RGBA", (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
 
         image_list = df.get_column("thumbnail").to_list()
-        folder_list = df.get_column("imported_path_short").to_list()  # Get folder names for color lookup
+        folder_list = df.get_column("imported_path_short").to_list()
 
         processed_images = []
-
         for i, img_data in enumerate(image_list):
             if img_data is None:
                 continue
 
-            # Get the folder for the current image
             folder_name = folder_list[i]
-            # Get border color from the color_map, with a fallback
-            # Convert hex string color (e.g., '#RRGGBB') to RGB tuple (e.g., (R,G,B))
-            hex_color = color_map.get(folder_name, '#FFFFFF')  # Default to white if not in map
+            hex_color = color_map.get(folder_name, "#FFFFFF")
             border_rgb = tuple(int(hex_color[j:j + 2], 16) for j in (1, 3, 5))
 
+            from PIL import Image  # ensure available inside loop
             if isinstance(img_data, Image.Image):
                 img = img_data
             else:
-                img_data = np.array(img_data)
-                if img_data.dtype == np.float32 or img_data.dtype == np.float64:
-                    img_data = (img_data * 255).astype(np.uint8)
-                elif img_data.dtype != np.uint8:
-                    img_data = img_data.astype(np.uint8)
-                img = Image.fromarray(img_data)
+                arr = np.array(img_data)
+                if arr.dtype in (np.float32, np.float64):
+                    arr = (arr * 255).astype(np.uint8)
+                elif arr.dtype != np.uint8:
+                    arr = arr.astype(np.uint8)
+                img = Image.fromarray(arr)
 
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-            resized_img = img.resize((SPRITE_SIZE, SPRITE_SIZE))
-
+            resized = img.resize((SPRITE_SIZE, SPRITE_SIZE))
             if border and border_size > 0:
-                bordered_img = Image.new('RGB', (SPRITE_SIZE + 2 * border_size, SPRITE_SIZE + 2 * border_size),
-                                         border_rgb)
-                bordered_img.paste(resized_img, (border_size, border_size))
-                processed_images.append(bordered_img)
+                bordered = Image.new(
+                    "RGB",
+                    (SPRITE_SIZE + 2 * border_size, SPRITE_SIZE + 2 * border_size),
+                    border_rgb,
+                )
+                bordered.paste(resized, (border_size, border_size))
+                processed_images.append(bordered)
             else:
-                processed_images.append(resized_img)
+                processed_images.append(resized)
 
         if not processed_images:
-            return Image.new('RGBA', (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
+            return Image.new("RGBA", (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
 
-        num_images = len(processed_images)
-        images_per_row = int(np.ceil(np.sqrt(num_images)))
+        n = len(processed_images)
+        per_row = int(np.ceil(np.sqrt(n)))
+        effective_dim = SPRITE_SIZE + (2 * border_size if border else 0)
 
-        effective_sprite_dim = SPRITE_SIZE + (2 * border_size if border else 0)
+        width = per_row * effective_dim
+        height = int(np.ceil(n / per_row)) * effective_dim
 
-        sprite_width = images_per_row * effective_sprite_dim
-        sprite_height = int(np.ceil(num_images / images_per_row)) * effective_sprite_dim
-
-        sprite_image = Image.new('RGBA', (sprite_width, sprite_height), (0, 0, 0, 0))
-
+        sprite = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         for i, img in enumerate(processed_images):
-            row = i // images_per_row
-            col = i % images_per_row
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
-            sprite_image.paste(img, (col * effective_sprite_dim, row * effective_sprite_dim))
-
-        return sprite_image
+            r, c = divmod(i, per_row)
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            sprite.paste(img, (c * effective_dim, r * effective_dim))
+        return sprite
     except ImportError:
         print("PIL (Pillow) not installed. Cannot generate sprite image.")
-        return Image.new('RGBA', (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))  # Transparent placeholder
+        from PIL import Image  # type: ignore  # will still fail if truly not installed
+        return Image.new("RGBA", (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
 
 
-class ImageMosaikWidget(PixelPatrolWidget):
+class ImageMosaikWidget:
+    # ---- Declarative spec ----
+    NAME: str = "Image Mosaic"
+    TAB: str = WidgetCategories.VISUALIZATION.value
+    REQUIRES: Set[str] = {"thumbnail", "imported_path_short", "name"}
+    REQUIRES_PATTERNS = None
 
-    @property
-    def tab(self) -> str:
-        return WidgetCategories.VISUALIZATION.value
+    # Component IDs
+    INTRO_ID = "mosaic-intro"
+    SORT_ID = "mosaic-sort-column-dropdown"
+    GRAPH_ID = "image-mosaic-graph"
 
-    @property
-    def name(self) -> str:
-        return "Image Mosaic"
-
-    def required_columns(self) -> List[str]:
-        return ["thumbnail"]
-
-    def layout(self) -> List: # Removed df parameter
+    def layout(self) -> List:
         """Defines the layout of the Image Mosaic widget."""
         return [
-            html.Div(id="mosaic-intro", children=[
-                html.P(
-                    "The little pictures printed here are 2D representations of each file in the selected folders. They are generated by picking the center slice of all dimensions other than X and Y and scaling them into a square, so they do not represent the images accurately. It allows gaining quick access over the dataset though, and sorting it by any of the existing measurement points (like min or mean) empowers us to visualize relations between images easier."),
-            ]),
-            html.Div([
-                html.Label("Sort mosaic by:"),
-                dcc.Dropdown(
-                    id="mosaic-sort-column-dropdown",
-                    options=[], # Options will be populated by callback
-                    value=None, # Default value will be set by callback
-                    clearable=False,
-                    style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"}
-                )
-            ]),
-            dcc.Graph(id="image-mosaic-graph", style={"height": "auto", "width": "100%"})
+            html.Div(
+                id=self.INTRO_ID,
+                children=[
+                    html.P(
+                        "The little pictures printed here are 2D representations of each file in the selected folders. "
+                        "They are generated by picking the center slice of all dimensions other than X and Y and scaling them into a square, "
+                        "so they do not represent the images accurately. It allows quick visual browsing of the dataset; "
+                        "sorting by existing measurements (e.g., min or mean) can help reveal relations between images."
+                    ),
+                ],
+            ),
+            html.Div(
+                [
+                    html.Label("Sort mosaic by:"),
+                    dcc.Dropdown(
+                        id=self.SORT_ID,
+                        options=[],   # populated by callback
+                        value=None,   # default set by callback
+                        clearable=False,
+                        style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"},
+                    ),
+                ]
+            ),
+            dcc.Graph(id=self.GRAPH_ID, style={"height": "auto", "width": "100%"}),
         ]
 
-    def register_callbacks(self, app, df_global: pl.DataFrame):
+    def register(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the Image Mosaic widget."""
 
-        # NEW CALLBACK to populate the sort column dropdown
+        # Populate the sort column dropdown
         @app.callback(
-            Output("mosaic-sort-column-dropdown", "options"),
-            Output("mosaic-sort-column-dropdown", "value"),
-            Input("color-map-store", "data"), # Use an existing input to trigger on initial load
-            prevent_initial_call=False # Allow this callback to run on initial load
+            Output(self.SORT_ID, "options"),
+            Output(self.SORT_ID, "value"),
+            Input("color-map-store", "data"),  # trigger on initial load
+            prevent_initial_call=False,
         )
-        def set_mosaic_sort_options(color_map: Dict[str, str]):
+        def set_mosaic_sort_options(_color_map: Dict[str, str]):
             sortable_columns = get_sortable_columns(df_global)
-            dropdown_options = [{'label': col, 'value': col} for col in sortable_columns]
-            default_sort_column = 'name' if 'name' in sortable_columns else (
-                sortable_columns[0] if sortable_columns else None)
-            return dropdown_options, default_sort_column
+            options = [{"label": col, "value": col} for col in sortable_columns]
+            default = "name" if "name" in sortable_columns else (sortable_columns[0] if sortable_columns else None)
+            return options, default
 
+        # Render mosaic
         @app.callback(
-            Output("image-mosaic-graph", "figure"),
-            Input("color-map-store", "data"),  # Input for folder colors
-            Input("mosaic-sort-column-dropdown", "value")  # Input for the selected sort column
+            Output(self.GRAPH_ID, "figure"),
+            Input("color-map-store", "data"),
+            Input(self.SORT_ID, "value"),
         )
         def update_image_mosaic(color_map: Dict[str, str], sort_column: str):
-            # --- Data Preprocessing (all in Polars) ---
-            # Only include rows with a thumbnail and process imported_path_short
-            processed_df = df_global.filter(
-                pl.col("thumbnail").is_not_null()
-            )
+            color_map = color_map or {}
 
-            # Apply sorting if a column is selected and exists in the DataFrame
-            files_dataframe_sorted = processed_df
-            if sort_column and sort_column in processed_df.columns:
-                files_dataframe_sorted = processed_df.sort(sort_column)
+            # Only include rows with a thumbnail
+            df = df_global.filter(pl.col("thumbnail").is_not_null())
 
-            # Create the mosaic image, passing the color_map
-            mosaic_image_pil = _create_sprite_image(files_dataframe_sorted, color_map, border=True, border_size=2)
+            # Optional sorting
+            if sort_column and sort_column in df.columns:
+                df = df.sort(sort_column)
 
-            # Convert PIL Image to NumPy array for Plotly
-            mosaic_image_np = np.array(mosaic_image_pil)
+            # Build mosaic
+            mosaic_pil = _create_sprite_image(df, color_map, border=True, border_size=2)
+            mosaic_np = np.array(mosaic_pil)
 
-            # Create the main image plot
-            fig = px.imshow(mosaic_image_np)
+            fig = px.imshow(mosaic_np)
 
-            # Create dummy traces for the legend (to display folder colors)
-            unique_folders_df = files_dataframe_sorted.select("imported_path_short").unique()
-            unique_folder_labels = unique_folders_df.get_column("imported_path_short").to_list()
-
-            dummy_traces = [
-                go.Scatter(
-                    x=[None],
-                    y=[None],
-                    mode='markers',
-                    marker=dict(size=10, color=color_map.get(label, '#333333')),  # Use color from map, with fallback
-                    name=label,
-                    showlegend=True
+            # Add dummy legend traces (folder colors)
+            unique_folders = df.select("imported_path_short").unique().get_column("imported_path_short").to_list()
+            for label in unique_folders:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None],
+                        y=[None],
+                        mode="markers",
+                        marker=dict(size=10, color=color_map.get(label, "#333333")),
+                        name=label,
+                        showlegend=True,
+                    )
                 )
-                for label in unique_folder_labels
-            ]
 
-            # Add dummy traces to the figure
-            for trace in dummy_traces:
-                fig.add_trace(trace)
-
-            # Update layout for image display
             fig.update_layout(
                 autosize=True,
-                height=min(1000, mosaic_image_pil.height + 50),
+                height=min(1000, mosaic_pil.height + 50),
                 xaxis=dict(visible=False, showticklabels=False),
                 yaxis=dict(visible=False, showticklabels=False),
                 margin=dict(l=0, r=0, t=0, b=0),
                 hovermode=False,
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.05,
-                    xanchor="center",
-                    x=0.5
-                )
+                legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5),
             )
-
-            fig.update_traces(hovertemplate=None, selector=dict(type='image'))
+            fig.update_traces(hovertemplate=None, selector=dict(type="image"))
 
             return fig

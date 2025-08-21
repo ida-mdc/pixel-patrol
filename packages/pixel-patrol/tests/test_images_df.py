@@ -23,15 +23,14 @@ from pixel_patrol_base.core.processing import (
 )
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
-
-@pytest.fixture(scope="module")
+@pytest.fixture
 def loader():
-    """Define a set of all available image properties we expect to extract."""
+    """Provides a fresh BioIoLoader for each test function."""
     return BioIoLoader()
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def processors():
-    """Define a set of all available image properties we expect to extract."""
+    """Provides a fresh list of processor plugins for each test function."""
     return discover_processor_plugins()
 
 def test_build_images_df_from_paths_df_empty(mock_empty_paths_df):
@@ -110,13 +109,12 @@ def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, mon
     paths = [p1, p2]
     required_cols = ["width", "height"]
 
-    def fake_get_all_image_properties(_path, read_pixel_data, loader, processors):
-        assert loader.id() == "bioio"
-        assert read_pixel_data == True
+    def fake_get_all_image_properties(_path, loader, processors):
+        assert loader.NAME == "bioio"
         return {"width": 100, "height": 200}
     monkeypatch.setattr(processing, "get_all_image_properties", fake_get_all_image_properties)
 
-    df = _get_deep_image_df(paths, "bioio", read_pixel_data=True)
+    df = _get_deep_image_df(paths, "bioio")
 
     assert isinstance(df, pl.DataFrame)
     assert set(df.columns) == {"path", "width", "height"}
@@ -127,14 +125,14 @@ def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, mon
 
 def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, loader, processors):
     missing = tmp_path / "no.png"
-    assert get_all_image_properties(missing, read_pixel_data=True, loader=loader, processors=processors) == {}
+    assert get_all_image_properties(missing, loader=loader, processors=processors) == {}
 
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
     monkeypatch.setattr("pixel_patrol.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert get_all_image_properties(img_file, read_pixel_data=True, loader=loader, processors=processors) == {}
+    assert get_all_image_properties(img_file, loader=loader, processors=processors) == {}
 
 
 class DummyImg:
@@ -142,6 +140,7 @@ class DummyImg:
     physical_pixel_sizes = type("PS", (), {"X": 0.5, "Y": 0.75, "Z": None, "T": None})()
     channel_names = ["ch1", "ch2"]
     ome_metadata = {}
+    dask_data = None
     shape = tuple(
         2 if d in ("Y", "X") else 1
         for d in STANDARD_DIM_ORDER
@@ -158,7 +157,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         lambda p: DummyImg()
     )
     props = get_all_image_properties(
-        img_file, read_pixel_data=False, loader=loader, processors=processors
+        img_file, loader=loader, processors=[]
     )
     expected_shape = [
         2 if d in ("Y", "X") else 1
@@ -175,7 +174,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_valid = tmp_path / "valid.jpg"; p_valid.write_bytes(b"")
     p_invalid = tmp_path / "invalid.png"; p_invalid.write_bytes(b"")
 
-    def fake_get_all_image_properties(path, _read_pixels, _loader, _processors):
+    def fake_get_all_image_properties(path, _loader, _processors):
         return {"width": 10, "height": 20} if path == p_valid else {}
 
     monkeypatch.setattr(
@@ -183,7 +182,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         fake_get_all_image_properties
     )
 
-    df = _get_deep_image_df([p_valid, p_invalid], loader="bioio", read_pixel_data=True)
+    df = _get_deep_image_df([p_valid, p_invalid], loader="bioio")
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 1
