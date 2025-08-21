@@ -84,7 +84,8 @@ class ZarrLoader:
 
     NAME = "zarr"
 
-    # ---- Declarative table schema (no methods) ----
+    SUPPORTED_EXTENSIONS: Dict[str, Any] = ["zarr"]
+
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
         "n_images": int,
@@ -92,6 +93,7 @@ class ZarrLoader:
         "dtype": str,
         "zarr_attributes": dict,
     }
+
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^[A-Za-z]_size$", int),
     ]

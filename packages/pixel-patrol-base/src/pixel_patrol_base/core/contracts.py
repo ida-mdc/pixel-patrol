@@ -9,6 +9,7 @@ ProcessResult = Union[dict, Artifact]
 
 class PixelPatrolLoader(Protocol):
     NAME: str
+    SUPPORTED_EXTENSIONS: Set[str]
     OUTPUT_SCHEMA: Dict[str, Any]
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]]
     def load(self, source: str) -> Artifact: ...

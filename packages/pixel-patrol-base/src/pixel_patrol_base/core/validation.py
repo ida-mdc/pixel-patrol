@@ -3,7 +3,6 @@ import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Union, Optional, Tuple, Set
-from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -87,12 +86,12 @@ def validate_paths_type(paths):
         raise TypeError("Paths must be a string, Path, or an iterable of strings/Paths.")
 
 
-def validate_and_filter_extensions(extensions: Set[str]) -> Set[str]:
+def validate_and_filter_extensions(extensions: Set[str], supported_extensions: Set[str]) -> Set[str]:
     """
     Helper method to filter user-provided extensions against supported ones
     and log warnings for unsupported extensions.
     """
-    supported_extensions = extensions.intersection(DEFAULT_PRESELECTED_FILE_EXTENSIONS)
+    supported_extensions = extensions.intersection(supported_extensions)
     unsupported_extensions = extensions - supported_extensions
 
     if unsupported_extensions:

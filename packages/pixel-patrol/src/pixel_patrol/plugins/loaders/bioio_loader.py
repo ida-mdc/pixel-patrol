@@ -79,8 +79,8 @@ class BioIoLoader:
 
     NAME = "bioio"
 
-    # ---- Declarative table schema (no methods) ----
-    # Static columns: name -> python/polars type
+    SUPPORTED_EXTENSIONS: Dict[str, Any] = ["czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"]
+
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
         "n_images": int,
@@ -91,7 +91,6 @@ class BioIoLoader:
         "dtype": str,
     }
 
-    # Dynamic columns: regex -> type
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = [
         (r"^pixel_size_[A-Za-z]$", float),
         (r"^[A-Za-z]_size$", int),
