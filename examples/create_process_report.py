@@ -12,7 +12,6 @@ from pixel_patrol_base.api import (
 from pixel_patrol_base.core.project_settings import Settings
 
 # --- Configure Logging ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Main Execution ---
