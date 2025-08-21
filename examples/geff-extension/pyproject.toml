@@ -1,0 +1,32 @@
+[project]
+name = "traxel-patrol"
+version = "0.1.0"
+description = "Tracking prevalidation tool for GEFF and traccuracy"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pixel_patrol_base>=0.1.0",
+    "traccuracy>=0.3.0",
+    "geff>=0.4.1",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/traxel_patrol"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+traxel_patrol_loaders = "traxel_patrol.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.widget_plugins"]
+traxel_patrol_widgets = "traxel_patrol.plugin_registry:register_widget_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../../packages/pixel-patrol-base" }
