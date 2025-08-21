@@ -1,14 +1,13 @@
+import logging
 from pathlib import Path
 from typing import List, Union, Iterable, Optional, Set
-import logging
 
-from pixel_patrol_base.core.project_settings import Settings
-from  pixel_patrol_base.core import processing, validation
 import polars as pl
 
-from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 from pixel_patrol_base.config import DEFAULT_PRESELECTED_FILE_EXTENSIONS, MIN_N_EXAMPLE_IMAGES, MAX_N_EXAMPLE_IMAGES
-
+from pixel_patrol_base.core import processing, validation
+from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 
 logger = logging.getLogger(__name__)
 

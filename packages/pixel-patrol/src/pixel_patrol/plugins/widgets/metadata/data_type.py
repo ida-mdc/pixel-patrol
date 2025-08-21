@@ -1,111 +1,93 @@
-from typing import List, Dict
-from dash import html, dcc, Input, Output
-import polars as pl
-import os
-import plotly.express as px
+from typing import List, Dict, Set
 
-from pixel_patrol_base.report.widget_interface import PixelPatrolWidget
+import plotly.express as px
+import polars as pl
+from dash import html, dcc, Input, Output
+
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
-class DataTypeWidget(PixelPatrolWidget):
+class DataTypeWidget:
+    # ---- Declarative spec ----
+    NAME: str = "Data Type Distribution"
+    TAB: str = WidgetCategories.METADATA.value
+    REQUIRES: Set[str] = {"dtype", "imported_path_short", "name"}  # all used below
+    REQUIRES_PATTERNS = None
 
-    @property
-    def tab(self) -> str:
-        return WidgetCategories.METADATA.value
-
-    @property
-    def name(self) -> str:
-        return "Data Type Distribution"
-
-    def required_columns(self) -> List[str]:
-        # Only these columns are strictly needed for the simplified plot
-        return ["dtype"]
+    # Component IDs
+    RATIO_ID = "dtype-present-ratio"
+    GRAPH_ID = "data-type-bar-chart"
 
     def layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""
         return [
-            html.Div(id="dtype-present-ratio", style={"marginBottom": "15px"}),
-            dcc.Graph(id="data-type-bar-chart", style={"height": "500px"})
+            html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
+            dcc.Graph(id=self.GRAPH_ID, style={"height": "500px"}),
         ]
 
-    def register_callbacks(self, app, df_global: pl.DataFrame):
+    def register(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the Data Type Distribution widget."""
         @app.callback(
-            Output("data-type-bar-chart", "figure"),
-            Output("dtype-present-ratio", "children"),
-            Input("color-map-store", "data"), # Input for colors
+            Output(self.GRAPH_ID, "figure"),
+            Output(self.RATIO_ID, "children"),
+            Input("color-map-store", "data"),
         )
         def update_data_type_chart(color_map: Dict[str, str]):
-            # --- Data Preprocessing (all in Polars) ---
+            color_map = color_map or {}
 
-            # Prepare data: extract short folder name, filter null dtypes, add 'value' for counting
-            processed_df = df_global.with_columns([
-                pl.lit(1).alias("value_count") # Add a column for counting
-            ]).filter(pl.col("dtype").is_not_null()) # Filter out rows with null dtype
+            # Prepare data: count only rows with dtype present
+            processed_df = (
+                df_global
+                .with_columns(pl.lit(1).alias("value_count"))
+                .filter(pl.col("dtype").is_not_null())
+            )
 
-            # Calculate ratio of files with 'Data Type' information
+            # Ratio text
             dtype_present_count = processed_df.height
             total_files = df_global.height
-            dtype_ratio_text = (
-                f"{dtype_present_count} of {total_files} files ({((dtype_present_count / total_files) * 100):.2f}%) have 'Data Type' information."
-                if total_files > 0 else "No files to display data type information."
+            if total_files > 0:
+                dtype_ratio_text = (
+                    f"{dtype_present_count} of {total_files} files "
+                    f"({(dtype_present_count / total_files) * 100:.2f}%) have 'Data Type' information."
+                )
+            else:
+                dtype_ratio_text = "No files to display data type information."
+
+            # Aggregate counts per (dtype, folder) and collect file names for hover
+            plot_data_agg = (
+                processed_df
+                .group_by(["dtype", "imported_path_short"])
+                .agg(
+                    pl.sum("value_count").alias("count"),
+                    pl.col("name").unique().alias("names_in_group"),
+                )
+                .sort(["dtype", "imported_path_short"])
             )
 
-            # Aggregate data for the bar chart: count occurrences of (dtype, folder)
-            plot_data_agg = processed_df.group_by(
-                ["dtype", "imported_path_short"]
-            ).agg(
-                pl.sum("value_count").alias("count"), # Sum the 'value_count'
-                pl.col("name").unique().alias("names_in_group") # Collect names for hover
-            ).sort(
-                ["dtype", "imported_path_short"]
-            )
-
-            # Add the 'color' column to the aggregated Polars DataFrame by mapping
-            plot_data_agg = plot_data_agg.with_columns(
-                pl.col("imported_path_short").map_elements(
-                    lambda f: color_map.get(f, '#333333'), # Fallback color
-                    return_dtype=pl.String
-                ).alias("color")
-            )
-
-            # --- Plotting using plotly.express ---
+            # Plot
             fig = px.bar(
-                plot_data_agg, # Pass Polars DataFrame directly
-                x='dtype',
-                y='count', # Use the aggregated 'count' column
-                color='imported_path_short', # Color by folder
-                barmode='stack', # Default to stacked bars for simplicity
-                color_discrete_map=color_map, # Apply the provided color map
+                plot_data_agg,
+                x="dtype",
+                y="count",
+                color="imported_path_short",
+                barmode="stack",
+                color_discrete_map=color_map,
                 title="Data Type Distribution",
                 labels={
-                    'dtype': "Data Type",
-                    'count': "Number of Files",
-                    'imported_path_short': 'Folder'
+                    "dtype": "Data Type",
+                    "count": "Number of Files",
+                    "imported_path_short": "Folder",
                 },
-                # Hover data: display folder, count, and names in group
-                hover_data=['imported_path_short', 'count', 'names_in_group']
+                hover_data=["imported_path_short", "count", "names_in_group"],
             )
-
-            fig.update_traces(
-                marker_line_color="white",
-                marker_line_width=0.5,
-                opacity=1,
-            )
+            fig.update_traces(marker_line_color="white", marker_line_width=0.5, opacity=1)
             fig.update_layout(
                 height=500,
                 margin=dict(l=50, r=50, t=80, b=100),
-                hovermode='closest',
+                hovermode="closest",
                 bargap=0.1,
                 bargroupgap=0.05,
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.2,
-                    xanchor="center",
-                    x=0.5
-                )
+                legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
             )
 
             return fig, dtype_ratio_text

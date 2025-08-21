@@ -1,25 +1,22 @@
-from typing import List
+# pixel_patrol/plugins/widgets/dynamic_stats_widget.py
+from typing import List, Set
 
 from pixel_patrol.plugins.base_dynamic_table_widget import BaseDynamicTableWidget
 from pixel_patrol.plugins.processors.basic_stats_processor import BasicStatsProcessor
-from pixel_patrol_base.core.spec_provider import get_requirements_as_patterns
+from pixel_patrol_base.core.feature_schema import patterns_from_processor
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
 class DynamicStatsWidget(BaseDynamicTableWidget):
+    NAME: str = "Basic Dynamic Statistics"
+    TAB: str = WidgetCategories.DATASET_STATS.value
+
+    # No fixed columns; we require whatever dynamic columns the processor emits.
+    REQUIRES: Set[str] = set()
+    REQUIRES_PATTERNS: List[str] = patterns_from_processor(BasicStatsProcessor)
+
     def __init__(self):
-        super().__init__(widget_id='basic-stats')
-
-    @property
-    def tab(self) -> str:
-        return WidgetCategories.DATASET_STATS.value
-
-    @property
-    def name(self) -> str:
-        return "Basic Dynamic Statistics"
-
-    def required_columns(self) -> List[str]:
-        return get_requirements_as_patterns(BasicStatsProcessor())
+        super().__init__(widget_id="basic-stats")
 
     def get_supported_metrics(self) -> List[str]:
-        return list(BasicStatsProcessor().get_specification().keys())
+        return list(getattr(BasicStatsProcessor, "OUTPUT_SCHEMA", {}).keys())

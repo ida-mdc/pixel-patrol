@@ -1,9 +1,7 @@
 import importlib
 from typing import Type, Union, List
 
-from pixel_patrol_base.core.loader_interface import PixelPatrolLoader
-from pixel_patrol_base.core.processor_interface import PixelPatrolProcessor
-from pixel_patrol_base.report.widget_interface import PixelPatrolWidget
+from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
 from pixel_patrol_base.plugins.widgets.file_stats.file_stats import FileStatisticsWidget
 from pixel_patrol_base.plugins.widgets.summary.dataframe import DataFrameWidget
 from pixel_patrol_base.plugins.widgets.summary.file_summary import FileSummaryWidget
@@ -14,22 +12,22 @@ PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Ty
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
-    print("Discovered loader plugins: ", ", ".join([plugin.id() for plugin in plugins]))
+    print("Discovered loader plugins: ", ", ".join([plugin.NAME for plugin in plugins]))
     for loader_plugin in plugins:
-        if loader_plugin.id() == loader_id:
+        if loader_plugin.NAME == loader_id:
             return loader_plugin()
-    raise RuntimeError(f"Could not find loader plugin `{loader_id}` in discovered loader plugins: {[plugin.id() for plugin in plugins]}")
+    raise RuntimeError(f"Could not find loader plugin `{loader_id}` in discovered loader plugins: {[plugin.NAME for plugin in plugins]}")
 
 def discover_processor_plugins() -> List[PixelPatrolProcessor]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    print("Discovered processor plugins: ", ", ".join([plugin.name for plugin in initialized_plugins]))
+    print("Discovered processor plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
     return initialized_plugins
 
 def discover_widget_plugins() -> List[PixelPatrolWidget]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    print("Discovered widget plugins: ", ", ".join([plugin.name for plugin in initialized_plugins]))
+    print("Discovered widget plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
     return initialized_plugins
 
 

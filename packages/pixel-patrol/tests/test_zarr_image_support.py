@@ -96,7 +96,7 @@ def test_extract_image_metadata_from_zarr(zarr_folder: Path):
     """
     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
     """
-    metadata = get_all_image_properties(zarr_folder, read_pixel_data=True, loader=BioIoLoader(), processors=discover_processor_plugins())
+    metadata = get_all_image_properties(zarr_folder, loader=BioIoLoader(), processors=discover_processor_plugins())
 
     assert isinstance(metadata, dict)
 

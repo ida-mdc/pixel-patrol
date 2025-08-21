@@ -1,43 +1,35 @@
 import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 
 import plotly.graph_objects as go
 import polars as pl
-from dash import html, dcc, Input, Output
-
+from dash import dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
-from pixel_patrol_base.report.widget_interface import PixelPatrolWidget
 
 
-class FileSunburstWidget(PixelPatrolWidget):
-    """A widget to display file structure as a sunburst plot."""
+class FileSunburstWidget:
+    """Display file structure as a sunburst plot."""
 
-    @property
-    def tab(self) -> str:
-        return WidgetCategories.SUMMARY.value
+    # ---- Declarative spec ----
+    NAME: str = "File Structure Sunburst"
+    TAB: str = WidgetCategories.SUMMARY.value
+    REQUIRES: Set[str] = {"path", "size_bytes", "imported_path_short"}
+    REQUIRES_PATTERNS = None
 
-    @property
-    def name(self) -> str:
-        return "File Structure Sunburst"
-
-    def required_columns(self) -> List[str]:
-        # Using imported_path_short based on your previous request for coloring
-        return ['path', 'size_bytes', 'imported_path_short']
+    # Component IDs
+    GRAPH_ID = "file-sunburst-plot"
 
     def layout(self) -> List:
-        return [dcc.Graph(id="file-sunburst-plot")]
+        return [dcc.Graph(id=self.GRAPH_ID)]
 
-    def register_callbacks(self, app, df_global: pl.DataFrame):
-        """Registers callbacks to update the sunburst plot."""
-
+    def register(self, app, df_global: pl.DataFrame):
         @app.callback(
-            Output("file-sunburst-plot", "figure"),
-            Input("color-map-store", "data")
+            Output(self.GRAPH_ID, "figure"),
+            Input("color-map-store", "data"),
         )
         def update_sunburst_plot(color_map: Dict[str, Any]) -> go.Figure:
-            if df_global.is_empty():
-                return go.Figure()
+            color_map = color_map or {}
 
             # --- 1. Find common root and create relative paths ---
             all_file_paths = df_global["path"].drop_nulls().to_list()
@@ -49,11 +41,10 @@ class FileSunburstWidget(PixelPatrolWidget):
 
             files_df = df_global.select(
                 pl.col("path").map_elements(lambda p: str(Path(p).relative_to(common_root_path))).alias("path"),
-                pl.col("path").map_elements(lambda p: str(Path(p).parent.relative_to(common_root_path))).alias(
-                    "parent"),
+                pl.col("path").map_elements(lambda p: str(Path(p).parent.relative_to(common_root_path))).alias("parent"),
                 pl.col("size_bytes"),
                 pl.col("imported_path_short"),
-                pl.lit(1, dtype=pl.Int64).alias("file_count")
+                pl.lit(1, dtype=pl.Int64).alias("file_count"),
             )
 
             # --- 2. Build the complete folder hierarchy ---
@@ -70,59 +61,74 @@ class FileSunburstWidget(PixelPatrolWidget):
                     for i in range(1, len(parts) + 1):
                         all_folders.add(os.sep.join(parts[:i]))
 
-            folders_df = pl.DataFrame({"path": list(all_folders)}).with_columns(
-                pl.col("path").map_elements(lambda p: str(Path(p).parent)).alias("parent"),
-                pl.lit(0, dtype=pl.Int64).alias("size_bytes"),
-                pl.lit(0, dtype=pl.Int64).alias("file_count"),
-                pl.lit(None, dtype=pl.String).alias("imported_path_short")
-            ).with_columns(
-                pl.when(pl.col("parent") == ".")
-                .then(pl.lit(vis_root_name))
-                .otherwise(pl.col("parent"))
-                .alias("parent")
+            folders_df = (
+                pl.DataFrame({"path": list(all_folders)})
+                .with_columns(
+                    pl.col("path").map_elements(lambda p: str(Path(p).parent)).alias("parent"),
+                    pl.lit(0, dtype=pl.Int64).alias("size_bytes"),
+                    pl.lit(0, dtype=pl.Int64).alias("file_count"),
+                    pl.lit(None, dtype=pl.String).alias("imported_path_short"),
+                )
+                .with_columns(
+                    pl.when(pl.col("parent") == ".")
+                    .then(pl.lit(vis_root_name))
+                    .otherwise(pl.col("parent"))
+                    .alias("parent")
+                )
             )
 
-            # --- 3. Create the root node ---
-            root_df = pl.DataFrame({
-                "path": [vis_root_name], "parent": [""], "size_bytes": [0], "file_count": [0],
-                "imported_path_short": [None]
-            })
+            # --- 3. Root node ---
+            root_df = pl.DataFrame(
+                {
+                    "path": [vis_root_name],
+                    "parent": [""],
+                    "size_bytes": [0],
+                    "file_count": [0],
+                    "imported_path_short": [None],
+                }
+            )
 
-            # --- 4. Define final column order and combine all parts ---
-            # This is the definitive fix for the ShapeError
+            # --- 4. Final schema & concat ---
             final_cols = ["path", "parent", "size_bytes", "file_count", "imported_path_short"]
+            final_df = (
+                pl.concat(
+                    [
+                        files_df.select(final_cols),
+                        folders_df.select(final_cols),
+                        root_df.select(final_cols),
+                    ]
+                )
+                .unique(subset=["path"], keep="first")
+            )
 
-            final_df = pl.concat([
-                files_df.select(final_cols),
-                folders_df.select(final_cols),
-                root_df.select(final_cols)
-            ]).unique(subset=["path"], keep="first")
-
-            # --- 5. Generate colors and display labels ---
+            # --- 5. Labels & colors ---
             display_labels = final_df["path"].map_elements(lambda p: Path(p).name, return_dtype=pl.String)
+
             marker_colors = []
             for row in final_df.iter_rows(named=True):
-                if row['parent'] == vis_root_name:
+                if row["parent"] == vis_root_name:
+                    # Color direct children of root by their original imported_path_short
                     original_folder_name = files_df.filter(pl.col("path").str.starts_with(row["path"]))[
-                        "imported_path_short"].head(1)
+                        "imported_path_short"
+                    ].head(1)
                     if len(original_folder_name) > 0:
-                        marker_colors.append(color_map.get(original_folder_name[0]))
+                        marker_colors.append(color_map.get(original_folder_name[0], "#cccccc"))
                     else:
                         marker_colors.append("#cccccc")
                 else:
                     marker_colors.append(None)
 
-            fig = go.Figure(go.Sunburst(
-                ids=final_df["path"],
-                labels=display_labels,
-                parents=final_df["parent"],
-                values=final_df["file_count"],
-                branchvalues="remainder",
-                marker_colors=marker_colors,
-                hovertext=display_labels,
-                hovertemplate='<b>%{hovertext}</b><br>Path: %{id}<extra></extra>'
-            ))
-
+            fig = go.Figure(
+                go.Sunburst(
+                    ids=final_df["path"],
+                    labels=display_labels,
+                    parents=final_df["parent"],
+                    values=final_df["file_count"],
+                    branchvalues="remainder",
+                    marker_colors=marker_colors,
+                    hovertext=display_labels,
+                    hovertemplate="<b>%{hovertext}</b><br>Path: %{id}<extra></extra>",
+                )
+            )
             fig.update_layout(margin=dict(t=40, l=20, r=20, b=20), height=500)
-
             return fig

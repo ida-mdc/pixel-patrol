@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     # Base folder containing multiple test-image subdirectories
-    base_path = Path(__file__).resolve().parent.parent / "tests" / "data"
+    base_path = Path(__file__).resolve().parent / "data" / "basic_image_data"
     logger.info(f"Scanning for immediate subdirectories under: {base_path}")
 
     # Collect all immediate child directories as separate data sources

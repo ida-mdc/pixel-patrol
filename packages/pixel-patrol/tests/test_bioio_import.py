@@ -34,7 +34,7 @@ def get_image_files_from_data_dir(test_data_dir: Path):
 
 def test_nonexistent_path_raises(tmp_path, loader, processors):
     missing = tmp_path / "nope.png"
-    assert get_all_image_properties(missing, read_pixel_data=True, loader=loader, processors=processors) == {}
+    assert get_all_image_properties(missing, loader=loader, processors=processors) == {}
 
 
 def test_unsupported_file(test_data_dir: Path, loader, processors):
@@ -42,14 +42,14 @@ def test_unsupported_file(test_data_dir: Path, loader, processors):
     Test that a non-image file returns an empty dictionary, indicating it's not processed as an image.
     """
     non_image_file = test_data_dir / "not_an_image.txt"
-    properties = get_all_image_properties(non_image_file, read_pixel_data=True, loader=loader, processors=processors)
+    properties = get_all_image_properties(non_image_file, loader=loader, processors=processors)
     assert properties == {}, f"Expected empty dict for non-image file, got {properties}"
 
 
 def test_empty_or_corrupt_image(tmp_path, loader, processors):
     f = tmp_path / "zero.tif"
     f.write_bytes(b"")
-    assert get_all_image_properties(f, read_pixel_data=True, loader=loader, processors=processors) == {}
+    assert get_all_image_properties(f, loader=loader, processors=processors) == {}
 
 
 @pytest.mark.parametrize("image_file_path", get_image_files_from_data_dir(Path(__file__).parent / "data"))
@@ -70,7 +70,7 @@ def test_bioio_image_properties_per_file(
     assert expected_props is not None, f"No expected data defined for {file_name}. Add it to expected_image_data fixture."
 
     # Get properties using your function
-    actual_properties = get_all_image_properties(image_file_path, read_pixel_data=True, loader=loader, processors=processors)
+    actual_properties = get_all_image_properties(image_file_path, loader=loader, processors=processors)
 
     assert actual_properties is not None, f"Failed to get properties for {file_name}"
     assert actual_properties != {}, f"Properties dictionary is empty for {file_name}"
@@ -111,7 +111,7 @@ def test_all_image_files_load_and_standardize(
     This test focuses on the existence and basic correctness of core properties.
     """
     file_name = image_file_path.name
-    properties = get_all_image_properties(image_file_path, read_pixel_data=True, loader=loader, processors=processors)
+    properties = get_all_image_properties(image_file_path, loader=loader, processors=processors)
 
     assert properties is not None, f"Failed to get properties for {file_name}"
     assert properties != {}, f"Properties dictionary is empty for {file_name}"
