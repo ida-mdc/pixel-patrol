@@ -1,7 +1,7 @@
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import bioio_imageio
 import numpy as np
@@ -79,7 +79,7 @@ class BioIoLoader:
 
     NAME = "bioio"
 
-    SUPPORTED_EXTENSIONS: Dict[str, Any] = ["czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"]
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,

@@ -5,7 +5,7 @@ import dask.array as da
 import numpy as np
 import polars as pl
 
-from pixel_patrol_base.config import SPRITE_SIZE
+from pixel_patrol.config import SPRITE_SIZE
 from pixel_patrol_base.core.artifact import Artifact
 from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.specs import ArtifactSpec

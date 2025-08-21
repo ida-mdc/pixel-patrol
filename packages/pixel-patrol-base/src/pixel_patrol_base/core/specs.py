@@ -1,20 +1,44 @@
-from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Set, Literal
 
-from pixel_patrol_base.core.artifact import ArrayKind, Artifact
+from dataclasses import dataclass
+from typing import Optional, Set, List, Pattern, Mapping, Any, Literal, Union
+
+from pixel_patrol_base.core.artifact import Artifact
+
+Features = Mapping[str, Any]
+
+# What a processor returns:
+# - "features": a flat dict of columns to merge into the table
+# - "artifact": a new Artifact (with free-form .kind)
+ProcessorOutput = Literal["features", "artifact"]
+
+# The actual return value
+ProcessResult = Union[Features, Artifact]
 
 
 @dataclass(frozen=True)
 class ArtifactSpec:
-    axes: Set[str] = field(default_factory=set)           # required axes subset
-    kinds: Set[ArrayKind] = field(default_factory=lambda: {"any"})
-    capabilities: Set[str]  = field(default_factory=set)
+    axes: Optional[Set[str]] = None
+    kinds: Optional[Set[str]] = None       # {"text"}, {"audio/*"}, {"*"}, etc.
+    capabilities: Optional[Set[str]] = None
+    kind_patterns: Optional[List[Pattern[str]]] = None  # optional regexes
 
-OutputKind = Literal["features","artifact"]
+def _kind_match(art_kind: str,
+                kinds: Optional[Set[str]],
+                patterns: Optional[List[Pattern[str]]]) -> bool:
+    if kinds is None or "*" in kinds:
+        return True
+    if art_kind in kinds:
+        return True
+    # prefix match: "audio/*" matches "audio/waveform", "audio/mel", ...
+    for k in kinds:
+        if k.endswith("/*") and art_kind.startswith(k[:-2] + "/"):
+            return True
+    if patterns and any(p.search(art_kind) for p in patterns):
+        return True
+    return False
 
-def can_accept(artifact: Artifact, spec: ArtifactSpec) -> bool:
-    if not spec.axes.issubset(artifact.axes): return False
-    if "any" not in spec.kinds and artifact.kind not in spec.kinds: return False
-    if not spec.capabilities.issubset(artifact.capabilities): return False
+def can_accept(art, spec: ArtifactSpec) -> bool:
+    if spec.axes and not spec.axes.issubset(art.axes): return False
+    if not _kind_match(art.kind, spec.kinds, spec.kind_patterns): return False
+    if spec.capabilities and not spec.capabilities.issubset(art.capabilities): return False
     return True

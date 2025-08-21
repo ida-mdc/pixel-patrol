@@ -1,18 +1,17 @@
-from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Mapping, Set, Literal, Dict
+from typing import Any, Mapping, Set
 
-ArrayKind = Literal["intensity", "label", "rgb", "multichannel", "any"]
+Kind = str
 
 @dataclass(frozen=True)
 class Artifact:
-    data: Any                    # typically a dask.array.Array (lazy is fine)
-    axes: Set[str]               # e.g. {"X","Y"} (+ maybe "Z","C","T")
-    kind: ArrayKind              # semantic type
-    meta: Mapping[str, Any]      # includes 'dim_order', sizes, etc.
-    capabilities: Set[str]               # capabilities (e.g. {"spatial-2d","temporal"})
+    data: Any
+    axes: Set[str]
+    kind: Kind
+    meta: Mapping[str, Any]
+    capabilities: Set[str]
 
-def artifact_from(array: Any, meta: Mapping[str, Any], *, kind: ArrayKind = "intensity") -> Artifact:
+def artifact_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Artifact:
     dim_order = (meta or {}).get("dim_order", "")
     axes = set(dim_order) if isinstance(dim_order, str) else set()
     capabilities: Set[str] = set()

@@ -21,7 +21,7 @@ package = true
 packages = ["src/pixel_patrol"]
 
 [project.scripts]
-pixel-patrol-base = "pixel_patrol_base.cli:cli"
+pixel-patrol = "pixel_patrol_base.cli:cli"
 
 [project.entry-points."pixel_patrol.loader_plugins"]
 pixel_patrol_loader_builtins = "pixel_patrol.plugin_registry:register_loader_plugins"

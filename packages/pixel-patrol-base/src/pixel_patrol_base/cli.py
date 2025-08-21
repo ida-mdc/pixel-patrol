@@ -5,7 +5,6 @@ from threading import Timer
 
 import click
 
-from pixel_patrol_base import Settings
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
@@ -16,6 +15,7 @@ from pixel_patrol_base.api import (
     import_project,
     show_report,
 )
+from pixel_patrol_base.core.project_settings import Settings
 
 
 @click.group()
@@ -50,7 +50,7 @@ def cli():
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
-           cmap: str, n_example_images: int, file_extension: tuple[str, ...], flavor: str):
+           cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -89,7 +89,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     selected_extensions = set(file_extension) if file_extension else "all"
     initial_settings = Settings(
         cmap=cmap,
-        n_example_images=n_example_images,
+        n_example_files=n_example_files,
         selected_file_extensions=selected_extensions,
         pixel_patrol_flavor=flavor
     )

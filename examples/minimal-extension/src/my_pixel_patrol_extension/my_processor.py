@@ -11,7 +11,7 @@ NEG = {"sad","angry","hate","hated","bad","awful","terrible","tired","sick","ups
 
 class MarkdownMoodProcessor:
     NAME   = "markdown-mood"
-    INPUT  = ArtifactSpec(kinds={"text"})   # only runs on text artifacts
+    INPUT  = ArtifactSpec(kinds={"text/markdown"})
     OUTPUT = "features"
 
     OUTPUT_SCHEMA = {

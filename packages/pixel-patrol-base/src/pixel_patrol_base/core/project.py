@@ -16,21 +16,21 @@ logger = logging.getLogger(__name__)
 
 class Project:
 
-    def __init__(self, name: str, base_dir: Union[str, Path], loader: str):
+    def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None):
 
         validation.validate_project_name(name)
         self.name: str = name
 
         self.base_dir = base_dir
 
-        self.loader = discover_loader(loader_id=loader)
+        self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
 
         self.paths: List[Path] = [self.base_dir]
         self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
         self.images_df: Optional[pl.DataFrame] = None
 
-        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME} and base dir: {self.base_dir}.")
+        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else "None" } and base dir: {self.base_dir}.")
 
 
     @property
@@ -219,7 +219,7 @@ class Project:
             new_settings.selected_file_extensions = current_extensions_value
             return
 
-        if isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
+        if self.loader is not None and isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
             new_extensions_input = self.loader.SUPPORTED_EXTENSIONS
             new_settings.selected_file_extensions = new_extensions_input
             logger.info(
@@ -232,13 +232,13 @@ class Project:
                 "selected_file_extensions must be 'all' (string) or a Set of strings."
             )
         else:
-            if not new_extensions_input:
+            if not new_extensions_input or self.loader == None:
                 logger.warning(
                     "Project Core: No file extensions provided. Defaulting to empty set.")
                 new_settings.selected_file_extensions = set()
                 return
             else:
-                new_extensions_input = validation.validate_and_filter_extensions(new_extensions_input)
+                new_extensions_input = validation.validate_and_filter_extensions(new_extensions_input, self.loader.SUPPORTED_EXTENSIONS)
                 if not new_extensions_input:
                     new_settings.selected_file_extensions = set()
                     logger.warning(

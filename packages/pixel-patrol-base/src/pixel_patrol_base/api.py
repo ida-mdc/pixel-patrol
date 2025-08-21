@@ -13,7 +13,7 @@ from pixel_patrol_base.report.dashboard_app import create_app
 
 logger = logging.getLogger(__name__)
 
-def create_project(name: str, base_dir: Union[str, Path], loader: str="bioio") -> Project:
+def create_project(name: str, base_dir: Union[str, Path], loader: str = None) -> Project:
     logger.info(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
     return Project(name, base_dir, loader)
 

@@ -1,11 +1,10 @@
-from typing import Protocol, Union, Iterable, Set, Any, Dict, List
+from typing import Protocol, Iterable, Set, Any, Dict, List
 
 import polars as pl
 
-from .artifact import Artifact
-from .specs import ArtifactSpec, OutputKind
+from pixel_patrol_base.core.artifact import Artifact
+from pixel_patrol_base.core.specs import ProcessResult, ArtifactSpec, ProcessorOutput
 
-ProcessResult = Union[dict, Artifact]
 
 class PixelPatrolLoader(Protocol):
     NAME: str
@@ -17,7 +16,7 @@ class PixelPatrolLoader(Protocol):
 class PixelPatrolProcessor(Protocol):
     NAME: str
     INPUT: ArtifactSpec
-    OUTPUT: OutputKind            # "features" or "artifact"
+    OUTPUT: ProcessorOutput            # "features" or "artifact"
     def run(self, art: Artifact) -> ProcessResult: ...
 
 

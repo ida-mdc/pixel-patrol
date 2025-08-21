@@ -20,7 +20,7 @@ def mock_project_name() -> str:
 def project_instance(mock_project_name: str, tmp_path: Path) -> Project:
     """Provides a Project instance with a base directory set (e.g., tmp_path) directly upon creation."""
     from pixel_patrol_base import api
-    return api.create_project(mock_project_name, tmp_path)
+    return api.create_project(mock_project_name, tmp_path, loader="bioio")
 
 
 @pytest.fixture
@@ -212,7 +212,7 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
     # Set some custom settings for image processing
     new_settings = Settings(
         cmap="viridis",
-        n_example_images=5,
+        n_example_files=5,
         selected_file_extensions={"jpg", "png", "gif"} # Match extensions
     )
     project.set_settings(new_settings)
