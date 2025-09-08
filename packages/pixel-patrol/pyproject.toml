@@ -1,0 +1,42 @@
+[project]
+name = "pixel-patrol"
+version = "0.2.0"
+description = "Image prevalidation tool"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "bioio>=3.0.0",
+    "bioio-ome-zarr>=2.1.1",
+    "bioio-tifffile>=1.3.0",
+    "bioio-imageio==1.3.0",
+    "pixel_patrol_base>=0.1.0",
+    "opencv-python>=4.11.0.88",
+]
+
+[tool.uv]
+package = true
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol"]
+
+[project.scripts]
+pixel-patrol = "pixel_patrol_base.cli:cli"
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_builtins = "pixel_patrol.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+pixel_patrol_processing_builtins = "pixel_patrol.plugin_registry:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.widget_plugins"]
+pixel_patrol_widget_builtins = "pixel_patrol.plugin_registry:register_widget_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }

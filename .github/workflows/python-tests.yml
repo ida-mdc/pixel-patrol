@@ -9,29 +9,63 @@ on:
       - '**'
 
 jobs:
-  build:
+  test-pixel-patrol-base:
+    name: Test pixel-patrol-base
     strategy:
       matrix:
         os: ${{ (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && fromJson('["ubuntu-latest", "windows-latest", "macos-latest"]') || fromJson('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
-
+    defaults:
+      run:
+        working-directory: packages/pixel-patrol-base
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    - name: Install uv and create virtual environment
-      run: |
-        pip install uv # Install uv itself
-        uv venv        # Create the .venv virtual environment
+      - name: Install uv and create venv
+        run: |
+          pip install uv
+          uv venv
 
-    - name: Install project in editable mode
-      run: |
-        uv pip install -e .   
+      - name: Install base (editable)
+        run: |
+          uv pip install -e .
 
-    - name: Run tests with pytest
-      run: |
-        uv run pytest # Use uv to run pytest within the managed environment
+      - name: Run tests (base)
+        run: |
+          uv run pytest
+
+  test-pixel-patrol:
+    name: Test pixel-patrol (depends on base)
+    needs: test-pixel-patrol-base
+    strategy:
+      matrix:
+        os: ${{ github.ref == 'refs/heads/main' || (github.event.pull_request.base.ref == 'main') && fromJson('["ubuntu-latest","windows-latest","macos-latest"]') || fromJson('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: packages/pixel-patrol
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv and create venv
+        run: |
+          pip install uv
+          uv venv
+
+      - name: Install pixel-patrol (editable)
+        run: |
+          uv pip install -e .
+
+      - name: Run tests (app)
+        run: |
+          uv run pytest

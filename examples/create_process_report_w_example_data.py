@@ -4,7 +4,7 @@ import tarfile
 import os
 from pathlib import Path
 
-from pixel_patrol.api import (
+from pixel_patrol_base.api import (
     create_project,
     add_paths,
     process_paths,
@@ -13,7 +13,7 @@ from pixel_patrol.api import (
     get_images_df,
     show_report,
 )
-from pixel_patrol.core.project_settings import Settings
+from pixel_patrol_base.core.project_settings import Settings
 
 # --- Configure Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     initial_settings = Settings(
         selected_file_extensions={"png", "tif", "tiff", "jpg", "jpeg"},
         cmap="viridis",
-        n_example_images=5
+        n_example_files=5
     )
     my_project = set_settings(my_project, initial_settings)
 
