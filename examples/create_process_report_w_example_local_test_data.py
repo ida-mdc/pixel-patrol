@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from pixel_patrol.api import (
+from pixel_patrol_base.api import (
     create_project,
     add_paths,
     process_paths,
@@ -11,18 +11,14 @@ from pixel_patrol.api import (
     get_images_df,
     show_report,
 )
-from pixel_patrol.core.project_settings import Settings
+from pixel_patrol_base.core.project_settings import Settings
 
 # — Configure Logging —
-logging.basicConfig(
-    level=logging.INFO,
-    format="%((asctime)s)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     # Base folder containing multiple test-image subdirectories
-    base_path = Path(__file__).resolve().parent.parent / "tests" / "data"
+    base_path = Path(__file__).resolve().parent / "data" / "basic_image_data"
     logger.info(f"Scanning for immediate subdirectories under: {base_path}")
 
     # Collect all immediate child directories as separate data sources
@@ -45,7 +41,7 @@ if __name__ == "__main__":
     settings = Settings(
         selected_file_extensions={"png", "jpg", "jpeg", "bmp", "tif", "tiff"},
         cmap="viridis",
-        n_example_images=5,
+        n_example_files=5,
     )
     project = set_settings(project, settings)
 

@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from pixel_patrol.api import (
+from pixel_patrol_base.api import (
     create_project,
     add_paths,
     process_paths,
@@ -11,12 +11,9 @@ from pixel_patrol.api import (
     get_paths_df,
     get_images_df,
 )
-
-from pixel_patrol.core.project_settings import Settings  # Still needed for Settings object
-
+from pixel_patrol_base.core.project_settings import Settings
 
 # --- Configure Logging ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Main Execution ---
@@ -49,7 +46,7 @@ if __name__ == "__main__":
     initial_settings = Settings(
         selected_file_extensions={"png", "tif", "jpg", "jpeg"},
         cmap="viridis",
-        n_example_images=5
+        n_example_files=5
     )
     my_project = set_settings(my_project, initial_settings)
 
