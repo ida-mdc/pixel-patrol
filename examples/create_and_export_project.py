@@ -4,11 +4,9 @@ from pathlib import Path
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
     process_images,
     export_project,
-    get_paths_df,
     get_images_df,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 # --- Main Execution ---
 if __name__ == "__main__":
     # Define the path to your test data directory relative to this script
-    test_data_directory = Path(__file__).parent.parent / "tests" / "data"
+    test_data_directory = Path(__file__).parent.parent / "ella_extras" / "data"
 
     # Define the output directory for the exported project
     output_directory = Path(__file__).parent / "exported_projects"
@@ -39,9 +37,6 @@ if __name__ == "__main__":
     # 2. Add the test data directory paths (using API)
     my_project = add_paths(my_project, test_data_directory)
 
-    # 3. Process paths to build the paths_df (using API)
-    my_project = process_paths(my_project)
-
     # 4. Set relevant settings (e.g., image extensions) (using API)
     initial_settings = Settings(
         selected_file_extensions={"png", "tif", "jpg", "jpeg"},
@@ -56,8 +51,7 @@ if __name__ == "__main__":
     # 6. Get and print the head of the images_df (using API)
     images_dataframe = get_images_df(my_project)
 
-    # Also use API functions for getting paths_df and images_df columns
-    print(get_paths_df(my_project).columns)
+    # Also use API functions for getting images_df columns
     print(get_images_df(my_project).columns)
 
     if images_dataframe is not None and not images_dataframe.is_empty():

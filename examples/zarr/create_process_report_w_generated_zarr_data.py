@@ -5,16 +5,15 @@ from pathlib import Path
 
 from distributed import Client, LocalCluster
 
-from pixel_patrol.api import (
+from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
     process_images,
     get_images_df,
     show_report, export_project,
 )
-from pixel_patrol.core.project_settings import Settings
+from pixel_patrol_base.core.project_settings import Settings
 
 # — Configure Logging —
 logging.basicConfig(
@@ -64,9 +63,6 @@ if __name__ == "__main__":
     project = create_project("Local Test Image Collections", base_path)
 
     project = add_paths(project, ["group1", "group2"])
-
-    # Discover and process all image paths
-    project = process_paths(project)
 
     # Configure image-processing settings
     settings = Settings(

@@ -7,7 +7,6 @@ from pathlib import Path
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
     process_images,
     get_images_df,
@@ -20,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- USER CONFIGURATION START ---
-# Define your local data base directory here.
+# Define your data's local base directory here.
 # This path should be the parent directory containing 'condition1_org', 'condition2_bl', etc.
 # e.g., if your conditions are in /my_data/plankton_processed/, set this to Path("/my_data/plankton_processed")
 # If set to None, the script will attempt to download the example plankton data from DESY Sync & Share.
@@ -139,9 +138,6 @@ if __name__ == "__main__":
     # This loop ensures each specified subdirectory is added
     for path in paths_to_add:
         my_project = add_paths(my_project, path)
-
-    # 3. Process paths to build the paths_df (using API)
-    my_project = process_paths(my_project)
 
     # 4. Set relevant settings (e.g., image extensions) (using API)
     initial_settings = Settings(

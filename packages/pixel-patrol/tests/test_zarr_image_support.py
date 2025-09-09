@@ -1,4 +1,4 @@
-# TODO: many of the set up here should be moved to a common file that tests many image types.
+# TODO: many of the set up here should be moved to a common file that ella_extras many image types.
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +10,6 @@ from zarr.storage import LocalStore
 
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
-from pixel_patrol_base.core.processing import build_paths_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
@@ -65,17 +64,18 @@ def zarr_folder(tmp_path: Path) -> Path:
 
     return zarr_path
 
-def test_zarr_path_recognition_as_image(zarr_folder: Path):
-    """
-    Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
-    """
-    parent_dir = zarr_folder.parent
-    paths_df = build_paths_df([parent_dir])
-    zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
-
-    assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
-    assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
-    assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
+# TODO: change after we process dirs as zarr only if zarr is available in package
+# def test_zarr_path_recognition_as_image(zarr_folder: Path):
+#     """
+#     Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
+#     """
+#     parent_dir = zarr_folder.parent
+#     paths_df = build_paths_df([parent_dir])
+#     zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
+#
+#     assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
+#     assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
+#     assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
 
 
 def test_bioio_can_read_zarr(zarr_folder: Path):

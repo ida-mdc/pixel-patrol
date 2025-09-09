@@ -11,15 +11,15 @@ from typing import List, Optional
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
-from pixel_patrol_base.io.project_io import METADATA_FILENAME, PATHS_DF_FILENAME, IMAGES_DF_FILENAME, _deserialize_ndarray_columns_dataframe
+from pixel_patrol_base.io.project_io import METADATA_FILENAME, IMAGES_DF_FILENAME, _deserialize_ndarray_columns_dataframe
 from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
 
-# Configure logging for tests to capture warnings/errors
+# Configure logging for ella_extras to capture warnings/errors
 logging.basicConfig(level=logging.INFO)
 
 
 # --- Tests for export_project ---
-# TODO: we have a patch in some tests for the thumbnail column as its an object.
+# TODO: we have a patch in some ella_extras for the thumbnail column as its an object.
 #       We need to handle it properly in the export/import logic.
 
 def test_export_project_empty(project_instance: Project, tmp_path: Path):
@@ -37,7 +37,6 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert PATHS_DF_FILENAME not in namelist  # Should not exist for empty project
         assert IMAGES_DF_FILENAME not in namelist  # Should not exist for empty project
 
         # Verify metadata content
@@ -51,7 +50,7 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
 
 
 def test_export_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
-    """Test exporting a project with base directory and paths_df."""
+    """Test exporting a project with base directory."""
     export_path = tmp_path / "minimal_data_project.zip"
     api.export_project(project_with_minimal_data, export_path)
 
@@ -61,7 +60,6 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert PATHS_DF_FILENAME in namelist
         assert IMAGES_DF_FILENAME not in namelist  # Not built in this fixture
 
         # Verify metadata
@@ -72,14 +70,9 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
             assert [Path(p) for p in metadata['paths']] == project_with_minimal_data.paths
             assert metadata['settings'] == _settings_to_dict(project_with_minimal_data.settings)
 
-        # Verify paths_df content
-        with zf.open(PATHS_DF_FILENAME) as df_file:
-            loaded_df = pl.read_parquet(df_file)
-            assert loaded_df.equals(project_with_minimal_data.paths_df)
-
 
 def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
-    """Test exporting a project with base_dir, paths_df, images_df, and custom settings."""
+    """Test exporting a project with base_dir, images_df, and custom settings."""
     export_path = tmp_path / "all_data_project.zip"
     api.export_project(project_with_all_data, export_path)
 
@@ -89,7 +82,6 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert PATHS_DF_FILENAME in namelist
         assert IMAGES_DF_FILENAME in namelist
 
         # Verify metadata
@@ -100,15 +92,11 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             assert [Path(p) for p in metadata['paths']] == project_with_all_data.paths
             assert metadata['settings'] == _settings_to_dict(project_with_all_data.settings)
 
-        # Verify paths_df content
-        with zf.open(PATHS_DF_FILENAME) as df_file:
-            loaded_df = pl.read_parquet(df_file)
-            assert loaded_df.equals(project_with_all_data.paths_df)
 
         # Verify images_df content
         with zf.open(IMAGES_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
-            # FIXME: The tests use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
+            # FIXME: The ella_extras use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
             # HOTFIX:
             loaded_df = _deserialize_ndarray_columns_dataframe(loaded_df)
 
@@ -212,12 +200,11 @@ def test_import_project_empty(project_instance: Project, tmp_path: Path):
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
     assert imported_project.settings == project_instance.settings
-    assert imported_project.paths_df is None
     assert imported_project.images_df is None
 
 
 def test_import_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
-    """Test importing a project with base directory and paths_df."""
+    """Test importing a project with base directory."""
     export_path = tmp_path / "exported_minimal_data_project.zip"
     api.export_project(project_with_minimal_data, export_path)
 
@@ -227,13 +214,11 @@ def test_import_project_with_minimal_data(project_with_minimal_data: Project, tm
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
     assert imported_project.settings == project_with_minimal_data.settings
-    assert imported_project.paths_df is not None
-    assert imported_project.paths_df.equals(project_with_minimal_data.paths_df)
     assert imported_project.images_df is None  # Not built in this fixture
 
 
 def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
-    """Test importing a project with base_dir, paths_df, images_df, and custom settings."""
+    """Test importing a project with base_dir, images_df, and custom settings."""
     export_path = tmp_path / "exported_all_data_project.zip"
     api.export_project(project_with_all_data, export_path)
 
@@ -243,8 +228,6 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
     assert imported_project.settings == project_with_all_data.settings
-    assert imported_project.paths_df is not None
-    assert imported_project.paths_df.equals(project_with_all_data.paths_df)
     assert imported_project.images_df is not None
 
     # Prepare expected images_df for comparison by dropping the 'thumbnail' column
@@ -388,34 +371,34 @@ def test_import_project_malformed_metadata_paths_not_list(project_instance: Proj
     finally:
         shutil.rmtree(tmp_staging_path, ignore_errors=True)
 
-
+# TODO: change this - as paths df is retired - should be images df
 def test_import_project_corrupted_dataframe_parquet(project_with_minimal_data: Project, tmp_path: Path, caplog):
     """
     Test importing a project where a DataFrame parquet file is corrupted.
     The project should load, but the corrupted DataFrame should be None, and a warning should be logged.
     """
-    export_path = tmp_path / "corrupted_paths_df_project.zip"
+    export_path = tmp_path / "corrupted_images_df_project.zip"
     api.export_project(project_with_minimal_data, export_path)  # Export a valid project first
 
     # Now, "corrupt" the paths_df.parquet inside the zip by replacing its content with invalid data
     with zipfile.ZipFile(export_path, 'a') as zf:  # 'a' for append, but it can overwrite if same name
         # Write some non-parquet data instead of the actual parquet file
-        zf.writestr(PATHS_DF_FILENAME, b"THIS IS NOT A VALID PARQUET FILE BUT JUNK DATA")
+        zf.writestr(IMAGES_DF_FILENAME, b"THIS IS NOT A VALID PARQUET FILE BUT JUNK DATA")
+
 
     with caplog.at_level(logging.WARNING):
         imported_project = api.import_project(export_path)
         # Check that a warning about not being able to read paths_df was logged
-        assert "Project IO: Could not read paths_df data" in caplog.text
+        assert "Project IO: Could not read images_df data" in caplog.text
 
     # Verify that paths_df is None due to corruption, but other attributes are fine
     assert imported_project.name == project_with_minimal_data.name
-    assert imported_project.paths_df is None
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
     assert imported_project.settings == project_with_minimal_data.settings
     assert imported_project.images_df is None  # Still None for this fixture type
 
-
+# TODO: change this - as paths df is retired - should be images df
 def test_import_project_missing_dataframe_files(project_instance: Project, tmp_path: Path):
     """
     Test importing a project where DataFrame files (paths_df.parquet, images_df.parquet)
@@ -429,7 +412,6 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
     imported_project = api.import_project(export_path)
 
     assert imported_project.name == project_instance.name
-    assert imported_project.paths_df is None
     assert imported_project.images_df is None
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
@@ -439,7 +421,7 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
 def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_path: Path):
     """
     Performs a full export-import cycle with a project containing
-    all possible data (base_dir, paths, settings, paths_df, images_df)
+    all possible data (base_dir, paths, settings, images_df)
     and verifies integrity.
     """
     export_path = tmp_path / "full_cycle_project.zip"
@@ -451,8 +433,6 @@ def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_pa
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
     assert imported_project.settings == project_with_all_data.settings
-    assert imported_project.paths_df is not None
-    assert imported_project.paths_df.equals(project_with_all_data.paths_df)
     assert imported_project.images_df is not None
 
     # Exclude 'thumbnail' column from comparison as it's not being exported/imported correctly

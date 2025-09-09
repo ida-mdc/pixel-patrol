@@ -5,7 +5,6 @@ from pathlib import Path
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
     process_images,
     get_images_df,
@@ -33,9 +32,6 @@ if __name__ == "__main__":
 
     # Add each subdirectory as a path in the project
     project = add_paths(project, subdirs)
-
-    # Discover and process all image paths
-    project = process_paths(project)
 
     # Configure image-processing settings
     settings = Settings(

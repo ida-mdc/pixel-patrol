@@ -13,10 +13,8 @@ from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing import (
-    build_images_df_from_paths_df,
     build_images_df_from_file_system,
     _scan_dirs_for_extensions,
-    _filter_paths_df,
     _get_deep_image_df,
     PATHS_DF_EXPECTED_SCHEMA,
     _postprocess_basic_file_metadata_df
@@ -32,19 +30,6 @@ def loader():
 def processors():
     """Provides a fresh list of processor plugins for each test function."""
     return discover_processor_plugins()
-
-def test_build_images_df_from_paths_df_empty(mock_empty_paths_df):
-    assert build_images_df_from_paths_df(mock_empty_paths_df, {"png", "jpg"}, loader="bioio") is None
-
-
-def test_build_images_df_from_paths_df_with_only_non_image_rows_returns_none():
-    # Only folder or non-image extensions
-    df = pl.DataFrame({
-        "path": ["a.txt", "folder", "b.doc"],
-        "type": ["file", "folder", "file"],
-        "file_extension": ["txt", None, "doc"],
-    })
-    assert build_images_df_from_paths_df(df, {"jpg", "png"}, "bioio") is None
 
 
 def test_build_images_df_from_file_system_no_images(tmp_path):
@@ -80,27 +65,6 @@ def test_scan_dirs_for_extensions_filters_correct_extensions(tmp_path):
 def test_scan_dirs_for_extensions_handles_empty_directory_list():
     result = _scan_dirs_for_extensions([], {"jpg", "png"})
     assert result == []
-
-
-def test_filter_paths_df_returns_only_file_rows_with_accepted_extensions():
-    df = pl.DataFrame({
-        "path": ["a.jpg", "b.png", "c.txt", "d.jpg", "e"],
-        "type": ["file", "file", "file", "folder", "file"],
-        "file_extension": ["jpg", "PNG", "txt", None, ""],
-    })
-    result = _filter_paths_df(df, {"jpg", "png"})
-    # Only rows 0 and 1 match type 'file' and extensions jpg or png (case-insensitive)
-    assert result.select("path").to_series().to_list() == ["a.jpg", "b.png"]
-
-
-def test_filter_paths_df_excludes_folders_and_unaccepted_extensions():
-    df = pl.DataFrame({
-        "path": ["img1.jpg", "img2.png", "docs", "img3.gif", "folder.jpg"],
-        "type": ["file", "file", "folder", "file", "folder"],
-        "file_extension": ["jpg", "png", None, "gif", "jpg"],
-    })
-    result = _filter_paths_df(df, {"jpg", "png"})
-    assert result.select("path").to_series().to_list() == ["img1.jpg", "img2.png"]
 
 
 def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
@@ -189,68 +153,6 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     assert df["path"].to_list() == [str(p_valid)]
     assert df["width"].to_list() == [10]
     assert df["height"].to_list() == [20]
-
-
-def test_build_images_df_from_paths_df_with_valid_paths_df_returns_expected_columns_and_values(
-    mock_paths_df_content, monkeypatch
-):
-    paths_df = mock_paths_df_content
-
-    ext_set = set(paths_df["file_extension"].to_list())
-    filtered = _filter_paths_df(paths_df, ext_set)
-    valid_paths = filtered["path"].to_list()
-
-    deep_df = pl.DataFrame({
-        "path": valid_paths,
-        "width": [100 + i*100 for i in range(len(valid_paths))],
-        "height": [150 + i*100 for i in range(len(valid_paths))],
-    })
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_image_df",
-        lambda paths, cols: deep_df
-    )
-
-    result = build_images_df_from_paths_df(paths_df, ext_set, "bioio")
-
-    expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
-    assert expected_cols.issubset(set(result.columns))
-
-    assert result["path"].to_list() == deep_df["path"].to_list()
-    assert result["width"].to_list() == deep_df["width"].to_list()
-    assert result["height"].to_list() == deep_df["height"].to_list()
-
-
-def test_build_images_df_from_paths_df__returns_nulls_for_missing_deep_metadata(
-    mock_paths_df_content, monkeypatch
-):
-
-    paths_df = mock_paths_df_content
-    extensions = {"jpg", "png"}
-
-    filtered = _filter_paths_df(paths_df, extensions)
-    basic_paths = [*filtered["path"].to_list()]
-
-    stubbed = pl.DataFrame({
-        "path": [basic_paths[0]],
-        "width": [123],
-        "height": [456],
-    })
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_image_df",
-        lambda paths, cols: stubbed
-    )
-
-    result = build_images_df_from_paths_df(paths_df, extensions, "bioio")
-
-    assert len(result) == 2
-    first_row = result.filter(pl.col("path") == basic_paths[0])
-    second_row = result.filter(pl.col("path") == basic_paths[1])
-
-    assert first_row["width"].item() == 123
-    assert first_row["height"].item() == 456
-
-    assert second_row["width"].is_null().all()
-    assert second_row["height"].is_null().all()
 
 
 def test_build_images_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):

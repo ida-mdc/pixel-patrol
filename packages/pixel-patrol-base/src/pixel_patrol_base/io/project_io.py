@@ -15,7 +15,6 @@ from pixel_patrol_base.core import validation
 logger = logging.getLogger(__name__)
 
 METADATA_FILENAME = 'metadata.yml'
-PATHS_DF_FILENAME = 'paths_df.parquet'
 IMAGES_DF_FILENAME = 'images_df.parquet'
 
 
@@ -197,7 +196,6 @@ def export_project(project: Project, dest: Path) -> None:
 
     Archive contains:
     - metadata.yml: Project name, paths (as strings), settings.
-    - paths_df.parquet (if exists): Preprocessed data.
     - images_df.parquet (if exists): Processed data.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -211,16 +209,11 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        # 2. Write DataFrames to temporary files and add to list for zipping
-        paths_df_tmp_path = _write_dataframe_to_parquet(project.paths_df, PATHS_DF_FILENAME, tmp_path)
-        if paths_df_tmp_path:
-            files_for_zip.append((paths_df_tmp_path, PATHS_DF_FILENAME))
-
         images_df_tmp_path = _write_dataframe_to_parquet(project.images_df, IMAGES_DF_FILENAME, tmp_path)
         if images_df_tmp_path:
             files_for_zip.append((images_df_tmp_path, IMAGES_DF_FILENAME))
 
-        # 3. Create the zip archive with all prepared files
+        # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
 
 
@@ -398,10 +391,6 @@ def import_project(src: Path) -> Project:
 
         project = _reconstruct_project_core_data(metadata_content, has_images_df)
 
-        project.paths_df = _read_dataframe_from_parquet(
-            tmp_path / PATHS_DF_FILENAME,
-            src
-        )
         project.images_df = imported_images_df # Assign the already read images_df
 
         return project

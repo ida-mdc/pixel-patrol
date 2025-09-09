@@ -1,12 +1,10 @@
 import logging
 from pathlib import Path
-import polars as pl
 
 # Import necessary API functions
 from pixel_patrol_base.api import (
     import_project,
     get_images_df,
-    get_paths_df,  # Also useful for verification
     get_name  # To confirm the project name
 )
 
@@ -34,7 +32,6 @@ if __name__ == "__main__":
 
         # 2. Get the images_df from the imported project
         images_dataframe = get_images_df(imported_project)
-        paths_dataframe = get_paths_df(imported_project)
 
         # 3. Print the head of the images_df
         if images_dataframe is not None and not images_dataframe.is_empty():
@@ -44,13 +41,6 @@ if __name__ == "__main__":
         else:
             print("\nNo images DataFrame found in the imported project or it is empty.")
 
-        # Optionally, print paths_df info to verify
-        if paths_dataframe is not None and not paths_dataframe.is_empty():
-            print("\n--- Imported Paths DataFrame Head ---")
-            print(paths_dataframe.head())
-            print(f"\nTotal paths in imported project: {paths_dataframe.height}")
-        else:
-            print("\nNo paths DataFrame found in the imported project or it is empty.")
 
     except Exception as e:
         logger.error(f"An error occurred during project import or data retrieval: {e}", exc_info=True)

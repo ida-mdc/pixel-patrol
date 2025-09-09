@@ -3,7 +3,6 @@ from pathlib import Path
 
 from pixel_patrol_base.api import (
     create_project,
-    process_paths,
     set_settings,
     process_images,
     export_project, show_report, add_paths,
@@ -28,9 +27,6 @@ if __name__ == "__main__":
     project = create_project("Markdown Diary", base_path, loader="markdown-diary")
 
     project = add_paths(project, ["2024", "2025"])
-
-    # Discover and process all image paths
-    project = process_paths(project)
 
     # Configure image-processing settings
     settings = Settings(
