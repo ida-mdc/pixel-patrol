@@ -13,7 +13,6 @@ from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 
 logger = logging.getLogger(__name__)
 
-
 class Project:
 
     def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None):
@@ -151,7 +150,7 @@ class Project:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
-        self.images_df = processing.build_images_df_from_file_system(self.paths, exts, loader=self.loader)
+        self.images_df = processing.build_images_df(self.paths, exts, loader=self.loader)
 
         if self.images_df is None or self.images_df.is_empty():
             logger.warning(
@@ -184,44 +183,56 @@ class Project:
 
     def _set_selected_file_extensions(self, new_settings: Settings) -> None:
         """
-        Handles the setting of `selected_file_extensions` within the Settings object.
-        Performs validation and filtering against supported extensions.
-        Raises ValueError if extensions are attempted to be changed after initial definition.
+        Set `selected_file_extensions` on `new_settings`.
+        Rules:
+        - If already set on `self.settings`: keep as-is (immutable for this project instance).
+        - If input == "all":
+            * with loader  -> use `loader.SUPPORTED_EXTENSIONS`
+            * without loader -> 'all'
+        - If input is a Set[str]: lowercase, then
+            * with loader -> filter against `SUPPORTED_EXTENSIONS`.
+            * without loader -> use as-is.
+        Raises:
+        - TypeError: if input is neither "all" nor a Set[str].
         """
-        current_extensions_value = self.settings.selected_file_extensions
-        new_extensions_input = new_settings.selected_file_extensions
 
-        if bool(current_extensions_value):
-            logger.info(
-                f"Project Core: File extensions are already set to '{current_extensions_value}'. No changes allowed.")
-            new_settings.selected_file_extensions = current_extensions_value
+        existing_extensions = self.settings.selected_file_extensions
+        proposed_extensions = new_settings.selected_file_extensions
+
+        if existing_extensions:
+            logger.info(f"Project Core: selected_file_extensions already set; keeping existing value: {existing_extensions}")
+            new_settings.selected_file_extensions = existing_extensions
             return
 
-        if self.loader is not None and isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
-            new_extensions_input = self.loader.SUPPORTED_EXTENSIONS
-            new_settings.selected_file_extensions = new_extensions_input
-            logger.info(
-                f"Project Core: Selected file extensions set to 'all'. Using default preselected extensions: {new_extensions_input}.")
-            return
-        elif not isinstance(new_extensions_input, Set):
-            logger.error(
-                f"Project Core: Invalid type for selected_file_extensions: {type(new_extensions_input)}. Defaulting to empty set.")
-            raise TypeError(
-                "selected_file_extensions must be 'all' (string) or a Set of strings."
-            )
-        else:
-            if not new_extensions_input or self.loader == None:
-                logger.warning(
-                    "Project Core: No file extensions provided. Defaulting to empty set.")
-                new_settings.selected_file_extensions = set()
+        if isinstance(proposed_extensions, str) and proposed_extensions.lower() == 'all':
+            if self.loader is None:
+                new_settings.selected_file_extensions = 'all'
+                logger.info("Project Core: All file extensions are selected")
                 return
             else:
-                new_extensions_input = validation.validate_and_filter_extensions(new_extensions_input, self.loader.SUPPORTED_EXTENSIONS)
-                if not new_extensions_input:
-                    new_settings.selected_file_extensions = set()
-                    logger.warning(
-                        "Project Core: No supported file extensions provided. The selected_file_extensions will be empty.")
-                    return
+                new_settings.selected_file_extensions = self.loader.SUPPORTED_EXTENSIONS
+                logger.info(f"Project Core: Using loader-supported extensions: {new_settings.selected_file_extensions}")
+                return
 
-        new_settings.selected_file_extensions = new_extensions_input
-        logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
+        if isinstance(proposed_extensions, Set):
+            proposed_extensions = {x.lower() for x in proposed_extensions if isinstance(x, str)}
+            if not proposed_extensions:
+                new_settings.selected_file_extensions = set()
+                logger.warning(f"Project Core: selected_file_extensions is an empty set - no file will be processed")
+                return
+            if not self.loader:
+                new_settings.selected_file_extensions = proposed_extensions
+                logger.info(f"Project Core: File extensions are selected: {proposed_extensions}")
+                return
+            else:
+                proposed_extensions = validation.validate_and_filter_extensions(proposed_extensions, self.loader.SUPPORTED_EXTENSIONS)
+                if not proposed_extensions:
+                    new_settings.selected_file_extensions = set()
+                    logger.warning("Project Core: No loader supported file extensions provided. No files will be processed.")
+                    return
+                new_settings.selected_file_extensions = proposed_extensions
+                logger.info(f"Project Core: Set file extensions to: {proposed_extensions}.")
+                return
+        else:
+            logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed_extensions)}")
+            raise TypeError("selected_file_extensions must be 'all' or a Set[str].")

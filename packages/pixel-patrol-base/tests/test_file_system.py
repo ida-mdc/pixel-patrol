@@ -3,10 +3,9 @@ import polars as pl
 from pathlib import Path
 from datetime import datetime, timezone
 import os
-import re
 
 
-from pixel_patrol_base.core.file_system import _fetch_single_directory_tree, _aggregate_folder_sizes
+from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes
 from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 
@@ -124,104 +123,58 @@ def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
     Tests _fetch_single_directory_tree with a complex directory structure.
     Verifies column types, content, depth, parent, size_readable, and imported_path.
     """
-    df = _fetch_single_directory_tree(complex_temp_dir)
+    df = walk_filesystem([complex_temp_dir], accepted_extensions="all")
     base_imported_path = str(complex_temp_dir)
 
     expected_data = [
-        {
-            "path": str(complex_temp_dir), "name": complex_temp_dir.name, "type": "folder", "parent": None,
-            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
-            "file_extension": None, "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "file1.txt"), "name": "file1.txt", "type": "file",
-            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10,
-            "size_readable": format_bytes_to_human_readable(10), "file_extension": "txt",
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_a"), "name": "subdir_a", "type": "folder",
-            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0,
-            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
-            "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20,
-            "size_readable": format_bytes_to_human_readable(20), "file_extension": "jpg",
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "name": "subdir_aa", "type": "folder",
-            "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 0,
-            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv",
-            "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3,
-            "size_bytes": 30, "size_readable": format_bytes_to_human_readable(30), "file_extension": "csv",
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_b"), "name": "subdir_b", "type": "folder",
-            "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 0,
-            "size_readable": format_bytes_to_human_readable(0), "file_extension": None,
-            "imported_path": base_imported_path,
-        },
-        {
-            "path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
-            "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40,
-            "size_readable": format_bytes_to_human_readable(40), "file_extension": "png",
-            "imported_path": base_imported_path,
-        },
+        {"path": str(complex_temp_dir / "file1.txt"), "name": "file1.txt", "type": "file",
+          "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10,
+          "size_readable": format_bytes_to_human_readable(10), "file_extension": "txt",
+          "imported_path": base_imported_path},
+        {"path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
+          "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20,
+          "size_readable": format_bytes_to_human_readable(20), "file_extension": "jpg",
+          "imported_path": base_imported_path},
+        {"path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv",
+          "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3,
+          "size_bytes": 30, "size_readable": format_bytes_to_human_readable(30), "file_extension": "csv",
+          "imported_path": base_imported_path},
+        {"path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
+          "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40,
+          "size_readable": format_bytes_to_human_readable(40), "file_extension": "png",
+          "imported_path": base_imported_path},
     ]
     _assert_directory_tree_df(df, expected_data, base_imported_path)
 
 
-def test_fetch_single_directory_tree_empty_dir(empty_temp_dir: Path):
+def test_walk_filesystem_empty_dir(empty_temp_dir: Path):
     """Tests _fetch_single_directory_tree with an empty directory."""
-    df = _fetch_single_directory_tree(empty_temp_dir)
-    base_imported_path = str(empty_temp_dir)
-    expected_data = [
-        {
-            "path": str(empty_temp_dir), "name": empty_temp_dir.name, "type": "folder", "parent": None,
-            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
-            "file_extension": None, "imported_path": base_imported_path,
-        },
-    ]
-    _assert_directory_tree_df(df, expected_data, base_imported_path)
+    df = walk_filesystem([empty_temp_dir], accepted_extensions="all")
+    assert df.is_empty()
 
 
-def test_fetch_single_directory_tree_single_file_dir(single_file_dir: Path):
+def test_walk_filesystem_single_file_dir(single_file_dir: Path):
     """Tests _fetch_single_directory_tree with a directory containing only one file."""
-    df = _fetch_single_directory_tree(single_file_dir)
+    df = walk_filesystem([single_file_dir], accepted_extensions="all")
     base_imported_path = str(single_file_dir)
-    expected_data = [
-        {
-            "path": str(single_file_dir), "name": single_file_dir.name, "type": "folder", "parent": None,
-            "depth": 0, "size_bytes": 0, "size_readable": format_bytes_to_human_readable(0),
-            "file_extension": None, "imported_path": base_imported_path,
-        },
-        {
-            "path": str(single_file_dir / "single_file.txt"), "name": "single_file.txt", "type": "file",
-            "parent": str(single_file_dir), "depth": 1, "size_bytes": len("content".encode('utf-8')),
-            "size_readable": format_bytes_to_human_readable(len("content".encode('utf-8'))),
-            "file_extension": "txt", "imported_path": base_imported_path,
-        },
-    ]
+    expected_data = [{
+        "path": str(single_file_dir / "single_file.txt"), "name": "single_file.txt", "type": "file",
+        "parent": str(single_file_dir), "depth": 1,
+        "size_bytes": len("content".encode('utf-8')),
+        "size_readable": format_bytes_to_human_readable(len("content".encode('utf-8'))),
+        "file_extension": "txt", "imported_path": base_imported_path,
+    }]
     _assert_directory_tree_df(df, expected_data, base_imported_path)
 
 
 @pytest.mark.parametrize("path_type_creator", [
     lambda tmp_path: (tmp_path / "not_a_dir.txt").touch() or (tmp_path / "not_a_dir.txt"),
-    lambda tmp_path: tmp_path / "i_do_not_exist"
+    lambda tmp_path: tmp_path / "i_do_not_exist",
 ])
-def test_fetch_single_directory_tree_invalid_paths(tmp_path: Path, path_type_creator):
-    """Tests _fetch_single_directory_tree raises ValueError for invalid or non-existent paths."""
+def test_walk_filesystem_invalid_paths(tmp_path: Path, path_type_creator):
     invalid_path = path_type_creator(tmp_path)
-    with pytest.raises(ValueError, match=re.escape(f"The path '{invalid_path}' is not a valid directory.")):
-        _fetch_single_directory_tree(invalid_path)
+    df = walk_filesystem([invalid_path], accepted_extensions="all")
+    assert isinstance(df, pl.DataFrame) and df.is_empty()
 
 
 # --- Tests for _aggregate_folder_sizes ---
