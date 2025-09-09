@@ -13,7 +13,7 @@ from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing import (
-    build_images_df_from_file_system,
+    build_images_df,
     _scan_dirs_for_extensions,
     _get_deep_image_df,
     PATHS_DF_EXPECTED_SCHEMA,
@@ -42,7 +42,7 @@ def test_build_images_df_from_file_system_no_images(tmp_path):
     extensions = {"png", "jpg"}
 
     with patch('pixel_patrol_base.core.processing._get_deep_image_df', return_value=pl.DataFrame()) as mock_get_deep_image_df:
-        images_df = build_images_df_from_file_system(paths, extensions, "bioio")
+        images_df = build_images_df(paths, extensions, "bioio")
         assert images_df is None
         mock_get_deep_image_df.assert_not_called()
 
@@ -175,7 +175,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
         lambda paths, cols: deep_df
     )
 
-    result = build_images_df_from_file_system(
+    result = build_images_df(
         bases=[base],
         selected_extensions={"jpg", "png"},
         loader="bioio"
@@ -212,7 +212,7 @@ def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correct
         lambda paths, cols: deep_df
     )
 
-    result = build_images_df_from_file_system(
+    result = build_images_df(
         bases=[base],
         selected_extensions={"jpg", "png"},
         loader="bioio"
@@ -272,7 +272,7 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path, loader):
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
     # Build without any monkeypatching
-    df = build_images_df_from_file_system(
+    df = build_images_df(
         bases=[img_dir],
         selected_extensions={"png"},
         loader=loader
@@ -300,7 +300,7 @@ def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     path = tmp_path / "5d.tif"
     tifffile.imwrite(str(path), arr, photometric='minisblack')
 
-    df = build_images_df_from_file_system(
+    df = build_images_df(
         bases=[tmp_path],
         selected_extensions={"tif"},
         loader=loader
@@ -362,7 +362,7 @@ def test_full_images_df_handles_png_gray(tmp_path, loader):
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
 
-    df = build_images_df_from_file_system(
+    df = build_images_df(
         bases=[tmp_path],
         selected_extensions={"png"},
         loader=loader

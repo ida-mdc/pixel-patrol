@@ -64,7 +64,7 @@ def test_set_settings_set_selected_file_extensions_empty_initially(named_project
     with caplog.at_level(logging.WARNING):
         updated_project = api.set_settings(named_project_with_base_dir, new_settings)
         assert api.get_settings(updated_project).selected_file_extensions == set()
-        assert "No file extensions provided. Defaulting to empty set." in caplog.text
+        assert "selected_file_extensions is an empty set - no file will be processed" in caplog.text
 
 
 def test_set_settings_set_selected_file_extensions_with_unsupported(named_project_with_base_dir: Project, caplog):
@@ -89,8 +89,7 @@ def test_set_settings_set_selected_file_extensions_only_unsupported(named_projec
         assert "The following file extensions are not supported and will be ignored:" in caplog.text
         assert "abc" in caplog.text
         assert "xyz" in caplog.text
-        assert "No supported file extensions provided. The selected_file_extensions will be empty." in caplog.text
-
+        assert "No loader supported file extensions provided. No files will be processed." in caplog.text
 
 def test_set_settings_set_selected_file_extensions_to_all(named_project_with_base_dir: Project, caplog):
     """Test setting selected_file_extensions to the string 'all'."""
@@ -99,13 +98,13 @@ def test_set_settings_set_selected_file_extensions_to_all(named_project_with_bas
         updated_project = api.set_settings(named_project_with_base_dir, new_settings)
         assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
         # Updated assertion to match the specific log message for 'all'
-        assert f"Selected file extensions set to 'all'. Using default preselected extensions: {BioIoLoader.SUPPORTED_EXTENSIONS}." in caplog.text
+        assert "Using loader-supported extensions:" in caplog.text
 
 
 def test_set_settings_invalid_string_for_extensions(named_project_with_base_dir: Project, caplog):
     """Test setting selected_file_extensions to an invalid string (not 'all')."""
     invalid_settings = Settings(selected_file_extensions="invalid_string")
-    with pytest.raises(TypeError, match="selected_file_extensions must be 'all' \\(string\\) or a Set of strings."):
+    with pytest.raises(TypeError, match=r"selected_file_extensions must be 'all' or a Set\[str\]\."):
         with caplog.at_level(logging.ERROR):
             api.set_settings(named_project_with_base_dir, invalid_settings)
             assert "Invalid type for selected_file_extensions: <class 'str'>." in caplog.text
@@ -114,7 +113,7 @@ def test_set_settings_invalid_string_for_extensions(named_project_with_base_dir:
 def test_set_settings_invalid_type_for_extensions(named_project_with_base_dir: Project, caplog):
     """Test setting selected_file_extensions to an invalid type."""
     invalid_settings = Settings(selected_file_extensions=["jpg", "png"]) # List instead of Set
-    with pytest.raises(TypeError, match="selected_file_extensions must be 'all' \\(string\\) or a Set of strings."):
+    with pytest.raises(TypeError, match=r"selected_file_extensions must be 'all' or a Set\[str\]\."):
         with caplog.at_level(logging.ERROR):
             api.set_settings(named_project_with_base_dir, invalid_settings)
             assert "Invalid type for selected_file_extensions: <class 'list'>." in caplog.text
@@ -138,7 +137,7 @@ def test_set_settings_change_selected_file_extensions_after_initial_set_differen
         updated_project = api.set_settings(project_with_ext, changed_settings)  # No pytest.raises here
 
         # Assert the specific INFO log message indicating no change allowed
-        assert f"File extensions are already set to '{str({'jpg'})}'. No changes allowed." in caplog.text
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text
 
     # Ensure the extensions *remain unchanged* from the original set
     assert api.get_settings(updated_project).selected_file_extensions == {"jpg"}
@@ -162,7 +161,7 @@ def test_set_settings_change_selected_file_extensions_after_initial_set_to_empty
         updated_project = api.set_settings(project_with_ext, changed_settings)  # No pytest.raises here
 
         # Assert the specific INFO log message indicating no change allowed
-        assert f"File extensions are already set to '{str({'jpg'})}'. No changes allowed." in caplog.text
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text
 
     # Ensure the extensions *remain unchanged* from the original set
     assert api.get_settings(updated_project).selected_file_extensions == {"jpg"}
@@ -210,7 +209,7 @@ def test_set_settings_change_selected_file_extensions_from_set_to_all(named_proj
 
         # Assert the specific INFO log message indicating no change allowed
         # Use str() for the set to ensure exact match with logger output
-        assert f"File extensions are already set to '{str({'jpg'})}'. No changes allowed." in caplog.text
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text
 
     # Ensure it remains unchanged (should still be the initial {"jpg"})
     assert api.get_settings(updated_project).selected_file_extensions == {"jpg"}
@@ -231,8 +230,7 @@ def test_set_settings_set_selected_file_extensions_to_same_set_already_defined(n
         assert api.get_settings(updated_project).selected_file_extensions == {"jpg"}
 
         # Corrected assertion for the log message to match current implementation's output
-        assert f"File extensions are already set to '{str({'jpg'})}'. No changes allowed." in caplog.text
-
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text
 
 def test_set_settings_set_selected_file_extensions_to_all_when_already_default_set(named_project_with_base_dir: Project,
                                                                                    caplog):
@@ -249,8 +247,7 @@ def test_set_settings_set_selected_file_extensions_to_all_when_already_default_s
         assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
         # Corrected assertion for the log message to match current implementation's output
-        assert f"File extensions are already set to '{str(BioIoLoader.SUPPORTED_EXTENSIONS)}'. No changes allowed." in caplog.text
-
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text
 
 def test_set_settings_set_selected_file_extensions_to_default_set_when_already_all_string(
         named_project_with_base_dir: Project, caplog):
@@ -267,4 +264,4 @@ def test_set_settings_set_selected_file_extensions_to_default_set_when_already_a
         assert api.get_settings(updated_project).selected_file_extensions == BioIoLoader.SUPPORTED_EXTENSIONS
 
         # Corrected assertion for the log message to match current implementation's output
-        assert f"File extensions are already set to '{str(BioIoLoader.SUPPORTED_EXTENSIONS)}'. No changes allowed." in caplog.text
+        assert "selected_file_extensions already set; keeping existing value:" in caplog.text

@@ -7,8 +7,8 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
-from pixel_patrol_base.core.file_system import make_basic_record
 from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension
 from pixel_patrol_base.utils.path_utils import find_common_base
@@ -62,15 +62,6 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-# TODO: delete or rename as paths_df is retired
-def _filter_paths_df(paths_df: pl.DataFrame, extensions: Set[str]) -> pl.DataFrame:
-    """Return only file rows whose extension (lower-cased) is in our set."""
-    return paths_df.filter(
-        (pl.col("type") == "file")
-        & pl.col("file_extension").str.to_lowercase().is_in(list(extensions))
-    )
-
-
 def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
     """Loop over paths, get_all_image_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
@@ -96,33 +87,21 @@ def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) ->
     return pl.DataFrame(rows)
 
 
-def build_images_df_from_file_system(bases: List[Path], selected_extensions: Set[str], loader: PixelPatrolLoader) -> Optional[pl.DataFrame]:
-    """
-    Performs a single-pass scan over the file system to find image files,
-    collect their basic file system metadata, and extract deep image-specific metadata.
-    Returns a complete images_df.
-    """
+def build_images_df(
+    bases: List[Path],
+    selected_extensions: Set[str] | str,
+    loader: Optional[PixelPatrolLoader],
+) -> Optional[pl.DataFrame]:
 
-    path_base_pairs = _scan_dirs_for_extensions(bases, selected_extensions)
-    if not path_base_pairs:
-        logger.warning(
-            f"No image files found in the provided directories for extensions: {selected_extensions}"
-        )
-        return None
+    basic = walk_filesystem(bases, accepted_extensions=selected_extensions)
+    if basic.is_empty(): return None
 
-    basic_file_df = pl.DataFrame([
-        make_basic_record(path, base=base, is_folder=False)
-        for path, base in path_base_pairs
-    ])
+    basic = _postprocess_basic_file_metadata_df(normalize_file_extension(basic))
+    if loader is None: return basic
 
-    basic_file_df = normalize_file_extension(basic_file_df)
-    basic_file_df = _postprocess_basic_file_metadata_df(basic_file_df)
+    deep = _get_deep_image_df([Path(p) for p in basic["path"].to_list()], loader)
 
-    deep_image_df = _get_deep_image_df([p for p, _ in path_base_pairs], loader)
-
-    joined = basic_file_df.join(deep_image_df, on="path", how="left")
-
-    return joined
+    return basic.join(deep, on="path", how="left")
 
 
 # TODO: delete or rename as paths_df is retired
