@@ -10,7 +10,7 @@ from pixel_patrol_base.core.file_system import _fetch_single_directory_tree, _ag
 from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 
-# --- Fixtures for _fetch_single_directory_tree tests ---
+# --- Fixtures for _fetch_single_directory_tree ella_extras ---
 
 @pytest.fixture
 def complex_temp_dir(tmp_path: Path) -> Path:
@@ -41,7 +41,7 @@ def complex_temp_dir(tmp_path: Path) -> Path:
     subdir_b.mkdir()
     (subdir_b / "fileB.png").write_bytes(b'd' * 40)
 
-    # Use a fixed modification time for deterministic tests
+    # Use a fixed modification time for deterministic ella_extras
     fixed_timestamp = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc).timestamp()
 
     # Set mtime for all created paths

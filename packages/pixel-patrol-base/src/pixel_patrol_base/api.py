@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, Iterable, List, Optional, Dict
+from typing import Union, Iterable, List, Optional
 import polars as pl
 import logging
 
@@ -7,7 +7,6 @@ from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.io.project_io import export_project as _io_export_project
 from pixel_patrol_base.io.project_io import import_project as _io_import_project
-from pixel_patrol_base.core import processing
 from pixel_patrol_base.report.dashboard_app import create_app
 
 
@@ -24,10 +23,6 @@ def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path
 def delete_path(project: Project, path: str) -> Project:
     logger.info(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
-
-def process_paths(project: Project) -> Project:
-    logger.info(f"API Call: Processing paths and building paths DataFrame for project '{project.name}'.")
-    return project.process_paths()
 
 def set_settings(project: Project, settings: Settings) -> Project:
     """
@@ -69,15 +64,8 @@ def get_base_dir(project: Project) -> Optional[Path]:
 def get_paths(project: Project) -> List[Path]:
     return project.get_paths()
 
-def get_paths_df(project: Project) -> Optional[pl.DataFrame]:
-    return project.get_paths_df()
-
 def get_settings(project: Project) -> Settings:
     return project.get_settings()
-
-def get_available_extensions(project: Project) -> Dict[str, int]:
-    logger.info(f"API Call: Getting all file extensions for all file paths in all paths of project '{project.name}'.")
-    return processing.count_file_extensions(project.paths_df)
 
 def get_images_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_images_df()

@@ -26,7 +26,6 @@ class Project:
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
 
         self.paths: List[Path] = [self.base_dir]
-        self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
         self.images_df: Optional[pl.DataFrame] = None
 
@@ -113,16 +112,6 @@ class Project:
 
         return self
 
-
-    def process_paths(self) -> "Project":
-        if not self.paths:
-            logger.warning("No directory paths added to preprocess. paths_df will be None.")
-            self.paths_df = None # Ensure it's None if no paths
-        else:
-            self.paths_df  = processing.build_paths_df(self.paths)
-        return self
-
-
     def set_settings(self, settings: Settings) -> "Project":
         logger.info(f"Project Core: Attempting to set project settings for '{self.name}'.")
 
@@ -149,9 +138,6 @@ class Project:
     def process_images(self, settings: Optional[Settings] = None) -> "Project":
         """
         Processes images in the project, building `images_df`.
-        - If `paths_df` does not exist, it performs a single, targeted file system scan to build `images_df` directly.
-        - If `paths_df` already exists it leverages this existing DataFrame, filters it, and then extracts image metadata.
-
         Args:
             settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
 
@@ -165,10 +151,7 @@ class Project:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
-        if self.paths_df is None or self.paths_df.is_empty():
-            self.images_df = processing.build_images_df_from_file_system(self.paths, exts, loader=self.loader)
-        else:
-            self.images_df = processing.build_images_df_from_paths_df(self.paths_df, exts, loader=self.loader)
+        self.images_df = processing.build_images_df_from_file_system(self.paths, exts, loader=self.loader)
 
         if self.images_df is None or self.images_df.is_empty():
             logger.warning(
@@ -176,7 +159,6 @@ class Project:
             self.images_df = None
 
         return self
-
 
     def get_name(self) -> str:
         """Get the project name."""
@@ -192,10 +174,6 @@ class Project:
     def get_settings(self) -> Settings:
         """Get the current project settings."""
         return self.settings
-
-    def get_paths_df(self) -> Optional[pl.DataFrame]:
-        """Get the single DataFrame containing preprocessed data."""
-        return self.paths_df
 
     def get_images_df(self) -> Optional[pl.DataFrame]:
         """Get the single DataFrame containing processed data."""

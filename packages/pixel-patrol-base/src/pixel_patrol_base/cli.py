@@ -8,7 +8,6 @@ import click
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
     process_images,
     export_project,
@@ -85,7 +84,6 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     for path in resolved_paths:
         add_paths(my_project, path)
 
-    process_paths(my_project)
     selected_extensions = set(file_extension) if file_extension else "all"
     initial_settings = Settings(
         cmap=cmap,

@@ -65,7 +65,7 @@ def mock_temp_file_system(tmp_path: Path) -> List[Path]:
     dir2.mkdir()
     (dir2 / "fileB.png").write_bytes(b"abcde")  # 5 bytes
 
-    # Return the root paths that would be passed to build_paths_df
+    # Return the root paths
     return [dir1, dir2]
 
 
@@ -197,7 +197,6 @@ def project_with_minimal_data(project_instance: Project, temp_test_dirs: list[Pa
     """
     project = project_instance # Already has base_dir set by fixture
     project.add_paths(temp_test_dirs) # Direct call to Project method
-    project.process_paths() # Direct call to Project method
     return project
 
 @pytest.fixture
@@ -210,7 +209,6 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
 
     # Add paths from the image-rich directory structure
     project.add_paths(temp_test_dirs)
-    project.process_paths()
 
     # Set some custom settings for image processing
     new_settings = Settings(
@@ -227,7 +225,7 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
 
 @pytest.fixture(scope="session")
 def test_data_dir() -> Path:
-    """Provides the path to the 'tests/data' directory."""
+    """Provides the path to the 'ella_extras/data' directory."""
     return Path(__file__).parent / "data"
 
 

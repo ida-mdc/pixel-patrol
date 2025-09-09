@@ -3,15 +3,8 @@ import logging
 from pathlib import Path
 
 from pixel_patrol_base.api import (
-    create_project,
-    add_paths,
-    process_paths,
-    set_settings,
-    process_images,
-    get_images_df,
     show_report, import_project,
 )
-from pixel_patrol_base.core.project_settings import Settings
 
 # — Configure Logging —
 logging.basicConfig(
