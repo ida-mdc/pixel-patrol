@@ -8,7 +8,7 @@ from pixel_patrol_base.core.specs import can_accept
 
 logger = logging.getLogger(__name__)
 
-def get_all_image_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
+def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
     start_total_time = time.monotonic()
 
     if not file_path.exists():

@@ -215,7 +215,7 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
     )
     project.set_settings(new_settings)
 
-    project.process_images()
+    project.process_artifacts()
 
     return project
 

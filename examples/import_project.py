@@ -4,7 +4,7 @@ from pathlib import Path
 # Import necessary API functions
 from pixel_patrol_base.api import (
     import_project,
-    get_images_df,
+    get_artifacts_df,
     get_name  # To confirm the project name
 )
 
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         logger.info(f"Project '{get_name(imported_project)}' successfully imported.")
 
         # 2. Get the images_df from the imported project
-        images_dataframe = get_images_df(imported_project)
+        images_dataframe = get_artifacts_df(imported_project)
 
         # 3. Print the head of the images_df
         if images_dataframe is not None and not images_dataframe.is_empty():

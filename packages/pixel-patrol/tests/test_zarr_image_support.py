@@ -8,7 +8,7 @@ import zarr
 from bioio import BioImage
 from zarr.storage import LocalStore
 
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
@@ -96,7 +96,7 @@ def test_extract_image_metadata_from_zarr(zarr_folder: Path):
     """
     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
     """
-    metadata = get_all_image_properties(zarr_folder, loader=BioIoLoader(), processors=discover_processor_plugins())
+    metadata = get_all_artifact_properties(zarr_folder, loader=BioIoLoader(), processors=discover_processor_plugins())
 
     assert isinstance(metadata, dict)
 

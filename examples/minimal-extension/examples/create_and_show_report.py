@@ -4,7 +4,7 @@ from pathlib import Path
 from pixel_patrol_base.api import (
     create_project,
     set_settings,
-    process_images,
+    process_artifacts,
     export_project, show_report, add_paths,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     )
     project = set_settings(project, settings)
 
-    project = process_images(project)
+    project = process_artifacts(project)
 
     export_project(project, exported_project_path)
 

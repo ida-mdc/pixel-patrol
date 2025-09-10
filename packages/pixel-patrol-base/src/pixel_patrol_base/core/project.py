@@ -26,7 +26,7 @@ class Project:
 
         self.paths: List[Path] = [self.base_dir]
         self.settings: Settings = Settings()
-        self.images_df: Optional[pl.DataFrame] = None
+        self.artifacts_df: Optional[pl.DataFrame] = None
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
@@ -136,28 +136,28 @@ class Project:
         return self
 
 
-    def process_images(self, settings: Optional[Settings] = None) -> "Project":
+    def process_artifacts(self, settings: Optional[Settings] = None) -> "Project":
         """
-        Processes images in the project, building `images_df`.
+        Processes artifacts (e.g. images) in the project, building `artifacts_df`.
         Args:
             settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
 
         Returns:
-            The Project instance with the `images_df` updated.
+            The Project instance with the `artifacts_df` updated.
         """
         if settings is not None:
-            logger.info("Project Core: Applying provided settings before processing images.")
+            logger.info("Project Core: Applying provided settings before processing files.")
             self.set_settings(settings)
         if not self.settings.selected_file_extensions:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
-        self.images_df = processing.build_images_df(self.paths, exts, loader=self.loader)
+        self.artifacts_df = processing.build_artifacts_df(self.paths, exts, loader=self.loader)
 
-        if self.images_df is None or self.images_df.is_empty():
+        if self.artifacts_df is None or self.artifacts_df.is_empty():
             logger.warning(
-                "Project Core: No image files found/processed. images_df will be None.")
-            self.images_df = None
+                "Project Core: No files found/processed. artifacts_df will be None.")
+            self.artifacts_df = None
 
         return self
 
@@ -176,9 +176,9 @@ class Project:
         """Get the current project settings."""
         return self.settings
 
-    def get_images_df(self) -> Optional[pl.DataFrame]:
+    def get_artifacts_df(self) -> Optional[pl.DataFrame]:
         """Get the single DataFrame containing processed data."""
-        return self.images_df
+        return self.artifacts_df
 
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
