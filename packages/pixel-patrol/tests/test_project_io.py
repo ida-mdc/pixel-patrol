@@ -11,7 +11,7 @@ from typing import List, Optional
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
-from pixel_patrol_base.io.project_io import METADATA_FILENAME, IMAGES_DF_FILENAME, _deserialize_ndarray_columns_dataframe
+from pixel_patrol_base.io.project_io import METADATA_FILENAME, ARTIFACTS_DF_FILENAME, _deserialize_ndarray_columns_dataframe
 from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
 
 # Configure logging for ella_extras to capture warnings/errors
@@ -37,7 +37,7 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert IMAGES_DF_FILENAME not in namelist  # Should not exist for empty project
+        assert ARTIFACTS_DF_FILENAME not in namelist  # Should not exist for empty project
 
         # Verify metadata content
         with zf.open(METADATA_FILENAME) as meta_file:
@@ -60,7 +60,7 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert IMAGES_DF_FILENAME not in namelist  # Not built in this fixture
+        assert ARTIFACTS_DF_FILENAME not in namelist  # Not built in this fixture
 
         # Verify metadata
         with zf.open(METADATA_FILENAME) as meta_file:
@@ -72,7 +72,7 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
 
 
 def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
-    """Test exporting a project with base_dir, images_df, and custom settings."""
+    """Test exporting a project with base_dir, artifacts_df, and custom settings."""
     export_path = tmp_path / "all_data_project.zip"
     api.export_project(project_with_all_data, export_path)
 
@@ -82,7 +82,7 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
     with zipfile.ZipFile(export_path, 'r') as zf:
         namelist = zf.namelist()
         assert METADATA_FILENAME in namelist
-        assert IMAGES_DF_FILENAME in namelist
+        assert ARTIFACTS_DF_FILENAME in namelist
 
         # Verify metadata
         with zf.open(METADATA_FILENAME) as meta_file:
@@ -93,8 +93,8 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             assert metadata['settings'] == _settings_to_dict(project_with_all_data.settings)
 
 
-        # Verify images_df content
-        with zf.open(IMAGES_DF_FILENAME) as df_file:
+        # Verify artifacts_df content
+        with zf.open(ARTIFACTS_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
             # FIXME: The ella_extras use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
             # HOTFIX:
@@ -104,7 +104,7 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             # Prepare the expected DataFrame for comparison by excluding the 'thumbnail' column.
             # This is a temporary patch to allow the test to pass if 'thumbnail' handling
             # is inconsistent or problematic during export/import.
-            expected_df_for_comparison = project_with_all_data.images_df.drop("thumbnail")
+            expected_df_for_comparison = project_with_all_data.artifacts_df.drop("thumbnail")
 
             # Also drop 'thumbnail' from the loaded_df if it somehow still exists
             # (though the export logic should handle it) to ensure column sets match.
@@ -200,7 +200,7 @@ def test_import_project_empty(project_instance: Project, tmp_path: Path):
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
     assert imported_project.settings == project_instance.settings
-    assert imported_project.images_df is None
+    assert imported_project.artifacts_df is None
 
 
 def test_import_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
@@ -214,11 +214,11 @@ def test_import_project_with_minimal_data(project_with_minimal_data: Project, tm
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
     assert imported_project.settings == project_with_minimal_data.settings
-    assert imported_project.images_df is None  # Not built in this fixture
+    assert imported_project.artifacts_df is None  # Not built in this fixture
 
 
 def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
-    """Test importing a project with base_dir, images_df, and custom settings."""
+    """Test importing a project with base_dir, artifacts_df, and custom settings."""
     export_path = tmp_path / "exported_all_data_project.zip"
     api.export_project(project_with_all_data, export_path)
 
@@ -228,31 +228,31 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
     assert imported_project.settings == project_with_all_data.settings
-    assert imported_project.images_df is not None
+    assert imported_project.artifacts_df is not None
 
-    # Prepare expected images_df for comparison by dropping the 'thumbnail' column
+    # Prepare expected artifacts_df for comparison by dropping the 'thumbnail' column
     # as it's currently not being saved/loaded correctly.
-    expected_images_df_for_comparison = project_with_all_data.images_df.drop("thumbnail")
+    expected_artifacts_df_for_comparison = project_with_all_data.artifacts_df.drop("thumbnail")
 
-    # Also drop 'thumbnail' from the imported_project.images_df if it exists
+    # Also drop 'thumbnail' from the imported_project.artifacts_df if it exists
     # to ensure consistency for the .equals() comparison.
-    imported_images_df_for_comparison = imported_project.images_df
-    if "thumbnail" in imported_images_df_for_comparison.columns:
-        imported_images_df_for_comparison = imported_images_df_for_comparison.drop("thumbnail")
+    imported_artifacts_df_for_comparison = imported_project.artifacts_df
+    if "thumbnail" in imported_artifacts_df_for_comparison.columns:
+        imported_artifacts_df_for_comparison = imported_artifacts_df_for_comparison.drop("thumbnail")
 
     # Reorder columns of the imported DataFrame to match the expected DataFrame's order
     # before performing the equality check.
-    imported_images_df_for_comparison = imported_images_df_for_comparison[expected_images_df_for_comparison.columns]
+    imported_artifacts_df_for_comparison = imported_artifacts_df_for_comparison[expected_artifacts_df_for_comparison.columns]
 
     # Use a more robust comparison that handles floating-point precision and numpy array differences
     # First check that shapes and columns match
-    assert imported_images_df_for_comparison.shape == expected_images_df_for_comparison.shape
-    assert imported_images_df_for_comparison.columns == expected_images_df_for_comparison.columns
+    assert imported_artifacts_df_for_comparison.shape == expected_artifacts_df_for_comparison.shape
+    assert imported_artifacts_df_for_comparison.columns == expected_artifacts_df_for_comparison.columns
     
     # Compare column by column
-    for col in expected_images_df_for_comparison.columns:
-        expected_col = expected_images_df_for_comparison[col]
-        imported_col = imported_images_df_for_comparison[col]
+    for col in expected_artifacts_df_for_comparison.columns:
+        expected_col = expected_artifacts_df_for_comparison[col]
+        imported_col = imported_artifacts_df_for_comparison[col]
         
         if expected_col.dtype == pl.Object:
             # For object columns (like histogram numpy arrays), compare element by element
@@ -280,7 +280,7 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
             # For other columns, use exact equality
             assert expected_col.equals(imported_col), f"Column '{col}' values are not equal"
     # Final validation: the filtered and reordered DataFrames should be equal, but they just aren't for some reason. Are there metadata differences in these two pl.df?
-    # assert imported_images_df_for_comparison.equals(expected_images_df_for_comparison)
+    # assert imported_artifacts_df_for_comparison.equals(expected_artifacts_df_for_comparison)
 
 def test_import_project_non_existent_file(tmp_path: Path):
     """Test importing from a path that does not exist."""
@@ -371,37 +371,36 @@ def test_import_project_malformed_metadata_paths_not_list(project_instance: Proj
     finally:
         shutil.rmtree(tmp_staging_path, ignore_errors=True)
 
-# TODO: change this - as paths df is retired - should be images df
 def test_import_project_corrupted_dataframe_parquet(project_with_minimal_data: Project, tmp_path: Path, caplog):
     """
     Test importing a project where a DataFrame parquet file is corrupted.
     The project should load, but the corrupted DataFrame should be None, and a warning should be logged.
     """
-    export_path = tmp_path / "corrupted_images_df_project.zip"
+    export_path = tmp_path / "corrupted_artifacts_df_project.zip"
     api.export_project(project_with_minimal_data, export_path)  # Export a valid project first
 
     # Now, "corrupt" the paths_df.parquet inside the zip by replacing its content with invalid data
     with zipfile.ZipFile(export_path, 'a') as zf:  # 'a' for append, but it can overwrite if same name
         # Write some non-parquet data instead of the actual parquet file
-        zf.writestr(IMAGES_DF_FILENAME, b"THIS IS NOT A VALID PARQUET FILE BUT JUNK DATA")
+        zf.writestr(ARTIFACTS_DF_FILENAME, b"THIS IS NOT A VALID PARQUET FILE BUT JUNK DATA")
 
 
     with caplog.at_level(logging.WARNING):
         imported_project = api.import_project(export_path)
         # Check that a warning about not being able to read paths_df was logged
-        assert "Project IO: Could not read images_df data" in caplog.text
+        assert "Project IO: Could not read artifacts_df data" in caplog.text
 
     # Verify that paths_df is None due to corruption, but other attributes are fine
     assert imported_project.name == project_with_minimal_data.name
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
     assert imported_project.settings == project_with_minimal_data.settings
-    assert imported_project.images_df is None  # Still None for this fixture type
+    assert imported_project.artifacts_df is None  # Still None for this fixture type
 
-# TODO: change this - as paths df is retired - should be images df
+
 def test_import_project_missing_dataframe_files(project_instance: Project, tmp_path: Path):
     """
-    Test importing a project where DataFrame files (paths_df.parquet, images_df.parquet)
+    Test importing a project where DataFrame files (paths_df.parquet, artifacts_df.parquet)
     are legitimately missing (e.g., exported before they were built).
     The project should load successfully, and the DFs should be None.
     """
@@ -412,7 +411,7 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
     imported_project = api.import_project(export_path)
 
     assert imported_project.name == project_instance.name
-    assert imported_project.images_df is None
+    assert imported_project.artifacts_df is None
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
     assert imported_project.settings == project_instance.settings
@@ -421,7 +420,7 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
 def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_path: Path):
     """
     Performs a full export-import cycle with a project containing
-    all possible data (base_dir, paths, settings, images_df)
+    all possible data (base_dir, paths, settings, artifacts_df)
     and verifies integrity.
     """
     export_path = tmp_path / "full_cycle_project.zip"
@@ -433,22 +432,22 @@ def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_pa
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
     assert imported_project.settings == project_with_all_data.settings
-    assert imported_project.images_df is not None
+    assert imported_project.artifacts_df is not None
 
     # Exclude 'thumbnail' column from comparison as it's not being exported/imported correctly
-    columns_to_compare = [col for col in project_with_all_data.images_df.columns if col != 'thumbnail']
-    imported_images_df_for_comparison = imported_project.images_df[columns_to_compare]
-    expected_images_df_for_comparison = project_with_all_data.images_df[columns_to_compare]
+    columns_to_compare = [col for col in project_with_all_data.artifacts_df.columns if col != 'thumbnail']
+    imported_artifacts_df_for_comparison = imported_project.artifacts_df[columns_to_compare]
+    expected_artifacts_df_for_comparison = project_with_all_data.artifacts_df[columns_to_compare]
 
     # Use a more robust comparison that handles floating-point precision and numpy array differences
     # First check that shapes and columns match
-    assert imported_images_df_for_comparison.shape == expected_images_df_for_comparison.shape
-    assert imported_images_df_for_comparison.columns == expected_images_df_for_comparison.columns
+    assert imported_artifacts_df_for_comparison.shape == expected_artifacts_df_for_comparison.shape
+    assert imported_artifacts_df_for_comparison.columns == expected_artifacts_df_for_comparison.columns
     
     # Compare column by column
-    for col in expected_images_df_for_comparison.columns:
-        expected_col = expected_images_df_for_comparison[col]
-        imported_col = imported_images_df_for_comparison[col]
+    for col in expected_artifacts_df_for_comparison.columns:
+        expected_col = expected_artifacts_df_for_comparison[col]
+        imported_col = imported_artifacts_df_for_comparison[col]
         
         if expected_col.dtype == pl.Object:
             # For object columns (like histogram numpy arrays), compare element by element
@@ -481,10 +480,10 @@ def create_mock_project_zip(
         project_name: str,
         base_dir_str: str,
         paths_str_list: List[str],
-        include_images_df: bool = False,
+        include_artifacts_df: bool = False,
         temp_dir_to_zip: Optional[Path] = None
 ) -> Path:
-    """Helper to create a zip file with custom metadata and optional images_df."""
+    """Helper to create a zip file with custom metadata and optional artifacts_df."""
     zip_export_path = tmp_path / f"{project_name}_mock.zip"
 
     # Use a temporary directory for staging the files to be zipped
@@ -504,9 +503,9 @@ def create_mock_project_zip(
 
     files_for_zip = [(metadata_file_path, METADATA_FILENAME)]
 
-    if include_images_df:
-        # Create a dummy images_df for the test
-        dummy_images_df = pl.DataFrame({
+    if include_artifacts_df:
+        # Create a dummy artifacts_df for the test
+        dummy_artifacts_df = pl.DataFrame({
             "path": ["/dummy/path/image1.jpg"],
             "filename": ["image1.jpg"],
             "file_extension": ["jpg"],
@@ -520,9 +519,9 @@ def create_mock_project_zip(
             "is_animated": [False],
             "n_frames": [1],
         })
-        images_df_path = temp_dir_to_zip / IMAGES_DF_FILENAME
-        dummy_images_df.write_parquet(images_df_path)
-        files_for_zip.append((images_df_path, IMAGES_DF_FILENAME))
+        artifacts_df_path = temp_dir_to_zip / ARTIFACTS_DF_FILENAME
+        dummy_artifacts_df.write_parquet(artifacts_df_path)
+        files_for_zip.append((artifacts_df_path, ARTIFACTS_DF_FILENAME))
 
     with zipfile.ZipFile(zip_export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         for source_path, arcname in files_for_zip:
@@ -531,9 +530,9 @@ def create_mock_project_zip(
     return zip_export_path
 
 
-def test_import_project_no_images_df_base_dir_missing_on_system(tmp_path: Path):
+def test_import_project_no_artifacts_df_base_dir_missing_on_system(tmp_path: Path):
     """
-    Test importing a project without images_df where base_dir in metadata
+    Test importing a project without artifacts_df where base_dir in metadata
     does NOT exist on the current file system. Should raise ValueError.
     """
     non_existent_base_dir = tmp_path / "non_existent_base_dir"
@@ -549,9 +548,9 @@ def test_import_project_no_images_df_base_dir_missing_on_system(tmp_path: Path):
         api.import_project(export_path)
 
 
-def test_import_project_no_images_df_path_missing_on_system(tmp_path: Path):
+def test_import_project_no_artifacts_df_path_missing_on_system(tmp_path: Path):
     """
-    Test importing a project without images_df where one of the paths in metadata
+    Test importing a project without artifacts_df where one of the paths in metadata
     does NOT exist on the current file system. Should raise ValueError.
     """
     # Create a real base_dir but a non-existent sub-path
@@ -571,9 +570,9 @@ def test_import_project_no_images_df_path_missing_on_system(tmp_path: Path):
         api.import_project(export_path)
 
 
-def test_import_project_with_images_df_base_dir_missing_on_system_warns(tmp_path: Path, caplog):
+def test_import_project_with_artifacts_df_base_dir_missing_on_system_warns(tmp_path: Path, caplog):
     """
-    Test importing a project WITH images_df where base_dir in metadata
+    Test importing a project WITH artifacts_df where base_dir in metadata
     does NOT exist on the current file system. Should succeed but log WARNING.
     """
     non_existent_base_dir = tmp_path / "non_existent_base_dir_with_images"
@@ -583,7 +582,7 @@ def test_import_project_with_images_df_base_dir_missing_on_system_warns(tmp_path
         "test_img_df_base_missing_warns",
         str(non_existent_base_dir),
         [str(non_existent_base_dir / "subdir")],  # Include a path for completeness
-        include_images_df=True
+        include_artifacts_df=True
     )
 
     with caplog.at_level(logging.WARNING):
@@ -593,12 +592,12 @@ def test_import_project_with_images_df_base_dir_missing_on_system_warns(tmp_path
 
     assert imported_project.name == "test_img_df_base_missing_warns"
     assert imported_project.base_dir == non_existent_base_dir
-    assert imported_project.images_df is not None  # Should still have images_df
+    assert imported_project.artifacts_df is not None  # Should still have artifacts_df
 
 
-def test_import_project_with_images_df_path_missing_on_system_warns(tmp_path: Path, caplog):
+def test_import_project_with_artifacts_df_path_missing_on_system_warns(tmp_path: Path, caplog):
     """
-    Test importing a project WITH images_df where one of the paths in metadata
+    Test importing a project WITH artifacts_df where one of the paths in metadata
     does NOT exist on the current file system. Should succeed but log WARNING.
     """
     real_base_dir = tmp_path / "real_base_with_images"
@@ -610,7 +609,7 @@ def test_import_project_with_images_df_path_missing_on_system_warns(tmp_path: Pa
         "test_img_df_path_missing_warns",
         str(real_base_dir),
         [str(real_base_dir), str(non_existent_path)],
-        include_images_df=True
+        include_artifacts_df=True
     )
 
     with caplog.at_level(logging.WARNING):
@@ -620,12 +619,12 @@ def test_import_project_with_images_df_path_missing_on_system_warns(tmp_path: Pa
     assert imported_project.name == "test_img_df_path_missing_warns"
     assert imported_project.base_dir == real_base_dir
     assert imported_project.paths == [real_base_dir, non_existent_path]  # Paths are preserved as is
-    assert imported_project.images_df is not None
+    assert imported_project.artifacts_df is not None
 
 
-def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path):
+def test_import_project_no_artifacts_df_base_dir_invalid_path_string(tmp_path: Path):
     """
-    Test importing a project without images_df where the base_dir string
+    Test importing a project without artifacts_df where the base_dir string
     in metadata is syntactically invalid (e.g., contains illegal characters).
     Should raise ValueError.
     """
@@ -639,7 +638,7 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
         "test_invalid_base_dir_str",
         invalid_base_dir_str,
         [], # No paths needed for this specific test
-        include_images_df=False
+        include_artifacts_df=False
     )
 
     with pytest.raises(
@@ -651,9 +650,9 @@ def test_import_project_no_images_df_base_dir_invalid_path_string(tmp_path: Path
     assert f"Project requires file system access but imported base directory '{invalid_base_dir_str.replace('\\', '/').replace('//', '/').replace('\\\\', '\\')}' is invalid or inaccessible: " in error_str
 
 
-def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
+def test_import_project_no_artifacts_df_paths_invalid_path_string(tmp_path: Path):
     """
-    Test importing a project without images_df where one of the paths strings
+    Test importing a project without artifacts_df where one of the paths strings
     in metadata is syntactically invalid. Should raise ValueError.
     """
     real_base_dir = tmp_path / "valid_base"
@@ -665,7 +664,7 @@ def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
         "test_invalid_path_str",
         str(real_base_dir),
         [str(real_base_dir), invalid_path_str],
-        include_images_df=False
+        include_artifacts_df=False
     )
 
     with pytest.raises(ValueError, match="is invalid, inaccessible, or outside the project base"):
@@ -675,7 +674,7 @@ def test_import_project_no_images_df_paths_invalid_path_string(tmp_path: Path):
 def test_import_project_malformed_metadata_base_dir_none(tmp_path: Path):
     """
     Test importing a project where base_dir in metadata.yml is explicitly None,
-    and there's NO images_df. Should raise ValueError.
+    and there's NO artifacts_df. Should raise ValueError.
     """
     export_path = tmp_path / "null_base_dir_no_img_df.zip"
     tmp_staging_path = tmp_path / "temp_staging_null_base"
@@ -701,26 +700,26 @@ def test_import_project_malformed_metadata_base_dir_none(tmp_path: Path):
         shutil.rmtree(tmp_staging_path, ignore_errors=True)
 
 
-def test_import_project_malformed_metadata_base_dir_none_with_images_df(tmp_path: Path, caplog):
+def test_import_project_malformed_metadata_base_dir_none_with_artifacts_df(tmp_path: Path, caplog):
     """
     Test importing a project where base_dir in metadata.yml is explicitly None,
-    but there IS an images_df. Should succeed but log WARNING.
+    but there IS an artifacts_df. Should succeed but log WARNING.
     """
     export_path = tmp_path / "null_base_dir_with_img_df.zip"
 
-    # Use the helper to create a zip with null base_dir and images_df
+    # Use the helper to create a zip with null base_dir and artifacts_df
     # We need to manually modify the metadata after initial creation for base_dir: None
     temp_staging_path = tmp_path / "temp_staging_null_base_with_img"
     temp_staging_path.mkdir()
 
-    # Create a dummy Project instance to generate images_df for the zip
+    # Create a dummy Project instance to generate artifacts_df for the zip
     # FIX: Ensure the dummy_base_dir exists before initializing Project, as Project's
     # base_dir setter validates the path.
     dummy_base_dir_for_creation = tmp_path / "dummy_base_dir"
     dummy_base_dir_for_creation.mkdir(exist_ok=True) # Create the directory
 
     dummy_project = Project(name="DummyProject", base_dir=dummy_base_dir_for_creation, loader="bioio")
-    dummy_project.images_df = pl.DataFrame({
+    dummy_project.artifacts_df = pl.DataFrame({
         "path": ["/dummy/path/image1.jpg"],
         "filename": ["image1.jpg"],
         "file_extension": ["jpg"],
@@ -748,9 +747,9 @@ def test_import_project_malformed_metadata_base_dir_none_with_images_df(tmp_path
 
     files_for_zip = [(metadata_file_path, METADATA_FILENAME)]
 
-    images_df_path = temp_staging_path / IMAGES_DF_FILENAME
-    dummy_project.images_df.write_parquet(images_df_path)
-    files_for_zip.append((images_df_path, IMAGES_DF_FILENAME))
+    artifacts_df_path = temp_staging_path / ARTIFACTS_DF_FILENAME
+    dummy_project.artifacts_df.write_parquet(artifacts_df_path)
+    files_for_zip.append((artifacts_df_path, ARTIFACTS_DF_FILENAME))
 
     with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         for source_path, arcname in files_for_zip:
@@ -759,11 +758,11 @@ def test_import_project_malformed_metadata_base_dir_none_with_images_df(tmp_path
     with caplog.at_level(logging.WARNING):
         imported_project = api.import_project(export_path)
         assert "Project IO: No base directory specified in the imported metadata." in caplog.text
-        assert "Project has processed image data (images_df), but path-dependent operations may be limited." in caplog.text
+        assert "Project has processed files (artifacts_df), but path-dependent operations may be limited." in caplog.text
 
     assert imported_project.name == "NullBaseDirWithImg"
     assert imported_project.base_dir is None  # Base dir should be None
-    assert imported_project.images_df is not None
+    assert imported_project.artifacts_df is not None
     shutil.rmtree(temp_staging_path, ignore_errors=True)  # Clean up temp staging dir
     shutil.rmtree(dummy_base_dir_for_creation, ignore_errors=True) # Clean up dummy base dir
 

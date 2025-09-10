@@ -202,8 +202,8 @@ def project_with_minimal_data(project_instance: Project, temp_test_dirs: list[Pa
 @pytest.fixture
 def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path]) -> Project:
     """
-    Provides a Project with base_dir, paths_df, images_df, and custom settings,
-    guaranteeing processable images.
+    Provides a Project with base_dir, paths_df, artifacts_df, and custom settings,
+    guaranteeing processable files.
     """
     project = project_instance # Already has base_dir set by fixture
 
@@ -218,7 +218,7 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
     )
     project.set_settings(new_settings)
 
-    project.process_images()
+    project.process_artifacts()
 
     return project
 

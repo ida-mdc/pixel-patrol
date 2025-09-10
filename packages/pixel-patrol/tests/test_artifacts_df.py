@@ -10,12 +10,12 @@ from PIL import Image
 
 from pixel_patrol.config import STANDARD_DIM_ORDER
 from pixel_patrol_base.core import processing
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing import (
-    build_images_df,
+    build_artifacts_df,
     _scan_dirs_for_extensions,
-    _get_deep_image_df,
+    _get_deep_artifact_df,
     PATHS_DF_EXPECTED_SCHEMA,
     _postprocess_basic_file_metadata_df
 )
@@ -32,7 +32,7 @@ def processors():
     return discover_processor_plugins()
 
 
-def test_build_images_df_from_file_system_no_images(tmp_path):
+def test_build_artifacts_df_from_file_system_no_images(tmp_path):
     non_image_dir = tmp_path / "non_image_files"
     non_image_dir.mkdir()
     (non_image_dir / "document.txt").write_text("This is a text file.")
@@ -41,10 +41,10 @@ def test_build_images_df_from_file_system_no_images(tmp_path):
     paths = [non_image_dir]
     extensions = {"png", "jpg"}
 
-    with patch('pixel_patrol_base.core.processing._get_deep_image_df', return_value=pl.DataFrame()) as mock_get_deep_image_df:
-        images_df = build_images_df(paths, extensions, "bioio")
-        assert images_df is None
-        mock_get_deep_image_df.assert_not_called()
+    with patch('pixel_patrol_base.core.processing._get_deep_artifact_df', return_value=pl.DataFrame()) as mock_get_deep_artifacts_df:
+        artifacts_df = build_artifacts_df(paths, extensions, "bioio")
+        assert artifacts_df is None
+        mock_get_deep_artifacts_df.assert_not_called()
 
 
 def test_scan_dirs_for_extensions_filters_correct_extensions(tmp_path):
@@ -67,18 +67,17 @@ def test_scan_dirs_for_extensions_handles_empty_directory_list():
     assert result == []
 
 
-def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
+def test_get_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
     p1 = tmp_path / "img1.jpg"; p1.write_bytes(b"")
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
-    required_cols = ["width", "height"]
 
-    def fake_get_all_image_properties(_path, loader, processors):
+    def fake_get_all_artifact_properties(_path, loader, processors):
         assert loader.NAME == "bioio"
         return {"width": 100, "height": 200}
-    monkeypatch.setattr(processing, "get_all_image_properties", fake_get_all_image_properties)
+    monkeypatch.setattr(processing, "get_all_artifact_properties", fake_get_all_artifact_properties)
 
-    df = _get_deep_image_df(paths, loader)
+    df = _get_deep_artifact_df(paths, loader)
 
     assert isinstance(df, pl.DataFrame)
     assert set(df.columns) == {"path", "width", "height"}
@@ -89,14 +88,14 @@ def test_get_deep_image_df_returns_dataframe_with_required_columns(tmp_path, mon
 
 def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, loader, processors):
     missing = tmp_path / "no.png"
-    assert get_all_image_properties(missing, loader=loader, processors=processors) == {}
+    assert get_all_artifact_properties(missing, loader=loader, processors=processors) == {}
 
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
     monkeypatch.setattr("pixel_patrol.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert get_all_image_properties(img_file, loader=loader, processors=processors) == {}
+    assert get_all_artifact_properties(img_file, loader=loader, processors=processors) == {}
 
 
 class DummyImg:
@@ -120,7 +119,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         "pixel_patrol.plugins.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
-    props = get_all_image_properties(
+    props = get_all_artifact_properties(
         img_file, loader=loader, processors=[]
     )
     expected_shape = [
@@ -142,11 +141,11 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         return {"width": 10, "height": 20} if path == p_valid else {}
 
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing.get_all_image_properties",
+        "pixel_patrol_base.core.processing.get_all_artifact_properties",
         fake_get_all_image_properties
     )
 
-    df = _get_deep_image_df([p_valid, p_invalid], loader_instance=loader)
+    df = _get_deep_artifact_df([p_valid, p_invalid], loader_instance=loader)
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 1
@@ -155,7 +154,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     assert df["height"].to_list() == [20]
 
 
-def test_build_images_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):
+def test_build_artifacts_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):
 
     base = tmp_path / "root"
     base.mkdir()
@@ -171,11 +170,11 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
         "height": [48, 256],
     })
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_artifact_df",
         lambda paths, cols: deep_df
     )
 
-    result = build_images_df(
+    result = build_artifacts_df(
         bases=[base],
         selected_extensions={"jpg", "png"},
         loader="bioio"
@@ -195,7 +194,7 @@ def test_build_images_df_from_file_system_with_images_returns_expected_columns_a
     expected_dict = dict(zip(expected_paths, zip([64, 128], [48, 256])))
     assert result_dict == expected_dict
 
-def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
+def test_build_artifacts_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
 
     base = tmp_path / "root"
     base.mkdir()
@@ -208,11 +207,11 @@ def test_build_images_df_from_file_system_merges_basic_and_deep_metadata_correct
         "height": [15, 25],
     })
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_image_df",
+        "pixel_patrol_base.core.processing._get_deep_artifact_df",
         lambda paths, cols: deep_df
     )
 
-    result = build_images_df(
+    result = build_artifacts_df(
         bases=[base],
         selected_extensions={"jpg", "png"},
         loader="bioio"
@@ -258,7 +257,7 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
     assert actual_short == expected_full or actual_short == expected_last
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
-def test_full_images_df_computes_real_mean_intensity(tmp_path, loader):
+def test_full_artifacts_df_computes_real_mean_intensity(tmp_path, loader):
     # Create a directory with two 2×2 images of known values
     img_dir = tmp_path / "imgs"
     img_dir.mkdir()
@@ -272,7 +271,7 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path, loader):
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
     # Build without any monkeypatching
-    df = build_images_df(
+    df = build_artifacts_df(
         bases=[img_dir],
         selected_extensions={"png"},
         loader=loader
@@ -288,7 +287,7 @@ def test_full_images_df_computes_real_mean_intensity(tmp_path, loader):
     assert mip["full.png"] == 255.0
 
 
-def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
+def test_full_artifacts_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
 
     t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
     arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
@@ -300,7 +299,7 @@ def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     path = tmp_path / "5d.tif"
     tifffile.imwrite(str(path), arr, photometric='minisblack')
 
-    df = build_images_df(
+    df = build_artifacts_df(
         bases=[tmp_path],
         selected_extensions={"tif"},
         loader=loader
@@ -352,7 +351,7 @@ def test_full_images_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     assert df[0,"mean_intensity"] == overall_expected
 
 
-def test_full_images_df_handles_png_gray(tmp_path, loader):
+def test_full_artifacts_df_handles_png_gray(tmp_path, loader):
 
     arr = np.zeros((2, 2, 3), dtype=np.uint8)
     arr[..., 0] = 10  # R
@@ -362,7 +361,7 @@ def test_full_images_df_handles_png_gray(tmp_path, loader):
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
 
-    df = build_images_df(
+    df = build_artifacts_df(
         bases=[tmp_path],
         selected_extensions={"png"},
         loader=loader

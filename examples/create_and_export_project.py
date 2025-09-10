@@ -5,9 +5,9 @@ from pixel_patrol_base.api import (
     create_project,
     add_paths,
     set_settings,
-    process_images,
+    process_artifacts,
     export_project,
-    get_images_df,
+    get_artifacts_df,
 )
 from pixel_patrol_base.core.project_settings import Settings
 
@@ -46,13 +46,13 @@ if __name__ == "__main__":
     my_project = set_settings(my_project, initial_settings)
 
     # 5. Process images to build the images_df (using API)
-    my_project = process_images(my_project)
+    my_project = process_artifacts(my_project)
 
     # 6. Get and print the head of the images_df (using API)
-    images_dataframe = get_images_df(my_project)
+    images_dataframe = get_artifacts_df(my_project)
 
     # Also use API functions for getting images_df columns
-    print(get_images_df(my_project).columns)
+    print(get_artifacts_df(my_project).columns)
 
     if images_dataframe is not None and not images_dataframe.is_empty():
         print("\n--- Images DataFrame Head ---")

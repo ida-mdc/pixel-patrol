@@ -7,7 +7,7 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_image_properties
+from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension
@@ -62,8 +62,8 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
-    """Loop over paths, get_all_image_properties, return DataFrame (may be empty).
+def _get_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
+    """Loop over paths, get_all_artifact_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
     """
     processors = discover_processor_plugins()
@@ -73,9 +73,9 @@ def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) ->
     rows = []
 
     for p in paths:
-        image_dict = get_all_image_properties(p, loader_instance, processors)
-        if image_dict:
-            rows.append({"path": str(p), **image_dict})
+        artifact_dict = get_all_artifact_properties(p, loader_instance, processors)
+        if artifact_dict:
+            rows.append({"path": str(p), **artifact_dict})
 
     # 1) coerce types row-wise based on declared schema/patterns
     rows = [coerce_row_types(r, static, patterns) for r in rows]
@@ -87,7 +87,7 @@ def _get_deep_image_df(paths: List[Path], loader_instance: PixelPatrolLoader) ->
     return pl.DataFrame(rows)
 
 
-def build_images_df(
+def build_artifacts_df(
     bases: List[Path],
     selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
@@ -99,7 +99,7 @@ def build_images_df(
     basic = _postprocess_basic_file_metadata_df(normalize_file_extension(basic))
     if loader is None: return basic
 
-    deep = _get_deep_image_df([Path(p) for p in basic["path"].to_list()], loader)
+    deep = _get_deep_artifact_df([Path(p) for p in basic["path"].to_list()], loader)
 
     return basic.join(deep, on="path", how="left")
 

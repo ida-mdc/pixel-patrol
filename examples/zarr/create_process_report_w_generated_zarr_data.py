@@ -9,8 +9,8 @@ from pixel_patrol_base.api import (
     create_project,
     add_paths,
     set_settings,
-    process_images,
-    get_images_df,
+    process_artifacts,
+    get_artifacts_df,
     show_report, export_project,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -73,10 +73,10 @@ if __name__ == "__main__":
     project = set_settings(project, settings)
 
     # Compute all image metrics
-    project = process_images(project)
+    project = process_artifacts(project)
 
     # Display head of the images DataFrame
-    df = get_images_df(project)
+    df = get_artifacts_df(project)
     if df is not None and not df.is_empty():
         print("\n--- Images DataFrame Head ---")
         print(df.head())
