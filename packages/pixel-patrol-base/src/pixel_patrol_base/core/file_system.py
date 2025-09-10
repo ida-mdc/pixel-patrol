@@ -3,39 +3,12 @@ from typing import Dict, Any, List, Literal, Optional, Set
 import os
 from datetime import datetime
 from pathlib import Path
-import zarr
 import polars as pl
 
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
+from pixel_patrol_base.core.contracts import PixelPatrolLoader
 
 logger = logging.getLogger(__name__)
-
-def is_zarr_store(path: Path) -> bool:
-    """
-    Robustly checks if a given path is a Zarr store (v2 or v3).
-
-    This function uses the zarr library to attempt opening the store, which
-    correctly handles both Zarr v2 and v3 specifications.
-
-    Args:
-        path: The pathlib.Path object to check.
-
-    Returns:
-        True if the path is a valid Zarr store, False otherwise.
-    """
-    try:
-        store_obj = zarr.open(store=str(path.absolute()), mode='r')
-
-        if isinstance(store_obj, zarr.Group):
-            # A group is "processable" if it has any custom attributes.
-            # A generic container group will have empty attrs.
-            return bool(store_obj.attrs)
-
-        return True
-
-    except Exception as e:
-        # Catches any error, indicating it's not a valid or accessible Zarr store.
-        return False
 
 
 def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[str, Any]:
@@ -74,30 +47,36 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
 def walk_filesystem(
     bases: List[Path],
     accepted_extensions: Set[str] | Literal["all"],
+    loader: Optional[PixelPatrolLoader] = None,
 ) -> pl.DataFrame:
     """
-    - Only include files and Zarr stores (no plain directories).
-    - accepted_extensions == "all": include all files + Zarr stores.
-    - accepted_extensions is a set: include files with suffix in set; include Zarr if 'zarr' in set.
+    - Only include files and loader-supported folder datasets (no plain directories).
+    - accepted_extensions == "all": include all files + any folder datasets supported by the loader.
+    - accepted_extensions is a set: include files with suffix in set; include folder datasets only if they intersect loader.FOLDER_EXTENSIONS.
     """
     records: List[dict] = []
     include_all = accepted_extensions == "all"
+
+    is_folder_check = (loader is not None) and \
+                      hasattr(loader, "is_folder_supported")  and \
+                      (include_all or
+                       not accepted_extensions.isdisjoint(getattr(loader, "FOLDER_EXTENSIONS", set())))
+    folder_support_fn = loader.is_folder_supported if is_folder_check else None
 
     for base in bases:
         for root, dirnames, filenames in os.walk(base, topdown=True):
             dirpath = Path(root)
 
-            # Zarr: add as single item and prune descent
             keep: List[str] = []
-            for d in dirnames:
-                sub = dirpath / d
-                if is_zarr_store(sub):
-                    if include_all or ("zarr" in accepted_extensions):
+
+            if is_folder_check:
+                for d in dirnames:
+                    sub = dirpath / d
+                    if folder_support_fn(sub):
                         records.append(make_basic_record(sub, base, is_folder=False))
-                    # do not descend into zarr
-                else:
-                    keep.append(d)
-            dirnames[:] = keep
+                    else:
+                        keep.append(d)
+                dirnames[:] = keep
 
             # Files
             for name in filenames:

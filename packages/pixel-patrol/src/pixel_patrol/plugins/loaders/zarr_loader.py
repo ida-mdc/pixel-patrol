@@ -8,6 +8,7 @@ import zarr
 
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.artifact import artifact_from
+from pixel_patrol.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,11 @@ class ZarrLoader:
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^[A-Za-z]_size$", int),
     ]
+
+    FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
+
+    def is_folder_supported(self, path: Path) -> bool:
+        return is_zarr_store(path)
 
     def load(self, source: str):
         path = Path(source)

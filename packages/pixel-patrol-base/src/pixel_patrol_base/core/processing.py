@@ -93,7 +93,7 @@ def build_images_df(
     loader: Optional[PixelPatrolLoader],
 ) -> Optional[pl.DataFrame]:
 
-    basic = walk_filesystem(bases, accepted_extensions=selected_extensions)
+    basic = walk_filesystem(bases, loader=loader, accepted_extensions=selected_extensions)
     if basic.is_empty(): return None
 
     basic = _postprocess_basic_file_metadata_df(normalize_file_extension(basic))
