@@ -11,8 +11,7 @@ from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifac
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension
-from pixel_patrol_base.utils.path_utils import find_common_base
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
+from pixel_patrol_base.utils.df_utils import postprocess_basic_file_metadata_df
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +28,6 @@ PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
     "size_readable": pl.String,
     "imported_path": pl.String
 }
-
-
-def _postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
-    if df.is_empty():
-        return df
-
-    common_base = find_common_base(df["imported_path"].unique().to_list())
-
-    df = df.with_columns([
-        pl.col("modification_date").dt.month().alias("modification_month"),
-        pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
-        pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
-    ])
-
-    return df
 
 def _scan_dirs_for_extensions(
     bases: List[Path],
@@ -62,7 +46,7 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-def _get_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
+def _build_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
     """Loop over paths, get_all_artifact_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
     """
@@ -93,15 +77,20 @@ def build_artifacts_df(
     loader: Optional[PixelPatrolLoader],
 ) -> Optional[pl.DataFrame]:
 
-    basic = walk_filesystem(bases, loader=loader, accepted_extensions=selected_extensions)
-    if basic.is_empty(): return None
+    basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
+    if loader is None or basic is None: return basic
 
-    basic = _postprocess_basic_file_metadata_df(normalize_file_extension(basic))
-    if loader is None: return basic
-
-    deep = _get_deep_artifact_df([Path(p) for p in basic["path"].to_list()], loader)
+    deep = _build_deep_artifact_df([Path(p) for p in basic["path"].to_list()], loader)
 
     return basic.join(deep, on="path", how="left")
+
+
+def _build_basic_file_df(bases, loader, accepted_extensions):
+    basic = walk_filesystem(bases, loader=loader, accepted_extensions=accepted_extensions)
+    if basic.is_empty(): return None
+    basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
+
+    return basic
 
 
 # TODO: delete or rename as paths_df is retired

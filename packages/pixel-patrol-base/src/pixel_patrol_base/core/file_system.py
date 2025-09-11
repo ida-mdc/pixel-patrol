@@ -36,7 +36,6 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
         "parent": str(path.parent) if path != base else None,
         "depth": depth,
         "size_bytes": 0 if is_folder else st.st_size,
-        "size_readable": "0 Bytes" if is_folder else format_bytes_to_human_readable(st.st_size),
         "modification_date": datetime.fromtimestamp(os.path.getmtime(path)),
         "file_extension": None if is_folder else path.suffix.lstrip(".").lower(),
         "imported_path": str(base),

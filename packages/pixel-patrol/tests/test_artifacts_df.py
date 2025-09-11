@@ -15,7 +15,7 @@ from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing import (
     build_artifacts_df,
     _scan_dirs_for_extensions,
-    _get_deep_artifact_df,
+    _build_deep_artifact_df,
     PATHS_DF_EXPECTED_SCHEMA,
     _postprocess_basic_file_metadata_df
 )
@@ -77,7 +77,7 @@ def test_get_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path, 
         return {"width": 100, "height": 200}
     monkeypatch.setattr(processing, "get_all_artifact_properties", fake_get_all_artifact_properties)
 
-    df = _get_deep_artifact_df(paths, loader)
+    df = _build_deep_artifact_df(paths, loader)
 
     assert isinstance(df, pl.DataFrame)
     assert set(df.columns) == {"path", "width", "height"}
@@ -145,7 +145,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         fake_get_all_image_properties
     )
 
-    df = _get_deep_artifact_df([p_valid, p_invalid], loader_instance=loader)
+    df = _build_deep_artifact_df([p_valid, p_invalid], loader_instance=loader)
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 1

@@ -81,7 +81,6 @@ def _assert_directory_tree_df(df: pl.DataFrame, expected_data: list[dict], impor
         "parent": pl.String, # This should be pl.String or pl.Null if parent can be None
         "depth": pl.Int64,
         "size_bytes": pl.Int64,
-        "size_readable": pl.String,
         "modification_date": pl.Datetime(time_unit="us", time_zone=None),
         "file_extension": pl.String, # This should be pl.String or pl.Null if extension can be None
         "imported_path": pl.String,
@@ -121,27 +120,25 @@ def _assert_directory_tree_df(df: pl.DataFrame, expected_data: list[dict], impor
 def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
     """
     Tests _fetch_single_directory_tree with a complex directory structure.
-    Verifies column types, content, depth, parent, size_readable, and imported_path.
+    Verifies column types, content, depth, parent, and imported_path.
     """
     df = walk_filesystem([complex_temp_dir], accepted_extensions="all")
     base_imported_path = str(complex_temp_dir)
 
     expected_data = [
         {"path": str(complex_temp_dir / "file1.txt"), "name": "file1.txt", "type": "file",
-          "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10,
-          "size_readable": format_bytes_to_human_readable(10), "file_extension": "txt",
+          "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10, "file_extension": "txt",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
-          "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20,
-          "size_readable": format_bytes_to_human_readable(20), "file_extension": "jpg",
+          "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20, "file_extension": "jpg",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv",
           "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3,
-          "size_bytes": 30, "size_readable": format_bytes_to_human_readable(30), "file_extension": "csv",
+          "size_bytes": 30, "file_extension": "csv",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
           "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40,
-          "size_readable": format_bytes_to_human_readable(40), "file_extension": "png",
+          "file_extension": "png",
           "imported_path": base_imported_path},
     ]
     _assert_directory_tree_df(df, expected_data, base_imported_path)
@@ -161,7 +158,6 @@ def test_walk_filesystem_single_file_dir(single_file_dir: Path):
         "path": str(single_file_dir / "single_file.txt"), "name": "single_file.txt", "type": "file",
         "parent": str(single_file_dir), "depth": 1,
         "size_bytes": len("content".encode('utf-8')),
-        "size_readable": format_bytes_to_human_readable(len("content".encode('utf-8'))),
         "file_extension": "txt", "imported_path": base_imported_path,
     }]
     _assert_directory_tree_df(df, expected_data, base_imported_path)
