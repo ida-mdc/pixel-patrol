@@ -25,10 +25,10 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     dim_order = getattr(img.dims, "order", "")
     metadata["dim_order"] = dim_order
     for letter in dim_order:
-        dim_val = getattr(img.dims, letter, None)
-        if not dim_val:
-            dim_val = 1
-        metadata[f"{letter}_size"] = int(dim_val)
+        dim_size= getattr(img.dims, letter, None)
+        if not dim_size:
+            dim_size = 1
+        metadata[f"{letter}_size"] = int(dim_size)
 
     # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
