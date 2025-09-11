@@ -17,9 +17,9 @@ from pixel_patrol_base.core.processing import (
     _scan_dirs_for_extensions,
     _build_deep_artifact_df,
     PATHS_DF_EXPECTED_SCHEMA,
-    _postprocess_basic_file_metadata_df
 )
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
+from pixel_patrol_base.utils.df_utils import postprocess_basic_file_metadata_df
 
 @pytest.fixture
 def loader():
@@ -41,7 +41,7 @@ def test_build_artifacts_df_from_file_system_no_images(tmp_path):
     paths = [non_image_dir]
     extensions = {"png", "jpg"}
 
-    with patch('pixel_patrol_base.core.processing._get_deep_artifact_df', return_value=pl.DataFrame()) as mock_get_deep_artifacts_df:
+    with patch('pixel_patrol_base.core.processing._build_deep_artifact_df', return_value=pl.DataFrame()) as mock_get_deep_artifacts_df:
         artifacts_df = build_artifacts_df(paths, extensions, "bioio")
         assert artifacts_df is None
         mock_get_deep_artifacts_df.assert_not_called()
@@ -67,7 +67,7 @@ def test_scan_dirs_for_extensions_handles_empty_directory_list():
     assert result == []
 
 
-def test_get_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
+def test_build_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
     p1 = tmp_path / "img1.jpg"; p1.write_bytes(b"")
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
@@ -170,7 +170,7 @@ def test_build_artifacts_df_from_file_system_with_images_returns_expected_column
         "height": [48, 256],
     })
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_artifact_df",
+        "pixel_patrol_base.core.processing._build_deep_artifact_df",
         lambda paths, cols: deep_df
     )
 
@@ -207,7 +207,7 @@ def test_build_artifacts_df_from_file_system_merges_basic_and_deep_metadata_corr
         "height": [15, 25],
     })
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._get_deep_artifact_df",
+        "pixel_patrol_base.core.processing._build_deep_artifact_df",
         lambda paths, cols: deep_df
     )
 
@@ -246,7 +246,7 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
         "imported_path": [str(base), str(base)],
     })
 
-    out = _postprocess_basic_file_metadata_df(df)
+    out = postprocess_basic_file_metadata_df(df)
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
