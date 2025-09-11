@@ -35,7 +35,7 @@ def set_settings(project: Project, settings: Settings) -> Project:
     logger.info(f"API Call: Attempting to set project settings for '{project.name}'.")
     return project.set_settings(settings)
 
-def process_artifacts(project: Project) -> Project:
+def process_files(project: Project) -> Project:
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_artifacts()
 

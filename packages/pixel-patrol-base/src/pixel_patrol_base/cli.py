@@ -9,7 +9,7 @@ from pixel_patrol_base.api import (
     create_project,
     add_paths,
     set_settings,
-    process_artifacts,
+    process_files,
     export_project,
     import_project,
     show_report,
@@ -95,7 +95,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     set_settings(my_project, initial_settings)
 
     click.echo("Processing images...")
-    process_artifacts(my_project)
+    process_files(my_project)
 
     click.echo(f"Exporting project to: '{output_zip}'")
     export_project(my_project, Path(output_zip)) # Assuming export_project takes string path
