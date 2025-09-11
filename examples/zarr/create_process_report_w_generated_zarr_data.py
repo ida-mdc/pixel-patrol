@@ -9,7 +9,7 @@ from pixel_patrol_base.api import (
     create_project,
     add_paths,
     set_settings,
-    process_artifacts,
+    process_files,
     get_artifacts_df,
     show_report, export_project,
 )
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     project = set_settings(project, settings)
 
     # Compute all image metrics
-    project = process_artifacts(project)
+    project = process_files(project)
 
     # Display head of the images DataFrame
     df = get_artifacts_df(project)

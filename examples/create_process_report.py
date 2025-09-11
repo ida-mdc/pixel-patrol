@@ -5,7 +5,7 @@ from pixel_patrol_base.api import (
     create_project,
     add_paths,
     set_settings,
-    process_artifacts,
+    process_files,
     get_artifacts_df, show_report,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     my_project = set_settings(my_project, initial_settings)
 
     # 5. Process images to build the images_df (using API)
-    my_project = process_artifacts(my_project)
+    my_project = process_files(my_project)
 
     # 6. Get and print the head of the images_df (using API)
     images_dataframe = get_artifacts_df(my_project)
