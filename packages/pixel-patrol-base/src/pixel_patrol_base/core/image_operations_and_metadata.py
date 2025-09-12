@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.core.specs import can_accept
+from pixel_patrol_base.core.specs import is_artifact_matching_processor
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, proc
     # Always process using Artifact; processors opt-in via INPUT spec
     extracted_properties.update(metadata)
     for P in processors:
-        if not can_accept(art, P.INPUT):
+        if not is_artifact_matching_processor(art, P.INPUT):
             continue
         out = P.run(art)
         if isinstance(out, dict):
