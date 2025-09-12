@@ -87,5 +87,5 @@ class ThumbnailProcessor:
     }
 
     def run(self, art: Artifact) -> ProcessResult:
-        dim_order = art.meta.get("dim_order", "")
+        dim_order = art.dim_order
         return {"thumbnail": _generate_thumbnail(art.data, dim_order)}

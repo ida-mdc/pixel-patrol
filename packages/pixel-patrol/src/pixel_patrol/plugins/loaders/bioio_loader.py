@@ -22,13 +22,19 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
 
     # Dim order and per-dimension sizes (e.g., X_size, Y_size, Z_size, C_size, T_size)
-    dim_order = getattr(img.dims, "order", "")
+    dim_order = getattr(getattr(img, 'dims', None), 'order', '')
     metadata["dim_order"] = dim_order
     for letter in dim_order:
         dim_size= getattr(img.dims, letter, None)
         if not dim_size:
             dim_size = 1
         metadata[f"{letter}_size"] = int(dim_size)
+
+    dim_names = getattr(getattr(img, 'dims', None), 'names', None)
+    metadata["dim_names"] = (
+        list(dim_names) if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names)
+        else [f"dim{i + 1}" for i in range(len(metadata.get("dim_order", "")))]
+    )
 
     # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
@@ -84,6 +90,7 @@ class BioIoLoader:
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
+        "dim_names": list,
         "n_images": int,
         "num_pixels": int,
         "shape": pl.Array,       # or use `list` if you prefer to avoid polars types here

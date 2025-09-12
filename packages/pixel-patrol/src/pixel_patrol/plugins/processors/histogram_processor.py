@@ -86,7 +86,7 @@ class HistogramProcessor:
         Two-pass approach to use a single global range for all per-slice histograms.
         """
         data = art.data
-        dim_order = art.meta.get("dim_order", "")
+        dim_order = art.dim_order
 
         # PASS 1: global min/max (Dask lazy compute)
         min_val, max_val = da.compute(data.min(), data.max())
