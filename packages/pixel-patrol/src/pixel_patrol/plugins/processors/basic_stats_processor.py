@@ -34,5 +34,5 @@ class BasicStatsProcessor:
     DESCRIPTION = "Extracts basic image statistics such as mean, min, max."
 
     def run(self, art):
-        dim_order = art.meta.get("dim_order", "")
+        dim_order = art.dim_order
         return calculate_np_array_stats(art.data, dim_order)

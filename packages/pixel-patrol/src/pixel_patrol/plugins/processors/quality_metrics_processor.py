@@ -132,5 +132,5 @@ class QualityMetricsProcessor:
     ]
 
     def run(self, art: Artifact) -> Dict[str, float]:
-        dim_order = art.meta.get("dim_order", "")
+        dim_order = art.dim_order
         return calculate_np_array_stats(art.data, dim_order)

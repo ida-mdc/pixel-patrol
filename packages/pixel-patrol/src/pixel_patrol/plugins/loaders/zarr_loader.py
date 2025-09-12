@@ -54,6 +54,8 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
     for i, name in enumerate(dim_order):
         meta[f"{name}_size"] = int(arr.shape[i])
 
+    meta["dim_names"] = [f"dim{i + 1}" for i in range(len(dim_order))]
+
     # Zarr generally represents a single "image"
     meta["n_images"] = 1
     meta["channel_names"] = []
@@ -89,6 +91,7 @@ class ZarrLoader:
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
+        "dim_names": list,
         "n_images": int,
         "channel_names": list,
         "dtype": str,

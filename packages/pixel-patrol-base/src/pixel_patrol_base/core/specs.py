@@ -38,7 +38,9 @@ def is_kind_match(art_kind: str,
     return False
 
 def is_artifact_matching_processor(art, processor_input_spec: ArtifactSpec) -> bool:
-    if processor_input_spec.axes and not processor_input_spec.axes.issubset(art.axes): return False
+    if processor_input_spec.axes:
+        art_axes = set(getattr(art, 'dim_order', '') or '')
+        if not processor_input_spec.axes.issubset(art_axes): return False
     if not is_kind_match(art.kind, processor_input_spec.kinds, processor_input_spec.kind_patterns): return False
     if processor_input_spec.capabilities and not processor_input_spec.capabilities.issubset(art.capabilities): return False
     return True

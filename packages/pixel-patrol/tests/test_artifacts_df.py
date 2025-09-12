@@ -71,10 +71,12 @@ def test_build_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
 
-    def fake_get_all_artifact_properties(_path, loader):
+    def fake_get_all_artifact_properties(_path, loader, processors):
         assert loader.NAME == "bioio"
         return {"width": 100, "height": 200}
-    monkeypatch.setattr(processing, "processing.get_all_artifact_properties", fake_get_all_artifact_properties)
+
+    monkeypatch.setattr("pixel_patrol_base.core.processing.get_all_artifact_properties",
+                        fake_get_all_artifact_properties)
 
     df = _build_deep_artifact_df(paths, loader)
 
