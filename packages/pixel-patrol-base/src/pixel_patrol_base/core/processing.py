@@ -5,13 +5,15 @@ from typing import List, Optional, Dict, Set, Tuple
 
 import polars as pl
 
-from pixel_patrol_base.core.contracts import PixelPatrolLoader
+import time
+
+from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
-from pixel_patrol_base.utils.df_utils import normalize_file_extension
-from pixel_patrol_base.utils.df_utils import postprocess_basic_file_metadata_df
+from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
+from pixel_patrol_base.core.specs import is_artifact_matching_processor
+
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,46 @@ def _build_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoade
     rows = [{c: r.get(c, None) for c in all_cols} for r in rows]
 
     return pl.DataFrame(rows)
+
+
+def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
+    start_total_time = time.monotonic()
+
+    if not file_path.exists():
+        logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
+        return {}
+
+    extracted_properties = {}
+
+    logger.info(f"Attempting to load '{file_path}' with loader: {loader.NAME}")
+
+    start_load_time = time.monotonic()
+    try:
+        art = loader.load(str(file_path))
+        metadata = dict(art.meta)
+    except Exception as e:
+        logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
+        return {}
+
+    load_duration = time.monotonic() - start_load_time
+    logger.info(f"Loading with '{loader.NAME}' took {load_duration:.4f} seconds.")
+
+    # Always process using Artifact; processors opt-in via INPUT spec
+    extracted_properties.update(metadata)
+    for P in processors:
+        if not is_artifact_matching_processor(art, P.INPUT):
+            continue
+        out = P.run(art)
+        if isinstance(out, dict):
+            extracted_properties.update(out)
+        else:
+            art = out  # chainable: processors may transform the artifact
+            extracted_properties.update(art.meta)
+
+    total_duration = time.monotonic() - start_total_time
+    logger.info(f"Successfully loaded and processed '{file_path}'. Total time: {total_duration} seconds.")
+    return extracted_properties
+
 
 
 def build_artifacts_df(

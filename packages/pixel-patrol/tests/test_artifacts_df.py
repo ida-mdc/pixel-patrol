@@ -10,7 +10,6 @@ from PIL import Image
 
 from pixel_patrol.config import STANDARD_DIM_ORDER
 from pixel_patrol_base.core import processing
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing import (
     build_artifacts_df,
@@ -72,10 +71,10 @@ def test_build_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
 
-    def fake_get_all_artifact_properties(_path, loader, processors):
+    def fake_get_all_artifact_properties(_path, loader):
         assert loader.NAME == "bioio"
         return {"width": 100, "height": 200}
-    monkeypatch.setattr(processing, "get_all_artifact_properties", fake_get_all_artifact_properties)
+    monkeypatch.setattr(processing, "processing.get_all_artifact_properties", fake_get_all_artifact_properties)
 
     df = _build_deep_artifact_df(paths, loader)
 
@@ -88,14 +87,14 @@ def test_build_deep_artifact_df_returns_dataframe_with_required_columns(tmp_path
 
 def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, loader, processors):
     missing = tmp_path / "no.png"
-    assert get_all_artifact_properties(missing, loader=loader, processors=processors) == {}
+    assert processing.get_all_artifact_properties(missing, loader=loader, processors=processors) == {}
 
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
     monkeypatch.setattr("pixel_patrol.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert get_all_artifact_properties(img_file, loader=loader, processors=processors) == {}
+    assert processing.get_all_artifact_properties(img_file, loader=loader, processors=processors) == {}
 
 
 class DummyImg:
@@ -119,7 +118,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         "pixel_patrol.plugins.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
-    props = get_all_artifact_properties(
+    props = processing.get_all_artifact_properties(
         img_file, loader=loader, processors=[]
     )
     expected_shape = [
