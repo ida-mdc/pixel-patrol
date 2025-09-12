@@ -8,7 +8,7 @@ import zarr
 from bioio import BioImage
 from zarr.storage import LocalStore
 
-from pixel_patrol_base.core.image_operations_and_metadata import get_all_artifact_properties
+from pixel_patrol_base.core.processing import get_all_artifact_properties
 from pixel_patrol.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
