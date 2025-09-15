@@ -1,0 +1,28 @@
+[project]
+name = "pixel-patrol-loader-zarr"
+version = "0.1.0"
+description = "PixelPatrol add-on package for loading images with zarr"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "zarr>=3.1.1",
+    "pixel-patrol-base>=0.1.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_loader_zarr"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_zarr_loader_builtins = "pixel_patrol_loader_zarr.plugin_registry:register_loader_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }

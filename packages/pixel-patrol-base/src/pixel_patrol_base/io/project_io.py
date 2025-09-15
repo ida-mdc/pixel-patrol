@@ -287,7 +287,7 @@ def _reconstruct_project_core_data(
                              #      BEFORE THE LOOP BELOW.
 
     # Initialize with a dummy base_dir first, will be updated based on validation
-    project = Project(name, Path.cwd(), loader="bioio")
+    project = Project(name, Path.cwd())
 
     # Handle base_dir
     if base_dir_str is not None:
