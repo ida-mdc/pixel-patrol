@@ -150,6 +150,7 @@ def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
         'base_dir': str(project.base_dir) if project.base_dir else None,
         'paths': [str(p) for p in project.paths],
         'settings': _settings_to_dict(project.settings),
+        'loader': getattr(getattr(project, "loader", None), "NAME", None),
     }
     return metadata_content
 
@@ -279,15 +280,25 @@ def _reconstruct_project_core_data(
     base_dir_str = metadata_content.get('base_dir')
     paths_str_list = metadata_content.get('paths', []) # This gets "not a list" from the malformed metadata
     settings_dict = metadata_content.get('settings', {})
+    loader_id = metadata_content.get('loader')
 
     if not isinstance(paths_str_list, list): # This condition is TRUE for the test case
         logger.warning(
             f"Project IO: 'paths' data in {METADATA_FILENAME} is not a list. Found type: {type(paths_str_list).__name__}")
-        paths_str_list = [] # <--- THIS LINE IS CRUCIAL AND MUST BE PRESENT TO SET paths_str_list TO AN EMPTY LIST
-                             #      BEFORE THE LOOP BELOW.
+        paths_str_list = []
 
     # Initialize with a dummy base_dir first, will be updated based on validation
-    project = Project(name, Path.cwd())
+    if loader_id:
+        try:
+            project = Project(name, Path.cwd(), loader=loader_id)
+        except Exception as e:
+            logger.warning(
+                f"Project IO: Loader '{loader_id}' from metadata could not be resolved. "
+                f"Proceeding without a loader. Error: {e}"
+            )
+            project = Project(name, Path.cwd())
+    else:
+        project = Project(name, Path.cwd())
 
     # Handle base_dir
     if base_dir_str is not None:
