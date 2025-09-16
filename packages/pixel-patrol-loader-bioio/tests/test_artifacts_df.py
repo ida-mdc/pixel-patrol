@@ -188,8 +188,7 @@ def test_build_artifacts_df_from_file_system_with_images_returns_expected_column
 
     assert set(result["path"].to_list()) == set(expected_paths)
 
-    # Check that width/height values match for each path
-    result_dict = { 
+    result_dict = {
         row["path"]: (row["width"], row["height"]) for row in result.iter_rows(named=True)
     }
     expected_dict = dict(zip(expected_paths, zip([64, 128], [48, 256])))
@@ -242,7 +241,6 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
             datetime(2025, 7, 1, 9, 30),
         ],
         "file_extension": ["txt", "txt"],
-        # size_readable will be recomputed by the function
         "size_readable": ["", ""],
         "imported_path": [str(base), str(base)],
     })
@@ -251,7 +249,6 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
-    # imported_path_short may be the full base path or just the last part, depending on OS/Polars
     actual_short = out["imported_path_short"].to_list()
     expected_full = [str(base), str(base)]
     expected_last = [Path(base).name, Path(base).name]
@@ -259,19 +256,16 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 def test_full_artifacts_df_computes_real_mean_intensity(tmp_path, loader):
-    # Create a directory with two 2×2 images of known values
     img_dir = tmp_path / "imgs"
     img_dir.mkdir()
 
-    # Image A: all zeros → mean_intensity == 0
     a = np.zeros((2,2,1), dtype=np.uint8)
+    from PIL import Image
     Image.fromarray(a.squeeze(), mode="L").save(img_dir / "zero.png")
 
-    # Image B: all 255 → mean_intensity == 255
     b = np.full((2,2,1), 255, dtype=np.uint8)
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
-    # Build without any monkeypatching
     df = build_artifacts_df(
         bases=[img_dir],
         selected_extensions={"png"},
@@ -289,7 +283,6 @@ def test_full_artifacts_df_computes_real_mean_intensity(tmp_path, loader):
 
 
 def test_full_artifacts_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
-
     t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
     arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
     for t in range(t_size):
@@ -323,7 +316,6 @@ def test_full_artifacts_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     for t in range(t_size):
         col = f"mean_intensity_t{t}"
         assert col in df.columns
-        # average of all blocks at this t:
         block_vals = [(t * z_size + z) * 10 + c * 5
                       for c in range(c_size) for z in range(z_size)]
         expected = sum(block_vals) / len(block_vals)
@@ -353,11 +345,10 @@ def test_full_artifacts_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
 
 
 def test_full_artifacts_df_handles_png_gray(tmp_path, loader):
-
     arr = np.zeros((2, 2, 3), dtype=np.uint8)
-    arr[..., 0] = 10  # R
-    arr[..., 1] = 20  # G
-    arr[..., 2] = 30  # B
+    arr[..., 0] = 10
+    arr[..., 1] = 20
+    arr[..., 2] = 30
 
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
@@ -369,9 +360,6 @@ def test_full_artifacts_df_handles_png_gray(tmp_path, loader):
     )
 
     assert "mean_intensity" in df.columns
-
-    # TODO we need to re-add the functionality to weight the S dimension properly to support RGB correctly.
-    # raw_gray = np.dot(np.array([10, 20, 30], np.float32), np.array(RGB_WEIGHTS, np.float32))
     raw_gray = np.mean(arr)
     expected_gray = np.uint8(raw_gray)
     assert df["mean_intensity"][0] == expected_gray
