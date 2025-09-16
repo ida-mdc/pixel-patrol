@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import List, Dict, Set
 
 import plotly.graph_objects as go
