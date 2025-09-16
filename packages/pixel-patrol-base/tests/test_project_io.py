@@ -14,12 +14,12 @@ from pixel_patrol_base import api
 from pixel_patrol_base.io.project_io import METADATA_FILENAME, ARTIFACTS_DF_FILENAME, _deserialize_ndarray_columns_dataframe
 from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
 
-# Configure logging for ella_extras to capture warnings/errors
+# Configure logging for tests to capture warnings/errors
 logging.basicConfig(level=logging.INFO)
 
 
 # --- Tests for export_project ---
-# TODO: we have a patch in some ella_extras for the thumbnail column as its an object.
+# TODO: we have a patch in some tests for the thumbnail column as its an object.
 #       We need to handle it properly in the export/import logic.
 
 def test_export_project_empty(project_instance: Project, tmp_path: Path):
@@ -96,7 +96,7 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
         # Verify artifacts_df content
         with zf.open(ARTIFACTS_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
-            # FIXME: The ella_extras use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
+            # FIXME: The test use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
             # HOTFIX:
             loaded_df = _deserialize_ndarray_columns_dataframe(loaded_df)
 
