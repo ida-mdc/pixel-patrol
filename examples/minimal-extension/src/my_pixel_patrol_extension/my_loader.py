@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from typing import List, Optional, Set
@@ -42,7 +40,8 @@ class MarkdownDiaryLoader:
         }
         return Artifact(
             data=None,
-            axes=set(),
+            dim_order='',
+            dim_names=[],
             kind="text/markdown",
             meta=meta,
             capabilities=set(),
