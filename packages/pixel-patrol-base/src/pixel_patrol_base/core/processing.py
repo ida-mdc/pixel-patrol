@@ -11,7 +11,7 @@ from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProce
 from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
-from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
+from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df, rows_to_flexible_df
 from pixel_patrol_base.core.specs import is_artifact_matching_processor
 
 
@@ -63,14 +63,9 @@ def _build_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoade
         if artifact_dict:
             rows.append({"path": str(p), **artifact_dict})
 
-    # 1) coerce types row-wise based on declared schema/patterns
     rows = [coerce_row_types(r, static, patterns) for r in rows]
 
-    # 2) make columns consistent (fill missing keys with None)
-    all_cols = sorted(set().union(*[r.keys() for r in rows]))
-    rows = [{c: r.get(c, None) for c in all_cols} for r in rows]
-
-    return pl.DataFrame(rows)
+    return rows_to_flexible_df(rows)
 
 
 def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
