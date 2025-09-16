@@ -38,6 +38,8 @@ def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
         else:
             i += 1
 
+    arr_to_process = da.squeeze(arr_to_process)
+
     # If still >2D, collapse remaining non-XY dims by mean
     if arr_to_process.ndim > 2:
         logger.warning(
