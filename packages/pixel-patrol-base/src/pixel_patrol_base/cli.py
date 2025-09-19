@@ -41,8 +41,8 @@ def cli():
                    'of BASE_DIRECTORY will be included.')
 @click.option('--cmap', type=str, default="rainbow", show_default=True,
               help='Colormap for report visualization (e.g., viridis, plasma, rainbow).')
-@click.option('--n-example-images', type=int, default=9, show_default=True,
-              help='Number of example images to display in the report.')
+@click.option('--n-example-files', type=int, default=9, show_default=True,
+              help='Number of example files to display in the report.')
 @click.option('--file-extension', '-e', multiple=True,
               help='Optional: File extensions to include (e.g., png, jpg). Can be specified multiple times. '
                    'If not specified, all supported extensions will be used.')
