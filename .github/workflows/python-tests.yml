@@ -13,8 +13,7 @@ jobs:
     name: Test Python Packages
     strategy:
       matrix:
-        os:
-          - ubuntu-latest
+        os: ${{ github.ref == 'refs/heads/main' || (github.event.pull_request.base.ref == 'main') && fromJson('["ubuntu-latest","windows-latest","macos-latest"]') || fromJson('["ubuntu-latest"]') }}
         package:
           - pixel-patrol-base
           - pixel-patrol-loader-bioio
