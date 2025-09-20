@@ -39,12 +39,27 @@ class FileSunburstWidget:
             common_root_path = Path(common_root)
             vis_root_name = common_root_path.name
 
-            files_df = df_global.select(
-                pl.col("path").map_elements(lambda p: str(Path(p).relative_to(common_root_path))).alias("path"),
-                pl.col("path").map_elements(lambda p: str(Path(p).parent.relative_to(common_root_path))).alias("parent"),
-                pl.col("size_bytes"),
-                pl.col("imported_path_short"),
-                pl.lit(1, dtype=pl.Int64).alias("file_count"),
+            files_df = (
+                df_global.select(
+                    pl.col("path").map_elements(
+                        lambda p: str(Path(p).relative_to(common_root_path)),
+                        return_dtype=pl.String,
+                    ).alias("path"),
+                    pl.col("path").map_elements(
+                        lambda p: str(Path(p).parent.relative_to(common_root_path)),
+                        return_dtype=pl.String,
+                    ).alias("parent"),
+                    pl.col("size_bytes"),
+                    pl.col("imported_path_short"),
+                    pl.lit(1, dtype=pl.Int64).alias("file_count"),
+                )
+                # ensure files at root attach to the root node
+                .with_columns(
+                    pl.when(pl.col("parent") == ".")
+                    .then(pl.lit(vis_root_name))
+                    .otherwise(pl.col("parent"))
+                    .alias("parent")
+                )
             )
 
             # --- 2. Build the complete folder hierarchy ---
@@ -64,7 +79,10 @@ class FileSunburstWidget:
             folders_df = (
                 pl.DataFrame({"path": list(all_folders)})
                 .with_columns(
-                    pl.col("path").map_elements(lambda p: str(Path(p).parent)).alias("parent"),
+                    pl.col("path").map_elements(
+                        lambda p: str(Path(p).parent),
+                        return_dtype=pl.String
+                    ).alias("parent"),
                     pl.lit(0, dtype=pl.Int64).alias("size_bytes"),
                     pl.lit(0, dtype=pl.Int64).alias("file_count"),
                     pl.lit(None, dtype=pl.String).alias("imported_path_short"),
@@ -102,7 +120,10 @@ class FileSunburstWidget:
             )
 
             # --- 5. Labels & colors ---
-            display_labels = final_df["path"].map_elements(lambda p: Path(p).name, return_dtype=pl.String)
+            display_labels = final_df["path"].map_elements(
+                lambda p: Path(p).name,
+                return_dtype=pl.String,
+            )
 
             marker_colors = []
             for row in final_df.iter_rows(named=True):
