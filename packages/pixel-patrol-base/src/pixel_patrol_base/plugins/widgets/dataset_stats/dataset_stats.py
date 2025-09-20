@@ -6,7 +6,7 @@ from dash import html, Input, Output
 
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.core.feature_schema import get_requirements_as_patterns
-from pixel_patrol_base.report.utils import generate_column_violin_plots
+from pixel_patrol_base.report.utils import generate_column_violin_plots, get_sortable_columns
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
@@ -39,7 +39,8 @@ class DatasetStatsWidget:
             color_map = color_map or {}
 
             # Resolve the actual metric columns from the declared regex patterns
-            cols = df_global.columns
+            cols = get_sortable_columns(df_global)
+
             patterns = self.REQUIRES_PATTERNS or ()
             numeric_cols = sorted(
                 {c for c in cols for pat in patterns if re.search(pat, c)}
