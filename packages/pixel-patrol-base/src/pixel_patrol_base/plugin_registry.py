@@ -2,25 +2,21 @@ import importlib
 from typing import Type, Union, List
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
-
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
 from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
-
+from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_histograms import DatasetHistogramWidget
+from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
+from pixel_patrol_base.plugins.widgets.dataset_stats.dynamic_dataset_metrics import DynamicStatsWidget
 from pixel_patrol_base.plugins.widgets.file_stats.file_stats import FileStatisticsWidget
+from pixel_patrol_base.plugins.widgets.metadata.data_type import DataTypeWidget
+from pixel_patrol_base.plugins.widgets.metadata.dim_order import DimOrderWidget
+from pixel_patrol_base.plugins.widgets.metadata.dim_size import DimSizeWidget
 from pixel_patrol_base.plugins.widgets.summary.dataframe import DataFrameWidget
 from pixel_patrol_base.plugins.widgets.summary.file_summary import FileSummaryWidget
 from pixel_patrol_base.plugins.widgets.summary.sunburst import FileSunburstWidget
 from pixel_patrol_base.plugins.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol_base.plugins.widgets.visualization.image_mosaik import ImageMosaikWidget
-
-from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
-from pixel_patrol_base.plugins.widgets.dataset_stats.dynamic_dataset_metrics import DynamicStatsWidget
-from pixel_patrol_base.plugins.widgets.dataset_stats.dynamic_histograms import SlicedHistogramsWidget
-
-from pixel_patrol_base.plugins.widgets.metadata.data_type import DataTypeWidget
-from pixel_patrol_base.plugins.widgets.metadata.dim_order import DimOrderWidget
-from pixel_patrol_base.plugins.widgets.metadata.dim_size import DimSizeWidget
 
 PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
@@ -79,5 +75,5 @@ def register_widget_plugins():
         ImageMosaikWidget,
         DatasetStatsWidget,
         DynamicStatsWidget,
-        SlicedHistogramsWidget,
+        DatasetHistogramWidget,
     ]
