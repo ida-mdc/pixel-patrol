@@ -4,8 +4,8 @@ from typing import Dict, Any
 import numpy as np
 import pytest
 
-from pixel_patrol_loader_bioio.config import STANDARD_DIM_ORDER
-from pixel_patrol_loader_bioio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.config import SPRITE_SIZE
 from pixel_patrol_base.core.processing import get_all_record_properties
 from pixel_patrol_base.plugin_registry import discover_processor_plugins

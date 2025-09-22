@@ -6,7 +6,7 @@ import zarr
 from zarr.storage import LocalStore
 import polars as pl
 
-from pixel_patrol_loader_zarr.plugins.loaders.zarr_loader import ZarrLoader
+from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
 from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 

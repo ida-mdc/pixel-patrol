@@ -7,8 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pixel-patrol-base>=0.1.0",
     "pixel-patrol-image>=0.1.0",
-    "pixel-patrol-loader-zarr>=0.1.0",
-    "pixel-patrol-loader-bioio>=0.1.0",
+    "pixel-patrol-loader-bio>=0.1.0",
 ]
 
 [tool.uv]

@@ -8,8 +8,8 @@ import pytest
 import tifffile
 from PIL import Image
 
-from pixel_patrol_loader_bioio.config import STANDARD_DIM_ORDER
-from pixel_patrol_loader_bioio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
@@ -95,7 +95,7 @@ def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, l
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
-    monkeypatch.setattr("pixel_patrol_loader_bioio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
+    monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
     assert processing.get_all_record_properties(img_file, loader=loader, processors=processors) == {}
 
 
@@ -117,7 +117,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
     img_file.write_bytes(b"")
 
     monkeypatch.setattr(
-        "pixel_patrol_loader_bioio.plugins.loaders.bioio_loader._load_bioio_image",
+        "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
     props = processing.get_all_record_properties(

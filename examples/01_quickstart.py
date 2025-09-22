@@ -18,7 +18,7 @@ def main():
     # OR e.g.
     # paths = []
 
-    loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bioio package
+    loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
     # OR e.g.
     # loader = None    # for basic file info only (no image data/metadata); only pixel-patrol-base package needed
     # loader = 'zarr'   # for zarr files; requires pixel-patrol-loader-zarr package
