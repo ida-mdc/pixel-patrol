@@ -3,9 +3,8 @@ from pathlib import Path
 
 from pixel_patrol_base.api import (
     create_project,
-    process_paths,
     set_settings,
-    process_images,
+    process_files,
     export_project, show_report, add_paths,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -29,9 +28,6 @@ if __name__ == "__main__":
 
     project = add_paths(project, ["2024", "2025"])
 
-    # Discover and process all image paths
-    project = process_paths(project)
-
     # Configure image-processing settings
     settings = Settings(
         cmap="viridis",
@@ -40,7 +36,7 @@ if __name__ == "__main__":
     )
     project = set_settings(project, settings)
 
-    project = process_images(project)
+    project = process_files(project)
 
     export_project(project, exported_project_path)
 
