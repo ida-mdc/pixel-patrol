@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Set
 import dask.array as da
 import zarr
 
-from pixel_patrol_base.core.artifact import artifact_from
+from pixel_patrol_base.core.record import record_from
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +140,8 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
 
 class ZarrLoader:
     """
-    Loader that produces an Artifact from Zarr (or OME-Zarr via BioIO fallback).
-    Protocol: single `load()` returning an Artifact.
+    Loader that produces an Record from Zarr (or OME-Zarr via BioIO fallback).
+    Protocol: single `load()` returning an Record.
     """
 
     NAME = "zarr"
@@ -174,4 +174,4 @@ class ZarrLoader:
             raise RuntimeError(f"Cannot read Zarr array at: {source}")
 
         meta = _extract_zarr_metadata(arr, path)
-        return artifact_from(arr, meta, kind="intensity")
+        return record_from(arr, meta, kind="intensity")

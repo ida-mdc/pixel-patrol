@@ -9,7 +9,7 @@ import polars as pl
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
-from pixel_patrol_base.core.artifact import artifact_from
+from pixel_patrol_base.core.record import record_from
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
 
 class BioIoLoader:
     """
-    Loader that produces an Artifact from BioIO/BioImage.
-    Protocol: single `load()` method returning an Artifact.
+    Loader that produces an record from BioIO/BioImage.
+    Protocol: single `load()` method returning an Record.
     """
 
     NAME = "bioio"
@@ -112,5 +112,5 @@ class BioIoLoader:
             raise UnsupportedFileFormatError(self.NAME, path=source)
 
         meta = _extract_metadata(img)
-        # dask-backed array; Artifact encapsulates axes/capabilities from meta["dim_order"]
-        return artifact_from(img.dask_data, meta, kind="intensity")
+        # dask-backed array; Record encapsulates axes/capabilities from meta["dim_order"]
+        return record_from(img.dask_data, meta, kind="intensity")

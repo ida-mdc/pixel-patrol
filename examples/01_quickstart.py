@@ -39,8 +39,8 @@ def main():
     # --- Step 5: process files ---
     # This step creates a dataframe with file information, and if available metadata and data (e.g. the image itself) metrics.
     api.process_files(project)
-    artifacts_df = api.get_artifacts_df(project)
-    print(artifacts_df.head())
+    records_df = api.get_records_df(project)
+    print(records_df.head())
 
     # --- Step 6: open the dashport report ---
     # Open http://127.0.0.1:8050/ in your browser

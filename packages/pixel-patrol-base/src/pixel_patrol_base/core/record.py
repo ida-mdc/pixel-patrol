@@ -5,7 +5,7 @@ import string
 Kind = str
 
 @dataclass(frozen=True)
-class Artifact:
+class Record:
     data: Any
     dim_order: str
     dim_names: List[str]
@@ -30,7 +30,7 @@ def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
         return names
     return [f"dim{i+1}" for i in range(len(order))]
 
-def artifact_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Artifact:
+def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
     mm = dict(meta or {})
     dim_order = _infer_dim_order(array, mm)
     dim_names = _infer_dim_names(dim_order, mm)
@@ -41,4 +41,4 @@ def artifact_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/in
     if 'Z' in dim_order: capabilities.add('spatial-3d')
     if 'T' in dim_order: capabilities.add('temporal')
     if 'C' in dim_order: capabilities.add('multichannel')
-    return Artifact(data=array, dim_order=dim_order, dim_names=dim_names, kind=kind, meta=mm, capabilities=capabilities)
+    return Record(data=array, dim_order=dim_order, dim_names=dim_names, kind=kind, meta=mm, capabilities=capabilities)

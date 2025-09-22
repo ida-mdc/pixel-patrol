@@ -2,21 +2,21 @@
 from dataclasses import dataclass
 from typing import Optional, Set, List, Pattern, Mapping, Any, Literal, Union
 
-from pixel_patrol_base.core.artifact import Artifact
+from pixel_patrol_base.core.record import Record
 
 Features = Mapping[str, Any]
 
 # What a processor returns:
 # - "features": a flat dict of columns to merge into the table
-# - "artifact": a new Artifact (with free-form .kind)
-ProcessorOutput = Literal["features", "artifact"]
+# - "record": a new Record (with free-form .kind)
+ProcessorOutput = Literal["features", "record"]
 
 # The actual return value
-ProcessResult = Union[Features, Artifact]
+ProcessResult = Union[Features, Record]
 
 
 @dataclass(frozen=True)
-class ArtifactSpec:
+class RecordSpec:
     axes: Optional[Set[str]] = None
     kinds: Optional[Set[str]] = None       # {"text"}, {"audio/*"}, {"*"}, etc.
     capabilities: Optional[Set[str]] = None
@@ -37,7 +37,7 @@ def is_kind_match(art_kind: str,
         return True
     return False
 
-def is_artifact_matching_processor(art, processor_input_spec: ArtifactSpec) -> bool:
+def is_record_matching_processor(art, processor_input_spec: RecordSpec) -> bool:
     if processor_input_spec.axes:
         art_axes = set(getattr(art, 'dim_order', '') or '')
         if not processor_input_spec.axes.issubset(art_axes): return False
