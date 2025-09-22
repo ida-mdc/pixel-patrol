@@ -1,24 +1,27 @@
 [project]
-name = "pixel-patrol-loader-bioio"
+name = "pixel-patrol-loader-bio"
 version = "0.1.0"
-description = "PixelPatrol add-on package for loading images with bioio"
+description = "PixelPatrol add-on package for loading images with bioio and zarr"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "bioio>=3.0.0",
     "bioio-tifffile>=1.3.0",
+    "bioio-ome-tiff>=1.3.0",
+    "bioio-ome-zarr>=2.2.0",
     "bioio-imageio==1.3.0",
     "pixel-patrol-base>=0.1.0",
+    "zarr>=3.1.1",
 ]
 
 [tool.uv]
 package = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pixel_patrol_loader_bioio"]
+packages = ["src/pixel_patrol_loader_bio"]
 
 [project.entry-points."pixel_patrol.loader_plugins"]
-pixel_patrol_loader_bioio_loader_builtins = "pixel_patrol_loader_bioio.plugin_registry:register_loader_plugins"
+pixel_patrol_loader_bio_loader_builtins = "pixel_patrol_loader_bio.plugin_registry:register_loader_plugins"
 
 
 [dependency-groups]

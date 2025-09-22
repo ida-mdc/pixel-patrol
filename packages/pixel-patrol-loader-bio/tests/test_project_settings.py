@@ -2,7 +2,7 @@ import pytest
 import logging
 from pathlib import Path
 
-from pixel_patrol_loader_bioio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
