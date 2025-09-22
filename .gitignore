@@ -3,8 +3,8 @@
 .vscode/
 *.egg-info/
 uv.lock
-examples/data
-examples/exported_projects
+examples/out
+examples/datasets/plankton_processed
 build
 .ipynb_checkpoints
 .idea

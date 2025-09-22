@@ -15,8 +15,7 @@ from pixel_patrol_base.core import validation
 logger = logging.getLogger(__name__)
 
 METADATA_FILENAME = 'metadata.yml'
-PATHS_DF_FILENAME = 'paths_df.parquet'
-IMAGES_DF_FILENAME = 'images_df.parquet'
+ARTIFACTS_DF_FILENAME = 'artifacts_df.parquet'
 
 
 def _settings_to_dict(settings: Settings) -> dict:
@@ -151,6 +150,7 @@ def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
         'base_dir': str(project.base_dir) if project.base_dir else None,
         'paths': [str(p) for p in project.paths],
         'settings': _settings_to_dict(project.settings),
+        'loader': getattr(getattr(project, "loader", None), "NAME", None),
     }
     return metadata_content
 
@@ -197,8 +197,7 @@ def export_project(project: Project, dest: Path) -> None:
 
     Archive contains:
     - metadata.yml: Project name, paths (as strings), settings.
-    - paths_df.parquet (if exists): Preprocessed data.
-    - images_df.parquet (if exists): Processed data.
+    - artifacts_df.parquet (if exists): Processed data.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -211,16 +210,11 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        # 2. Write DataFrames to temporary files and add to list for zipping
-        paths_df_tmp_path = _write_dataframe_to_parquet(project.paths_df, PATHS_DF_FILENAME, tmp_path)
-        if paths_df_tmp_path:
-            files_for_zip.append((paths_df_tmp_path, PATHS_DF_FILENAME))
+        artifacts_df_tmp_path = _write_dataframe_to_parquet(project.artifacts_df, ARTIFACTS_DF_FILENAME, tmp_path)
+        if artifacts_df_tmp_path:
+            files_for_zip.append((artifacts_df_tmp_path, ARTIFACTS_DF_FILENAME))
 
-        images_df_tmp_path = _write_dataframe_to_parquet(project.images_df, IMAGES_DF_FILENAME, tmp_path)
-        if images_df_tmp_path:
-            files_for_zip.append((images_df_tmp_path, IMAGES_DF_FILENAME))
-
-        # 3. Create the zip archive with all prepared files
+        # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
 
 
@@ -280,76 +274,86 @@ def _read_and_validate_metadata(tmp_path: Path, src_archive: Path) -> Dict[str, 
 
 def _reconstruct_project_core_data(
     metadata_content: Dict[str, Any],
-    has_images_df: bool
+    has_artifacts_df: bool
 ) -> Project:
     name = metadata_content.get('name', 'Imported Project')
     base_dir_str = metadata_content.get('base_dir')
     paths_str_list = metadata_content.get('paths', []) # This gets "not a list" from the malformed metadata
     settings_dict = metadata_content.get('settings', {})
+    loader_id = metadata_content.get('loader')
 
     if not isinstance(paths_str_list, list): # This condition is TRUE for the test case
         logger.warning(
             f"Project IO: 'paths' data in {METADATA_FILENAME} is not a list. Found type: {type(paths_str_list).__name__}")
-        paths_str_list = [] # <--- THIS LINE IS CRUCIAL AND MUST BE PRESENT TO SET paths_str_list TO AN EMPTY LIST
-                             #      BEFORE THE LOOP BELOW.
+        paths_str_list = []
 
     # Initialize with a dummy base_dir first, will be updated based on validation
-    project = Project(name, Path.cwd(), loader="bioio")
+    if loader_id:
+        try:
+            project = Project(name, Path.cwd(), loader=loader_id)
+        except Exception as e:
+            logger.warning(
+                f"Project IO: Loader '{loader_id}' from metadata could not be resolved. "
+                f"Proceeding without a loader. Error: {e}"
+            )
+            project = Project(name, Path.cwd())
+    else:
+        project = Project(name, Path.cwd())
 
     # Handle base_dir
     if base_dir_str is not None:
         imported_base_dir = Path(base_dir_str)
-        if has_images_df:
-            # If images_df exists, set base_dir directly, warn if not found
+        if has_artifacts_df:
+            # If artifacts_df exists, set base_dir directly, warn if not found
             project._base_dir = imported_base_dir # Set directly to bypass setter validation
             if not imported_base_dir.exists():
                 logger.warning(
                     f"Project IO: Imported project's base directory '{imported_base_dir}' does not exist on the file system. "
-                    "This project has processed image data (images_df), so it can still be used for analysis, "
+                    "This project has processed files data (artifacts_df), so it can still be used for analysis, "
                     "but path-dependent operations may be limited."
                 )
             else:
                 logger.info(f"Project IO: Imported project base directory set to '{imported_base_dir}'.")
         else:
-            # If images_df does NOT exist, base_dir MUST be valid
+            # If artifacts_df does NOT exist, base_dir MUST be valid
             try:
                 project.base_dir = imported_base_dir # Use setter for full validation
                 logger.info(f"Project IO: Imported project base directory set to '{project.base_dir}'.")
             except (FileNotFoundError, ValueError) as e:
                 raise ValueError(
                     f"Project requires file system access but imported base directory '{imported_base_dir}' is invalid or inaccessible: {e}. "
-                    "Cannot load project without processed image data."
+                    "Cannot load project without processed data (e.g. image data)."
                 ) from e
     else:
-        # If base_dir was None in metadata, and no images_df, this is an issue.
-        # If images_df exists, it's less critical, but still note it.
-        if not has_images_df:
+        # If base_dir was None in metadata, and no artifacts_df, this is an issue.
+        # If artifacts_df exists, it's less critical, but still note it.
+        if not has_artifacts_df:
             raise ValueError(
                 "Project requires file system access but no base directory was specified in the imported metadata. "
-                "Cannot load project without processed image data."
+                "Cannot load project without processed data (e.g. image data)."
             )
         else:
             logger.warning("Project IO: No base directory specified in the imported metadata. "
-                           "Project has processed image data (images_df), but path-dependent operations may be limited.")
+                           "Project has processed files (artifacts_df), but path-dependent operations may be limited.")
             project._base_dir = None
 
 
     # Handle paths
     reconstructed_paths: List[Path] = []
-    if has_images_df:
-        # If images_df exists, add paths as is, warn if not found
+    if has_artifacts_df:
+        # If artifacts_df exists, add paths as is, warn if not found
         for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
             p = Path(p_str)
             if not p.exists():
                 logger.warning(
                     f"Project IO: Imported path '{p}' does not exist on the file system. "
-                    "This project has processed image data (images_df), so it can still be used for analysis, "
+                    "This project has processed files (artifacts_df), so it can still be used for analysis, "
                     "but path-dependent operations may fail."
                 )
             reconstructed_paths.append(p)
         project.paths = reconstructed_paths
     else:
-        # If images_df does NOT exist, paths MUST be valid
+        # If artifacts_df does NOT exist, paths MUST be valid
         for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
             try:
                 # Use resolve_and_validate_project_path for proper validation relative to base_dir
@@ -361,7 +365,7 @@ def _reconstruct_project_core_data(
             except (FileNotFoundError, ValueError) as e:
                 raise ValueError(
                     f"Project requires file system access but imported path '{p_str}' is invalid or inaccessible: {e}. "
-                    "Cannot load project without processed image data."
+                    "Cannot load project without processed files (e.g. image data)."
                 ) from e
         project.paths = reconstructed_paths
 
@@ -388,20 +392,16 @@ def import_project(src: Path) -> Project:
 
         metadata_content = _read_and_validate_metadata(tmp_path, src)
 
-        # First, try to read images_df to determine validation behavior
-        imported_images_df = _read_dataframe_from_parquet(
-            tmp_path / IMAGES_DF_FILENAME,
+        # First, try to read artifacts_df to determine validation behavior
+        imported_artifacts_df = _read_dataframe_from_parquet(
+            tmp_path / ARTIFACTS_DF_FILENAME,
             src
         )
-        has_images_df = imported_images_df is not None and not imported_images_df.is_empty()
-        logger.info(f"Project IO: Imported archive {'HAS' if has_images_df else 'DOES NOT HAVE'} images_df.")
+        has_artifacts_df = imported_artifacts_df is not None and not imported_artifacts_df.is_empty()
+        logger.info(f"Project IO: Imported archive {'HAS' if has_artifacts_df else 'DOES NOT HAVE'} artifacts_df.")
 
-        project = _reconstruct_project_core_data(metadata_content, has_images_df)
+        project = _reconstruct_project_core_data(metadata_content, has_artifacts_df)
 
-        project.paths_df = _read_dataframe_from_parquet(
-            tmp_path / PATHS_DF_FILENAME,
-            src
-        )
-        project.images_df = imported_images_df # Assign the already read images_df
+        project.artifacts_df = imported_artifacts_df # Assign the already read artifacts_df
 
         return project

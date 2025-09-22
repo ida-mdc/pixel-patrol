@@ -8,9 +8,8 @@ import click
 from pixel_patrol_base.api import (
     create_project,
     add_paths,
-    process_paths,
     set_settings,
-    process_images,
+    process_files,
     export_project,
     import_project,
     show_report,
@@ -40,17 +39,19 @@ def cli():
               help='Optional: Paths to include in the project, relative to BASE_DIRECTORY. '
                    'Can be specified multiple times. If omitted, all immediate subdirectories '
                    'of BASE_DIRECTORY will be included.')
+@click.option('--loader', '-l', type=str, show_default=True,
+              help='Pixel Patrol file loader (e.g., bioio, zarr).')
 @click.option('--cmap', type=str, default="rainbow", show_default=True,
               help='Colormap for report visualization (e.g., viridis, plasma, rainbow).')
-@click.option('--n-example-images', type=int, default=9, show_default=True,
-              help='Number of example images to display in the report.')
+@click.option('--n-example-files', type=int, default=9, show_default=True,
+              help='Number of example files to display in the report.')
 @click.option('--file-extension', '-e', multiple=True,
               help='Optional: File extensions to include (e.g., png, jpg). Can be specified multiple times. '
                    'If not specified, all supported extensions will be used.')
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
-           cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str):
+           loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -61,7 +62,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
 
     click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
-    my_project = create_project(name, str(base_directory)) # Assuming create_project takes string path
+    my_project = create_project(name, str(base_directory), loader=loader) # Assuming create_project takes string path
 
     # Handle paths: explicit --paths or auto-discover subdirectories
     resolved_paths = []
@@ -85,7 +86,6 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     for path in resolved_paths:
         add_paths(my_project, path)
 
-    process_paths(my_project)
     selected_extensions = set(file_extension) if file_extension else "all"
     initial_settings = Settings(
         cmap=cmap,
@@ -97,7 +97,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     set_settings(my_project, initial_settings)
 
     click.echo("Processing images...")
-    process_images(my_project)
+    process_files(my_project)
 
     click.echo(f"Exporting project to: '{output_zip}'")
     export_project(my_project, Path(output_zip)) # Assuming export_project takes string path

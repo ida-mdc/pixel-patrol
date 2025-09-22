@@ -1,0 +1,31 @@
+[project]
+name = "pixel-patrol-loader-bioio"
+version = "0.1.0"
+description = "PixelPatrol add-on package for loading images with bioio"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "bioio>=3.0.0",
+    "bioio-tifffile>=1.3.0",
+    "bioio-imageio==1.3.0",
+    "pixel-patrol-base>=0.1.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_loader_bioio"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_bioio_loader_builtins = "pixel_patrol_loader_bioio.plugin_registry:register_loader_plugins"
+
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }

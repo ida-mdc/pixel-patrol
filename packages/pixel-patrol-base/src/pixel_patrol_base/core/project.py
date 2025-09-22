@@ -13,7 +13,6 @@ from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 
 logger = logging.getLogger(__name__)
 
-
 class Project:
 
     def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None):
@@ -26,10 +25,11 @@ class Project:
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
 
         self.paths: List[Path] = [self.base_dir]
-        self.paths_df: Optional[pl.DataFrame] = None
         self.settings: Settings = Settings()
-        self.images_df: Optional[pl.DataFrame] = None
+        self.artifacts_df: Optional[pl.DataFrame] = None
 
+        if loader is None:
+            logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
         logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else "None" } and base dir: {self.base_dir}.")
 
 
@@ -113,16 +113,6 @@ class Project:
 
         return self
 
-
-    def process_paths(self) -> "Project":
-        if not self.paths:
-            logger.warning("No directory paths added to preprocess. paths_df will be None.")
-            self.paths_df = None # Ensure it's None if no paths
-        else:
-            self.paths_df  = processing.build_paths_df(self.paths)
-        return self
-
-
     def set_settings(self, settings: Settings) -> "Project":
         logger.info(f"Project Core: Attempting to set project settings for '{self.name}'.")
 
@@ -146,37 +136,30 @@ class Project:
         return self
 
 
-    def process_images(self, settings: Optional[Settings] = None) -> "Project":
+    def process_artifacts(self, settings: Optional[Settings] = None) -> "Project":
         """
-        Processes images in the project, building `images_df`.
-        - If `paths_df` does not exist, it performs a single, targeted file system scan to build `images_df` directly.
-        - If `paths_df` already exists it leverages this existing DataFrame, filters it, and then extracts image metadata.
-
+        Processes artifacts (e.g. images) in the project, building `artifacts_df`.
         Args:
             settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
 
         Returns:
-            The Project instance with the `images_df` updated.
+            The Project instance with the `artifacts_df` updated.
         """
         if settings is not None:
-            logger.info("Project Core: Applying provided settings before processing images.")
+            logger.info("Project Core: Applying provided settings before processing files.")
             self.set_settings(settings)
         if not self.settings.selected_file_extensions:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
-        if self.paths_df is None or self.paths_df.is_empty():
-            self.images_df = processing.build_images_df_from_file_system(self.paths, exts, loader=self.loader)
-        else:
-            self.images_df = processing.build_images_df_from_paths_df(self.paths_df, exts, loader=self.loader)
+        self.artifacts_df = processing.build_artifacts_df(self.paths, exts, loader=self.loader)
 
-        if self.images_df is None or self.images_df.is_empty():
+        if self.artifacts_df is None or self.artifacts_df.is_empty():
             logger.warning(
-                "Project Core: No image files found/processed. images_df will be None.")
-            self.images_df = None
+                "Project Core: No files found/processed. artifacts_df will be None.")
+            self.artifacts_df = None
 
         return self
-
 
     def get_name(self) -> str:
         """Get the project name."""
@@ -193,57 +176,65 @@ class Project:
         """Get the current project settings."""
         return self.settings
 
-    def get_paths_df(self) -> Optional[pl.DataFrame]:
-        """Get the single DataFrame containing preprocessed data."""
-        return self.paths_df
-
-    def get_images_df(self) -> Optional[pl.DataFrame]:
+    def get_artifacts_df(self) -> Optional[pl.DataFrame]:
         """Get the single DataFrame containing processed data."""
-        return self.images_df
+        return self.artifacts_df
 
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
 
     def _set_selected_file_extensions(self, new_settings: Settings) -> None:
         """
-        Handles the setting of `selected_file_extensions` within the Settings object.
-        Performs validation and filtering against supported extensions.
-        Raises ValueError if extensions are attempted to be changed after initial definition.
+        Set `selected_file_extensions` on `new_settings`.
+        Rules:
+        - If already set on `self.settings`: keep as-is (immutable for this project instance).
+        - If input == "all":
+            * with loader  -> use `loader.SUPPORTED_EXTENSIONS`
+            * without loader -> 'all'
+        - If input is a Set[str]: lowercase, then
+            * with loader -> filter against `SUPPORTED_EXTENSIONS`.
+            * without loader -> use as-is.
+        Raises:
+        - TypeError: if input is neither "all" nor a Set[str].
         """
-        current_extensions_value = self.settings.selected_file_extensions
-        new_extensions_input = new_settings.selected_file_extensions
 
-        if bool(current_extensions_value):
-            logger.info(
-                f"Project Core: File extensions are already set to '{current_extensions_value}'. No changes allowed.")
-            new_settings.selected_file_extensions = current_extensions_value
+        existing_extensions = self.settings.selected_file_extensions
+        proposed_extensions = new_settings.selected_file_extensions
+
+        if existing_extensions:
+            logger.info(f"Project Core: selected_file_extensions already set; keeping existing value: {existing_extensions}")
+            new_settings.selected_file_extensions = existing_extensions
             return
 
-        if self.loader is not None and isinstance(new_extensions_input, str) and new_extensions_input.lower() == "all":
-            new_extensions_input = self.loader.SUPPORTED_EXTENSIONS
-            new_settings.selected_file_extensions = new_extensions_input
-            logger.info(
-                f"Project Core: Selected file extensions set to 'all'. Using default preselected extensions: {new_extensions_input}.")
-            return
-        elif not isinstance(new_extensions_input, Set):
-            logger.error(
-                f"Project Core: Invalid type for selected_file_extensions: {type(new_extensions_input)}. Defaulting to empty set.")
-            raise TypeError(
-                "selected_file_extensions must be 'all' (string) or a Set of strings."
-            )
-        else:
-            if not new_extensions_input or self.loader == None:
-                logger.warning(
-                    "Project Core: No file extensions provided. Defaulting to empty set.")
-                new_settings.selected_file_extensions = set()
+        if isinstance(proposed_extensions, str) and proposed_extensions.lower() == 'all':
+            if self.loader is None:
+                new_settings.selected_file_extensions = 'all'
+                logger.info("Project Core: All file extensions are selected")
                 return
             else:
-                new_extensions_input = validation.validate_and_filter_extensions(new_extensions_input, self.loader.SUPPORTED_EXTENSIONS)
-                if not new_extensions_input:
-                    new_settings.selected_file_extensions = set()
-                    logger.warning(
-                        "Project Core: No supported file extensions provided. The selected_file_extensions will be empty.")
-                    return
+                new_settings.selected_file_extensions = self.loader.SUPPORTED_EXTENSIONS
+                logger.info(f"Project Core: Using loader-supported extensions: {new_settings.selected_file_extensions}")
+                return
 
-        new_settings.selected_file_extensions = new_extensions_input
-        logger.info(f"Project Core: Set file extensions to: {new_extensions_input}.")
+        if isinstance(proposed_extensions, Set):
+            proposed_extensions = {x.lower() for x in proposed_extensions if isinstance(x, str)}
+            if not proposed_extensions:
+                new_settings.selected_file_extensions = set()
+                logger.warning(f"Project Core: selected_file_extensions is an empty set - no file will be processed")
+                return
+            if not self.loader:
+                new_settings.selected_file_extensions = proposed_extensions
+                logger.info(f"Project Core: File extensions are selected: {proposed_extensions}")
+                return
+            else:
+                proposed_extensions = validation.validate_and_filter_extensions(proposed_extensions, self.loader.SUPPORTED_EXTENSIONS)
+                if not proposed_extensions:
+                    new_settings.selected_file_extensions = set()
+                    logger.warning("Project Core: No loader supported file extensions provided. No files will be processed.")
+                    return
+                new_settings.selected_file_extensions = proposed_extensions
+                logger.info(f"Project Core: Set file extensions to: {proposed_extensions}.")
+                return
+        else:
+            logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed_extensions)}")
+            raise TypeError("selected_file_extensions must be 'all' or a Set[str].")

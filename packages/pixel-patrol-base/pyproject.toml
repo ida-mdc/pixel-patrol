@@ -13,20 +13,22 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pyyaml>=6.0.2",
     "statsmodels>=0.14.4",
-    "tensorboard>=2.18.0",
-    "tensorboardx>=2.6.4",
-    "zarr>=3.1.0",
+    "tensorboard>=2.18.0", # TODO: Are we sure we want it in base?
+    "tensorboardx>=2.6.4", # TODO: Are we sure we want it in base?
+    "dask>=2025.5.1",
 ]
 
 [tool.uv]
 package = true
 
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
 
 [project.scripts]
-pixel-patrol-base = "pixel_patrol_base.cli:cli"
+pixel-patrol = "pixel_patrol_base.cli:cli"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+pixel_patrol_base_processing_builtins = "pixel_patrol_base.plugin_registry:register_processor_plugins"
 
 [project.entry-points."pixel_patrol.widget_plugins"]
 pixel_patrol_base_widget_builtins = "pixel_patrol_base.plugin_registry:register_widget_plugins"

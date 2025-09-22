@@ -22,9 +22,9 @@ class ArtifactSpec:
     capabilities: Optional[Set[str]] = None
     kind_patterns: Optional[List[Pattern[str]]] = None  # optional regexes
 
-def _kind_match(art_kind: str,
-                kinds: Optional[Set[str]],
-                patterns: Optional[List[Pattern[str]]]) -> bool:
+def is_kind_match(art_kind: str,
+                  kinds: Optional[Set[str]],
+                  patterns: Optional[List[Pattern[str]]]) -> bool:
     if kinds is None or "*" in kinds:
         return True
     if art_kind in kinds:
@@ -37,8 +37,10 @@ def _kind_match(art_kind: str,
         return True
     return False
 
-def can_accept(art, spec: ArtifactSpec) -> bool:
-    if spec.axes and not spec.axes.issubset(art.axes): return False
-    if not _kind_match(art.kind, spec.kinds, spec.kind_patterns): return False
-    if spec.capabilities and not spec.capabilities.issubset(art.capabilities): return False
+def is_artifact_matching_processor(art, processor_input_spec: ArtifactSpec) -> bool:
+    if processor_input_spec.axes:
+        art_axes = set(getattr(art, 'dim_order', '') or '')
+        if not processor_input_spec.axes.issubset(art_axes): return False
+    if not is_kind_match(art.kind, processor_input_spec.kinds, processor_input_spec.kind_patterns): return False
+    if processor_input_spec.capabilities and not processor_input_spec.capabilities.issubset(art.capabilities): return False
     return True

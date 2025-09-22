@@ -1,7 +1,7 @@
 from typing import List, Dict, Set
 
 import polars as pl
-from dash import dcc, Input, Output, html
+from dash import dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
