@@ -13,7 +13,8 @@ jobs:
     name: Test Python Packages
     strategy:
       matrix:
-        os: ${{ github.ref == 'refs/heads/main' || (github.event.pull_request.base.ref == 'main') && fromJson('["ubuntu-latest","windows-latest","macos-latest"]') || fromJson('["ubuntu-latest"]') }}
+        # If on main (push) OR PR targeting main -> test on 3 OSes, else only ubuntu
+        os: ${{ fromJson( (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]' ) }}
         package:
           - pixel-patrol-base
           - pixel-patrol-loader-bioio
