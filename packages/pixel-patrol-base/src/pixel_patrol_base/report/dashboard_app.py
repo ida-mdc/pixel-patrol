@@ -30,7 +30,7 @@ def load_and_concat_parquets(paths: List[str]) -> pl.DataFrame:
 
 def create_app(project: Project) -> Dash:
     return _create_app(
-        project.artifacts_df,
+        project.records_df,
         project.get_settings().cmap,
         pixel_patrol_flavor=project.get_settings().pixel_patrol_flavor,
     )

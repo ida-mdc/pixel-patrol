@@ -6,8 +6,8 @@ import dask.array as da
 import numpy as np
 
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
-from pixel_patrol_base.core.artifact import Artifact
-from pixel_patrol_base.core.specs import ArtifactSpec
+from pixel_patrol_base.core.record import Record
+from pixel_patrol_base.core.specs import RecordSpec
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,8 @@ def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
         "tenengrad": {"fn": _tenengrad_2d, "agg": da.mean},
         "brenner": {"fn": _brenner_2d, "agg": da.mean},
         "noise_std": {"fn": _noise_estimation_2d, "agg": da.mean},
-        "blocking_artifacts": {"fn": _check_blocking_artifacts_2d, "agg": da.mean},
-        "ringing_artifacts": {"fn": _check_ringing_artifacts_2d, "agg": da.mean},
+        "blocking_records": {"fn": _check_blocking_records_2d, "agg": da.mean},
+        "ringing_records": {"fn": _check_ringing_records_2d, "agg": da.mean},
     }
 
 
@@ -71,7 +71,7 @@ def _noise_estimation_2d(image: np.ndarray) -> float:
     return float(np.std(noise))
 
 
-def _check_blocking_artifacts_2d(image: np.ndarray) -> float:
+def _check_blocking_records_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
         return float(np.nan)
@@ -93,7 +93,7 @@ def _check_blocking_artifacts_2d(image: np.ndarray) -> float:
     return blocking_effect / num_boundaries if num_boundaries > 0 else 0.0
 
 
-def _check_ringing_artifacts_2d(image: np.ndarray) -> float:
+def _check_ringing_records_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
         return float(np.nan)
@@ -120,8 +120,8 @@ class QualityMetricsProcessor:
 
     # Declarative plugin metadata
     NAME = "quality-metrics"
-    INPUT = ArtifactSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
-    OUTPUT = "features"  # or "artifact" if this produced another image
+    INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+    OUTPUT = "features"  # or "record" if this produced another image
 
     # Table schema (static + dynamic)
     OUTPUT_SCHEMA: Dict[str, Any] = {name: float for name in _column_fn_registry().keys()}
@@ -131,6 +131,6 @@ class QualityMetricsProcessor:
         for name in _column_fn_registry().keys()
     ]
 
-    def run(self, art: Artifact) -> Dict[str, float]:
+    def run(self, art: Record) -> Dict[str, float]:
         dim_order = art.dim_order
         return calculate_np_array_stats(art.data, dim_order)

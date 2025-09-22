@@ -37,7 +37,7 @@ def set_settings(project: Project, settings: Settings) -> Project:
 
 def process_files(project: Project) -> Project:
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
-    return project.process_artifacts()
+    return project.process_records()
 
 def show_report(project: Project, host: str = "127.0.0.1", port: int = None) -> None:
     logger.info(f"API Call: Showing report for project '{project.name}'.")
@@ -67,5 +67,5 @@ def get_paths(project: Project) -> List[Path]:
 def get_settings(project: Project) -> Settings:
     return project.get_settings()
 
-def get_artifacts_df(project: Project) -> Optional[pl.DataFrame]:
-    return project.get_artifacts_df()
+def get_records_df(project: Project) -> Optional[pl.DataFrame]:
+    return project.get_records_df()
