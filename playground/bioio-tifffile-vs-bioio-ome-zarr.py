@@ -1,9 +1,10 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "bioio",
-#   "bioio-tifffile",
-#   "bioio-ome-zarr",
+#   "bioio==3.0.0",
+#   "bioio-tifffile==1.3.0",
+#   "bioio-ome-zarr==2.3.0",
+#   "tifffile==2025.9.20",
 # ]
 # ///
 from pathlib import Path
