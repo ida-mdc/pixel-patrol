@@ -6,8 +6,8 @@ import zarr
 from zarr.storage import LocalStore
 import polars as pl
 
-from pixel_patrol_loader_zarr.plugins.loaders.zarr_loader import ZarrLoader
-from pixel_patrol_base.core.processing import get_all_artifact_properties, build_artifacts_df
+from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
+from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
@@ -67,7 +67,7 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
     Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
     """
     parent_dir = zarr_folder.parent
-    paths_df = build_artifacts_df([parent_dir], selected_extensions='all', loader=ZarrLoader())
+    paths_df = build_records_df([parent_dir], selected_extensions='all', loader=ZarrLoader())
     zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
 
     assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
@@ -79,7 +79,7 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
 #     """
 #     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
 #     """
-#     metadata = get_all_artifact_properties(zarr_folder, loader=ZarrLoader(), processors=discover_processor_plugins())
+#     metadata = get_all_record_properties(zarr_folder, loader=ZarrLoader(), processors=discover_processor_plugins())
 #
 #     assert isinstance(metadata, dict)
 #

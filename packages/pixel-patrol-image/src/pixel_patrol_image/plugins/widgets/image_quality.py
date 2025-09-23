@@ -38,10 +38,10 @@ class ImageQualityWidget:
                 "Estimated random noise level; higher noise reduces clarity."
             ),
             # "wavelet_energy": "High-frequency detail via wavelet energy.",
-            "blocking_artifacts": (
-                "Compression blockiness (e.g., JPEG); higher indicates stronger blocking artifacts."
+            "blocking_records": (
+                "Compression blockiness (e.g., JPEG); higher indicates stronger blocking records."
             ),
-            "ringing_artifacts": (
+            "ringing_records": (
                 "Edge ghosting/oscillations from compression; higher indicates stronger ringing."
             ),
         }
@@ -59,7 +59,7 @@ class ImageQualityWidget:
                     html.H4("Image Quality Metric Descriptions"),
                     html.P(
                         "The following metrics assess various aspects of image quality, such as sharpness, noise, "
-                        "and compression artifacts. Each plot shows the distribution of a quality score for images "
+                        "and compression records. Each plot shows the distribution of a quality score for images "
                         "in the selected folders."
                     ),
                     html.Ul(description_items),

@@ -18,7 +18,7 @@ def main():
     # OR e.g.
     # paths = []
 
-    loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bioio package
+    loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
     # OR e.g.
     # loader = None    # for basic file info only (no image data/metadata); only pixel-patrol-base package needed
     # loader = 'zarr'   # for zarr files; requires pixel-patrol-loader-zarr package
@@ -39,8 +39,8 @@ def main():
     # --- Step 5: process files ---
     # This step creates a dataframe with file information, and if available metadata and data (e.g. the image itself) metrics.
     api.process_files(project)
-    artifacts_df = api.get_artifacts_df(project)
-    print(artifacts_df.head())
+    records_df = api.get_records_df(project)
+    print(records_df.head())
 
     # --- Step 6: open the dashport report ---
     # Open http://127.0.0.1:8050/ in your browser

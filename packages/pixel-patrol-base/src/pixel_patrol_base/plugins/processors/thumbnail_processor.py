@@ -5,9 +5,9 @@ import numpy as np
 import polars as pl
 
 from pixel_patrol_base.config import SPRITE_SIZE
-from pixel_patrol_base.core.artifact import Artifact
+from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.contracts import ProcessResult
-from pixel_patrol_base.core.specs import ArtifactSpec
+from pixel_patrol_base.core.specs import RecordSpec
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +82,13 @@ def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
 
 class ThumbnailProcessor:
     NAME   = "thumbnail"
-    INPUT  = ArtifactSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+    INPUT  = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
     OUTPUT_SCHEMA = {
         "thumbnail": pl.Array
     }
 
-    def run(self, art: Artifact) -> ProcessResult:
+    def run(self, art: Record) -> ProcessResult:
         dim_order = art.dim_order
         return {"thumbnail": _generate_thumbnail(art.data, dim_order)}

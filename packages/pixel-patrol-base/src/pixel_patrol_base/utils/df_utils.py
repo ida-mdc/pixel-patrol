@@ -49,7 +49,7 @@ def get_polars_type(py_type):
     if issubclass(py_type, (list, tuple)): return PolarsList(pl.Unknown)
     return pl.String
 
-def _get_artifact_schema(rows: list[dict]) -> dict:
+def _get_record_schema(rows: list[dict]) -> dict:
     dynamic_schema = {}
     for row in rows:
         for key, value in row.items():
@@ -90,9 +90,9 @@ def rows_to_flexible_df(rows: List[Dict[str, Any]]) -> pl.DataFrame:
             elif isinstance(v, np.generic):
                 r[k] = v.item()
 
-    artifact_schema = _get_artifact_schema(norm_rows)
+    record_schema = _get_record_schema(norm_rows)
 
-    list_cols: list[str] = [k for k, dt in artifact_schema.items() if str(dt).startswith("List")]
+    list_cols: list[str] = [k for k, dt in record_schema.items() if str(dt).startswith("List")]
     for r in norm_rows:
         for k in list_cols:
             v = r.get(k)
@@ -101,4 +101,4 @@ def rows_to_flexible_df(rows: List[Dict[str, Any]]) -> pl.DataFrame:
             assert v is not None  # help type checker
             r[k] = [v]
 
-    return pl.DataFrame(norm_rows, schema_overrides=artifact_schema)
+    return pl.DataFrame(norm_rows, schema_overrides=record_schema)
