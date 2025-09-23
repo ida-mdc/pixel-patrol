@@ -18,7 +18,6 @@ jobs:
         package:
           - pixel-patrol-base
           - pixel-patrol-loader-bio
-          - pixel-patrol-loader-zarr
     runs-on: ${{ matrix.os }}
     defaults:
       run:
