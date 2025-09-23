@@ -15,7 +15,7 @@ from pixel_patrol_base.core import validation
 logger = logging.getLogger(__name__)
 
 METADATA_FILENAME = 'metadata.yml'
-ARTIFACTS_DF_FILENAME = 'artifacts_df.parquet'
+RECORDS_DF_FILENAME = 'records_df.parquet'
 
 
 def _settings_to_dict(settings: Settings) -> dict:
@@ -197,7 +197,7 @@ def export_project(project: Project, dest: Path) -> None:
 
     Archive contains:
     - metadata.yml: Project name, paths (as strings), settings.
-    - artifacts_df.parquet (if exists): Processed data.
+    - records_df.parquet (if exists): Processed data.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -210,9 +210,9 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        artifacts_df_tmp_path = _write_dataframe_to_parquet(project.artifacts_df, ARTIFACTS_DF_FILENAME, tmp_path)
-        if artifacts_df_tmp_path:
-            files_for_zip.append((artifacts_df_tmp_path, ARTIFACTS_DF_FILENAME))
+        records_df_tmp_path = _write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
+        if records_df_tmp_path:
+            files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
 
         # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
@@ -274,7 +274,7 @@ def _read_and_validate_metadata(tmp_path: Path, src_archive: Path) -> Dict[str, 
 
 def _reconstruct_project_core_data(
     metadata_content: Dict[str, Any],
-    has_artifacts_df: bool
+    has_records_df: bool
 ) -> Project:
     name = metadata_content.get('name', 'Imported Project')
     base_dir_str = metadata_content.get('base_dir')
@@ -303,19 +303,19 @@ def _reconstruct_project_core_data(
     # Handle base_dir
     if base_dir_str is not None:
         imported_base_dir = Path(base_dir_str)
-        if has_artifacts_df:
-            # If artifacts_df exists, set base_dir directly, warn if not found
+        if has_records_df:
+            # If records_df exists, set base_dir directly, warn if not found
             project._base_dir = imported_base_dir # Set directly to bypass setter validation
             if not imported_base_dir.exists():
                 logger.warning(
                     f"Project IO: Imported project's base directory '{imported_base_dir}' does not exist on the file system. "
-                    "This project has processed files data (artifacts_df), so it can still be used for analysis, "
+                    "This project has processed files data (records_df), so it can still be used for analysis, "
                     "but path-dependent operations may be limited."
                 )
             else:
                 logger.info(f"Project IO: Imported project base directory set to '{imported_base_dir}'.")
         else:
-            # If artifacts_df does NOT exist, base_dir MUST be valid
+            # If records_df does NOT exist, base_dir MUST be valid
             try:
                 project.base_dir = imported_base_dir # Use setter for full validation
                 logger.info(f"Project IO: Imported project base directory set to '{project.base_dir}'.")
@@ -325,35 +325,35 @@ def _reconstruct_project_core_data(
                     "Cannot load project without processed data (e.g. image data)."
                 ) from e
     else:
-        # If base_dir was None in metadata, and no artifacts_df, this is an issue.
-        # If artifacts_df exists, it's less critical, but still note it.
-        if not has_artifacts_df:
+        # If base_dir was None in metadata, and no records_df, this is an issue.
+        # If records_df exists, it's less critical, but still note it.
+        if not has_records_df:
             raise ValueError(
                 "Project requires file system access but no base directory was specified in the imported metadata. "
                 "Cannot load project without processed data (e.g. image data)."
             )
         else:
             logger.warning("Project IO: No base directory specified in the imported metadata. "
-                           "Project has processed files (artifacts_df), but path-dependent operations may be limited.")
+                           "Project has processed files (records_df), but path-dependent operations may be limited.")
             project._base_dir = None
 
 
     # Handle paths
     reconstructed_paths: List[Path] = []
-    if has_artifacts_df:
-        # If artifacts_df exists, add paths as is, warn if not found
+    if has_records_df:
+        # If records_df exists, add paths as is, warn if not found
         for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
             p = Path(p_str)
             if not p.exists():
                 logger.warning(
                     f"Project IO: Imported path '{p}' does not exist on the file system. "
-                    "This project has processed files (artifacts_df), so it can still be used for analysis, "
+                    "This project has processed files (records_df), so it can still be used for analysis, "
                     "but path-dependent operations may fail."
                 )
             reconstructed_paths.append(p)
         project.paths = reconstructed_paths
     else:
-        # If artifacts_df does NOT exist, paths MUST be valid
+        # If records_df does NOT exist, paths MUST be valid
         for p_str in paths_str_list: # If paths_str_list is correctly [], this loop does not run.
             try:
                 # Use resolve_and_validate_project_path for proper validation relative to base_dir
@@ -392,16 +392,16 @@ def import_project(src: Path) -> Project:
 
         metadata_content = _read_and_validate_metadata(tmp_path, src)
 
-        # First, try to read artifacts_df to determine validation behavior
-        imported_artifacts_df = _read_dataframe_from_parquet(
-            tmp_path / ARTIFACTS_DF_FILENAME,
+        # First, try to read records_df to determine validation behavior
+        imported_records_df = _read_dataframe_from_parquet(
+            tmp_path / RECORDS_DF_FILENAME,
             src
         )
-        has_artifacts_df = imported_artifacts_df is not None and not imported_artifacts_df.is_empty()
-        logger.info(f"Project IO: Imported archive {'HAS' if has_artifacts_df else 'DOES NOT HAVE'} artifacts_df.")
+        has_records_df = imported_records_df is not None and not imported_records_df.is_empty()
+        logger.info(f"Project IO: Imported archive {'HAS' if has_records_df else 'DOES NOT HAVE'} records_df.")
 
-        project = _reconstruct_project_core_data(metadata_content, has_artifacts_df)
+        project = _reconstruct_project_core_data(metadata_content, has_records_df)
 
-        project.artifacts_df = imported_artifacts_df # Assign the already read artifacts_df
+        project.records_df = imported_records_df # Assign the already read records_df
 
         return project

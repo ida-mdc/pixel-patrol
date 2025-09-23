@@ -3,8 +3,8 @@ from typing import Protocol, Iterable, Set, Any, Dict, List
 import polars as pl
 from pathlib import Path
 
-from pixel_patrol_base.core.artifact import Artifact
-from pixel_patrol_base.core.specs import ProcessResult, ArtifactSpec, ProcessorOutput
+from pixel_patrol_base.core.record import Record
+from pixel_patrol_base.core.specs import ProcessResult, RecordSpec, ProcessorOutput
 
 
 class PixelPatrolLoader(Protocol):
@@ -14,14 +14,14 @@ class PixelPatrolLoader(Protocol):
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]]
     FOLDER_EXTENSIONS: Set[str]
     def is_folder_supported(self, path: Path) -> bool: ...
-    def load(self, source: str) -> Artifact: ...
+    def load(self, source: str) -> Record: ...
 
 
 class PixelPatrolProcessor(Protocol):
     NAME: str
-    INPUT: ArtifactSpec
-    OUTPUT: ProcessorOutput            # "features" or "artifact"
-    def run(self, art: Artifact) -> ProcessResult: ...
+    INPUT: RecordSpec
+    OUTPUT: ProcessorOutput            # "features" or "record"
+    def run(self, art: Record) -> ProcessResult: ...
 
 
 class PixelPatrolWidget(Protocol):

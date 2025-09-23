@@ -6,9 +6,9 @@ import numpy as np
 import polars as pl
 import dask.array as da
 
-from pixel_patrol_base.core.artifact import Artifact
+from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.contracts import ProcessResult
-from pixel_patrol_base.core.specs import ArtifactSpec
+from pixel_patrol_base.core.specs import RecordSpec
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +38,12 @@ def _dask_hist_func(dask_array: da.Array, bins: int) -> Dict[str, List]:
 
 class HistogramProcessor:
     """
-    Artifact-first processor that extracts a full hierarchy of pixel-value histograms.
+    Record-first processor that extracts a full hierarchy of pixel-value histograms.
     Histograms are recalculated for the full image and for every possible combination of slices.
     """
 
     NAME = "histogram"
-    INPUT = ArtifactSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+    INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
     # Updated schema to include the full image histogram and patterns for all slice hierarchies
@@ -56,7 +56,7 @@ class HistogramProcessor:
         (r"^(?:histogram)_bins_.*$", pl.List(pl.Float64)),
     ]
 
-    def run(self, art: Artifact) -> ProcessResult:
+    def run(self, art: Record) -> ProcessResult:
         """
         Calculates histograms for all levels of the dimensional hierarchy by iterating
         through the power set of non-spatial dimensions.

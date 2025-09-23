@@ -5,7 +5,7 @@ import dask.array as da
 import numpy as np
 
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
-from pixel_patrol_base.core.specs import ArtifactSpec
+from pixel_patrol_base.core.specs import RecordSpec
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def calculate_np_array_stats(array: da.array, dim_order: str) -> dict[str, float
 
 class BasicStatsProcessor:
     NAME = "basic-stats"
-    INPUT = ArtifactSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+    INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
     OUTPUT_SCHEMA = {name: float for name in _column_fn_registry().keys()}

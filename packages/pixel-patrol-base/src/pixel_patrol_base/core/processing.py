@@ -12,7 +12,7 @@ from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_r
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df, rows_to_flexible_df
-from pixel_patrol_base.core.specs import is_artifact_matching_processor
+from pixel_patrol_base.core.specs import is_record_matching_processor
 
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,8 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-def _build_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
-    """Loop over paths, get_all_artifact_properties, return DataFrame (may be empty).
+def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
+    """Loop over paths, get_all_record_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
     """
     processors = discover_processor_plugins()
@@ -59,16 +59,16 @@ def _build_deep_artifact_df(paths: List[Path], loader_instance: PixelPatrolLoade
     rows = []
 
     for p in paths:
-        artifact_dict = get_all_artifact_properties(p, loader_instance, processors)
-        if artifact_dict:
-            rows.append({"path": str(p), **artifact_dict})
+        record_dict = get_all_record_properties(p, loader_instance, processors)
+        if record_dict:
+            rows.append({"path": str(p), **record_dict})
 
     rows = [coerce_row_types(r, static, patterns) for r in rows]
 
     return rows_to_flexible_df(rows)
 
 
-def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
+def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
     start_total_time = time.monotonic()
 
     if not file_path.exists():
@@ -90,16 +90,16 @@ def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, proc
     load_duration = time.monotonic() - start_load_time
     logger.info(f"Loading with '{loader.NAME}' took {load_duration:.4f} seconds.")
 
-    # Always process using Artifact; processors opt-in via INPUT spec
+    # Always process using Record; processors opt-in via INPUT spec
     extracted_properties.update(metadata)
     for P in processors:
-        if not is_artifact_matching_processor(art, P.INPUT):
+        if not is_record_matching_processor(art, P.INPUT):
             continue
         out = P.run(art)
         if isinstance(out, dict):
             extracted_properties.update(out)
         else:
-            art = out  # chainable: processors may transform the artifact
+            art = out  # chainable: processors may transform the record
             extracted_properties.update(art.meta)
 
     total_duration = time.monotonic() - start_total_time
@@ -108,7 +108,7 @@ def get_all_artifact_properties(file_path: Path, loader: PixelPatrolLoader, proc
 
 
 
-def build_artifacts_df(
+def build_records_df(
     bases: List[Path],
     selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
@@ -117,7 +117,7 @@ def build_artifacts_df(
     basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
     if loader is None or basic is None: return basic
 
-    deep = _build_deep_artifact_df([Path(p) for p in basic["path"].to_list()], loader)
+    deep = _build_deep_record_df([Path(p) for p in basic["path"].to_list()], loader)
 
     return basic.join(deep, on="path", how="left")
 
