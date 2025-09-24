@@ -35,7 +35,7 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
         # If reader gives single-letter axis names, normalize to lowercase ("t","c","z","y","x")
         dn = [x.lower() if isinstance(x, str) and len(x) == 1 else x for x in dim_names]
     else:
-        # Fallback: derive from dim_order letters (lowercase), not "dim1", "dim2", ...
+        # Fallback: derive from dim_order letters as "dim_<letter>" (e.g., "dim_y","dim_x")
         dn = [letter.lower() for letter in str(dim_order)]
     metadata["dim_names"] = list(dn)
 

@@ -23,14 +23,33 @@ def _infer_dim_order(array: Any, meta: Mapping[str, Any]) -> str:
         return order
     return ''.join(string.ascii_uppercase[i] for i in range(min(int(n or 0), 26)))
 
-# _infer_dim_names: prefer meta dim_names; otherwise derive from dim_order letters (lowercase)
+from typing import Mapping, List, Any
+
 def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
+    """
+    Decide human-readable dim names.
+      - If meta['dim_names'] is valid, use it as-is.
+      - Else if meta['dim_order'] equals 'order' and is single-letter, use letters (lowercase).
+      - Else fallback to ['dimA','dimB',...] from 'order'; if no order, use ['dim1',...].
+    """
+    # 1) explicit names from metadata win
     names = meta.get("dim_names")
     if isinstance(names, list) and len(names) == len(order) and all(isinstance(x, str) for x in names):
         return names
-    if isinstance(order, str) and order:
+
+    # 2) if the order came from metadata and is single-letter, derive names from it (no 'dim' prefix)
+    mo = meta.get("dim_order")
+    if isinstance(mo, str) and mo == order and order.isalpha() and order.isupper():
         return [ch.lower() for ch in order]
-    return [f"dim{i+1}" for i in range(len(order))]
+
+    # 3) fallback from order → 'dimA','dimB',...
+    if isinstance(order, str) and order:
+        return [f"dim{ch.upper()}" for ch in order]
+
+    # 4) no order → numeric dims using meta['ndim']
+    n = meta.get("ndim")
+    n = int(n) if isinstance(n, int) else 0
+    return [f"dim{i+1}" for i in range(n)]
 
 
 def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
