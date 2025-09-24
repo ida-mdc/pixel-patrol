@@ -6,6 +6,7 @@ import zarr
 from zarr.storage import LocalStore
 import polars as pl
 
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
 from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
@@ -74,23 +75,23 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
     assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
     assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
 
-# TODO: not using bioio anymore for zarr. Maybe we should?
-# def test_extract_image_metadata_from_zarr(zarr_folder: Path):
-#     """
-#     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
-#     """
-#     metadata = get_all_record_properties(zarr_folder, loader=ZarrLoader(), processors=discover_processor_plugins())
-#
-#     assert isinstance(metadata, dict)
-#
-#     assert metadata.get("dim_order") in ["TCZYXS", "TCZYX", "TCYX", "CZYX", "CXY", "TYX"]  # TODO: probably need to change so dim order is always TCZYXS
-#     assert metadata.get("dtype") == "uint16"
-#     assert metadata.get("T_size") == 1
-#     assert metadata.get("C_size") == 2
-#     assert metadata.get("Z_size") == 1
-#     assert metadata.get("Y_size") == 10
-#     assert metadata.get("X_size") == 10
-#
-#     assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
-#     assert "shape" in metadata and metadata["shape"].tolist()  == [1, 2, 1, 10, 10]
-#     assert "ndim" in metadata and metadata["ndim"] == 5
+
+def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path):
+    """
+    Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
+    """
+    metadata = get_all_record_properties(zarr_folder, loader=BioIoLoader(), processors=discover_processor_plugins())
+
+    assert isinstance(metadata, dict)
+
+    assert metadata.get("dim_order") in ["TCZYXS", "TCZYX", "TCYX", "CZYX", "CXY", "TYX"]  # TODO: probably need to change so dim order is always TCZYXS
+    assert metadata.get("dtype") == "uint16"
+    assert metadata.get("T_size") == 1
+    assert metadata.get("C_size") == 2
+    assert metadata.get("Z_size") == 1
+    assert metadata.get("Y_size") == 10
+    assert metadata.get("X_size") == 10
+
+    assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
+    assert "shape" in metadata and metadata["shape"].tolist()  == [1, 2, 1, 10, 10]
+    assert "ndim" in metadata and metadata["ndim"] == 5
