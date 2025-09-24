@@ -140,7 +140,7 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
         dim_order = _infer_dim_order(ndim)
 
     if not dim_names:
-        dim_names = [c.lower() for c in dim_order]
+        dim_names = [f"dim{c}" for c in dim_order]
 
     meta["dim_order"] = dim_order
     meta["dim_names"] = dim_names
