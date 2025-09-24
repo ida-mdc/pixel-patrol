@@ -10,6 +10,7 @@ from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
 from pixel_patrol_base.core.record import record_from
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,6 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
         logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
         return None
 
-
 class BioIoLoader:
     """
     Loader that produces an record from BioIO/BioImage.
@@ -85,7 +85,7 @@ class BioIoLoader:
 
     NAME = "bioio"
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -105,6 +105,8 @@ class BioIoLoader:
 
     FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
 
+    def is_folder_supported(self, path: Path) -> bool:
+        return is_zarr_store(path)
 
     def load(self, source: str):
         img = _load_bioio_image(Path(source))
