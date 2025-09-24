@@ -31,10 +31,13 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
         metadata[f"{letter}_size"] = int(dim_size)
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
-    metadata["dim_names"] = (
-        list(dim_names) if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names)
-        else [f"dim{i + 1}" for i in range(len(metadata.get("dim_order", "")))]
-    )
+    if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
+        # If reader gives single-letter axis names, normalize to lowercase ("t","c","z","y","x")
+        dn = [x.lower() if isinstance(x, str) and len(x) == 1 else x for x in dim_names]
+    else:
+        # Fallback: derive from dim_order letters (lowercase), not "dim1", "dim2", ...
+        dn = [letter.lower() for letter in str(dim_order)]
+    metadata["dim_names"] = list(dn)
 
     # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1

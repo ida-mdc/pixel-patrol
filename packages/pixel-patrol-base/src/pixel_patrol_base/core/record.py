@@ -13,22 +13,25 @@ class Record:
     meta: Mapping[str, Any]
     capabilities: Set[str]
 
+# _infer_dim_order: accept only single-letter codes and (if known) match ndim, else fallback ABC...
 def _infer_dim_order(array: Any, meta: Mapping[str, Any]) -> str:
     order = meta.get("dim_order", "")
-    if isinstance(order, str) and order.isalpha(): return order
     n = meta.get("ndim")
     if not isinstance(n, int):
-        n = getattr(array, "ndim", None)
-        if not isinstance(n, int):
-            shape = getattr(array, "shape", None)
-            n = len(shape) if isinstance(shape, (list, tuple)) else 0
+        n = getattr(array, "ndim", None) or len(getattr(array, "shape", []) or [])
+    if isinstance(order, str) and order.isalpha() and (not n or len(order) == int(n)):
+        return order
     return ''.join(string.ascii_uppercase[i] for i in range(min(int(n or 0), 26)))
 
+# _infer_dim_names: prefer meta dim_names; otherwise derive from dim_order letters (lowercase)
 def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
     names = meta.get("dim_names")
     if isinstance(names, list) and len(names) == len(order) and all(isinstance(x, str) for x in names):
         return names
+    if isinstance(order, str) and order:
+        return [ch.lower() for ch in order]
     return [f"dim{i+1}" for i in range(len(order))]
+
 
 def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
     mm = dict(meta or {})
