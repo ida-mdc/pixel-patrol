@@ -56,7 +56,7 @@ class FileSummaryWidget:
                 intro_md.append(
                     html.P(
                         f"Folder '{row['imported_path_short']}' contains "
-                        f"{row['file_count']} files ({row['total_size_mb']:.1f} MB) with types: {ft_str}."
+                        f"{row['file_count']} files ({row['total_size_mb']:.3f} MB) with types: {ft_str}."
                     )
                 )
 
