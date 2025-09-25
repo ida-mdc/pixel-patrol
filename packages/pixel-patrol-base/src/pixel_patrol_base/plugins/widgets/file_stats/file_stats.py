@@ -64,6 +64,13 @@ class FileStatisticsWidget:
                     color_discrete_map=color_map,
                     title="File Count by Extension",
                 )
+
+                n = plot_data_ext_count["file_extension"].n_unique()
+                if n == 1:
+                    fig_ext_count.update_layout(bargap=0.7)
+                if n == 2:
+                    fig_ext_count.update_layout(bargap=0.4)
+
                 report_elements.append(dcc.Graph(figure=fig_ext_count))
 
                 plot_data_ext_size = df_filtered.group_by(
@@ -79,6 +86,12 @@ class FileStatisticsWidget:
                     color_discrete_map=color_map,
                     title="Total Size by Extension",
                 )
+                n = plot_data_ext_size["file_extension"].n_unique()
+                if n == 1:
+                    fig_ext_size.update_layout(bargap=0.7)
+                if n == 2:
+                    fig_ext_size.update_layout(bargap=0.4)
+
                 report_elements.append(dcc.Graph(figure=fig_ext_size))
 
             # --- 2) File Size Analysis ---
