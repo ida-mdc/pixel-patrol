@@ -71,6 +71,12 @@ class FileSummaryWidget:
             fig.add_trace(go.Bar(x=x_labels, y=sizes, marker_color=colors), row=1, col=2)
             fig.update_layout(height=400, showlegend=False, margin=dict(l=40, r=40, t=80, b=40), barmode="group")
 
+            n = len(x_labels)
+            if n == 1:
+                fig.update_layout(bargap=0.7)
+            if n == 2:
+                fig.update_layout(bargap=0.4)
+
             table = html.Table(
                 [
                     html.Thead(html.Tr([
