@@ -39,10 +39,18 @@ def process_files(project: Project) -> Project:
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records()
 
-def show_report(project: Project, host: str = "127.0.0.1", port: int = None) -> None:
+def show_report(project: Project, host: str = "127.0.0.1", port: int = None, debug: bool = False) -> None:
+    """
+    Run without the Flask debug reloader by default. The debug reloader
+    spawns a second process and will re-import/run the script, which causes
+    the example to execute twice (scan/process files two times). When a
+    developer needs the interactive debugger they can pass `debug=True`,
+    but should also set `use_reloader=False` if they do not want the script
+    re-executed.
+    """
     logger.info(f"API Call: Showing report for project '{project.name}'.")
     app = create_app(project)
-    app.run(debug=True, host=host, port=port)
+    app.run(debug=debug, host=host, port=port, use_reloader=False)
 
 def export_project(project: Project, dest: Path) -> None: # TODO: think about when project can be saved
     logger.info(f"API Call: Exporting project '{project.name}' to '{dest}'.")
