@@ -76,11 +76,13 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
     assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
 
 
-def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path):
+# test decorator + signature (edit existing test)
+@pytest.mark.parametrize("loader", [ZarrLoader(), BioIoLoader()])
+def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path, loader):
     """
     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
     """
-    metadata = get_all_record_properties(zarr_folder, loader=BioIoLoader(), processors=discover_processor_plugins())
+    metadata = get_all_record_properties(zarr_folder, loader=loader, processors=discover_processor_plugins())
 
     assert isinstance(metadata, dict)
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Set, List, Mapping
 
 import dask.array as da
+import numpy as np
 import zarr
 
 from pixel_patrol_base.core.record import record_from
@@ -145,9 +146,10 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
     meta["dim_order"] = dim_order
     meta["dim_names"] = dim_names
 
-    meta["shape"] = tuple(int(s) for s in arr.shape)
+    meta["shape"] = np.array(arr.shape, dtype=int)
     meta["dtype"] = str(arr.dtype)
-    meta["n_dimensions"] = arr.ndim
+    meta["ndim"] = arr.ndim
+    meta["num_pixels"] = int(np.prod(arr.shape))
     chunks = getattr(arr, "chunksize", None)
     meta["chunks"] = chunks if chunks is not None else arr.chunks
 
