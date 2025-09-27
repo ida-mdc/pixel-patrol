@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Mapping, Set, List
 import string
+import logging
+logger = logging.getLogger(__name__)
 
 Kind = str
 
@@ -13,48 +15,96 @@ class Record:
     meta: Mapping[str, Any]
     capabilities: Set[str]
 
-# _infer_dim_order: accept only single-letter codes and (if known) match ndim, else fallback ABC...
-def _infer_dim_order(array: Any, meta: Mapping[str, Any]) -> str:
-    order = meta.get("dim_order", "")
-    n = meta.get("ndim")
-    if not isinstance(n, int):
-        n = getattr(array, "ndim", None) or len(getattr(array, "shape", []) or [])
-    if isinstance(order, str) and order.isalpha() and (not n or len(order) == int(n)):
-        return order
-    return ''.join(string.ascii_uppercase[i] for i in range(min(int(n or 0), 26)))
+def as_list(v):
+    if v is None:
+        return []
+    if hasattr(v, "tolist"):
+        return v.tolist()
+    return list(v)
 
-from typing import Mapping, List, Any
+
+def _validate_and_fix_meta(array: Any, meta: Mapping[str, Any]) -> Mapping[str, Any]:
+    meta = dict(meta)  # Create a mutable copy of the input meta mapping
+
+    meta_ndim = meta.get("ndim")
+    if isinstance(meta_ndim, str) and meta_ndim.strip().lstrip("+-").isdigit():
+        meta_ndim = int(meta_ndim)
+    elif not isinstance(meta_ndim, int):
+        meta_ndim = None
+
+    meta_shape = as_list(meta.get("shape"))
+    arr_shape = as_list(getattr(array, "shape", None))
+    arr_ndim = getattr(array, "ndim", None) or len(arr_shape)
+
+    if arr_ndim is not None and (meta_ndim is None or meta_ndim != arr_ndim):
+        if meta_ndim is not None:
+            logger.warning(f"meta['ndim'] != array.ndim - {meta_ndim} != {arr_ndim}; using array.ndim")
+        meta['ndim'] = arr_ndim
+
+    if not meta_shape and arr_shape:
+        meta['shape'] = list(arr_shape)
+    elif meta_shape and arr_shape and tuple(meta_shape) != tuple(arr_shape):
+        logger.warning(f"meta['shape'] != array.shape - {meta_shape} != {arr_shape}; using array.shape")
+        meta['shape'] = list(arr_shape)
+    meta['shape'] = list(meta['shape'])
+
+    if "dim_order" in meta:
+        if not isinstance(meta['dim_order'], str) or len(meta['dim_order']) != arr_ndim:
+            logger.warning(
+                f"meta['dim_order'] {meta['dim_order']} is invalid or length mismatch ({len(meta['dim_order'])} != {arr_ndim}); removing from meta")
+            del meta["dim_order"]
+
+    if "dim_names" in meta:
+        if isinstance(meta['dim_names'], tuple):
+            meta['dim_names'] = list(meta['dim_names'])
+        if not isinstance(meta['dim_names'], list):
+            logger.warning(
+                f"meta['dim_names'] must be list or tuple, found {type(meta['dim_names']).__name__}; removing from meta")
+            del meta["dim_names"]
+        elif len(meta['dim_names']) != arr_ndim:
+                logger.warning(
+                    f"meta['dim_names'] length mismatch ({len(meta['dim_names'])} != {arr_ndim}); removing from meta")
+                del meta["dim_names"]
+
+    return meta
+
+
+def _infer_dim_order(meta: Mapping[str, Any]) -> str:
+    meta_order = meta.get("dim_order")
+    meta_names = meta.get("dim_names")
+    meta_ndim = meta.get("ndim")
+
+    if meta_order and isinstance(meta_order, str):
+        return meta_order
+
+    if (meta_names and isinstance(meta_names, list)
+            and all(isinstance(x, str) for x in meta_names)
+            and all(len(x) == 1 for x in meta_names)):
+        return "".join(meta_names)
+    else:
+        return ''.join(string.ascii_uppercase[i] for i in range(min(int(meta_ndim or 0), 26)))
+
 
 def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
-    """
-    Decide human-readable dim names.
-      - If meta['dim_names'] is valid, use it as-is.
-      - Else if meta['dim_order'] equals 'order' and is single-letter, use letters (lowercase).
-      - Else fallback to ['dimA','dimB',...] from 'order'; if no order, use ['dim1',...].
-    """
-    # 1) explicit names from metadata win
+
     names = meta.get("dim_names")
-    if isinstance(names, list) and len(names) == len(order) and all(isinstance(x, str) for x in names):
+    if isinstance(names, list) and all(isinstance(x, str) for x in names):
         return names
 
-    # 2) if the order came from metadata and is single-letter, derive names from it (no 'dim' prefix)
-    mo = meta.get("dim_order")
-    if isinstance(mo, str) and mo == order and order.isalpha() and order.isupper():
-        return [ch.lower() for ch in order]
+    meta_order = meta.get("dim_order")
+    if isinstance(meta_order, str) and meta_order == order:
+        return list(order)
 
-    # 3) fallback from order → 'dimA','dimB',...
     if isinstance(order, str) and order:
         return [f"dim{ch.upper()}" for ch in order]
 
-    # 4) no order → numeric dims using meta['ndim']
-    n = meta.get("ndim")
-    n = int(n) if isinstance(n, int) else 0
-    return [f"dim{i+1}" for i in range(n)]
+    return []
 
 
 def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
     mm = dict(meta or {})
-    dim_order = _infer_dim_order(array, mm)
+    mm = _validate_and_fix_meta(array, mm)
+    dim_order = _infer_dim_order(mm)
     dim_names = _infer_dim_names(dim_order, mm)
     mm["dim_order"] = dim_order
     mm["dim_names"] = dim_names

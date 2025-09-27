@@ -32,30 +32,20 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
     if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
-        # If reader gives single-letter axis names, normalize to lowercase ("t","c","z","y","x")
-        dn = [x.lower() if isinstance(x, str) and len(x) == 1 else x for x in dim_names]
-    else:
-        # Fallback: derive from dim_order letters as "dim_<letter>" (e.g., "dim_y","dim_x")
-        dn = [letter.lower() for letter in str(dim_order)]
-    metadata["dim_names"] = list(dn)
+        metadata["dim_names"] = list(dim_names)
 
-    # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
 
-    # Physical pixel sizes (optional on some readers)
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
             metadata[f"pixel_size_{ax}"] = getattr(img.physical_pixel_sizes, ax, None)
 
-    # Channels
     if hasattr(img, "channel_names"):
         metadata["channel_names"] = img.channel_names
 
-    # dtype (kept as string only; no special handling elsewhere)
     if hasattr(img, "dtype"):
         metadata["dtype"] = str(img.dtype)
 
-    # Shape-related stats
     if hasattr(img, "shape"):
         metadata["shape"] = np.array(img.shape)
         metadata["ndim"] = len(img.shape)
