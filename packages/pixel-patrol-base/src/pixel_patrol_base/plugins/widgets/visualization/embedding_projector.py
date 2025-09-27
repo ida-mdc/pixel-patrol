@@ -17,83 +17,76 @@ from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 SPRITE_SIZE = 16
 
-
-def _create_sprite_image(df: pl.DataFrame):
-    """
-    Creates a sprite image from thumbnails stored in a Polars DataFrame.
-    Assumes 'thumbnail' column contains PIL Image objects or numpy arrays.
-    """
-    if "thumbnail" not in df.columns or df.get_column("thumbnail").is_empty():
-        return None
-
-    image_list = df.get_column("thumbnail").to_list()
-    processed_images = []
-    for img_data in image_list:
-        if img_data is None:
-            continue
-        if isinstance(img_data, Image.Image):
-            img = img_data
-        elif isinstance(img_data, np.ndarray):
-            # normalize to uint8
-            if img_data.dtype in (np.float32, np.float64):
-                img_data = (np.clip(img_data, 0, 1) * 255).astype(np.uint8)
-            elif img_data.dtype != np.uint8:
-                img_data = img_data.astype(np.uint8)
-            img = Image.fromarray(img_data)
-        else:
-            continue
-        processed_images.append(img.resize((SPRITE_SIZE, SPRITE_SIZE)))
-
-    if not processed_images:
-        return None
-
-    num_images = len(processed_images)
-    images_per_row = int(np.ceil(np.sqrt(num_images)))  # Square grid
-    sprite_width = images_per_row * SPRITE_SIZE
-    sprite_height = int(np.ceil(num_images / images_per_row)) * SPRITE_SIZE
-
-    sprite_image = Image.new("RGB", (sprite_width, sprite_height))
-    for i, img in enumerate(processed_images):
-        row = i // images_per_row
-        col = i % images_per_row
-        sprite_image.paste(img, (col * SPRITE_SIZE, row * SPRITE_SIZE))
-    return sprite_image
-
-
 def _generate_projector_checkpoint(
-    embeddings: np.ndarray,
-    meta_df: pl.DataFrame,
-    log_dir: Path,
+        embeddings: np.ndarray,
+        meta_df: pl.DataFrame,
+        log_dir: Path,
 ):
     """Creates TensorBoard embedding files."""
     writer = SummaryWriter(logdir=str(log_dir))
+    # print(f"DEBUG: _generate_projector_checkpoint received meta_df with shape: {meta_df.shape}")
+
+    # Instead of creating a sprite, we create a stack of individual images
+    # that tensorboardX will use to create its own sprite.
+    images_for_tb = None
+    if "thumbnail" in meta_df.columns:
+        image_list = meta_df.get_column("thumbnail").to_list()
+        processed_images = []
+
+        for img_data in image_list:
+            if img_data is None:
+                processed_images.append(np.zeros((SPRITE_SIZE, SPRITE_SIZE, 3), dtype=np.uint8))
+                continue
+
+            if isinstance(img_data, list):
+                img_data = np.array(img_data)
+
+            if isinstance(img_data, Image.Image):
+                img = img_data
+            elif isinstance(img_data, np.ndarray):
+                if img_data.size == 0:
+                    processed_images.append(np.zeros((SPRITE_SIZE, SPRITE_SIZE, 3), dtype=np.uint8))
+                    continue
+
+                final_img_data = img_data
+                if img_data.dtype == np.uint16:
+                    # Correctly scale 16-bit data (0-65535) down to 8-bit (0-255).
+                    # Integer division by 256 is an efficient way to do this.
+                    final_img_data = (img_data // 256).astype(np.uint8)
+
+                    # Some PNG loaders (like matplotlib) might produce floats from 0.0 to 1.0.
+                elif img_data.dtype in [np.float32, np.float64]:
+                    if img_data.max() <= 1.0:
+                        final_img_data = (img_data * 255).astype(np.uint8)
+
+                    # Ensure data is uint8 before creating the image.
+                img = Image.fromarray(final_img_data.astype(np.uint8))
+
+            else:
+                processed_images.append(np.zeros((SPRITE_SIZE, SPRITE_SIZE, 3), dtype=np.uint8))
+                continue
+            resized_img_arr = np.array(img.resize((SPRITE_SIZE, SPRITE_SIZE)).convert("RGB"))
+            processed_images.append(resized_img_arr)
+
+        if processed_images:
+            images_np = np.stack(processed_images)
+            images_for_tb = images_np.transpose(0, 3, 1, 2)
+            images_for_tb = images_for_tb.astype(float) / 255.
 
     # TensorBoardX expects pandas metadata; drop thumbnails if present
     metadata_for_tb = meta_df.drop("thumbnail", strict=False).to_pandas()
-    sanitized_df = metadata_for_tb.astype(str).replace(r"\t", " ", regex=True)
+    sanitized_df = metadata_for_tb.astype(str).replace(r"[\n\r\t]", " ", regex=True)
     metadata = sanitized_df.values.tolist()
-
-    # Optional sprite (thumbnail grid)
-    sprite_np_array = None
-    if "thumbnail" in meta_df.columns:
-        sprite_pil_image = _create_sprite_image(meta_df)
-        if sprite_pil_image:
-            sprite_np_array = np.array(sprite_pil_image)
-            if sprite_np_array.ndim == 2:
-                sprite_np_array = np.expand_dims(sprite_np_array, axis=-1)
-            elif sprite_np_array.ndim == 3 and sprite_np_array.shape[2] == 4:
-                sprite_np_array = np.array(Image.fromarray(sprite_np_array).convert("RGB"))
 
     writer.add_embedding(
         mat=embeddings,
         metadata=metadata,
         metadata_header=list(sanitized_df.columns),
-        label_img=sprite_np_array,
+        label_img=images_for_tb,
         tag="pixel_patrol_embedding",
         global_step=0,
     )
     writer.close()
-
 
 def _launch_tensorboard_subprocess(logdir: Path, port: int):
     """Launch TensorBoard and wait briefly until it responds; return Popen or None."""
@@ -132,16 +125,14 @@ class EmbeddingProjectorWidget:
     START_BTN_ID = "start-tb-button"
     STOP_BTN_ID = "stop-tb-button"
     # dcc.Store ID to preserve TB state; ensure a matching dcc.Store(id=STORE_ID, data={}) exists in app layout
-    STORE_ID = "tb-process-store-embedding-projector"
+    STORE_ID = "tb-process-store-tensorboard-embedding-projector"
 
     def layout(self) -> List:
         return [
             html.Div(
                 id=self.INTRO_ID,
                 children=[
-                    html.P("The "),
-                    html.Strong("Embedding Projector"),
-                    html.Span(" allows you to explore high-dimensional data by reducing it to 2D or 3D using "),
+                    html.P("The Embedding Projector allows you to explore high-dimensional data by reducing it to 2D or 3D using "),
                     html.Strong("Principal Component Analysis (PCA)"),
                     html.Span(" or "),
                     html.Strong("t-SNE"),
@@ -150,7 +141,7 @@ class EmbeddingProjectorWidget:
                         "Embeddings represent data as points in a high-dimensional space; closer points are more similar."
                     ),
                     html.P("This tool helps visualize relationships, clusters, and patterns in large datasets."),
-                    html.P(id=self.SUMMARY_ID),
+                    html.Div(id=self.SUMMARY_ID),
                 ],
             ),
             html.Div(
@@ -171,223 +162,133 @@ class EmbeddingProjectorWidget:
             # NOTE: Add dcc.Store(id=self.STORE_ID, data={}) to your app layout.
         ]
 
+    def prepare_data(self, df: pl.DataFrame):
+        """
+        Separates a DataFrame into embeddings and metadata based on data types and cardinality.
+
+        Args:
+            df: The input Polars DataFrame.
+        Returns:
+            A tuple containing:
+            - np.ndarray: The numeric embedding vectors.
+            - pl.DataFrame: The DataFrame containing only metadata columns.
+        """
+        # Identify columns that should be used for embeddings
+        embedding_feature_cols = []
+        skipped_cols = []
+        for col in df.columns:
+            if df[col].dtype.is_float():
+                embedding_feature_cols.append(col)
+            elif df[col].dtype.is_integer():
+                embedding_feature_cols.append(col)
+            elif df[col].dtype.is_nested() and col != "thumbnail":
+                skipped_cols.append(col)
+
+        if not embedding_feature_cols:
+            # Fallback for when no clear embedding columns are found
+            df_numeric = df.select(cs.by_dtype(pl.NUMERIC_DTYPES))
+            embedding_feature_cols = df_numeric.columns
+
+        # Create the embeddings array and the metadata DataFrame
+        embeddings = df.select(embedding_feature_cols).fill_null(0.0).to_numpy()
+        metadata_df = df.drop(embedding_feature_cols).drop(skipped_cols)
+
+        return embeddings, metadata_df
+
+
     def register(self, app, df_global: pl.DataFrame):
         @app.callback(
+            # Since this is the ONLY callback updating these, we remove 'allow_duplicate=True'
             Output(self.SUMMARY_ID, "children"),
             Output(self.STATUS_ID, "children"),
             Output(self.LINK_ID, "children"),
             Output(self.START_BTN_ID, "disabled"),
             Output(self.STOP_BTN_ID, "disabled"),
             Output(self.STORE_ID, "data"),
+            # This callback now triggers on button clicks AND on page load (from the store)
             Input(self.START_BTN_ID, "n_clicks"),
             Input(self.STOP_BTN_ID, "n_clicks"),
+            Input(self.STORE_ID, "data"),
             State(self.PORT_INPUT_ID, "value"),
-            State(self.STORE_ID, "data"),
             prevent_initial_call=True,
         )
         def manage_tensorboard(
-            start_clicks: int,
-            stop_clicks: int,
-            port: int,
-            tb_state: Dict,
+                start_clicks: int,
+                stop_clicks: int,
+                tb_state: Dict,
+                port: int,
         ):
-            # defaults
             tb_state = tb_state or {}
             port = port or 6006
-
             ctx = callback_context
             triggered_id = ctx.triggered_id if ctx.triggered else None
 
             current_pid = tb_state.get("pid")
             current_log_dir_str = tb_state.get("log_dir")
-            current_log_dir = Path(current_log_dir_str) if current_log_dir_str else None
 
+            # --- Default UI component values ---
             summary_info_text = html.P("")
-            status_message = html.Span("")
+            status_message = html.Span("TensorBoard not running.", className="text-info")
             projector_link_children: List = []
             start_button_disabled = False
             stop_button_disabled = True
 
-            # compute numeric feature matrix
-            df_numeric = df_global.select(cs.by_dtype(pl.NUMERIC_DTYPES)).fill_null(0.0)
-            if df_numeric.is_empty():
+            if triggered_id is None or triggered_id == self.STORE_ID:
+                df_numeric = df_global.select(cs.by_dtype(pl.NUMERIC_DTYPES))
                 summary_info_text = html.P(
-                    "No numeric data found! Embedding visualization requires numerical features."
-                )
-                return (
-                    summary_info_text,
-                    html.P("Cannot start TensorBoard: No numeric data.", className="text-danger"),
-                    [],
-                    True,
-                    True,
-                    tb_state,
-                )
+                    f"✅ Found {df_numeric.shape[1]} numeric columns in the {df_global.shape} DataFrame.")
+                if current_pid:
+                    try:
+                        os.kill(current_pid, 0)
+                        status_message = html.P(f"TensorBoard is running (PID: {current_pid}).", className="text-info")
+                        projector_link_children = [
+                            html.A("🔗 Open TensorBoard", href=f"http://127.0.0.1:{port}/#projector", target="_blank")]
+                        start_button_disabled = True
+                        stop_button_disabled = False
+                    except OSError:
+                        tb_state = {"pid": None, "log_dir": None}
+                        status_message = html.P("Previous TensorBoard process found dead. State cleared.",
+                                                className="text-warning")
+                return summary_info_text, status_message, projector_link_children, start_button_disabled, stop_button_disabled, tb_state
 
-            summary_info_text = html.P(
-                f"✅ {df_numeric.shape[1]} numeric columns, "
-                f"with {df_numeric.shape[0]} rows can be utilized to display the data in the Embedding Projector."
-            )
+            summary_info_text = html.P([
+                f"Debug Info: Using DataFrame with shape {df_global.shape}. "
+            ])
 
-            # if already running
-            if current_pid:
-                try:
-                    os.kill(current_pid, 0)
-                    status_message = html.P(
-                        f"TensorBoard is running on port {port} (PID: {current_pid}).", className="text-info"
-                    )
-                    projector_link_children = [
-                        html.A(
-                            f"🔗 Open TensorBoard Projector on port {port}",
-                            href=f"http://127.0.0.1:{port}/#projector",
-                            target="_blank",
-                            className="button button-primary",
-                        )
-                    ]
-                    start_button_disabled = True
-                    stop_button_disabled = False
-                except OSError:
-                    # dead -> clear
-                    status_message = html.P(
-                        "TensorBoard process was terminated externally or crashed.", className="text-warning"
-                    )
-                    tb_state["pid"] = None
-                    tb_state["log_dir"] = None
-                    start_button_disabled = False
-                    stop_button_disabled = True
-
+            # -- STOP BUTTON CLICKED --
             if triggered_id == self.STOP_BTN_ID:
                 if current_pid:
                     try:
                         os.kill(current_pid, 9)
-                        if current_log_dir and current_log_dir.exists():
+                        if current_log_dir_str and Path(current_log_dir_str).exists():
                             import shutil
-                            shutil.rmtree(current_log_dir)
-                        status_message = html.P("TensorBoard stopped and logs cleared.", className="text-success")
-                    except OSError as e:
-                        status_message = html.P(f"Error stopping TensorBoard (PID {current_pid}): {e}",
-                                                className="text-danger")
-                    tb_state["pid"] = None
-                    tb_state["log_dir"] = None
-                    start_button_disabled = False
-                    stop_button_disabled = True
-                else:
-                    status_message = html.P("TensorBoard is not running.", className="text-info")
-                    start_button_disabled = False
-                    stop_button_disabled = True
+                            shutil.rmtree(current_log_dir_str)
+                        status_message = html.P("TensorBoard stopped.", className="text-success")
+                    except OSError:
+                        pass  # Process was already dead
+                tb_state = {"pid": None, "log_dir": None}
+                start_button_disabled = False
+                stop_button_disabled = True
 
+            # -- START BUTTON CLICKED --
             elif triggered_id == self.START_BTN_ID:
-                if current_pid:
-                    status_message = html.P(f"TensorBoard is already running on port {port}.", className="text-info")
-                else:
-                    status_message = html.P("Starting TensorBoard...", className="text-warning")
-                    start_button_disabled = True
-                    stop_button_disabled = True
+                embeddings_array, df_meta = self.prepare_data(df_global)
+                summary_info_text.children.append(f" Processing {embeddings_array.shape[1]} features...")
 
-                    embeddings_array = df_numeric.to_numpy()
-                    new_log_dir = Path(tempfile.mkdtemp(prefix="tb_log_"))
+                new_log_dir = Path(tempfile.mkdtemp(prefix="tb_log_"))
+                _generate_projector_checkpoint(embeddings_array, df_meta, new_log_dir)
+                tb_process = _launch_tensorboard_subprocess(new_log_dir, port)
 
-                    try:
-                        _generate_projector_checkpoint(embeddings_array, df_global, new_log_dir)
-                        tb_process = _launch_tensorboard_subprocess(new_log_dir, port)
-                        if tb_process:
-                            tb_state["pid"] = tb_process.pid
-                            tb_state["log_dir"] = str(new_log_dir)
-                            tb_state["port"] = port
-                            status_message = html.P(
-                                f"TensorBoard is running on port {port}!", className="text-success"
-                            )
-                            projector_link_children = [
-                                html.A(
-                                    f"🔗 Open TensorBoard Projector on port {port}",
-                                    href=f"http://127.0.0.1:{port}/#projector",
-                                    target="_blank",
-                                    className="button button-primary",
-                                )
-                            ]
-                            start_button_disabled = True
-                            stop_button_disabled = False
-                        else:
-                            status_message = html.P("Failed to start TensorBoard.", className="text-danger")
-                            tb_state["pid"] = None
-                            tb_state["log_dir"] = None
-                            start_button_disabled = False
-                            stop_button_disabled = True
-                    except Exception as e:
-                        status_message = html.P(f"Error preparing or starting TensorBoard: {e}",
-                                                className="text-danger")
-                        tb_state["pid"] = None
-                        tb_state["log_dir"] = None
-                        start_button_disabled = False
-                        stop_button_disabled = True
-
-            return (
-                summary_info_text,
-                status_message,
-                projector_link_children,
-                start_button_disabled,
-                stop_button_disabled,
-                tb_state,
-            )
-
-        # Initial state sync on page load
-        @app.callback(
-            Output(self.SUMMARY_ID, "children", allow_duplicate=True),
-            Output(self.STATUS_ID, "children", allow_duplicate=True),
-            Output(self.LINK_ID, "children", allow_duplicate=True),
-            Output(self.START_BTN_ID, "disabled", allow_duplicate=True),
-            Output(self.STOP_BTN_ID, "disabled", allow_duplicate=True),
-            Output(self.STORE_ID, "data", allow_duplicate=True),
-            Input(self.STORE_ID, "data"),
-            prevent_initial_call="initial_duplicate",
-        )
-        def initial_layout_setup(tb_state_initial: Dict):
-            tb_state_initial = tb_state_initial or {}
-            df_numeric = df_global.select(cs.by_dtype(pl.NUMERIC_DTYPES)).fill_null(0.0)
-
-            summary_text = (
-                html.P(
-                    f"✅ {df_numeric.shape[1]} numeric columns, "
-                    f"with {df_numeric.shape[0]} rows can be utilized to display the data in the Embedding Projector."
-                )
-                if not df_numeric.is_empty()
-                else html.P("No numeric data found! Embedding visualization requires numerical features.")
-            )
-
-            status = html.P("TensorBoard not running.", className="text-info")
-            link_area: List = []
-            start_button_disabled = False
-            stop_button_disabled = True
-
-            current_pid_initial = tb_state_initial.get("pid")
-            initial_port = tb_state_initial.get("port", 6006)
-            if current_pid_initial:
-                try:
-                    os.kill(current_pid_initial, 0)
-                    status = html.P(
-                        f"TensorBoard seems to be running on port {initial_port} (PID: {current_pid_initial}).",
-                        className="text-warning",
-                    )
-                    link_area = [
-                        html.A(
-                            f"🔗 Open TensorBoard Projector on port {initial_port}",
-                            href=f"http://127.0.0.1:{initial_port}/#projector",
-                            target="_blank",
-                            className="button button-primary",
-                        )
-                    ]
+                if tb_process:
+                    tb_state = {"pid": tb_process.pid, "log_dir": str(new_log_dir), "port": port}
+                    status_message = html.P(f"TensorBoard is running on port {port}!", className="text-success")
+                    projector_link_children = [
+                        html.A("🔗 Open TensorBoard", href=f"http://127.0.0.1:{port}/#projector", target="_blank")]
                     start_button_disabled = True
                     stop_button_disabled = False
-                except OSError:
-                    tb_state_initial = {"pid": None, "log_dir": None}
-                    status = html.P("Previous TensorBoard process found dead. State cleared.", className="text-warning")
+                else:
+                    status_message = html.P("Failed to start TensorBoard.", className="text-danger")
                     start_button_disabled = False
                     stop_button_disabled = True
 
-            return (
-                summary_text,
-                status,
-                link_area,
-                start_button_disabled,
-                stop_button_disabled,
-                tb_state_initial,
-            )
+            return summary_info_text, status_message, projector_link_children, start_button_disabled, stop_button_disabled, tb_state
