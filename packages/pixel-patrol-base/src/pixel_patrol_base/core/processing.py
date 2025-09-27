@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple
+from tqdm.auto import tqdm
 
 import polars as pl
 
@@ -58,7 +59,8 @@ def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader)
 
     rows = []
 
-    for p in paths:
+    # Show a per-file progress bar for deep processing. Use tqdm when available.
+    for p in tqdm(paths, desc="Processing files", unit="file", total=len(paths), leave=True, colour="green", position=0):
         record_dict = get_all_record_properties(p, loader_instance, processors)
         if record_dict:
             rows.append({"path": str(p), **record_dict})
@@ -69,17 +71,20 @@ def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader)
 
 
 def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
-    start_total_time = time.monotonic()
+    '''Load a file with the given loader, run all matching processors, and return combined metadata.
+    Args:
+        file_path: Path to the file to process.
+        loader: An instance of PixelPatrolLoader to load the file.
+        processors: A list of PixelPatrolProcessor instances to run on the loaded record.
 
+    Returns:
+        A dictionary of combined data (metadata) from the loader and all applicable processors.
+    '''
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
-
+    
     extracted_properties = {}
-
-    logger.info(f"Attempting to load '{file_path}' with loader: {loader.NAME}")
-
-    start_load_time = time.monotonic()
     try:
         art = loader.load(str(file_path))
         metadata = dict(art.meta)
@@ -87,12 +92,9 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
         logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
         return {}
 
-    load_duration = time.monotonic() - start_load_time
-    logger.info(f"Loading with '{loader.NAME}' took {load_duration:.4f} seconds.")
-
     # Always process using Record; processors opt-in via INPUT spec
     extracted_properties.update(metadata)
-    for P in processors:
+    for P in tqdm(processors, desc="  Running processors for image: ", unit="proc", leave=False, colour="blue", position=1):
         if not is_record_matching_processor(art, P.INPUT):
             continue
         out = P.run(art)
@@ -102,8 +104,6 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
             art = out  # chainable: processors may transform the record
             extracted_properties.update(art.meta)
 
-    total_duration = time.monotonic() - start_total_time
-    logger.info(f"Successfully loaded and processed '{file_path}'. Total time: {total_duration} seconds.")
     return extracted_properties
 
 

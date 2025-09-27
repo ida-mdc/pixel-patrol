@@ -10,6 +10,7 @@ from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
 from pixel_patrol_base.core.record import record_from
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,13 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
         metadata[f"{letter}_size"] = int(dim_size)
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
-    metadata["dim_names"] = (
-        list(dim_names) if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names)
-        else [f"dim{i + 1}" for i in range(len(metadata.get("dim_order", "")))]
-    )
+    if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
+        # If reader gives single-letter axis names, normalize to lowercase ("t","c","z","y","x")
+        dn = [x.lower() if isinstance(x, str) and len(x) == 1 else x for x in dim_names]
+    else:
+        # Fallback: derive from dim_order letters as "dim_<letter>" (e.g., "dim_y","dim_x")
+        dn = [letter.lower() for letter in str(dim_order)]
+    metadata["dim_names"] = list(dn)
 
     # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
@@ -76,7 +80,6 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
         logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
         return None
 
-
 class BioIoLoader:
     """
     Loader that produces an record from BioIO/BioImage.
@@ -85,7 +88,7 @@ class BioIoLoader:
 
     NAME = "bioio"
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -105,6 +108,8 @@ class BioIoLoader:
 
     FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
 
+    def is_folder_supported(self, path: Path) -> bool:
+        return is_zarr_store(path)
 
     def load(self, source: str):
         img = _load_bioio_image(Path(source))

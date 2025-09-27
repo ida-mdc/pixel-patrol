@@ -9,6 +9,8 @@ import polars as pl
 from dash import Dash, html, dcc
 from dash.dependencies import Input, Output
 
+import plotly.io as pio
+
 from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
@@ -45,6 +47,8 @@ def _create_app(
     df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP, "https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
+
+    pio.templates.default = "plotly"
 
     # Discover widget instances (new or legacy)
     group_widgets: List[PixelPatrolWidget] = discover_widget_plugins()

@@ -78,6 +78,7 @@ class DimOrderWidget:
                 },
                 hover_data=["imported_path_short", "count", "names_in_group"],
             )
+
             fig.update_traces(marker_line_color="white", marker_line_width=0.5, opacity=1)
             fig.update_layout(
                 height=500,
@@ -87,5 +88,10 @@ class DimOrderWidget:
                 bargroupgap=0.05,
                 legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
             )
+            n = plot_data_agg["dim_order"].n_unique()
+            if n==1:
+                fig.update_layout(bargap=0.7)
+            if n==2:
+                fig.update_layout(bargap=0.4)
 
             return fig, ratio_text

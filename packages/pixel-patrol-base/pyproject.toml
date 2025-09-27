@@ -16,6 +16,7 @@ dependencies = [
     "tensorboard>=2.18.0", # TODO: Are we sure we want it in base?
     "tensorboardx>=2.6.4", # TODO: Are we sure we want it in base?
     "dask>=2025.5.1",
+    "tqdm>=4.67.1",
 ]
 
 [tool.uv]

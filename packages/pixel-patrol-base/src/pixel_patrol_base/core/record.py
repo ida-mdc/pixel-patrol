@@ -13,22 +13,44 @@ class Record:
     meta: Mapping[str, Any]
     capabilities: Set[str]
 
+# _infer_dim_order: accept only single-letter codes and (if known) match ndim, else fallback ABC...
 def _infer_dim_order(array: Any, meta: Mapping[str, Any]) -> str:
     order = meta.get("dim_order", "")
-    if isinstance(order, str) and order.isalpha(): return order
     n = meta.get("ndim")
     if not isinstance(n, int):
-        n = getattr(array, "ndim", None)
-        if not isinstance(n, int):
-            shape = getattr(array, "shape", None)
-            n = len(shape) if isinstance(shape, (list, tuple)) else 0
+        n = getattr(array, "ndim", None) or len(getattr(array, "shape", []) or [])
+    if isinstance(order, str) and order.isalpha() and (not n or len(order) == int(n)):
+        return order
     return ''.join(string.ascii_uppercase[i] for i in range(min(int(n or 0), 26)))
 
+from typing import Mapping, List, Any
+
 def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
+    """
+    Decide human-readable dim names.
+      - If meta['dim_names'] is valid, use it as-is.
+      - Else if meta['dim_order'] equals 'order' and is single-letter, use letters (lowercase).
+      - Else fallback to ['dimA','dimB',...] from 'order'; if no order, use ['dim1',...].
+    """
+    # 1) explicit names from metadata win
     names = meta.get("dim_names")
     if isinstance(names, list) and len(names) == len(order) and all(isinstance(x, str) for x in names):
         return names
-    return [f"dim{i+1}" for i in range(len(order))]
+
+    # 2) if the order came from metadata and is single-letter, derive names from it (no 'dim' prefix)
+    mo = meta.get("dim_order")
+    if isinstance(mo, str) and mo == order and order.isalpha() and order.isupper():
+        return [ch.lower() for ch in order]
+
+    # 3) fallback from order → 'dimA','dimB',...
+    if isinstance(order, str) and order:
+        return [f"dim{ch.upper()}" for ch in order]
+
+    # 4) no order → numeric dims using meta['ndim']
+    n = meta.get("ndim")
+    n = int(n) if isinstance(n, int) else 0
+    return [f"dim{i+1}" for i in range(n)]
+
 
 def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
     mm = dict(meta or {})

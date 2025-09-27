@@ -106,19 +106,20 @@ class DimSizeWidget:
             else:
                 fig_strip = px.strip(
                     melted_df,
-                    x="dimension_value",
-                    y="imported_path_short",
+                    x="imported_path_short",
+                    y="dimension_value",
                     color="imported_path_short",
                     facet_col="dimension_name",
                     facet_col_wrap=3,
                     color_discrete_map=color_map,
+                    facet_row_spacing=0.16,
                     title="Individual Dimension Sizes per Dataset",
-                    labels={"dimension_value": "", "imported_path_short": "Folder"},
+                    labels={"dimension_value": "Size", "imported_path_short": "Folder"},
                     hover_data=["name"],
                 )
                 # Show numeric tick labels on all subplots
                 fig_strip.update_xaxes(matches=None, showticklabels=True)
-                fig_strip.update_yaxes(matches=None)
+                fig_strip.update_yaxes(matches=None, showticklabels=True)
                 fig_strip.for_each_annotation(
                     lambda a: a.update(text=a.text.replace("dimension_name=", "").replace("_size", " Size"))
                 )

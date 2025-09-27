@@ -23,4 +23,4 @@ dev = [
 pixel-patrol-base = { path = "../pixel-patrol-base" }
 pixel-patrol-image = { path = "../pixel-patrol-image" }
 pixel-patrol-loader-zarr = { path = "../pixel-patrol-loader-zarr" }
-pixel-patrol-loader-bioio = { path = "../pixel-patrol-loader-bioio" }
+pixel-patrol-loader-bio = { path = "../pixel-patrol-loader-bio" }

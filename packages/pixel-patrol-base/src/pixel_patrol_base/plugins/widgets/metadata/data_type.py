@@ -89,5 +89,10 @@ class DataTypeWidget:
                 bargroupgap=0.05,
                 legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
             )
+            n = plot_data_agg["dtype"].n_unique()
+            if n == 1:
+                fig.update_layout(bargap=0.7)
+            if n == 2:
+                fig.update_layout(bargap=0.4)
 
             return fig, dtype_ratio_text
