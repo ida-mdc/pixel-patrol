@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output, ALL, ctx
+from polars.selectors import alpha
 
 from pixel_patrol_base.report.utils import _parse_dynamic_col
 from pixel_patrol_base.report.widget_categories import WidgetCategories
@@ -41,6 +42,37 @@ class DatasetHistogramWidget:
         if not parsed:
             return False, {}
         return parsed
+
+    def _downsample_hist(self, x: np.ndarray, y: np.ndarray, max_points: int = 400) -> tuple[np.ndarray, np.ndarray]:
+        """Uniform stride decimation to cap points per trace."""
+        n = x.size
+        if n <= max_points:
+            return x, y
+        step = int(np.ceil(n / max_points))
+        return x[::step], y[::step]
+
+    def _rebin_to_max_bins(self, counts: np.ndarray, edges: np.ndarray, max_bins: int = 256) -> tuple[
+        np.ndarray, np.ndarray]:
+        """Rebin by uniform grouping of adjacent bins to a target max bin count."""
+        nb = counts.size
+        if nb <= max_bins:
+            # return midpoints + normalized counts
+            mids = 0.5 * (edges[:-1] + edges[1:])
+            return mids, counts
+        group = int(np.ceil(nb / max_bins))
+        # pad to multiple of group
+        pad = (-nb) % group
+        if pad:
+            counts = np.pad(counts, (0, pad), constant_values=0)
+            edges = np.pad(edges, (0, pad), mode="edge")
+        counts = counts.reshape(-1, group).sum(axis=1)
+        # new edges by taking every 'group' edge
+        new_edges = edges[::group]
+        if new_edges.size == counts.size:  # ensure one more edge than counts
+            new_edges = np.append(new_edges, edges[-1])
+        mids = 0.5 * (new_edges[:-1] + new_edges[1:])
+        return mids, counts
+
 
     @staticmethod
     def _load_hist_payload(cell: Any) -> Tuple[np.ndarray, np.ndarray]:
@@ -183,20 +215,56 @@ class DatasetHistogramWidget:
             if long_df.is_empty():
                 return go.Figure(layout={"title": "No valid histogram data for the selected filters."})
 
-            ## 3. Generate the plot (No change here) ##
-            id_col = "imported_path_short" if "imported_path_short" in long_df.columns else "path"
-            fig = px.line(
-                long_df.to_pandas(),
-                x="pixel_value", y="frequency", color=id_col, line_group="path",
-                color_discrete_map=color_map,
-                labels={"pixel_value": "Pixel Value", "frequency": "Normalized Frequency", id_col: "Source File"},
-                title="Overlayed Pixel Histograms"
-            )
+            id_col = "imported_path_short" if "imported_path_short" in df_joined.columns else "path"
+            fig = go.Figure()
+
+            # Vectorized normalization & midpoints per row, then decimate per trace
+            counts_series = df_joined["counts"].to_list()
+            bins_series = df_joined["bins"].to_list()
+            ids_series = df_joined[id_col].to_list()
+            paths_series = df_joined["path"].to_list()  # for stable line_group
+            seen = set()
+            for counts, bins, label, path in zip(counts_series, bins_series, ids_series, paths_series):
+                if counts is None or bins is None:
+                    continue
+                counts = np.asarray(counts)
+                if counts.size == 0 or counts.sum() == 0:
+                    continue
+                bins = np.asarray(bins, dtype=float)
+                # midpoints
+                x, counts = self._rebin_to_max_bins(counts, bins, max_bins=256)
+                y = counts / counts.sum()
+                x, y = self._downsample_hist(x, y, max_points=300)
+
+                showlegend = label not in seen
+                seen.add(label)
+
+                fig.add_trace(go.Scattergl(
+                    x=x, y=y,
+                    mode="lines",
+                    name=str(label),
+                    legendgroup=str(label),   # group by file
+                    showlegend=showlegend,
+                    line=dict(width=1.5),
+                    marker=dict(size=0),
+                    opacity=0.5
+                ))
+
+            # Apply color map to matching trace names (if provided)
+            if color_map:
+                for tr in fig.data:
+                    if tr.name in color_map:
+                        tr.line.color = color_map[tr.name]
+
+            if not fig.data:
+                return go.Figure(layout={"title": "No valid histogram data for the selected filters."})
 
             fig.update_layout(
-                legend_title_text='Source File',
-                xaxis_title="Pixel Value", yaxis_title="Normalized Frequency",
-                margin=dict(t=40, l=20, r=20, b=20), height=420
+                title="Overlayed Pixel Histograms",
+                legend_title_text="Source File",
+                xaxis_title="Pixel Value",
+                yaxis_title="Normalized Frequency",
+                margin=dict(t=40, l=20, r=20, b=20),
+                height=420,
             )
-
             return fig
