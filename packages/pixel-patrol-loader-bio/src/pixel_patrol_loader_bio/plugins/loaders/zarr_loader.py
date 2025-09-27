@@ -1,43 +1,16 @@
 import logging
 import string
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, List, Mapping
 
 import dask.array as da
+import numpy as np
 import zarr
 
 from pixel_patrol_base.core.record import record_from
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
-
-
-
-def is_zarr_store(path: Path) -> bool:
-    """
-    Robustly checks if a given path is a Zarr store (v2 or v3).
-
-    This function uses the zarr library to attempt opening the store, which
-    correctly handles both Zarr v2 and v3 specifications.
-
-    Args:
-        path: The pathlib.Path object to check.
-
-    Returns:
-        True if the path is a valid Zarr store, False otherwise.
-    """
-    try:
-        store_obj = zarr.open(store=str(path.absolute()), mode='r')
-
-        if isinstance(store_obj, zarr.Group):
-            # A group is "processable" if it has any custom attributes.
-            # A generic container group will have empty attrs.
-            return bool(store_obj.attrs)
-
-        return True
-
-    except Exception as e:
-        # Catches any error, indicating it's not a valid or accessible Zarr store.
-        return False
 
 
 def _load_zarr_array(path: Path) -> Optional[da.Array]:
@@ -83,64 +56,112 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
             return None
 
 
-def _infer_dim_order(shape: tuple[int, ...]) -> str:
+def _infer_dim_order(n: int) -> str:
     """
     Infer a simple dim order assuming the last two dims are YX.
     Preceding dims are assigned A,B,C,... in order.
     """
-    n = len(shape)
     if n <= 2:
         return "YX"[-n:]  # n==0 -> "", n==1 -> "X", n==2 -> "YX"
     return string.ascii_uppercase[: n - 2] + "YX"
 
 
-def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
+def _read_zarr_root_and_primary_attrs(path: Path) -> Dict[str, Any]:
     """
-    Build a flat metadata dict from a zarr-backed dask array and its container.
+    Read merged attributes from the Zarr root AND the primary child array
+    (first of "0" or "data" if present). Returns a flat dict.
     """
-    meta: Dict[str, Any] = {}
-    meta["shape"] = tuple(int(s) for s in arr.shape)
-    meta["dtype"] = str(arr.dtype)
-    meta["n_dimensions"] = arr.ndim
+    attrs: Dict[str, Any] = {}
+    try:
+        root = zarr.open(str(path), mode="r")
+        attrs.update(dict(getattr(root, "attrs", {}) or {}))
+        try:
+            if hasattr(root, "arrays"):
+                for name, item in root.arrays():
+                    if name in ("data", "0"):
+                        attrs.update(dict(getattr(item, "attrs", {}) or {}))
+                        break
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f"Could not read Zarr attributes from '{path}': {e}")
+    return attrs
 
-    # chunksize may be missing for irregular chunks; fall back to .chunks
+
+def _extract_ngff_dim_names(attrs: Mapping[str, Any], ndim: int) -> Optional[List[str]]:
+    """
+    Parse OME-NGFF axes from attrs -> return dim_names if available
+    """
+    if not isinstance(attrs, dict):
+        return None
+
+    ms = attrs.get("multiscales")
+    if not (isinstance(ms, list) and ms):
+        return None
+
+    first = ms[0]
+    if not isinstance(first, dict):
+        return None
+
+    axes = first.get("axes")
+    if not isinstance(axes, list):
+        return None
+
+    if len(axes) != int(ndim):
+        logger.warning("NGFF: axes length (%s) != array ndim (%s); ignoring axes", len(axes), ndim)
+        return None
+
+    names: List[str] = []
+    for a in axes:
+        if isinstance(a, str):
+            n = a
+        elif isinstance(a, dict) and isinstance(a.get("name"), str):
+            n = a["name"]
+        else:
+            logger.warning("NGFF: malformed axis entry %r; ignoring axes", a)
+            return None
+        names.append(n)
+
+    return names
+
+
+def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
+    meta: Dict[str, Any] = {}
+    ndim = int(getattr(arr, "ndim", len(getattr(arr, "shape", []) or [])))
+
+    attrs = _read_zarr_root_and_primary_attrs(path)
+    if attrs:
+        meta["zarr_attributes"] = attrs
+
+    dim_names = _extract_ngff_dim_names(attrs, ndim)
+
+    if dim_names and all(isinstance(n, str) and len(n) == 1 for n in dim_names):
+        dim_order = "".join(n.upper() for n in dim_names)
+    else:
+        dim_order = _infer_dim_order(ndim)
+
+    if not dim_names:
+        dim_names = [f"dim{c}" for c in dim_order]
+
+    meta["dim_order"] = dim_order
+    meta["dim_names"] = dim_names
+
+    meta["shape"] = np.array(arr.shape, dtype=int)
+    meta["dtype"] = str(arr.dtype)
+    meta["ndim"] = arr.ndim
+    meta["num_pixels"] = int(np.prod(arr.shape))
     chunks = getattr(arr, "chunksize", None)
     meta["chunks"] = chunks if chunks is not None else arr.chunks
 
-    # Infer dim order and per-dimension sizes
-    dim_order = _infer_dim_order(arr.shape)
-    meta["dim_order"] = dim_order
-    for i, name in enumerate(dim_order):
-        meta[f"{name}_size"] = int(arr.shape[i])
-
-    meta["dim_names"] = [f"dim{i + 1}" for i in range(len(dim_order))]
-
-    # Zarr generally represents a single "image"
-    meta["n_images"] = 1
-    meta["channel_names"] = []
-
-    # Read zarr attributes (array or group)
-    try:
-        root = zarr.open(str(path), mode="r")
-        if isinstance(root, zarr.Array):
-            meta["zarr_attributes"] = dict(root.attrs)
-        elif isinstance(root, zarr.Group):
-            attrs = dict(root.attrs)
-            # Common conventions: arrays named "data" or "0" (multiscales)
-            for name, item in list(root.arrays()):
-                if name in ("data", "0"):
-                    attrs.update(dict(item.attrs))
-                    break
-            meta["zarr_attributes"] = attrs
-    except Exception as e:
-        logger.warning(f"Could not read Zarr attributes from '{path}': {e}")
+    for i, ax in enumerate(dim_order):
+        meta[f"{ax}_size"] = int(arr.shape[i])
 
     return meta
 
 
 class ZarrLoader:
     """
-    Loader that produces an Record from Zarr (or OME-Zarr via BioIO fallback).
+    Loader that produces an Record from Zarr.
     Protocol: single `load()` returning an Record.
     """
 

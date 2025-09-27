@@ -10,6 +10,7 @@ from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
 from pixel_patrol_base.core.record import record_from
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -30,28 +31,21 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
         metadata[f"{letter}_size"] = int(dim_size)
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
-    metadata["dim_names"] = (
-        list(dim_names) if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names)
-        else [f"dim{i + 1}" for i in range(len(metadata.get("dim_order", "")))]
-    )
+    if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
+        metadata["dim_names"] = list(dim_names)
 
-    # Number of scenes/images
     metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
 
-    # Physical pixel sizes (optional on some readers)
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
             metadata[f"pixel_size_{ax}"] = getattr(img.physical_pixel_sizes, ax, None)
 
-    # Channels
     if hasattr(img, "channel_names"):
         metadata["channel_names"] = img.channel_names
 
-    # dtype (kept as string only; no special handling elsewhere)
     if hasattr(img, "dtype"):
         metadata["dtype"] = str(img.dtype)
 
-    # Shape-related stats
     if hasattr(img, "shape"):
         metadata["shape"] = np.array(img.shape)
         metadata["ndim"] = len(img.shape)
@@ -76,7 +70,6 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
         logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
         return None
 
-
 class BioIoLoader:
     """
     Loader that produces an record from BioIO/BioImage.
@@ -85,7 +78,7 @@ class BioIoLoader:
 
     NAME = "bioio"
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -105,6 +98,8 @@ class BioIoLoader:
 
     FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
 
+    def is_folder_supported(self, path: Path) -> bool:
+        return is_zarr_store(path)
 
     def load(self, source: str):
         img = _load_bioio_image(Path(source))

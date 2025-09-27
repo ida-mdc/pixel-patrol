@@ -98,19 +98,46 @@ def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monke
     monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
     assert processing.get_all_record_properties(img_file, loader=loader, processors=processors) == {}
 
-
 class DummyImg:
+    # Mocks the 'dims' object required by bioio_loader
     dims = type("D", (), {"order": STANDARD_DIM_ORDER})()
-    physical_pixel_sizes = type("PS", (), {"X": 0.5, "Y": 0.75, "Z": None, "T": None})()
-    channel_names = ["ch1", "ch2"]
-    ome_metadata = {}
-    dask_data = None
+
+    # Properties required by the loader to determine array properties
     shape = tuple(
         2 if d in ("Y", "X") else 1
         for d in STANDARD_DIM_ORDER
     )
+
+    # FIXED: dask_data must be a NumPy array with the correct shape/ndim, not None.
+    # This prevents _validate_and_fix_meta from incorrectly setting ndim to 0.
+    dask_data = np.zeros(shape, dtype=np.uint8)
+
+    # Other metadata properties used by the loader
+    channel_names = ["ch1", "ch2"]
+    ome_metadata = {}
+
+    physical_pixel_sizes = type(
+        "P",
+        (),
+        {"X": 0.5, "Y": 0.75, "Z": 1.0, "T": 1.0}
+    )()
+
+    # Mock methods required by the bioio_loader logic
     def get_image_data(self):
-        return np.zeros(self.shape, dtype=np.uint8)
+        # Return the actual array data
+        return np.asarray(self.dask_data)
+
+    def get_channel_names(self):
+        return self.channel_names
+
+    def get_physical_pixel_sizes(self):
+        # Mocks the method for other tests, uses the new attribute values
+        sizes = self.physical_pixel_sizes
+        return {'X': sizes.X, 'Y': sizes.Y, 'Z': sizes.Z, 'T': sizes.T}
+
+    def get_image_metadata(self):
+        return self.ome_metadata
+
 
 def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.png"
@@ -127,7 +154,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         2 if d in ("Y", "X") else 1
         for d in STANDARD_DIM_ORDER]
 
-    assert props["shape"].tolist() == expected_shape
+    assert props["shape"] == expected_shape
     assert props["ndim"] == len(STANDARD_DIM_ORDER)
 
     assert props["pixel_size_X"] == 0.5
