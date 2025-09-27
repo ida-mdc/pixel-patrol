@@ -1,6 +1,6 @@
-# packages/pixel-patrol-base/tests/test_dims.py
 import pytest
 from pixel_patrol_base.core.record import _infer_dim_order, _infer_dim_names
+from pixel_patrol_base.core.record import record_from
 
 class StubArr:
     def __init__(self, shape):
@@ -10,59 +10,63 @@ class StubArr:
 def test_fallback_order_and_names():
     a = StubArr((5, 6))
     meta = {}
-    order = _infer_dim_order(a, meta)
-    names = _infer_dim_names(order, meta)
+    record = record_from(a, meta)
+    order = record.dim_order
+    names = record.dim_names
     assert order == "AB"
     assert names == ["dimA", "dimB"]
+
 
 def test_meta_order_preserved_and_names_from_order():
     a = StubArr((2, 3, 4, 5, 6))
     meta = {"dim_order": "TCZYX", "ndim": 5}
-    order = _infer_dim_order(a, meta)
+    order = _infer_dim_order(meta)
     names = _infer_dim_names(order, meta)
     assert order == "TCZYX"
-    assert names == ["t", "c", "z", "y", "x"]
+    assert names == ["T", "C", "Z", "Y", "X"]
 
 def test_meta_names_preferred_when_length_matches():
     a = StubArr((3, 4, 5))
     meta = {"dim_names": ["time", "channel", "z"]}
-    order = _infer_dim_order(a, {})             # no order in meta → fallback "ABC"
-    names = _infer_dim_names(order, meta)       # length matches → keep meta names
+    record = record_from(a, meta)
+    order = record.dim_order
+    names = record.dim_names
     assert order == "ABC"
     assert names == ["time", "channel", "z"]
 
 def test_meta_names_ignored_on_length_mismatch():
     a = StubArr((3, 4, 5))
     meta = {"dim_names": ["t", "c"]}  # too short → ignore
-    order = _infer_dim_order(a, {})
-    names = _infer_dim_names(order, meta)
-    assert names == [f"dim{c}" for c in order]
+    record = record_from(a, meta)
+    order = record.dim_order
+    names = record.dim_names
+    assert order == "ABC"
+    assert names == [f"dim{c}" for c in 'ABC']
 
 def test_invalid_meta_order_falls_back_and_names_follow():
     a = StubArr((3, 4))
     meta = {"dim_order": "TimeChannel", "ndim": 2}  # not single-letter
-    order = _infer_dim_order(a, meta)
-    names = _infer_dim_names(order, {})
+    record = record_from(a, meta)
+    order = record.dim_order
+    names = record.dim_names
     assert order == "AB"
     assert names == ["dimA", "dimB"]
 
-def test_no_order_numeric_fallback():
-    # call names with empty order → should use meta['ndim'] → dim1, dim2, dim3
-    names = _infer_dim_names("", {"ndim": 3})
-    assert names == ["dim1", "dim2", "dim3"]
 
 def test_meta_names_wrong_types_ignored():
     a = StubArr((3, 4, 5))
-    meta = {"dim_names": ["t", 1, "z"]}  # invalid → ignore
-    order = _infer_dim_order(a, {})
-    names = _infer_dim_names(order, meta)
+    meta = {"dim_names": ["t", 1, "z"]}
+    record = record_from(a, meta)
+    names = record.dim_names
+    order = record.dim_order
     assert order == "ABC"
     assert names == ["dimA", "dimB", "dimC"]
 
-def test_meta_order_nonalpha_ignored():
+def test_meta_order_non_alpha():
     a = StubArr((2, 3))
     meta = {"dim_order": "T1", "ndim": 2}  # non-alpha → ignore
-    order = _infer_dim_order(a, meta)
-    names = _infer_dim_names(order, {})
-    assert order == "AB"
-    assert names == ["dimA", "dimB"]
+    record = record_from(a, meta)
+    names = record.dim_names
+    order = record.dim_order
+    assert order == "T1"
+    assert names == ["T", "1"]

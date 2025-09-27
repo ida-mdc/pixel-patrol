@@ -95,5 +95,5 @@ def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path, loader):
     assert metadata.get("X_size") == 10
 
     assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
-    assert "shape" in metadata and metadata["shape"].tolist()  == [1, 2, 1, 10, 10]
+    assert "shape" in metadata and metadata["shape"]  == [1, 2, 1, 10, 10]
     assert "ndim" in metadata and metadata["ndim"] == 5
