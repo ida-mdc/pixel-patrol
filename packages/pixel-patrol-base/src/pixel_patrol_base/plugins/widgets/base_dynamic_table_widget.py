@@ -60,6 +60,8 @@ class BaseDynamicTableWidget:
 
             dropdowns = []
             for dim_name, indices in sorted(all_dims.items()):
+                if len(indices) <= 1:
+                    continue
                 dropdown_id = {"type": f"dynamic-filter-{self.widget_id}", "dim": dim_name}
                 dropdowns.append(
                     html.Div(
@@ -78,14 +80,14 @@ class BaseDynamicTableWidget:
                 )
             return dropdowns
 
-        # Update the table as filters change
         @app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
             Input({"type": f"dynamic-filter-{self.widget_id}", "dim": ALL}, "value"),
         )
         def update_stats_table(filter_values):
             # Pattern-matching Input gives us ctx.inputs_list
-            filters = {prop["id"]["dim"]: value for prop, value in zip(ctx.inputs_list[0], filter_values)}
+            inputs_list = ctx.inputs_list[0] if ctx.inputs_list else []
+            filters = {prop["id"]["dim"]: value for prop, value in zip(inputs_list, filter_values)}
             supported_metrics = self.get_supported_metrics()
 
             parsed_cols = []
@@ -95,7 +97,14 @@ class BaseDynamicTableWidget:
                     parsed_cols.append({"col": col, "metric": parsed[0], "dims": parsed[1]})
 
             metrics_to_show = sorted({p["metric"] for p in parsed_cols})
-            dims_to_plot = sorted({d for p in parsed_cols for d in p["dims"]})
+            from collections import defaultdict
+            all_dims = defaultdict(set)
+
+            for p in parsed_cols:
+                for dname, didx in p["dims"].items():
+                    all_dims[dname].add(didx)
+
+            dims_to_plot = sorted([d for d, idxs in all_dims.items() if len(idxs) > 1])
 
             if not metrics_to_show or not dims_to_plot:
                 return html.P("No matching dynamic statistics found.")
@@ -105,18 +114,23 @@ class BaseDynamicTableWidget:
             for metric in metrics_to_show:
                 row_cells = [html.Td(metric.replace("_", " ").title())]
                 for plot_dim in dims_to_plot:
-                    cols_for_cell = []
+                    cols_for_cell, slice_idxs = [], set()  # track which slice indices exist for this dim
                     for pc in parsed_cols:
                         if pc["metric"] == metric and plot_dim in pc["dims"]:
                             # honor dropdown filters; 'all' passes through
-                            if all(f_val == "all" or pc["dims"].get(f_dim) == f_val for f_dim, f_val in filters.items()):
+                            if all(f_val == "all" or pc["dims"].get(f_dim) == f_val for f_dim, f_val in
+                                   filters.items()):
                                 cols_for_cell.append(pc["col"])
+                                slice_idxs.add(pc["dims"][plot_dim])
 
-                    if cols_for_cell:
-                        cell_content = dcc.Graph(
-                            figure=_create_sparkline(df_global, plot_dim, cols_for_cell),
-                            config={"displayModeBar": False},
-                        )
+                    # require at least 2 slices for that dim; otherwise no plot
+                    if cols_for_cell and len(slice_idxs) > 1:
+                        fig = _create_sparkline(df_global, plot_dim, cols_for_cell)
+                        fig.update_layout(height=120, margin=dict(l=30, r=10, t=10, b=30))
+                        fig.update_xaxes(visible=True, showticklabels=True, showgrid=True, ticks="outside", title_text=None,
+                                         tickmode="linear", dtick=1, tickformat="d")
+                        fig.update_yaxes(visible=True, showticklabels=True, ticks="outside", tickformat=".2f")
+                        cell_content = dcc.Graph(figure=fig, config={"displayModeBar": False})
                     else:
                         cell_content = html.Div("N/A", style={"textAlign": "center", "padding": "15px"})
                     row_cells.append(html.Td(cell_content))
@@ -127,3 +141,4 @@ class BaseDynamicTableWidget:
                 className="striped-table",
                 style={"width": "100%"},
             )
+

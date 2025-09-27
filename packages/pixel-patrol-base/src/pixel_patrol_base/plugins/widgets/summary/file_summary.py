@@ -24,7 +24,6 @@ class FileSummaryWidget:
         return [
             html.Div(id=self.INTRO_ID, style={"marginBottom": "20px"}),
             dcc.Graph(id=self.GRAPH_ID),
-            html.B("Aggregated File Stats", style={"marginTop": "30px"}),
             html.Div(id=self.TABLE_ID, style={"marginTop": "20px"}),
         ]
 
@@ -32,6 +31,7 @@ class FileSummaryWidget:
         @app.callback(
             Output(self.INTRO_ID, "children"),
             Output(self.GRAPH_ID, "figure"),
+            Output(self.TABLE_ID, "children"),
             Input("color-map-store", "data"),
         )
         def update_file_summary(color_map: Dict[str, str]):
@@ -56,7 +56,7 @@ class FileSummaryWidget:
                 intro_md.append(
                     html.P(
                         f"Folder '{row['imported_path_short']}' contains "
-                        f"{row['file_count']} files ({row['total_size_mb']:.1f} MB) with types: {ft_str}."
+                        f"{row['file_count']} files ({row['total_size_mb']:.3f} MB) with types: {ft_str}."
                     )
                 )
 
@@ -71,4 +71,28 @@ class FileSummaryWidget:
             fig.add_trace(go.Bar(x=x_labels, y=sizes, marker_color=colors), row=1, col=2)
             fig.update_layout(height=400, showlegend=False, margin=dict(l=40, r=40, t=80, b=40), barmode="group")
 
-            return intro_md, fig
+            n = len(x_labels)
+            if n == 1:
+                fig.update_layout(bargap=0.7)
+            if n == 2:
+                fig.update_layout(bargap=0.4)
+
+            table = html.Table(
+                [
+                    html.Thead(html.Tr([
+                        html.Th("Folder"), html.Th("Files"), html.Th("Size (MB)"), html.Th("Types")
+                    ])),
+                    html.Tbody([
+                        html.Tr([
+                            html.Td(row["imported_path_short"]),
+                            html.Td(row["file_count"]),
+                            html.Td(f"{row['total_size_mb']:.3f}"),
+                            html.Td(", ".join(row["file_types"])),
+                        ]) for row in summary.iter_rows(named=True)
+                    ]),
+                ],
+                style={"width": "100%", "borderCollapse": "collapse"},
+            )
+
+
+            return intro_md, fig, table
