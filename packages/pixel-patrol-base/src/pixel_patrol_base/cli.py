@@ -36,11 +36,12 @@ def cli():
 @click.option('--name', type=str, required=False,
               help='Optional: Name of the project. If not provided, derived from BASE_DIRECTORY.')
 @click.option('--paths', '-p', multiple=True, type=str,
-              help='Optional: Paths to include in the project, relative to BASE_DIRECTORY. '
+              help='Optional: Paths (subdirectories) to treat as **experimental conditions**, relative to BASE_DIRECTORY. '
                    'Can be specified multiple times. If omitted, all immediate subdirectories '
-                   'of BASE_DIRECTORY will be included.')
+                   'of BASE_DIRECTORY will be included, or if BASE_DIRECTORY has no subdirectories, '
+                   'it is treated as a single condition.')
 @click.option('--loader', '-l', type=str, show_default=True,
-              help='Pixel Patrol file loader (e.g., bioio, zarr).')
+              help='Recommended: Pixel Patrol file loader (e.g., bioio, zarr). If omitted, only basic file info is collected.')
 @click.option('--cmap', type=str, default="rainbow", show_default=True,
               help='Colormap for report visualization (e.g., viridis, plasma, rainbow).')
 @click.option('--n-example-files', type=int, default=9, show_default=True,
