@@ -43,7 +43,7 @@ class DataFrameWidget:
                 id=self.GRID_ID,
                 rowData=df_global_limited.to_dicts(),
                 columnDefs=[{"field": col} for col in cols_to_display],
-                style={"height": "70vh"},
+                style={"maxHeight": "70vh"},
                 # pagination=True, paginationPageSize=100
                 # columnSize="sizeToFit",
                 # dashGridOptions={"domLayout": "autoHeight"},
