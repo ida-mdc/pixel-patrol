@@ -82,7 +82,7 @@ def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFram
                 polars_df = polars_df.with_columns(
                     pl.col(col).map_elements(lambda x: x.tolist() if isinstance(x, np.ndarray) else x, return_dtype=pl.List(pl.Int64))
                 )
-                logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
+                # logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
             except Exception as e:
                 logger.warning(f"Project IO: Failed to serialize column '{col}' to list. Error: {e}. This column will be excluded from the Parquet export.")
                 polars_df = polars_df.drop(col)
@@ -107,7 +107,7 @@ def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFr
                     )
                     .cast(pl.Object)
                 )
-                logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
+                # logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
             except Exception as e:
                 logger.warning(f"Project IO: Failed to deserialize column '{col}' to ndarray. Error: {e}. This column will be excluded from the DataFrame.")
                 polars_df = polars_df.drop(col)
