@@ -35,7 +35,7 @@ def cli():
               required=True)
 @click.option('--name', type=str, required=False,
               help='Optional: Name of the project. If not provided, derived from BASE_DIRECTORY.')
-@click.option('--paths', '-p', multiple=True, type=str, # Changed to str, will be resolved as Path relative to base_directory
+@click.option('--paths', '-p', multiple=True, type=str,
               help='Optional: Paths to include in the project, relative to BASE_DIRECTORY. '
                    'Can be specified multiple times. If omitted, all immediate subdirectories '
                    'of BASE_DIRECTORY will be included.')
@@ -56,6 +56,9 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
     """
+    # Always operate on an absolute base directory so downstream path resolution is stable.
+    base_directory = base_directory.resolve()
+
     # Derive project_name if not provided
     if name is None:
         name = base_directory.name # Use the name of the base directory
@@ -64,27 +67,13 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
     my_project = create_project(name, str(base_directory), loader=loader) # Assuming create_project takes string path
 
-    # Handle paths: explicit --paths or auto-discover subdirectories
-    resolved_paths = []
     if paths:
-        for rel_path_str in paths:
-            abs_path = base_directory / rel_path_str
-            if not abs_path.is_dir():
-                click.echo(f"Warning: Specified path '{abs_path}' is not a valid directory. Skipping.", err=True)
-                continue
-            resolved_paths.append(Path(abs_path))
-            click.echo(f"Adding explicitly specified path: '{abs_path}'")
+        click.echo(f"Adding explicitly specified paths: {', '.join(paths)}. Resolution will be relative to '{base_directory}'")
+        add_paths(my_project, paths)
     else:
+        # If no paths, we want to add the base directory itself.
         click.echo(f"No --paths specified. Processing all images in '{base_directory}'.")
-        resolved_paths.append(Path(base_directory))
-
-    if not resolved_paths:
-        click.echo("No valid paths found to process. Please check your base directory or --paths.", err=True)
-        # Optionally, raise an error or exit here if no paths is considered an invalid state
-        return
-
-    for path in resolved_paths:
-        add_paths(my_project, path)
+        add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extension) if file_extension else "all"
     initial_settings = Settings(
