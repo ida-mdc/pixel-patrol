@@ -14,7 +14,7 @@ def main():
     # You can specify the paths either as absolute or relevant to base_path.
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     # OR e.g.
-    # paths = ['pngs', 'tifs', 'jpgs'] # those are relative paths inside the base_path
+    # paths = ['/home/ella/work/pixel-patrol/examples/datasets/bioio/pngs', 'tifs', 'jpgs'] # those are relative paths inside the base_path
     # OR e.g.
     # paths = []
 
