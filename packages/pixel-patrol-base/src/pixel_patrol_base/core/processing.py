@@ -107,7 +107,6 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
     return extracted_properties
 
 
-
 def build_records_df(
     bases: List[Path],
     selected_extensions: Set[str] | str,
