@@ -66,6 +66,13 @@ def _validate_and_fix_meta(array: Any, meta: Mapping[str, Any]) -> Mapping[str, 
                     f"meta['dim_names'] length mismatch ({len(meta['dim_names'])} != {arr_ndim}); removing from meta")
                 del meta["dim_names"]
 
+    if "channel_names" in meta:
+        cn = as_list(meta["channel_names"])
+        meta["channel_names"] = [
+            (x.item() if hasattr(x, "item") else x) if isinstance(x, str) else str(x)
+            for x in cn
+        ]
+
     return meta
 
 
