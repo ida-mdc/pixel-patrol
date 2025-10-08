@@ -38,5 +38,10 @@ jobs:
       - name: Install package dependencies
         run: uv pip install -e .
 
+      - name: Check key package versions
+        run: |
+          echo "--- All installed packages (check bioio, zarr, imageio, dask versions) ---"
+          uv pip freeze
+
       - name: Run tests
         run: uv run pytest

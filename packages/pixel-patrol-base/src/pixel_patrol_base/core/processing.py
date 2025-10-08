@@ -6,13 +6,10 @@ from tqdm.auto import tqdm
 
 import polars as pl
 
-import time
-
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.core.feature_schema import merge_output_schemas, coerce_row_types
 from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
-from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df, rows_to_flexible_df
+from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
 from pixel_patrol_base.core.specs import is_record_matching_processor
 
 
@@ -55,8 +52,6 @@ def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader)
     """
     processors = discover_processor_plugins()
 
-    static, patterns = merge_output_schemas(processors)
-
     rows = []
 
     # Show a per-file progress bar for deep processing. Use tqdm when available.
@@ -65,13 +60,12 @@ def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader)
         if record_dict:
             rows.append({"path": str(p), **record_dict})
 
-    rows = [coerce_row_types(r, static, patterns) for r in rows]
-
-    return rows_to_flexible_df(rows)
+    return pl.DataFrame(rows)
 
 
 def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
-    '''Load a file with the given loader, run all matching processors, and return combined metadata.
+    """
+    Load a file with the given loader, run all matching processors, and return combined metadata.
     Args:
         file_path: Path to the file to process.
         loader: An instance of PixelPatrolLoader to load the file.
@@ -79,7 +73,7 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
 
     Returns:
         A dictionary of combined data (metadata) from the loader and all applicable processors.
-    '''
+    """
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
@@ -105,7 +99,6 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
             extracted_properties.update(art.meta)
 
     return extracted_properties
-
 
 
 def build_records_df(
