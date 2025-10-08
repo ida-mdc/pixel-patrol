@@ -1,43 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, List, Tuple, Type
+from typing import Any, Dict, List, Tuple, Type
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 
 Schema = Dict[str, Any]
 PatternSpec = List[Tuple[str, Any]]
-
-def merge_output_schemas(processors: Iterable[object]) -> Tuple[Schema, PatternSpec]:
-    static: Schema = {}
-    patterns: PatternSpec = []
-    for p in processors:
-        static.update(getattr(p, "OUTPUT_SCHEMA", {}) or {})
-        patterns += getattr(p, "OUTPUT_SCHEMA_PATTERNS", []) or []
-    return static, patterns
-
-def infer_col_type(col: str, static: Schema, patterns: PatternSpec):
-    if col in static:
-        return static[col]
-    for pat, typ in patterns:
-        if re.match(pat, col):
-            return typ
-    return None  # unknown => leave as-is
-
-def coerce_row_types(row: Dict[str, Any], static: Schema, patterns: PatternSpec) -> Dict[str, Any]:
-    out = dict(row)
-    for k, v in row.items():
-        want = infer_col_type(k, static, patterns)
-        if want is None or v is None:
-            continue
-        try:
-            if want is list and not isinstance(v, list): out[k] = [v]
-            elif want is dict and not isinstance(v, dict): pass  # recommend JSON string instead
-            else: out[k] = want(v)  # int/float/str
-        except Exception:
-            # keep original if coercion fails
-            pass
-    return out
 
 
 def get_requirements_as_patterns(component: Type[PixelPatrolLoader]) -> List[str]:
@@ -63,11 +32,6 @@ def get_requirements_as_patterns(component: Type[PixelPatrolLoader]) -> List[str
 
     return exact_keys_as_patterns + dynamic_patterns
 
-
-def get_dynamic_patterns(component: Type[PixelPatrolLoader]) -> List[str]:
-    return [
-        pattern_tuple[0] for pattern_tuple in component.OUTPUT_SCHEMA_PATTERNS
-    ]
 
 def patterns_from_processor(P) -> List[str]:
     """
