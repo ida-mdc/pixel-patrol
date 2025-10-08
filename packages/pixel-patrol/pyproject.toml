@@ -5,9 +5,9 @@ description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pixel-patrol-base>=0.1.0",
-    "pixel-patrol-image>=0.1.0",
-    "pixel-patrol-loader-bio>=0.1.0",
+    "pixel-patrol-base>=0.1.1",
+    "pixel-patrol-image>=0.1.1",
+    "pixel-patrol-loader-bio>=0.1.1",
 ]
 
 [tool.uv]
