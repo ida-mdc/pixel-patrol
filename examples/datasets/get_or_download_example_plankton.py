@@ -1,6 +1,11 @@
 from pathlib import Path
 import requests, tarfile, os
 
+# Bigger dataset - long run:
+# PLANKTON_URL = "https://syncandshare.desy.de/index.php/s/TPFT4rpMLMpNmYr/download?path=/&files=plankton_filtered_processed.tar.gz"
+# ARCHIVE_NAME = "plankton_filtered_processed.tar.gz"
+# EXTRACTED_TOP = "plankton_filtered_processed"
+
 PLANKTON_URL = "https://syncandshare.desy.de/index.php/s/R5GLtp9DBSy68R9/download?path=/&files=plankton_processed.tar.gz"
 ARCHIVE_NAME = "plankton_processed.tar.gz"
 EXTRACTED_TOP = "plankton_processed"
