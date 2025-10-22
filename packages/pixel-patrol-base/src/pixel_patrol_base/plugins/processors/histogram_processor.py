@@ -20,22 +20,39 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float]:
         x: Input image as array (Dask or NumPy)
     Returns (min, max, max_adj) with correct right-edge handling for histograms. 
     """
+    # compute min/max without pulling full arrays where possible
     if isinstance(x, da.Array):
-        min, max = da.compute(x.min(), x.max())
-        min, max = np.float64(min), np.float64(max) # cast to float64 to avoid overflows
+        min_val, max_val = da.compute(x.min(), x.max())
+        min_val, max_val = np.float64(min_val), np.float64(max_val)  # cast to float64 to avoid overflows
     else:
-        min, max = np.float64(np.min(x)), np.float64(np.max(x)) 
+        min_val, max_val = np.float64(np.min(x)), np.float64(np.max(x))
 
-    # add +1 to include the max value as its own bin
-    if np.issubdtype(x.dtype, np.integer):
-        max_adj = max + 1
+    # If the underlying data type is uint8, set the minimum to 0 so we
+    # use the full 0..255 bin range for display/processing. This ensures
+    # bin-width=1 and use of all bins while remaining
+    # flexible for other integer types (e.g., int16).
+    # Why would I do this?
+    # If an image has values in e.g. 33..255, the bin holding value 255 would 
+    # fall into 254.x. The last bin would then start at 255.y and miss the max value.
+    try:
+        dtype = x.dtype
+    except Exception:
+        dtype = None
+
+    if dtype is not None and np.dtype(dtype) == np.dtype('uint8'):
+        min_val = 0.0
+
+    # add +1 to include the max value as its own bin for integer types
+    if dtype is not None and np.issubdtype(dtype, np.integer):
+        max_adj = max_val + 1.0
     else:
         # in case of a blank image, nextafter would be too small to span a range, so we need some space between min and max
-        if min == max:
-            max_adj = max + 1.
-        # make the upper bound slightly greater than max again
-        max_adj = np.nextafter(max, np.inf)
-    return min, max, max_adj
+        if min_val == max_val:
+            max_adj = max_val + 1.0
+        else:
+            # make the upper bound slightly greater than max again
+            max_adj = np.nextafter(max_val, np.inf)
+    return min_val, max_val, max_adj
 
 
 def _dask_hist_func(dask_array: da.Array, bins: int) -> Dict[str, List]:
