@@ -13,27 +13,49 @@ from pixel_patrol_base.core.specs import RecordSpec
 logger = logging.getLogger(__name__)
 
 
+def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float]:
+    """
+    Ensures the maximum is included in the last bin while having a right-bound that is strictly greater than the maximum.
+    Args:
+        x: Input image as array (Dask or NumPy)
+    Returns (min, max, max_adj) with correct right-edge handling for histograms. 
+    """
+    if isinstance(x, da.Array):
+        min, max = da.compute(x.min(), x.max())
+        min, max = np.float64(min), np.float64(max) # cast to float64 to avoid overflows
+    else:
+        min, max = np.float64(np.min(x)), np.float64(np.max(x)) 
+
+    # add +1 to include the max value as its own bin
+    if np.issubdtype(x.dtype, np.integer):
+        max_adj = max + 1
+    else:
+        # in case of a blank image, nextafter would be too small to span a range, so we need some space between min and max
+        if min == max:
+            max_adj = max + 1.
+        # make the upper bound slightly greater than max again
+        max_adj = np.nextafter(max, np.inf)
+    return min, max, max_adj
+
+
 def _dask_hist_func(dask_array: da.Array, bins: int) -> Dict[str, List]:
     """
     Calculates a histogram on a Dask array without pulling the full chunk into memory.
     Returns both counts and bin edges in a dictionary.
     """
+    # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
     if dask_array.size == 0:
-        return {"counts": [], "bins": []}
+        zero_counts = np.zeros(bins, dtype=int).tolist()
+        return {"counts": zero_counts, "min": 0.0, "max": 255.0}
 
     # Compute min/max efficiently with Dask
-    min_val, max_val = da.compute(dask_array.min(), dask_array.max())
-    min_val, max_val = float(min_val), float(max_val)
+    min_val, max_val, max_adj_val = safe_hist_range(dask_array)
 
-    # Guard against a degenerate range
-    if min_val == max_val:
-        min_val, max_val = min_val - 0.5, max_val + 0.5
+    # Use Dask's histogram function and compute the counts (we don't need edges to be stored)
+    counts, edges = da.histogram(dask_array, bins=bins, range=(min_val, max_adj_val))
+    computed_counts, _ = da.compute(counts, edges)
 
-    # Use Dask's histogram function and compute the result
-    counts, edges = da.histogram(dask_array, bins=bins, range=(min_val, max_val))
-    computed_counts, computed_edges = da.compute(counts, edges)
-
-    return {"counts": computed_counts.tolist(), "bins": computed_edges.tolist()}
+    return {"counts": computed_counts.tolist(), "min": min_val, "max": max_val}
 
 
 class HistogramProcessor:
@@ -47,13 +69,16 @@ class HistogramProcessor:
     OUTPUT = "features"
 
     # Updated schema to include the full image histogram and patterns for all slice hierarchies
+    # TODO: Consider smaller data types for counts and bounds to save memory
     OUTPUT_SCHEMA = {
         "histogram_counts": pl.List(pl.Int64),
-        "histogram_bins": pl.List(pl.Float64),
+        "histogram_min": pl.Float64,
+        "histogram_max": pl.Float64,
     }
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^(?:histogram)_counts_.*$", pl.List(pl.Int64)),
-        (r"^(?:histogram)_bins_.*$", pl.List(pl.Float64)),
+        (r"^(?:histogram)_min_.*$", pl.Float64),
+        (r"^(?:histogram)_max_.*$", pl.Float64),
     ]
 
     def run(self, art: Record) -> ProcessResult:
@@ -79,7 +104,8 @@ class HistogramProcessor:
             if not subset:
                 hist_dict = _dask_hist_func(data, bins=256)
                 final_features["histogram_counts"] = hist_dict["counts"]
-                final_features["histogram_bins"] = hist_dict["bins"]
+                final_features["histogram_min"] = hist_dict.get("min")
+                final_features["histogram_max"] = hist_dict.get("max")
                 continue
 
             # Get the shape of the dimensions for the current hierarchy level
@@ -104,6 +130,7 @@ class HistogramProcessor:
                 # Construct the final column names
                 slice_suffix = "_".join(name_parts)
                 final_features[f"histogram_counts_{slice_suffix}"] = hist_dict["counts"]
-                final_features[f"histogram_bins_{slice_suffix}"] = hist_dict["bins"]
+                final_features[f"histogram_min_{slice_suffix}"] = hist_dict.get("min")
+                final_features[f"histogram_max_{slice_suffix}"] = hist_dict.get("max")
 
         return final_features
