@@ -40,7 +40,8 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float]:
         dtype = None
 
     if dtype is not None and np.dtype(dtype) == np.dtype('uint8'):
-        min_val = 0.0
+        min_val, max_val, max_adj = 0.0, 255.0, 256.0
+        return min_val, max_val, max_adj
 
     # add +1 to include the max value as its own bin for integer types
     if dtype is not None and np.issubdtype(dtype, np.integer):
