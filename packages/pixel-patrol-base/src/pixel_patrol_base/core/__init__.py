@@ -16,3 +16,8 @@ logging.basicConfig(
 # You can also define a specific logger for the top-level package
 logger = logging.getLogger(__name__)
 logger.info("Pixel Patrol package initialized.")
+
+# Set random seeds for reproducibility
+random.seed(42)
+np.random.seed(42)
+dask.config.set({"random.seed": 42})
