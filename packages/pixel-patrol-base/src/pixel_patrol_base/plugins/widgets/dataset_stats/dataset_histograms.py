@@ -374,13 +374,15 @@ class DatasetHistogramWidget:
                         p = (h / s) if s > 0 else h
                         mats.append(p)
 
+                        # make p + bin_width*0.5 to shift bar centers to the right so it aligns 
+
                         chart.add_trace(
                             go.Bar(
-                                x=list(range(p.size)),
-                                y=list(p),
+                                x=list(range(p.size + 1)),
+                                y=list(p)+[0],
                                 width=1,
                                 name=Path(folder).name,
-                                marker=dict(color=color, opacity=0.3),
+                                marker=dict(color=color, opacity=0.25),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
                                 hovertemplate=(
@@ -390,10 +392,15 @@ class DatasetHistogramWidget:
                                         if (minv is not None and maxv is not None)
                                         else ""
                                     )
-                                    + "<extra></extra>"
+                                    + "<extra></extra>",
                                 ),
+                                # barmode="overlay",
+                                # bargap=0.0,
+                                # bargroupgap=0.0,
+                                offset=0.0,
                             )
                         )
+                        print("x:", list(range(p.size + 1)))
                     if not mats:
                         continue
 
@@ -442,13 +449,13 @@ class DatasetHistogramWidget:
                                 y=list(h_norm),
                                 width=list(widths),
                                 name=Path(folder).name,
-                                marker=dict(color=color, opacity=0.3),
+                                marker=dict(color=color, opacity=0.25),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
                                 hovertemplate=(
                                     f"File: {file_name}<br>Pixel value: %{{x:.3f}}<br>Freq: %{{y:.3f}}<extra></extra>"
-
-                                )
+                                ),
+                                offset=0.0,
                             )
                         )
 
