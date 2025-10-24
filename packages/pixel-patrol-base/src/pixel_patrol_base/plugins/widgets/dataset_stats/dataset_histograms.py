@@ -374,29 +374,6 @@ class DatasetHistogramWidget:
                         p = (h / s) if s > 0 else h
                         mats.append(p)
 
-                        # chart.add_trace(
-                        #     go.Scatter(
-                        #         x=list(range(p.size)),
-                        #         y=p,
-                        #         mode="lines",
-                        #         name=Path(folder).name,
-                        #         line=dict(width=1, color=color),
-                        #         opacity=0.2,
-                        #         showlegend=False,
-                        #         legendgroup=Path(folder).name,
-                        #         hovertemplate=(
-                        #             f"File: {file_name}<br>Bin idx: %{{x}}<br>Prob: %{{y:.3f}}"
-                        #             + (
-                        #                 f"<br>Range: {minv:.3f}..{maxv:.3f}"
-                        #                 if (minv is not None and maxv is not None)
-                        #                 else ""
-                        #             )
-                        #             + "<extra></extra>"
-                        #         ),
-                        #     )
-                        # )
-
-                        # TODO: Decide: `lefts += 0.5 * widths` to have the center in the middle of the bin and the bar aligned, e.g. to span from integer to integer for integer bins
                         chart.add_trace(
                             go.Bar(
                                 x=list(range(p.size)),
@@ -459,11 +436,6 @@ class DatasetHistogramWidget:
                         total = counts.sum()
                         h_norm = counts / total if total > 0 else counts
 
-                        hover_texts = [
-                            f"File: {file_name}<br>Pixel center: {c:.3f}<br>Nearest: {int(round(c))}<br>Freq: {float(v):.3f}"
-                            for c, v in zip(lefts, h_norm)
-                        ]
-                        # TODO: Decide: `lefts += 0.5 * widths` to have the center in the middle of the bin and the bar aligned, e.g. to span from integer to integer for integer bins
                         chart.add_trace(
                             go.Bar(
                                 x=list(lefts),
@@ -473,12 +445,12 @@ class DatasetHistogramWidget:
                                 marker=dict(color=color, opacity=0.3),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
-                                hovertemplate="%{hover_texts}<extra></extra>",
+                                hovertemplate=(
+                                    f"File: {file_name}<br>Pixel value: %{{x:.3f}}<br>Freq: %{{y:.3f}}<extra></extra>"
+
+                                )
                             )
                         )
-                        print("counts.length:", len(counts))
-                        print("lefts[0] und lefts[-1]:", lefts[0], lefts[-1])
-                        print("widths[0]:", widths[0], "min and max:", minv, maxv)
 
                     # Folder group edges from Polars-derived min/max (data-derived native range)
                     gmin, gmax = self._folder_minmax_using_polars(
@@ -512,7 +484,7 @@ class DatasetHistogramWidget:
                     mean_hist = np.mean(mats, axis=0)
                     mean_centers = group_edges[:-1] #+ 0.5 * np.diff(group_edges) to have the center in the middle of the bin
                     mean_hover_texts = [
-                        f"Folder: {Path(folder).name}<br>Pixel center: {float(c):.3f}<br>Nearest: {int(round(c))}<br>Mean Prob: {float(v):.3f}"
+                        f"Mean of folder: {Path(folder).name}<br>Pixel value: {float(c):.3f}<br>Nearest pixel: {int(round(c))}<br>Mean Prob: {float(v):.3f}"
                         for c, v in zip(mean_centers, mean_hist)
                     ]
                     chart.add_trace(
