@@ -173,8 +173,9 @@ class DatasetHistogramWidget:
             )
         return None, None
 
+    @staticmethod
     def _compute_edges(
-        self, counts: np.ndarray, minv: float | None, maxv: float | None
+        counts: np.ndarray, minv: float | None, maxv: float | None
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Compute left-oriented edges/widths consistent with processor semantics via safe_hist_range.
@@ -214,7 +215,6 @@ class DatasetHistogramWidget:
         return edges, lefts, widths
 
     @staticmethod
-
     def _rebin_via_cdf(
         counts: np.ndarray, src_edges: np.ndarray, tgt_edges: np.ndarray
     ) -> np.ndarray:
@@ -374,14 +374,36 @@ class DatasetHistogramWidget:
                         p = (h / s) if s > 0 else h
                         mats.append(p)
 
+                        # chart.add_trace(
+                        #     go.Scatter(
+                        #         x=list(range(p.size)),
+                        #         y=p,
+                        #         mode="lines",
+                        #         name=Path(folder).name,
+                        #         line=dict(width=1, color=color),
+                        #         opacity=0.2,
+                        #         showlegend=False,
+                        #         legendgroup=Path(folder).name,
+                        #         hovertemplate=(
+                        #             f"File: {file_name}<br>Bin idx: %{{x}}<br>Prob: %{{y:.3f}}"
+                        #             + (
+                        #                 f"<br>Range: {minv:.3f}..{maxv:.3f}"
+                        #                 if (minv is not None and maxv is not None)
+                        #                 else ""
+                        #             )
+                        #             + "<extra></extra>"
+                        #         ),
+                        #     )
+                        # )
+
+                        # TODO: Decide: `lefts += 0.5 * widths` to have the center in the middle of the bin and the bar aligned, e.g. to span from integer to integer for integer bins
                         chart.add_trace(
-                            go.Scatter(
+                            go.Bar(
                                 x=list(range(p.size)),
-                                y=p,
-                                mode="lines",
+                                y=list(p),
+                                width=1,
                                 name=Path(folder).name,
-                                line=dict(width=1, color=color),
-                                opacity=0.2,
+                                marker=dict(color=color, opacity=0.3),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
                                 hovertemplate=(
@@ -444,19 +466,19 @@ class DatasetHistogramWidget:
                         # TODO: Decide: `lefts += 0.5 * widths` to have the center in the middle of the bin and the bar aligned, e.g. to span from integer to integer for integer bins
                         chart.add_trace(
                             go.Bar(
-                                x=list(
-                                    lefts
-                                ),  
+                                x=list(lefts),
                                 y=list(h_norm),
                                 width=list(widths),
                                 name=Path(folder).name,
                                 marker=dict(color=color, opacity=0.3),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
-                                text=hover_texts,
-                                hovertemplate="%{text}<extra></extra>",
+                                hovertemplate="%{hover_texts}<extra></extra>",
                             )
                         )
+                        print("counts.length:", len(counts))
+                        print("lefts[0] und lefts[-1]:", lefts[0], lefts[-1])
+                        print("widths[0]:", widths[0], "min and max:", minv, maxv)
 
                     # Folder group edges from Polars-derived min/max (data-derived native range)
                     gmin, gmax = self._folder_minmax_using_polars(
