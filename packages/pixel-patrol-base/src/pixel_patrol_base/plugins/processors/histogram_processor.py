@@ -13,7 +13,7 @@ from pixel_patrol_base.core.specs import RecordSpec
 logger = logging.getLogger(__name__)
 
 
-def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float]:
+def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     """
     Ensures the maximum is included in the last bin while having a right-bound that is strictly greater than the maximum.
     Args:
@@ -40,6 +40,7 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float]:
         dtype = None
 
     if dtype is not None and np.dtype(dtype) == np.dtype('uint8'):
+        # TODO: why do we assume 0 as min?
         min_val, max_val, max_adj = 0.0, 255.0, 256.0
         return min_val, max_val, max_adj
 
@@ -67,6 +68,7 @@ def _dask_hist_func(dask_array: da.Array, bins: int) -> Dict[str, List]:
         return {"counts": zero_counts, "min": 0.0, "max": 255.0}
 
     # Compute min/max efficiently with Dask
+    # TODO: Why does the function return two values
     min_val, max_val, max_adj_val = safe_hist_range(dask_array)
 
     # Use Dask's histogram function and compute the counts (we don't need edges to be stored)
