@@ -6,6 +6,9 @@ import random
 import numpy as np
 import dask
 
+# TODO: probably most of this should be moved to a setup file and called.
+# We're configuring runtime environment. If an app imports pixel-patrol-base, we're forcing those settings.
+
 # Configure root logger for basic console output
 # This is a basic setup; a more advanced application might allow custom handlers
 # and different levels for different modules.
