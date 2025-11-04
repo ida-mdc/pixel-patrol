@@ -61,11 +61,11 @@ class DatasetHistogramWidget:
                         id="histogram-remap-mode",
                         options=[
                             {
-                                "label": "Show the bins 0-255 to compare the distribution shapes based on the content",
+                                "label": "Fixed 0–255 bins",
                                 "value": "shape",
                             },
                             {
-                                "label": "Map the bins to the native pixel value ranges across all images",
+                                "label": "Bin on the native pixel range",
                                 "value": "native",
                             },
                         ],
@@ -489,6 +489,7 @@ class DatasetHistogramWidget:
                         mats.append(reb_prob)
 
                     mean_hist = np.mean(mats, axis=0)
+                    # TODO: I think mean centers are still not correct here
                     mean_centers = group_edges[:-1] #+ 0.5 * np.diff(group_edges) to have the center in the middle of the bin
                     mean_hover_texts = [
                         f"Mean of folder: {Path(folder).name}<br>Pixel value: {float(c):.3f}<br>Nearest pixel: {int(round(c))}<br>Mean Prob: {float(v):.3f}"
@@ -512,11 +513,11 @@ class DatasetHistogramWidget:
             chart.update_layout(
                 title="Mean Pixel Value Histogram (per group)",
                 xaxis_title=(
-                    "Bin index (shape-only)"
+                    "Pixel intensity - Fixed 0–255 Bins"
                     if remap_mode == "shape"
-                    else "Pixel Value (native units)"
+                    else "Native-range bins (actual values)"
                 ),
-                yaxis_title="Probability",
+                yaxis_title="Normalized Frequency",
                 legend_title="Folder name",
             )
             return chart, ""
