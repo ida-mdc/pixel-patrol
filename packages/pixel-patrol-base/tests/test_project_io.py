@@ -648,10 +648,13 @@ def test_import_project_no_records_df_base_dir_invalid_path_string(tmp_path: Pat
         ValueError,
     ) as exc_info:
         api.import_project(export_path)
-    # Accept both posix and windows path representations in the error message
+    normalized = invalid_base_dir_str.replace("\\", "/").replace("//", "/").replace("\\\\", "\\")
     error_str = str(exc_info.value).replace("\\", "/")
-    assert f"Project requires file system access but imported base directory '{invalid_base_dir_str.replace('\\', '/').replace('//', '/').replace('\\\\', '\\')}' is invalid or inaccessible: " in error_str
 
+    assert (
+        f"Project requires file system access but imported base directory '{normalized}' is invalid or inaccessible: "
+        in error_str
+    )
 
 def test_import_project_no_records_df_paths_invalid_path_string(tmp_path: Path):
     """

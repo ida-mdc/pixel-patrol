@@ -16,6 +16,8 @@ from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
 
+from pathlib import Path  # add if missing
+ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
 
 def load_and_concat_parquets(paths: List[str]) -> pl.DataFrame:
     """Read parquet files/dirs and concatenate into one DataFrame."""
@@ -46,7 +48,14 @@ def _create_app(
     """Instantiate Dash app, register callbacks, and assign layout."""
     df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP, "https://codepen.io/chriddyp/pen/bWLwgP.css"]
-    app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
+    #app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
+
+    app = Dash(
+        __name__,
+        external_stylesheets=external_stylesheets,
+        suppress_callback_exceptions=True,
+        assets_folder=str(ASSETS_DIR),
+    )
 
     pio.templates.default = "plotly"
 
