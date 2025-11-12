@@ -1,6 +1,6 @@
-# PixelPatrol: Scientific Image Dataset Pre-validation Tool
+# PixelPatrol: Scientific Dataset Quality Control and Data Exploration Tool
 
-PixelPatrol is an early-version tool designed for the systematic pre-validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
+PixelPatrol is an early-version tool designed for the systematic validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
 
 ![Overview of the PixelPatrol dashboard, showing interactive data exploration.](readme_assets/overview.png)
 *PixelPatrol's main dashboard provides an interface for dataset exploration.*
@@ -21,18 +21,20 @@ PixelPatrol is an early-version tool designed for the systematic pre-validation 
 
 ## Installation
 
+PixelPatrol requires Python 3.11 or higher.  
+
 PixelPatrol and its add-on packages are published on PyPI: https://pypi.org/project/pixel-patrol/
 
 ### 1. Install `uv` (recommended)
 
 `uv` provides fast virtualenv management and dependency resolution. Install it once and reuse it for all workflows.
 
-* **macOS / Linux:**
+* **🐧 macOS / Linux:**
   ```bash
   curl -Ls https://astral.sh/uv/install.sh | sh
   ```
 
-* **Windows (PowerShell):**
+* **🪟 Windows:**
   ```powershell
   powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
   ```
@@ -49,13 +51,15 @@ If you prefer an alternative installation method, consult the official guide: ht
 
 Before installing the package, activate a clean virtual environment so its dependencies stay isolated from other projects. Create one with your preferred tool:
 
+* **🐧 macOS / Linux:**
 ```bash
-# macOS / Linux (uv)
-uv venv pixel-patrol-env
+uv venv --python 3.12 pixel-patrol-env
 source pixel-patrol-env/bin/activate
+```
 
-# Windows PowerShell
-uv venv pixel-patrol-env
+* **🪟 Windows PowerShell:**
+```bash
+uv venv --python 3.12 pixel-patrol-env
 pixel-patrol-env\\Scripts\\Activate.ps1
 ```
 
