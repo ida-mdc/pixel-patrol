@@ -30,7 +30,7 @@ class Project:
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
-        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else "None" } and base dir: {self.base_dir}.")
+        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else 'None' } and base dir: {self.base_dir}.")
 
 
     @property

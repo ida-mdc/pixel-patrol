@@ -42,7 +42,8 @@ def test_create_project_invalid_base_dir_type(mock_project_name: str):
 
     assert "str" in actual_error_message
     assert "os.PathLike object" in actual_error_message
-    assert "not 'int'" in actual_error_message
+    assert "not 'int'" in actual_error_message or "not int" in actual_error_message
+
 
     if actual_error_message.startswith("expected str, bytes"):
         # This is the Python 3.10 format (observed on GitHub Actions)
