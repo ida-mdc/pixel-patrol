@@ -3,6 +3,7 @@ name = "pixel-patrol-loader-bio"
 version = "0.1.2"
 description = "PixelPatrol add-on package for loading images with bioio and zarr"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
     "bioio==3.0.0",
@@ -17,6 +18,9 @@ dependencies = [
 
 [tool.uv]
 package = true
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_loader_bio"]
