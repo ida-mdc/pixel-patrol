@@ -3,6 +3,7 @@ name = "pixel-patrol-base"
 version = "0.1.2"
 description = "Image prevalidation tool"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.2.1",
@@ -21,6 +22,9 @@ dependencies = [
 
 [tool.uv]
 package = true
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
