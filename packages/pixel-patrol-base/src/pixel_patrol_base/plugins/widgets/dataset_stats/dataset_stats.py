@@ -5,7 +5,8 @@ from typing import List, Dict, Set
 import plotly.graph_objects as go
 import polars as pl
 import statsmodels.stats.multitest as smm  # For Bonferroni correction
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, ALL
+from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from scipy.stats import mannwhitneyu
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
@@ -41,7 +42,9 @@ class DatasetStatsWidget:
                     value=None,
                     clearable=False,
                     style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"}
-                )
+                ),
+                html.Div(id="stats-filters-container"),
+                dcc.Store(id="stats-dims-store")
             ]),
             dcc.Graph(id="stats-violin-chart", style={"height": "600px"}),
             html.Div(className="markdown-content", children=[
@@ -102,28 +105,55 @@ class DatasetStatsWidget:
         @app.callback(
             Output("stats-value-to-plot-dropdown", "options"),
             Output("stats-value-to-plot-dropdown", "value"),
+            Output("stats-filters-container", "children"),
+            Output("stats-dims-store", "data"),
             Input("color-map-store", "data"),
-            prevent_initial_call=False
+            prevent_initial_call=False,
         )
         def set_stats_dropdown_options(color_map: Dict[str, str]):
-            numeric_cols_for_plot = [
+            # Determine available base metrics from the processor declaration if possible
+            processor_metrics = list(BasicStatsProcessor.OUTPUT_SCHEMA.keys()) if hasattr(BasicStatsProcessor, 'OUTPUT_SCHEMA') else []
+            # Fallback: find numeric columns resembling metrics
+            numeric_candidates = [
                 col for col in df_global.columns
-                if df_global[col].dtype.is_numeric() and any(metric in col for metric in self.required_columns()[:-2])
+                if df_global[col].dtype.is_numeric()
             ]
-            dropdown_options = [{'label': col, 'value': col} for col in numeric_cols_for_plot]
-            default_value_to_plot = 'mean' if 'mean' in numeric_cols_for_plot else (
-                numeric_cols_for_plot[0] if numeric_cols_for_plot else None)
-            return dropdown_options, default_value_to_plot
+            # Build dropdown options (prefer processor-declared metrics if available)
+            dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [{'label': col, 'value': col} for col in numeric_candidates]
+            default_value_to_plot = processor_metrics[0] if processor_metrics else (numeric_candidates[0] if numeric_candidates else None)
+
+            # Build dynamic filter dropdowns for the chosen base metric using shared helper
+            children = []
+            dims_order = []
+            if default_value_to_plot:
+                from pixel_patrol_base.report.utils import build_dimension_dropdown_children
+                children, dims_order = build_dimension_dropdown_children(
+                    df_global.columns, base=default_value_to_plot, id_type="stats-dim-filter"
+                )
+
+            return dropdown_options, default_value_to_plot, children, dims_order
 
         @app.callback(
             Output("stats-violin-chart", "figure"),
             Output("dataset-stats-warning", "children"),
             Input("color-map-store", "data"),
-            Input("stats-value-to-plot-dropdown", "value")
+            Input("stats-value-to-plot-dropdown", "value"),
+            Input({"type": "stats-dim-filter", "dim": ALL}, "value"),
+            Input("stats-dims-store", "data"),
         )
-        def update_stats_chart(color_map: Dict[str, str], value_to_plot: str):
+        def update_stats_chart(color_map: Dict[str, str], value_to_plot: str, dim_values_list, dims_order):
             if not value_to_plot:
                 return go.Figure(), "Please select a value to plot."
+
+            # Reconstruct selection dict from dims_order and values
+            selections = {}
+            if dims_order and dim_values_list:
+                for dim_name, val in zip(dims_order, dim_values_list):
+                    selections[dim_name] = val
+
+            # Find best matching column for the chosen metric
+            from pixel_patrol_base.report.utils import find_best_matching_column
+            chosen_col = find_best_matching_column(df_global.columns, value_to_plot, selections) or value_to_plot
 
             processed_df = df_global.filter(
                 pl.col("imported_path").is_not_null()
@@ -134,13 +164,7 @@ class DatasetStatsWidget:
                 ).alias("imported_path_short"),
             ])
 
-            if value_to_plot not in processed_df.columns:
-                return go.Figure(), html.P(f"Error: Column '{value_to_plot}' not found in data.",
-                                           className="text-danger")
-
-            plot_data = processed_df.filter(
-                pl.col(value_to_plot).is_not_null()
-            )
+            plot_data = processed_df.filter(pl.col(chosen_col).is_not_null())
 
             if plot_data.is_empty():
                 return go.Figure(), html.P(f"No valid data found for '{value_to_plot}' in selected folders.",
@@ -154,7 +178,7 @@ class DatasetStatsWidget:
                 df_group = plot_data.filter(
                     pl.col("imported_path_short") == imported_path_short
                 )
-                data_values = df_group.get_column(value_to_plot).to_list()
+                data_values = df_group.get_column(chosen_col).to_list()
                 file_names = df_group.get_column("name").to_list()
                 file_names_short = [str(Path(x).name) if x is not None else "Unknown File" for x in file_names]
                 group_color = color_map.get(imported_path_short, '#333333')
@@ -183,8 +207,8 @@ class DatasetStatsWidget:
                 comparisons = list(itertools.combinations(groups, 2))
                 p_values = []
                 for group1, group2 in comparisons:
-                    data1 = plot_data.filter(pl.col("imported_path_short") == group1).get_column(value_to_plot).to_list()
-                    data2 = plot_data.filter(pl.col("imported_path_short") == group2).get_column(value_to_plot).to_list()
+                    data1 = plot_data.filter(pl.col("imported_path_short") == group1).get_column(chosen_col).to_list()
+                    data2 = plot_data.filter(pl.col("imported_path_short") == group2).get_column(chosen_col).to_list()
                     if len(data1) > 0 and len(data2) > 0:
                         stat_val, p_val = mannwhitneyu(data1, data2, alternative="two-sided")
                         p_values.append(p_val)
@@ -196,8 +220,8 @@ class DatasetStatsWidget:
                     pvals_corrected = []
                 chart.update_layout(xaxis=dict(categoryorder="array", categoryarray=groups))
                 positions = {group: i for i, group in enumerate(groups)}
-                overall_y_min = plot_data.get_column(value_to_plot).min()
-                overall_y_max = plot_data.get_column(value_to_plot).max()
+                overall_y_min = plot_data.get_column(chosen_col).min()
+                overall_y_max = plot_data.get_column(chosen_col).max()
                 y_range = overall_y_max - overall_y_min
                 y_offset = y_range * 0.05
                 annotation_y_levels = {g: overall_y_max for g in groups}
@@ -216,8 +240,8 @@ class DatasetStatsWidget:
                         sig = "*"
                     else:
                         sig = "ns"
-                    y_max1 = plot_data.filter(pl.col("imported_path_short") == group1).get_column(value_to_plot).max()
-                    y_max2 = plot_data.filter(pl.col("imported_path_short") == group2).get_column(value_to_plot).max()
+                    y_max1 = plot_data.filter(pl.col("imported_path_short") == group1).get_column(chosen_col).max()
+                    y_max2 = plot_data.filter(pl.col("imported_path_short") == group2).get_column(chosen_col).max()
                     current_y_level = max(annotation_y_levels.get(group1, overall_y_max), annotation_y_levels.get(group2, overall_y_max))
                     y_bracket = max(y_max1, y_max2, current_y_level) + y_offset
                     annotation_y_levels[group1] = y_bracket + y_offset
