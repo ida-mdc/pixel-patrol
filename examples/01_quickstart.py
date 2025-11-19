@@ -42,14 +42,16 @@ def main():
     records_df = api.get_records_df(project)
     print(records_df.head())
 
-    # --- Step 6: open the dashport report ---
-    # Open http://127.0.0.1:8050/ in your browser
-    api.show_report(project)
-
-    # --- Step 7: (optional) export/import project cycle ---
+    # --- Step 6: export project ---
     zip_path = Path("out/quickstart_project.zip")
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     api.export_project(project, zip_path) # project exports to zip_path 'out/'
+
+    # --- Step 7: open the dashport report ---
+    # Open http://127.0.0.1:8050/ in your browser
+    api.show_report(project)
+
+    # --- Step 8: (optional) import project ---
     imported = api.import_project(zip_path)
     print("Imported:", imported.name)
 
