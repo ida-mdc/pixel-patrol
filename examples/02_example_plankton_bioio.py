@@ -26,11 +26,13 @@ my_project = add_paths(my_project, paths)
 my_project = set_settings(my_project, settings)
 my_project = process_files(my_project)
 
-# Open http://127.0.0.1:8050/ in your browser
-show_report(my_project)
-
-# Optional: export & import to out/
+# export project to /out
 zip_path = Path("out/plankton_project.zip")
 zip_path.parent.mkdir(parents=True, exist_ok=True)
 export_project(my_project, zip_path)
+
+# Open http://127.0.0.1:8050/ in your browser
+show_report(my_project)
+
+# Optional: Import project from /out
 imported = import_project(zip_path)
