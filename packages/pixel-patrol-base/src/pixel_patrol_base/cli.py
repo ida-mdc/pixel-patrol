@@ -1,4 +1,5 @@
 import os
+import shutil
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -51,8 +52,14 @@ def cli():
                    'If not specified, all supported extensions will be used.')
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
+@click.option('--rerun-incomplete', is_flag=True, default=False,
+              help='If set, clear previous partial chunk files and re-run processing from scratch. Default: resume where left off.')
+@click.option('--chunk-dir', type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=Path),
+                  default=None,
+                  help='Optional: Directory to store intermediate parquet chunk files. Defaults to <output_zip_parent>/<output_stem>_records_chunks.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
-           loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str):
+              loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str,
+              rerun_incomplete: bool, chunk_dir: Path | None):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -77,12 +84,37 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
         add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extension) if file_extension else "all"
+
+    # Determine chunk dir: CLI option overrides default inferred location next to ZIP
+    if chunk_dir is not None:
+        chosen_chunk_dir = Path(chunk_dir).resolve()
+    else:
+        chosen_chunk_dir = (output_zip.parent / f"{output_zip.stem}_records_chunks").resolve()
+
+    # If user requested a clean rerun, clear existing partials in the chosen dir
+    if chosen_chunk_dir.exists() and rerun_incomplete:
+        try:
+            click.echo(f"--rerun-incomplete passed: clearing previous records chunk directory: '{chosen_chunk_dir}'")
+            shutil.rmtree(chosen_chunk_dir)
+        except OSError as exc:
+            click.echo(f"Warning: Could not clear '{chosen_chunk_dir}': {exc}")
+
     initial_settings = Settings(
         cmap=cmap,
         n_example_files=n_example_files,
         selected_file_extensions=selected_extensions,
-        pixel_patrol_flavor=flavor
+        pixel_patrol_flavor=flavor,
+        records_flush_dir=chosen_chunk_dir,
     )
+    # Note: Do not clear existing chunk dir by default so runs may be resumed.
+    # Use --rerun-incomplete flag to force clearing of partial results before processing.
+    # Clear existing partial chunks only when explicitly requested by the user.
+    if chunk_dir.exists() and rerun_incomplete:
+        try:
+            click.echo(f"--rerun-incomplete passed: clearing previous records chunk directory: '{chunk_dir}'")
+            shutil.rmtree(chunk_dir)
+        except OSError as exc:
+            click.echo(f"Warning: Could not clear '{chunk_dir}': {exc}")
     click.echo(f"Setting project settings: {initial_settings}")
     set_settings(my_project, initial_settings)
 

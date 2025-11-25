@@ -27,6 +27,9 @@ def _settings_to_dict(settings: Settings) -> dict:
     # CONVERT SET TO SORTED LIST FOR YAML READABILITY
     if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], set):
         s_dict['selected_file_extensions'] = sorted(list(s_dict['selected_file_extensions']))
+    flush_dir = s_dict.get('records_flush_dir')
+    if isinstance(flush_dir, Path):
+        s_dict['records_flush_dir'] = str(flush_dir)
     return s_dict
 
 
@@ -48,6 +51,9 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
     try:
         if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], list):
             s_dict['selected_file_extensions'] = set(s_dict['selected_file_extensions'])
+        flush_dir = s_dict.get('records_flush_dir')
+        if isinstance(flush_dir, str) and flush_dir:
+            s_dict['records_flush_dir'] = Path(flush_dir)
     except Exception as e:
         logger.warning(
             f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}.")
@@ -231,12 +237,59 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        records_df_tmp_path = _write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
-        if records_df_tmp_path:
-            files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
+        # If processing created a combined records_df.parquet in the flush dir,
+        # prefer adding that file directly to the archive rather than
+        # re-serializing the in-memory DataFrame. This keeps the ZIP small
+        # and preserves the exact on-disk combined artifact produced during
+        # processing.
+        flush_dir = getattr(project.settings, "records_flush_dir", None)
+        combined_on_disk = None
+        if flush_dir:
+            try:
+                candidate = Path(flush_dir) / RECORDS_DF_FILENAME
+                if candidate.exists():
+                    combined_on_disk = candidate
+            except Exception:
+                # ignore problems inspecting the flush dir and fall back to serializing
+                combined_on_disk = None
+
+        if combined_on_disk is not None:
+            files_for_zip.append((combined_on_disk, RECORDS_DF_FILENAME))
+        else:
+            records_df_tmp_path = _write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
+            if records_df_tmp_path:
+                files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
 
         # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
+
+    _cleanup_records_flush_dir(project.settings)
+
+
+def _cleanup_records_flush_dir(settings: Settings) -> None:
+    path_candidate = getattr(settings, "records_flush_dir", None)
+    if not path_candidate:
+        return
+
+    flush_dir = Path(path_candidate)
+    if not flush_dir.exists():
+        return
+
+    removed_any = False
+    for parquet_file in flush_dir.glob("records_batch_*.parquet"):
+        try:
+            parquet_file.unlink()
+            removed_any = True
+        except OSError as exc:
+            logger.warning("Project IO: Could not remove partial records file %s: %s", parquet_file, exc)
+
+    if removed_any:
+        logger.info("Project IO: Removed partial records batches under %s", flush_dir)
+        try:
+            flush_dir.rmdir()
+        except OSError:
+            # Directory might contain user files; leave it in place.
+            pass
 
 
 def _read_dataframe_from_parquet(
