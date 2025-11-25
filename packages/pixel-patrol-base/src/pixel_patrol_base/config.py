@@ -5,3 +5,7 @@ MAX_ROWS_DISPLAYED = 100
 MAX_COLS_DISPLAYED = 200
 SPRITE_SIZE = 64
 
+# Processing defaults
+DEFAULT_PROCESSING_BATCH_SIZE: int = 512  # rows buffered before converting to Polars
+DEFAULT_RECORDS_FLUSH_EVERY_N: int = 2048  # rows kept in-memory before optional disk flush
+

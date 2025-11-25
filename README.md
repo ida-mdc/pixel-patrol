@@ -165,6 +165,37 @@ pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
   -e tif -e png --cmap viridis
 ```
 
+### Intermediate chunk files and resuming
+
+When processing very large datasets, PixelPatrol can write intermediate Polars/Parquet chunk files so long runs can be resumed and do not have to be re-run from scratch. Behavior:
+
+- By default the CLI `export` command will create an adjacent chunk directory next to the requested ZIP output: `<output_parent>/<output_stem>_records_chunks/` and write `records_batch_*.parquet` files there as processing progresses.
+- The CLI will *not* clear that directory by default — this enables resume behavior: if you re-run `export` without the `--rerun-incomplete` flag, PixelPatrol will detect existing chunk files and skip already-processed images.
+- If you want a fresh run (delete partial chunks first), pass `--rerun-incomplete` to `export` and the chunk directory will be cleared prior to processing.
+- You can also explicitly select a chunk directory with `--chunk-dir <DIR>` to override the default location.
+
+API users: `process_files()` (i.e. `Project.process_records`) will automatically infer a default `records_flush_dir` inside the project's `base_dir` when none is provided, so you do not need to set it explicitly to get intermediate chunk files. If you prefer a specific location, set `project.settings.records_flush_dir` (and optionally `processing_batch_size` / `records_flush_every_n`) before calling `process_files()`. The `export_project()` helper will still infer a default chunk directory next to the destination ZIP if that path is used.
+
+Examples:
+
+- Resume run (no clearing):
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip
+```
+
+- Force clean re-run (clear partials first):
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip --rerun-incomplete
+```
+
+- Explicit chunk directory:
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip --chunk-dir /data/pp_chunks
+```
+
 ### `pixel-patrol report`
 
 Launches the Dash dashboard from a previously exported project ZIP file. The command prints the URL and attempts to open the browser automatically.
