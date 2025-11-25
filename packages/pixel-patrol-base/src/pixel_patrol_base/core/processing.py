@@ -1,7 +1,8 @@
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Tuple
+from typing import List, Optional, Dict, Set, Tuple, Iterable
 from tqdm.auto import tqdm
 
 import polars as pl
@@ -11,6 +12,11 @@ from pixel_patrol_base.core.file_system import walk_filesystem
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
 from pixel_patrol_base.core.specs import is_record_matching_processor
+from pixel_patrol_base.config import (
+    DEFAULT_PROCESSING_BATCH_SIZE,
+    DEFAULT_RECORDS_FLUSH_EVERY_N,
+)
+from pixel_patrol_base.core.project_settings import Settings
 
 
 logger = logging.getLogger(__name__)
@@ -46,24 +52,87 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
-    """Loop over paths, get_all_record_properties, return DataFrame (may be empty).
-    Optimized to minimize Python loop overhead where possible.
-    """
+def _build_deep_record_df(
+    paths: List[Path],
+    loader_instance: PixelPatrolLoader,
+    settings: Optional[Settings] = None,
+) -> pl.DataFrame:
+    """Process each path (optionally in parallel) and build a Polars DataFrame."""
+    if not paths:
+        return pl.DataFrame([])
+
     processors = discover_processor_plugins()
+    worker_count = _resolve_worker_count(settings)
+    show_processor_progress = worker_count == 1
 
-    rows = []
+    accumulator = _RecordsAccumulator(
+        batch_size=_resolve_batch_size(settings),
+        flush_every_n=_resolve_flush_threshold(settings),
+        flush_dir=getattr(settings, "records_flush_dir", None),
+    )
 
-    # Show a per-file progress bar for deep processing. Use tqdm when available.
-    for p in tqdm(paths, desc="Processing files", unit="file", total=len(paths), leave=True, colour="green", position=0):
-        record_dict = get_all_record_properties(p, loader_instance, processors)
-        if record_dict:
-            rows.append({"path": str(p), **record_dict})
+    path_strings = [str(p) for p in paths]
 
-    return pl.DataFrame(rows)
+    # If partial chunk files exist, load them and skip already-processed paths
+    processed_paths: Set[str] = set()
+    if accumulator._flush_dir:
+        processed_paths = accumulator.load_existing_chunks()
+
+    to_process = [p for p in path_strings if p not in processed_paths]
+
+    with tqdm(
+        total=len(to_process),
+        desc="Processing files",
+        unit="file",
+        leave=True,
+        colour="green",
+        position=0,
+    ) as progress:
+        if processed_paths:
+            logger.info("Processing Core: skipping %d already-processed files; resuming %d remaining files", len(processed_paths), len(to_process))
+
+        if worker_count == 1:
+            for file_path in to_process:
+                record_dict = get_all_record_properties(
+                    Path(file_path), loader_instance, processors, show_processor_progress
+                )
+                if record_dict:
+                    accumulator.add_row({"path": file_path, **record_dict})
+                progress.update(1)
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_map = {
+                    executor.submit(
+                        get_all_record_properties,
+                        Path(file_path),
+                        loader_instance,
+                        processors,
+                        show_processor_progress,
+                    ): file_path
+                    for file_path in to_process
+                }
+
+                for future in as_completed(future_map):
+                    file_path = future_map[future]
+                    try:
+                        record_dict = future.result()
+                    except Exception:  # pragma: no cover - logged for observability
+                        logger.exception("Processor failed for %s", file_path)
+                        record_dict = {}
+
+                    if record_dict:
+                        accumulator.add_row({"path": file_path, **record_dict})
+                    progress.update(1)
+
+    return accumulator.finalize()
 
 
-def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, processors: List[PixelPatrolProcessor]) -> Dict:
+def get_all_record_properties(
+    file_path: Path,
+    loader: PixelPatrolLoader,
+    processors: List[PixelPatrolProcessor],
+    show_processor_progress: bool = True,
+) -> Dict:
     """
     Load a file with the given loader, run all matching processors, and return combined metadata.
     Args:
@@ -88,7 +157,20 @@ def get_all_record_properties(file_path: Path, loader: PixelPatrolLoader, proces
 
     # Always process using Record; processors opt-in via INPUT spec
     extracted_properties.update(metadata)
-    for P in tqdm(processors, desc="  Running processors for image: ", unit="proc", leave=False, colour="blue", position=1):
+    processor_iter: Iterable[PixelPatrolProcessor]
+    if show_processor_progress:
+        processor_iter = tqdm(
+            processors,
+            desc="  Running processors for image: ",
+            unit="proc",
+            leave=False,
+            colour="blue",
+            position=1,
+        )
+    else:
+        processor_iter = processors
+
+    for P in processor_iter:
         if not is_record_matching_processor(art, P.INPUT):
             continue
         out = P.run(art)
@@ -105,12 +187,13 @@ def build_records_df(
     bases: List[Path],
     selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
+    settings: Optional[Settings] = None,
 ) -> Optional[pl.DataFrame]:
 
     basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
     if loader is None or basic is None: return basic
 
-    deep = _build_deep_record_df([Path(p) for p in basic["path"].to_list()], loader)
+    deep = _build_deep_record_df([Path(p) for p in basic["path"].to_list()], loader, settings=settings)
 
     return basic.join(deep, on="path", how="left")
 
@@ -160,3 +243,186 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     result["all_files"] = df_files.height
 
     return result
+
+
+def _resolve_worker_count(settings: Optional[Settings]) -> int:
+    if settings and settings.processing_max_workers is not None:
+        return max(1, settings.processing_max_workers)
+    cpu_count = os.cpu_count() or 1
+    return max(1, cpu_count)
+
+
+def _resolve_batch_size(settings: Optional[Settings]) -> int:
+    value = settings.processing_batch_size if settings else DEFAULT_PROCESSING_BATCH_SIZE
+    return max(1, value)
+
+
+def _resolve_flush_threshold(settings: Optional[Settings]) -> int:
+    value = settings.records_flush_every_n if settings else DEFAULT_RECORDS_FLUSH_EVERY_N
+    return max(0, value)
+
+
+class _RecordsAccumulator:
+    """Collect rows, batch-convert to Polars, and optionally flush to disk."""
+
+    def __init__(
+        self,
+        batch_size: int,
+        flush_every_n: int,
+        flush_dir: Optional[Path],
+    ) -> None:
+        self._batch_size = batch_size
+        self._flush_every_n = flush_every_n
+        self._flush_dir = Path(flush_dir) if flush_dir else None
+        self._buffer: List[Dict[str, object]] = []
+        self._active_df = pl.DataFrame([])
+        self._written_files: List[Path] = []
+        self._chunk_index = 0
+        if self._flush_dir:
+            logger.info(
+                "Processing Core: buffering %s rows per chunk; partial batches go to '%s'",
+                self._batch_size,
+                self._flush_dir,
+            )
+
+    def add_row(self, row: Dict[str, object]) -> None:
+        self._buffer.append(row)
+        if len(self._buffer) >= self._batch_size:
+            self._flush_buffer_to_active()
+
+    def finalize(self) -> pl.DataFrame:
+        if self._buffer:
+            self._flush_buffer_to_active()
+
+        if (
+            self._flush_dir
+            and self._flush_every_n > 0
+            and self._written_files
+            and not self._active_df.is_empty()
+        ):
+            self._flush_active_to_disk(force=True)
+
+        if not self._written_files:
+            return self._active_df
+
+        frames = [pl.read_parquet(path) for path in self._written_files]
+        if not self._active_df.is_empty():
+            frames.append(self._active_df)
+
+        if not frames:
+            return pl.DataFrame([])
+
+        final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
+
+        # If a flush directory is configured, also write a single combined
+        # Parquet file there for convenience and remove the per-chunk files
+        # to keep the directory tidy. This makes the processed records
+        # individually usable without needing to stitch chunk files later.
+        if self._flush_dir:
+            try:
+                combined_path = self._flush_dir / "records_df.parquet"
+                logger.info("Processing Core: writing combined records DataFrame to %s", combined_path)
+                final_df.write_parquet(combined_path, compression="zstd")
+
+                # Remove the individual chunk files now that we have a combined file
+                for p in list(self._written_files):
+                    try:
+                        p.unlink()
+                    except Exception as exc:  # pragma: no cover - best-effort cleanup
+                        logger.warning("Processing Core: could not remove partial chunk %s: %s", p, exc)
+                # Reset written files list
+                self._written_files = []
+                # Attempt to remove the directory if it's empty
+                try:
+                    self._flush_dir.rmdir()
+                except Exception:
+                    # If not empty or cannot remove, leave it in place.
+                    pass
+            except Exception:
+                logger.exception("Processing Core: failed to write combined records parquet to %s", self._flush_dir)
+
+        return final_df
+
+    def _flush_buffer_to_active(self) -> None:
+        if not self._buffer:
+            return
+
+        chunk = pl.DataFrame(
+            self._buffer,
+            nan_to_null=True,
+            strict=False,
+            infer_schema_length=None,
+        )
+        self._buffer.clear()
+        if chunk.is_empty():
+            return
+
+        if self._active_df.is_empty():
+            self._active_df = chunk
+        else:
+            self._active_df = pl.concat(
+                [self._active_df, chunk],
+                how="diagonal_relaxed",
+                rechunk=False,
+            )
+
+        if self._flush_dir and self._flush_every_n > 0 and self._active_df.height >= self._flush_every_n:
+            self._flush_active_to_disk(force=False)
+
+    def _flush_active_to_disk(self, force: bool) -> None:
+        if self._active_df.is_empty():
+            return
+        if self._flush_dir is None:
+            print("Flush directory is not set. Skipping flush to disk.")
+            return
+        if not force and self._active_df.height < self._flush_every_n:
+            return
+        print(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
+        self._flush_dir.mkdir(parents=True, exist_ok=True)
+        chunk_path = self._flush_dir / f"records_batch_{self._chunk_index:05d}.parquet"
+        self._chunk_index += 1
+        try:
+            logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
+            self._active_df.write_parquet(chunk_path, compression="zstd")
+            self._written_files.append(chunk_path)
+            self._active_df = pl.DataFrame([])
+        except Exception as exc:
+            logger.exception("Processing Core: failed to write partial chunk %s: %s", chunk_path, exc)
+
+    def load_existing_chunks(self) -> Set[str]:
+        """Load existing parquet chunk files from the flush directory.
+
+        Populates `_written_files` and `_chunk_index` and returns a set of already-processed
+        `path` values so the caller can skip re-processing those files.
+        """
+        processed: Set[str] = set()
+        if self._flush_dir is None or not self._flush_dir.exists():
+            return processed
+
+        files = sorted(self._flush_dir.glob("records_batch_*.parquet"))
+        if not files:
+            return processed
+
+        # adopt existing files and set next chunk index
+        self._written_files = files.copy()
+        max_idx = -1
+        for f in files:
+            stem = f.stem  # e.g. records_batch_00001
+            try:
+                idx = int(stem.rsplit("_", 1)[1])
+                if idx > max_idx:
+                    max_idx = idx
+            except Exception:
+                # ignore files with unexpected names
+                continue
+
+            try:
+                df = pl.read_parquet(f, columns=["path"])
+                if not df.is_empty() and "path" in df.columns:
+                    processed.update(df["path"].to_list())
+            except Exception:
+                logger.warning("Processing Core: could not read existing chunk %s", f)
+
+        self._chunk_index = max_idx + 1
+        logger.info("Processing Core: found %d existing partial chunk(s) (next chunk index=%d)", len(self._written_files), self._chunk_index)
+        return processed
