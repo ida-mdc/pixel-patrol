@@ -1,11 +1,13 @@
 import re
 from typing import List, Dict, Sequence
+import copy
 
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
 import polars as pl
 from dash import Dash, html, dcc
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 
 import plotly.io as pio
 
@@ -15,13 +17,19 @@ from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
 from pixel_patrol_base.report.global_controls import (
     build_sidebar,
+    apply_global_config,
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
     GLOBAL_GROUPBY_COLS_ID,
     GLOBAL_FILTER_COLUMN_ID,
     GLOBAL_FILTER_TEXT_ID,
     GLOBAL_APPLY_BUTTON_ID,
+    EXPORT_CSV_BUTTON_ID,
+    EXPORT_PROJECT_BUTTON_ID,
+    EXPORT_CSV_DOWNLOAD_ID,
+    EXPORT_PROJECT_DOWNLOAD_ID,
 )
+
 
 
 from pathlib import Path  # add if missing
@@ -42,17 +50,21 @@ def load_and_concat_parquets(paths: List[str]) -> pl.DataFrame:
 
 def create_app(project: Project) -> Dash:
     return _create_app(
-        project.records_df,
-        project.get_settings().cmap,
+        df=project.records_df,
+        default_palette_name=project.get_settings().cmap,
         pixel_patrol_flavor=project.get_settings().pixel_patrol_flavor,
+        project_name=project.name,
+        project=project,
     )
 
 
 def _create_app(
     df: pl.DataFrame,
-    default_palette_name: str = "tab10",
-    pixel_patrol_flavor: str = "",
-) -> Dash:
+    default_palette_name: str,
+    pixel_patrol_flavor: str,
+    project_name: str,
+    project: Project,
+):
     """Instantiate Dash app, register callbacks, and assign layout."""
     df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP, "https://codepen.io/chriddyp/pen/bWLwgP.css"]
@@ -126,7 +138,9 @@ def _create_app(
         )
 
         # --- Sidebar with global controls (built once, outside content container) ---
-        sidebar_controls, global_control_stores = build_sidebar(df, default_palette_name)
+        sidebar_controls, global_control_stores, extra_components = build_sidebar(
+            df, default_palette_name
+        )
 
         # --- Group Widget Layout Generation (content only) ---
         group_widget_content = []
@@ -184,6 +198,7 @@ def _create_app(
                     id="tb-process-store-tensorboard-embedding-projector",
                     data={},
                 ),
+                *extra_components,
             ]
         )
 
@@ -247,18 +262,15 @@ def _create_app(
     )
     def update_global_config(
         n_clicks: int,
-        group_cols,
+        group_col,
         filter_col,
         filter_text,
     ) -> Dict:
-        # Default group by
-        if not group_cols:
-            if "imported_path_short" in df.columns:
-                group_cols = ["imported_path_short"]
-            elif "imported_path" in df.columns:
-                group_cols = ["imported_path"]
-            else:
-                group_cols = []
+        # Single grouping column; default to report_group if nothing chosen
+        if not group_col:
+            group_cols = ["report_group"]
+        else:
+            group_cols = [group_col]
 
         filters: Dict[str, List[str]] = {}
         if filter_col and filter_text:
@@ -268,6 +280,63 @@ def _create_app(
 
         return {"group_cols": group_cols, "filters": filters}
 
+    @app.callback(
+        Output(EXPORT_CSV_DOWNLOAD_ID, "data"),
+        Input(EXPORT_CSV_BUTTON_ID, "n_clicks"),
+        State(GLOBAL_CONFIG_STORE_ID, "data"),
+        prevent_initial_call=True,
+    )
+    def export_current_table_as_csv(n_clicks: int, global_config: Dict):
+        if not n_clicks:
+            raise PreventUpdate
+
+        df_filtered, group_col = apply_global_config(df, global_config)
+
+        # add a human-readable group label column for clarity
+        df_export = df_filtered.with_columns(
+            pl.col(group_col).alias("group_label")
+        )
+
+        csv_str = df_export.to_pandas().to_csv(index=False)
+        filename = f"{project_name}_filtered_table.csv"
+
+        return dcc.send_string(csv_str, filename)
+
+    @app.callback(
+        Output(EXPORT_PROJECT_DOWNLOAD_ID, "data"),
+        Input(EXPORT_PROJECT_BUTTON_ID, "n_clicks"),
+        State(GLOBAL_CONFIG_STORE_ID, "data"),
+        prevent_initial_call=True,
+    )
+    def export_filtered_project(n_clicks: int, global_config: Dict):
+        if not n_clicks:
+            raise PreventUpdate
+
+        import tempfile
+        import copy
+        from pathlib import Path
+        from pixel_patrol_base import api as pp_api
+
+        # 1. Apply filters
+        df_filtered, _ = apply_global_config(df, global_config)
+
+        # 2. Clone the project and override records_df
+        new_project = copy.copy(project)
+        new_project.records_df = df_filtered
+
+        # 3. Export using PixelPatrol's real export_project API
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = Path(tmpdir) / f"{project_name}_filtered.zip"
+
+            # This creates ONE zip file (not a directory)
+            pp_api.export_project(new_project, zip_path)
+
+            # 4. Read the zip file into memory
+            with open(zip_path, "rb") as f:
+                zip_bytes = f.read()
+
+        # 5. Return it to browser
+        return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.ppproj.zip")
 
     return app
 
