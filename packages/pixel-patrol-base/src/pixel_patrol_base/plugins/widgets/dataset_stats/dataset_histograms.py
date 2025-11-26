@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 import polars as pl
 import plotly.graph_objects as go
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, ALL
 import numpy as np
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
@@ -40,18 +40,9 @@ class DatasetHistogramWidget:
             ),
             html.Div(
                 [
-                    html.Label("Select histogram dimension to plot:"),
-                    dcc.Dropdown(
-                        id="histogram-dimension-dropdown",
-                        options=[],
-                        value=None,
-                        clearable=False,
-                        style={
-                            "width": "300px",
-                            "marginTop": "10px",
-                            "marginBottom": "20px",
-                        },
-                    ),
+                    html.Label("Select histogram dimensions to plot (choose 'All' to omit a suffix):"),
+                    html.Div(id="histogram-filters-container"),
+                    dcc.Store(id="histogram-dims-store"),
                 ]
             ),
             html.Div(
@@ -92,6 +83,16 @@ class DatasetHistogramWidget:
                 ]
             ),
             dcc.Graph(id="histogram-plot", style={"height": "600px"}),
+            html.Div([
+                html.Label("Show bars for specific file (optional):"),
+                dcc.Dropdown(
+                    id="histogram-file-dropdown",
+                    options=[],
+                    value=None,
+                    clearable=True,
+                    style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"},
+                ),
+            ]),
             html.Div(
                 className="markdown-content",
                 children=[
@@ -280,52 +281,85 @@ class DatasetHistogramWidget:
     # ---------------------------- Dash callbacks --------------------------- #
     def register(self, app, df_global: pl.DataFrame):
         @app.callback(
-            Output("histogram-dimension-dropdown", "options"),
-            Output("histogram-dimension-dropdown", "value"),
+            Output("histogram-filters-container", "children"),
+            Output("histogram-dims-store", "data"),
             Output("histogram-folder-dropdown", "options"),
             Output("histogram-folder-dropdown", "value"),
             Input("color-map-store", "data"),
         )
         def populate_dropdowns(color_map):
-            histogram_columns = [
-                col for col in df_global.columns if col.startswith("histogram_counts")
-            ]
-            dropdown_options = [
-                {"label": col, "value": col} for col in histogram_columns
-            ]
-            default_histogram = histogram_columns[0] if histogram_columns else None
+
+            # discover per-dimension tokens using the shared helper when possible
+            # This prefers columns named like 'histogram_counts_t0_c0', but will
+            # gracefully fall back to a generic scan if none are found.
+            # Build dropdown children using the shared utility to keep parsing consistent
+            from pixel_patrol_base.report.utils import build_dimension_dropdown_children
+
+            children, dims_order = build_dimension_dropdown_children(
+                df_global.columns, base="histogram_counts", id_type="histogram-dim-filter"
+            )
 
             folder_names = (
                 df_global["imported_path_short"].unique().to_list()
                 if "imported_path_short" in df_global.columns
                 else []
             )
-            folder_options = [
-                {"label": str(Path(f).name), "value": f} for f in folder_names
-            ]
-            default_folders = (
-                folder_names[:2] if len(folder_names) > 1 else folder_names
-            )
-            return dropdown_options, default_histogram, folder_options, default_folders
+            folder_options = [{"label": str(Path(f).name), "value": f} for f in folder_names]
+            default_folders = folder_names[:2] if len(folder_names) > 1 else folder_names
+
+            return children, dims_order, folder_options, default_folders
+
+        @app.callback(
+            Output("histogram-file-dropdown", "options"),
+            Output("histogram-file-dropdown", "value"),
+            Input("histogram-folder-dropdown", "value"),
+        )
+        def update_file_options(selected_folders):
+            # Filter files according to the selected folders; if none selected, return all files
+            if "name" not in df_global.columns:
+                return [], None
+            if not selected_folders:
+                file_names = df_global["name"].unique().to_list()
+            else:
+                file_names = (
+                    df_global.filter(pl.col("imported_path_short").is_in(selected_folders))
+                    .select("name")
+                    .unique()
+                    .to_series()
+                    .to_list()
+                )
+            file_options = [{"label": str(Path(f).name), "value": f} for f in file_names]
+            return file_options, None
 
         @app.callback(
             Output("histogram-plot", "figure"),
             Output("dataset-histograms-warning", "children"),
             Input("color-map-store", "data"),
             Input("histogram-remap-mode", "value"),
-            Input("histogram-dimension-dropdown", "value"),
+            Input({"type": "histogram-dim-filter", "dim": ALL}, "value"),
             Input("histogram-folder-dropdown", "value"),
+            Input("histogram-file-dropdown", "value"),
+            Input("histogram-dims-store", "data"),
         )
         def update_histogram_plot(
-            color_map, remap_mode, histogram_key, selected_folders
+            color_map, remap_mode, dim_values_list, selected_folders, selected_file, dims_order
         ):
-            if not histogram_key or not selected_folders:
-                return (
-                    go.Figure(),
-                    "Please select a histogram dimension and at least one folder.",
-                )
-            if histogram_key not in df_global.columns:
-                return go.Figure(), "No histogram data found in the selected images."
+            # dim_values_list is a list of values from the dynamically-created dropdowns
+            if not selected_folders:
+                return go.Figure(), "Please select at least one folder."
+
+            # reconstruct selections dict from dims_order and values
+            selections = {}
+            if dims_order and dim_values_list:
+                # dim_values_list aligns with children order (we generated children in sorted order)
+                for dim_name, val in zip(dims_order, dim_values_list):
+                    selections[dim_name] = val
+
+            # find best matching histogram column
+            from pixel_patrol_base.report.utils import find_best_matching_column
+            histogram_columns = [col for col in df_global.columns if "histogram" in col]
+            base = "histogram_counts"
+            histogram_key = find_best_matching_column(histogram_columns, base, selections) or base
 
             chart = go.Figure()
             for folder in selected_folders:
@@ -361,9 +395,16 @@ class DatasetHistogramWidget:
                 )
                 color = color_map.get(folder, None) if color_map else None
 
+                # compute per-image opacity scaling when no specific file is selected
+                n_images_present = max(sum(1 for c in counts_list if c is not None), 1) # avoids div by zero later
+                if selected_file:
+                    per_image_opacity = 0.7
+                else:
+                    per_image_opacity = 0.6 / n_images_present
+
                 if remap_mode == "shape":
                     # ------------------- Shape (bin-index) mode ------------------- #
-                    mats = []
+                    mats_all = []
                     for counts, minv, maxv, file_name in zip(
                         counts_list, min_list, max_list, names
                     ):
@@ -372,17 +413,21 @@ class DatasetHistogramWidget:
                         h = np.asarray(counts, float)
                         s = h.sum()
                         p = (h / s) if s > 0 else h
-                        mats.append(p)
+                        mats_all.append(p)
 
-                        # make p + bin_width*0.5 to shift bar centers to the right so it aligns 
+                        # per-image plotting: show only the selected file's bars when
+                        # a specific file is chosen, otherwise show all per-image bars
+                        if selected_file and file_name != selected_file:
+                            # skip plotting this file's bar but keep it for mean
+                            continue
 
                         chart.add_trace(
                             go.Bar(
                                 x=list(range(p.size + 1)),
-                                y=list(p)+[0],
+                                y=list(p) + [0], # NOTE: make p + bin_width*0.5 to shift bar centers to the right so it aligns
                                 width=1,
                                 name=Path(folder).name,
-                                marker=dict(color=color, opacity=0.25),
+                                marker=dict(color=color, opacity=per_image_opacity),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
                                 hovertemplate=(
@@ -394,17 +439,14 @@ class DatasetHistogramWidget:
                                     )
                                     + "<extra></extra>",
                                 ),
-                                # barmode="overlay",
-                                # bargap=0.0,
-                                # bargroupgap=0.0,
                                 offset=0.0,
                             )
                         )
-                        print("x:", list(range(p.size + 1)))
-                    if not mats:
+
+                    if not mats_all:
                         continue
 
-                    mean_hist = np.mean(mats, axis=0)
+                    mean_hist = np.mean(mats_all, axis=0)
                     mean_hist = (
                         mean_hist / mean_hist.sum()
                         if mean_hist.sum() > 0
@@ -439,6 +481,9 @@ class DatasetHistogramWidget:
 
                     # Per-image bars at native edges
                     for counts, minv, maxv, file_name in valid_items:
+                        # if a specific file is requested, only show bars for that file
+                        if selected_file and file_name != selected_file:
+                            continue
                         edges, lefts, widths = self._compute_edges(counts, minv, maxv)
                         total = counts.sum()
                         h_norm = counts / total if total > 0 else counts
@@ -449,7 +494,7 @@ class DatasetHistogramWidget:
                                 y=list(h_norm),
                                 width=list(widths),
                                 name=Path(folder).name,
-                                marker=dict(color=color, opacity=0.25),
+                                marker=dict(color=color, opacity=per_image_opacity),
                                 showlegend=False,
                                 legendgroup=Path(folder).name,
                                 hovertemplate=(
@@ -489,8 +534,7 @@ class DatasetHistogramWidget:
                         mats.append(reb_prob)
 
                     mean_hist = np.mean(mats, axis=0)
-                    # TODO: I think mean centers are still not correct here
-                    mean_centers = group_edges[:-1] #+ 0.5 * np.diff(group_edges) to have the center in the middle of the bin
+                    mean_centers = group_edges[:-1] # NOTE: + 0.5 * np.diff(group_edges) to have the center in the middle of the bin
                     mean_hover_texts = [
                         f"Mean of folder: {Path(folder).name}<br>Pixel value: {float(c):.3f}<br>Nearest pixel: {int(round(c))}<br>Mean Prob: {float(v):.3f}"
                         for c, v in zip(mean_centers, mean_hist)

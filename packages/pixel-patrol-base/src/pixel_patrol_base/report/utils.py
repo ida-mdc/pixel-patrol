@@ -46,7 +46,7 @@ def _parse_dynamic_col(
         supported_metrics: A list of valid base metrics (e.g., ['mean', 'std']).
 
     Returns:
-        A tuple of (base_metric, attribute, dims_dict) if parsing is successful.
+        A tuple of (base_metric OR "{base_metric}_{attribute}", dims_dict) if parsing is successful.
         The 'attribute' is a string if present, otherwise None.
         Returns None if the column name doesn't match the expected patterns.
     """
@@ -215,44 +215,6 @@ def _create_single_violin_plot(
         box=dict(line_color="black")
     )
 
-    # # Add statistical annotations if more than one group exists
-    # if len(groups) > 1:
-    #     # (The complex statistical annotation logic is moved here)
-    #     # This logic remains the same as your original code, operating on the `chart` object.
-    #     comparisons = list(itertools.combinations(groups, 2))
-    #     p_values = [
-    #         mannwhitneyu(
-    #             plot_data.filter(pl.col("imported_path_short") == g1).get_column(value_to_plot),
-    #             plot_data.filter(pl.col("imported_path_short") == g2).get_column(value_to_plot)
-    #         ).pvalue for g1, g2 in comparisons
-    #     ]
-    #
-    #     if p_values:
-    #         reject, pvals_corrected, _, _ = smm.multipletests(p_values, alpha=0.05, method="bonferroni")
-    #
-    #         chart.update_layout(xaxis=dict(categoryorder="array", categoryarray=groups))
-    #         positions = {group: i for i, group in enumerate(groups)}
-    #         y_range = plot_data.get_column(value_to_plot).max() - plot_data.get_column(value_to_plot).min()
-    #         y_offset = y_range * 0.05 if y_range > 0 else 1
-    #
-    #         # Simplified annotation for adjacent pairs to keep it clean
-    #         for i, (g1, g2) in enumerate(comparisons):
-    #             if abs(positions[g1] - positions[g2]) > 1: continue  # Only adjacent for now
-    #
-    #             p_corr = pvals_corrected[i]
-    #             sig = "***" if p_corr < 0.001 else "**" if p_corr < 0.01 else "*" if p_corr < 0.05 else "ns"
-    #
-    #             y_max = max(
-    #                 plot_data.filter(pl.col("imported_path_short") == g1).get_column(value_to_plot).max(),
-    #                 plot_data.filter(pl.col("imported_path_short") == g2).get_column(value_to_plot).max()
-    #             )
-    #             y_bracket = y_max + y_offset * (abs(positions[g1] - positions[g2]))
-    #
-    #             chart.add_shape(type="line", x0=positions[g1], y0=y_bracket, x1=positions[g2], y1=y_bracket,
-    #                             line=dict(color="black", width=1.5))
-    #             chart.add_annotation(x=(positions[g1] + positions[g2]) / 2, y=y_bracket + y_offset / 4, text=sig,
-    #                                  showarrow=False)
-    #
     # Final layout updates for the single plot
     chart.update_layout(
         title_text=f"Distribution of {value_to_plot.replace('_', ' ').title()}",
@@ -321,3 +283,149 @@ def _create_mean_sparkline(df: pl.DataFrame, cols_for_cell: List[str]) -> go.Fig
     )
 
     return fig
+
+
+def extract_dimension_tokens(columns: List[str], base: str, dims: List[str] = None) -> dict:
+    """
+    Inspect a list of column names and extract available per-dimension tokens
+    for a given base metric/column prefix.
+
+    Args:
+        columns: list of column names (e.g., df.columns)
+        base: base metric or prefix (e.g., 'histogram_counts' or 'mean_intensity')
+        dims: ordered list of single-letter dimension names to look for (default ['t','c','z','s'])
+
+    Returns:
+        dict mapping dimension letter to sorted list of tokens (e.g., {'t': ['t0','t1'], 'c': ['c0']})
+    """
+    import re
+
+    if dims is None:
+        dims = ['t', 'c', 'z', 's']
+
+    tokens = {d: set() for d in dims}
+
+    # pattern to capture trailing _Xn groups after the base
+    pattern = re.compile(rf"^{re.escape(base)}((?:_[a-zA-Z]\d+)+)$")
+    dim_pat = re.compile(r'_([a-zA-Z])(\d+)')
+
+    for col in columns:
+        m = pattern.match(col)
+        if not m:
+            continue
+        suffix = m.group(1)
+        for mm in dim_pat.finditer(suffix):
+            d = mm.group(1).lower()
+            n = mm.group(2)
+            if d in tokens:
+                tokens[d].add(f"{d}{n}")
+
+    return {k: sorted(v) for k, v in tokens.items()}
+
+
+def build_dimension_options(tokens: dict) -> dict:
+    """
+    Convert extracted token lists into Dash dropdown options, including an 'All' entry.
+
+    Args:
+        tokens: output of `extract_dimension_tokens`.
+
+    Returns:
+        dict mapping dimension letter to a list of option dicts for Dash dropdown.
+    """
+    opts = {}
+    for k, vals in tokens.items():
+        o = [{"label": "All", "value": "All"}]
+        for v in vals:
+            o.append({"label": v, "value": v})
+        opts[k] = o
+    return opts
+
+
+def find_best_matching_column(columns: List[str], base: str, selections: dict) -> Optional[str]:
+    """
+    Given a base name and a dict of selected tokens (e.g., {'t': 't0', 'c': 'All', ...}),
+    build the expected column name and return it if present. Otherwise, attempt to
+    find a compatible candidate column from `columns`.
+
+    Args:
+        columns: list of column names
+        base: base metric name
+        selections: dict mapping dim letter to selected token string or 'All'
+
+    Returns:
+        best matching column name or None if none found
+    """
+    # construct suffix in canonical dim order
+    suffix_parts = []
+    for d in ['t', 'c', 'z', 's']:
+        tok = selections.get(d)
+        if tok and tok != 'All':
+            suffix_parts.append(f"_{tok}")
+
+    desired = base + ''.join(suffix_parts)
+    if desired in columns:
+        return desired
+
+    # fallback: find columns that start with base
+    candidates = [c for c in columns if c.startswith(base)]
+    if not candidates:
+        return None
+
+    # prefer columns that contain all requested tokens
+    def matches(col: str) -> bool:
+        for d in ['t', 'c', 'z', 's']:
+            tok = selections.get(d)
+            if tok and tok != 'All' and f"_{tok}" not in col:
+                return False
+        return True
+
+    matched = [c for c in candidates if matches(c)]
+    if matched:
+        return matched[0]
+    return candidates[0]
+
+
+def build_dimension_dropdown_children(
+    columns: List[str], base: str, id_type: str = "dim-filter"
+) -> Tuple[List[html.Div], List[str]]:
+    """
+    Build Dash dropdown `children` and `dims_order` for dimension selectors.
+
+    Args:
+        columns: list of column names (e.g., df.columns)
+        base: base metric/prefix to inspect (e.g., 'histogram_counts')
+        id_type: the dictionary 'type' value to use for the dropdown ids
+
+    Returns:
+        tuple(children, dims_order)
+            children: list of `html.Div` elements containing a Label and `dcc.Dropdown`
+            dims_order: list of dimension letters in stable order
+
+    The dropdown ids use the pattern `{"type": id_type, "dim": <dim>}` so they can be
+    used with Dash pattern-matching callbacks (ALL).
+    """
+    tokens = extract_dimension_tokens(columns, base)
+
+    # Fallback: if no tokens found, leave tokens empty dict
+    children = []
+    dims_order = []
+    # Preferred stable order: t, c, z, s (TCZS)
+    for dim_name in ['t', 'c', 'z', 's']:
+        if dim_name in tokens and tokens[dim_name]:
+            dims_order.append(dim_name)
+            dropdown_id = {"type": id_type, "dim": dim_name}
+            options = [{"label": "All", "value": "All"}] + [
+                {"label": tok[1:], "value": tok} for tok in tokens[dim_name]
+            ]
+            children.append(
+                html.Div(
+                    [
+                        html.Label(f"{dim_name.upper()} slice"),
+                        dcc.Dropdown(id=dropdown_id, options=options, value="All", clearable=False),
+                    ],
+                    style={"display": "inline-block", "marginRight": "12px"},
+                )
+            )
+
+    return children, dims_order
