@@ -46,7 +46,7 @@ def _parse_dynamic_col(
         supported_metrics: A list of valid base metrics (e.g., ['mean', 'std']).
 
     Returns:
-        A tuple of (base_metric, attribute, dims_dict) if parsing is successful.
+        A tuple of (base_metric OR "{base_metric}_{attribute}", dims_dict) if parsing is successful.
         The 'attribute' is a string if present, otherwise None.
         Returns None if the column name doesn't match the expected patterns.
     """

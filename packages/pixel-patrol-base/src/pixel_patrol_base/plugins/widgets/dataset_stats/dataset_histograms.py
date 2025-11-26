@@ -288,8 +288,6 @@ class DatasetHistogramWidget:
             Input("color-map-store", "data"),
         )
         def populate_dropdowns(color_map):
-            from collections import defaultdict
-            from pixel_patrol_base.report.utils import extract_dimension_tokens
 
             # discover per-dimension tokens using the shared helper when possible
             # This prefers columns named like 'histogram_counts_t0_c0', but will
