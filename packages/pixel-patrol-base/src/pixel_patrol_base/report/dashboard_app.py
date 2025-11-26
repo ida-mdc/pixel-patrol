@@ -1,13 +1,11 @@
 import re
-from pathlib import Path
 from typing import List, Dict, Sequence
 
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
-import matplotlib.pyplot as plt
 import polars as pl
 from dash import Dash, html, dcc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 
 import plotly.io as pio
 
@@ -15,6 +13,16 @@ from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
+from pixel_patrol_base.report.global_controls import (
+    build_sidebar,
+    PALETTE_SELECTOR_ID,
+    GLOBAL_CONFIG_STORE_ID,
+    GLOBAL_GROUPBY_COLS_ID,
+    GLOBAL_FILTER_COLUMN_ID,
+    GLOBAL_FILTER_TEXT_ID,
+    GLOBAL_APPLY_BUTTON_ID,
+)
+
 
 from pathlib import Path  # add if missing
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
@@ -72,7 +80,7 @@ def _create_app(
     def serve_layout_closure() -> html.Div:
         DEFAULT_WIDGET_WIDTH = 12
 
-        # --- Header ---
+        # --- Header (inside main content) ---
         header_row = dbc.Row(
             [
                 dbc.Col(
@@ -117,34 +125,19 @@ def _create_app(
             className="my-3",
         )
 
-        settings_controls = dbc.Row(
-            [
-                dbc.Col(html.Div(), width=True),
-                dbc.Col(
-                    html.Div(
-                        [
-                            html.Label("Color Palette:", className="me-2"),
-                            dcc.Dropdown(
-                                id="palette-selector",
-                                options=[{"label": name, "value": name} for name in sorted(plt.colormaps())],
-                                value=default_palette_name,
-                                clearable=False,
-                                style={"width": "200px"},
-                            ),
-                        ],
-                        className="d-flex align-items-center justify-content-end",
-                    ),
-                    width="auto",
-                ),
-            ]
-        )
+        # --- Sidebar with global controls (built once, outside content container) ---
+        sidebar_controls, global_control_stores = build_sidebar(df, default_palette_name)
 
-        # --- Group Widget Layout Generation ---
+        # --- Group Widget Layout Generation (content only) ---
         group_widget_content = []
-        tabbed_group_widgets = organize_widgets_by_tab(group_widgets)  # assumes it looks at NAME/TAB
+        tabbed_group_widgets = organize_widgets_by_tab(group_widgets)
 
         for group_name, ws in tabbed_group_widgets.items():
-            group_widget_content.append(dbc.Row(dbc.Col(html.H3(group_name, className="my-3 text-primary"))))
+            group_widget_content.append(
+                dbc.Row(
+                    dbc.Col(html.H3(group_name, className="my-3 text-primary"))
+                )
+            )
             current_group_cols = []
             current_row_width = 0
 
@@ -154,40 +147,88 @@ def _create_app(
 
                     # wrap to next row if needed
                     if current_row_width + widget_width > 12:
-                        group_widget_content.append(dbc.Row(current_group_cols, className="g-4 p-3"))
+                        group_widget_content.append(
+                            dbc.Row(current_group_cols, className="g-4 p-3")
+                        )
                         current_group_cols, current_row_width = [], 0
 
-                    # Title + body
                     title = getattr(w, "NAME", w.__class__.__name__)
-                    current_group_cols.append(dbc.Row(dbc.Col(html.H4(title, className="my-3 text-primary"))))
+
+                    # title row
                     current_group_cols.append(
-                        dbc.Col(html.Div(w.layout()), width=widget_width, className="mb-3")
+                        dbc.Row(
+                            dbc.Col(html.H4(title, className="my-3 text-primary"))
+                        )
+                    )
+                    # widget body
+                    current_group_cols.append(
+                        dbc.Col(
+                            html.Div(w.layout()),
+                            width=widget_width,
+                            className="mb-3",
+                        )
                     )
                     current_row_width += widget_width
 
             if current_group_cols:
-                group_widget_content.append(dbc.Row(current_group_cols, className="g-4 p-3"))
+                group_widget_content.append(
+                    dbc.Row(current_group_cols, className="g-4 p-3")
+                )
 
         # --- Data Stores ---
         stores = html.Div(
             [
                 dcc.Store(id="color-map-store"),
-                dcc.Store(id="tb-process-store-tensorboard-embedding-projector", data={}),
+                *global_control_stores,
+                dcc.Store(
+                    id="tb-process-store-tensorboard-embedding-projector",
+                    data={},
+                ),
             ]
         )
 
-        # --- Final Layout Assembly ---
+        # --- Main content container (header + widgets, centered with maxWidth) ---
+        content_container = dbc.Container(
+            [header_row, html.Hr(), *group_widget_content],
+            fluid=True,
+            style={"maxWidth": "1200px", "margin": "0 auto"},
+        )
+
+        # --- Overall layout: sidebar outside margins + main content ---
+        layout_row = dbc.Row(
+            [
+                # Sidebar column: fixed-ish width, outside main container margins
+                dbc.Col(
+                    sidebar_controls,
+                    width="auto",
+                    style={
+                        "minWidth": "280px",
+                        "maxWidth": "320px",
+                        "padding": "20px",
+                    },
+                ),
+                # Main app content column: takes remaining width
+                dbc.Col(
+                    content_container,
+                    width=True,
+                ),
+            ],
+            className="gx-0",  # no horizontal gutter between sidebar and content
+        )
+
         return html.Div(
-            dbc.Container(
-                [header_row, stores, settings_controls, html.Hr(), *group_widget_content],
-                fluid=True,
-                style={"maxWidth": "1200px", "margin": "0 auto"},
-            )
+            [
+                stores,
+                layout_row,
+            ]
         )
 
     app.layout = serve_layout_closure
 
-    @app.callback(Output("color-map-store", "data"), Input("palette-selector", "value"))
+    @app.callback(
+        Output("color-map-store", "data"),
+        Input(PALETTE_SELECTOR_ID, "value"),
+    )
     def update_color_map(palette: str) -> Dict[str, str]:
         folders = df.select(pl.col("imported_path_short")).unique().to_series().to_list()
         cmap = cm.get_cmap(palette, len(folders))
@@ -195,6 +236,38 @@ def _create_app(
             f: f"#{int(cmap(i)[0] * 255):02x}{int(cmap(i)[1] * 255):02x}{int(cmap(i)[2] * 255):02x}"
             for i, f in enumerate(folders)
         }
+
+    @app.callback(
+        Output(GLOBAL_CONFIG_STORE_ID, "data"),
+        Input(GLOBAL_APPLY_BUTTON_ID, "n_clicks"),
+        State(GLOBAL_GROUPBY_COLS_ID, "value"),
+        State(GLOBAL_FILTER_COLUMN_ID, "value"),
+        State(GLOBAL_FILTER_TEXT_ID, "value"),
+        prevent_initial_call=False,
+    )
+    def update_global_config(
+        n_clicks: int,
+        group_cols,
+        filter_col,
+        filter_text,
+    ) -> Dict:
+        # Default group by
+        if not group_cols:
+            if "imported_path_short" in df.columns:
+                group_cols = ["imported_path_short"]
+            elif "imported_path" in df.columns:
+                group_cols = ["imported_path"]
+            else:
+                group_cols = []
+
+        filters: Dict[str, List[str]] = {}
+        if filter_col and filter_text:
+            allowed_vals = [v.strip() for v in filter_text.split(",") if v.strip()]
+            if allowed_vals:
+                filters[filter_col] = allowed_vals
+
+        return {"group_cols": group_cols, "filters": filters}
+
 
     return app
 
