@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol-loader-bio"
-version = "0.1.2"
+version = "0.1.3"
 description = "PixelPatrol add-on package for loading images with bioio and zarr"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -11,7 +11,7 @@ dependencies = [
     "bioio-ome-tiff==1.4.0",
     "bioio-ome-zarr==2.3.0",
     "bioio-imageio==1.3.0",
-    "pixel-patrol-base==0.1.2",
+    "pixel-patrol-base>=0.1.2",
     "zarr==3.1.1",
     "tifffile==2025.9.9",
 ]
