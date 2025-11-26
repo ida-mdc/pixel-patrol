@@ -17,14 +17,22 @@ GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
 GLOBAL_FILTER_TEXT_ID = "global-filter-text"
 GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
+EXPORT_CSV_BUTTON_ID = "export-csv-button"
+EXPORT_PROJECT_BUTTON_ID = "export-project-button"
+EXPORT_CSV_DOWNLOAD_ID = "export-csv-download"
+EXPORT_PROJECT_DOWNLOAD_ID = "export-project-download"
 
+# ---------- GLOBAL CONSTANTS ----------
+
+REPORT_GROUP_COL = "report_group"
+DEFAULT_GROUP_COL = REPORT_GROUP_COL
+
+MAX_UNIQUE_GROUP = 12  # TODO: move to config
+MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
 
 # ---------- LAYOUT: SIDEBAR + STORES ----------
 
 def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
-    MAX_UNIQUE_GROUP = 50 # TODO: move to config
-    MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
-
 
     group_cols: List[str] = []
     filter_cols: List[str] = []
@@ -45,8 +53,6 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
         if n_unique <= MAX_UNIQUE_FILTER:
             if s.dtype in (pl.Utf8, pl.Boolean):
                 filter_cols.append(c)
-            # if you later want ints too, you can add a simple check here
-            # (e.g. s.dtype == pl.Int64, etc.)
 
         # GROUP-BY candidates: stricter
         if n_unique <= MAX_UNIQUE_GROUP:
@@ -55,20 +61,14 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 
     return group_cols, filter_cols
 
-def build_sidebar(df: pl.DataFrame, default_palette_name: str):
-    """
-    Build sidebar controls and associated dcc.Store components.
 
-    Returns:
-        sidebar_controls, stores_list
-    """
+def build_sidebar(df: pl.DataFrame, default_palette_name: str):
+
     candidate_group_cols, candidate_filter_cols = _find_candidate_columns(df)
 
     default_group_value: List[str] = []
-    if "imported_path_short" in df.columns:
-        default_group_value = ["imported_path_short"]
-    elif "imported_path" in df.columns:
-        default_group_value = ["imported_path"]
+    if REPORT_GROUP_COL in df.columns:
+        default_group_value = [REPORT_GROUP_COL]
 
     sidebar_controls = dbc.Card(
         [
@@ -94,10 +94,10 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                     dcc.Dropdown(
                         id=GLOBAL_GROUPBY_COLS_ID,
                         options=[{"label": c, "value": c} for c in candidate_group_cols],
-                        value=default_group_value,
-                        multi=True,
+                        value=default_group_value[0] if default_group_value else None,
+                        multi=False,
                         clearable=True,
-                        placeholder="e.g. imported_path_short, condition",
+                        placeholder="Choose grouping column",
                         style={"width": "100%"},
                     ),
                     html.Small(
@@ -128,6 +128,22 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                         n_clicks=0,
                         className="btn btn-primary btn-sm mt-3 w-100",
                     ),
+                    html.Div(
+                        [
+                            html.Button(
+                                "Export current table (CSV)",
+                                id=EXPORT_CSV_BUTTON_ID,
+                                n_clicks=0,
+                                className="btn btn-outline-secondary btn-sm mt-3 w-100",
+                            ),
+                            html.Button(
+                                "Export filtered project",
+                                id=EXPORT_PROJECT_BUTTON_ID,
+                                n_clicks=0,
+                                className="btn btn-outline-secondary btn-sm mt-2 w-100",
+                            ),
+                        ]
+                    ),
                 ]
             ),
         ],
@@ -142,7 +158,12 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
         )
     ]
 
-    return sidebar_controls, stores
+    extra_components = [
+        dcc.Download(id=EXPORT_CSV_DOWNLOAD_ID),
+        dcc.Download(id=EXPORT_PROJECT_DOWNLOAD_ID),
+    ]
+
+    return sidebar_controls, stores, extra_components
 
 
 # ---------- LOGIC: APPLY GLOBAL CONFIG ----------
@@ -150,31 +171,25 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
 def apply_global_config(
     df: pl.DataFrame,
     global_config: Optional[Dict],
-    default_group_col: str = "imported_path_short",
+    default_group_col: str = DEFAULT_GROUP_COL,
 ) -> Tuple[pl.DataFrame, str]:
-    """
-    Apply global filters & produce a grouping column.
 
-    Returns:
-        (df_with_group_col, group_col_name)
-    """
     global_config = global_config or {}
+
+    # group_cols in the store is always a list; we take the first element
     group_cols = list(global_config.get("group_cols") or [])
 
-    # ensure default grouping exists
-    if default_group_col not in df.columns:
-        if "imported_path" in df.columns:
-            df = df.with_columns(
-                pl.col("imported_path").map_elements(
-                    lambda x: Path(x).name if x is not None else "Unknown Folder",
-                    return_dtype=pl.String,
-                ).alias(default_group_col)
-            )
-
     if not group_cols:
-        group_cols = [default_group_col]
+        group_col = default_group_col
+    else:
+        group_col = group_cols[0]
 
-    group_cols = [c for c in group_cols if c in df.columns] or [default_group_col]
+    # ensure the chosen group_col exists; otherwise fall back to DEFAULT_GROUP_COL
+    if group_col not in df.columns:
+        group_col = default_group_col
+    if group_col not in df.columns:
+        # as a last resort pick the first column
+        group_col = df.columns[0]
 
     # filters: {column -> [allowed_values]}
     filters = global_config.get("filters") or {}
@@ -182,12 +197,5 @@ def apply_global_config(
         if col in df.columns and allowed_vals:
             df = df.filter(pl.col(col).is_in(allowed_vals))
 
-    group_col_name = "__global_group"
-    if len(group_cols) == 1:
-        df = df.with_columns(pl.col(group_cols[0]).alias(group_col_name))
-    else:
-        df = df.with_columns(
-            pl.concat_str(group_cols, separator=" | ").alias(group_col_name)
-        )
-
-    return df, group_col_name
+    # no extra column; widgets will group directly by `group_col`
+    return df, group_col
