@@ -22,21 +22,38 @@ GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
 # ---------- LAYOUT: SIDEBAR + STORES ----------
 
 def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
+    MAX_UNIQUE_GROUP = 50 # TODO: move to config
+    MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
+
+
     group_cols: List[str] = []
     filter_cols: List[str] = []
 
     for c in df.columns:
+        s = df[c]
+
+        # cardinality
         try:
             n_unique = df.select(pl.col(c).n_unique()).item()
         except Exception:
             n_unique = None
 
-        if df[c].dtype == pl.Utf8 or (n_unique is not None and n_unique <= 50):
-            group_cols.append(c)
-            filter_cols.append(c)
+        if n_unique is None:
+            continue
+
+        # FILTER candidates
+        if n_unique <= MAX_UNIQUE_FILTER:
+            if s.dtype in (pl.Utf8, pl.Boolean):
+                filter_cols.append(c)
+            # if you later want ints too, you can add a simple check here
+            # (e.g. s.dtype == pl.Int64, etc.)
+
+        # GROUP-BY candidates: stricter
+        if n_unique <= MAX_UNIQUE_GROUP:
+            if s.dtype in (pl.Utf8, pl.Boolean):
+                group_cols.append(c)
 
     return group_cols, filter_cols
-
 
 def build_sidebar(df: pl.DataFrame, default_palette_name: str):
     """
