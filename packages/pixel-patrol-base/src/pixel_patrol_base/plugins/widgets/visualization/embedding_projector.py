@@ -14,6 +14,7 @@ from dash import html, dcc, Input, Output, State, callback_context
 from tensorboardX import SummaryWriter
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 SPRITE_SIZE = 16
 
@@ -109,7 +110,7 @@ def _launch_tensorboard_subprocess(logdir: Path, port: int):
         return None
 
 
-class EmbeddingProjectorWidget:
+class EmbeddingProjectorWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "TensorBoard Embedding Projector"
     TAB: str = WidgetCategories.VISUALIZATION.value
@@ -127,23 +128,19 @@ class EmbeddingProjectorWidget:
     # dcc.Store ID to preserve TB state; ensure a matching dcc.Store(id=STORE_ID, data={}) exists in app layout
     STORE_ID = "tb-process-store-tensorboard-embedding-projector"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return (
+            "The Embedding Projector allows you to explore high-dimensional data by reducing it to 2D or 3D using "
+            "**Principal Component Analysis (PCA)** or **t-SNE**.\n\n"
+            "Embeddings represent data as points in a high-dimensional space; closer points are more similar. "
+            "This tool helps visualize relationships, clusters, and patterns in large datasets."
+        )
+
+    def get_content_layout(self) -> List:
         return [
-            html.Div(
-                id=self.INTRO_ID,
-                children=[
-                    html.P("The Embedding Projector allows you to explore high-dimensional data by reducing it to 2D or 3D using "),
-                    html.Strong("Principal Component Analysis (PCA)"),
-                    html.Span(" or "),
-                    html.Strong("t-SNE"),
-                    html.Span(". "),
-                    html.Span(
-                        "Embeddings represent data as points in a high-dimensional space; closer points are more similar."
-                    ),
-                    html.P("This tool helps visualize relationships, clusters, and patterns in large datasets."),
-                    html.Div(id=self.SUMMARY_ID),
-                ],
-            ),
+            # Removed the big Intro div text
+            html.Div(id=self.SUMMARY_ID),
             html.Div(
                 [
                     html.Label("TensorBoard Port:"),

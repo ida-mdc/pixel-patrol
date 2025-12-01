@@ -6,9 +6,11 @@ import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 
-class FileStatisticsWidget:
+class FileStatisticsWidget(BaseReportWidget):
+    # --- Configuration ---
     NAME: str = "File Statistics Report"
     TAB: str = WidgetCategories.FILE_STATS.value
     REQUIRES: Set[str] = {
@@ -18,11 +20,30 @@ class FileStatisticsWidget:
         "size_bytes",
         "modification_date",
     }
-    REQUIRES_PATTERNS = None
 
     CONTENT_ID = "file-stats-report-content"
 
-    def layout(self) -> List:
+    # --- New Base Class Properties ---
+    @property
+    def help_text(self) -> str:
+        return (
+            "This widget provides a high-level overview of the dataset file structure.\n\n"
+            "**Charts:**\n"
+            "- File Count by Extension\n"
+            "- Total Size by Extension\n"
+            "- Size Distribution (Bins)\n"
+            "- Modification Timeline\n\n"
+            "If 'No Variance' is detected (e.g., all files are .png), "
+            "it is shown in the summary table."
+        )
+
+    # --- Implementation ---
+
+    def get_content_layout(self) -> List:
+        """
+        Only defines the inner content area.
+        The Card, Title, and Info Icon are handled by BaseReportWidget.
+        """
         return [html.Div(id=self.CONTENT_ID)]
 
     def register(self, app, df_global: pl.DataFrame):
@@ -31,6 +52,7 @@ class FileStatisticsWidget:
             Input("color-map-store", "data"),
         )
         def update_file_stats_report(color_map: Dict[str, str]):
+            # ... existing implementation unchanged ...
             color_map = color_map or {}
             report_elements = []
             constant_values_data = []
@@ -45,6 +67,7 @@ class FileStatisticsWidget:
 
             # --- 1) File Extension Analysis ---
             ext_agg = df_filtered.group_by("file_extension").agg(pl.count()).drop_nulls()
+
             if ext_agg.height <= 1:
                 if not ext_agg.is_empty():
                     constant_values_data.append(
@@ -66,10 +89,8 @@ class FileStatisticsWidget:
                 )
 
                 n = plot_data_ext_count["file_extension"].n_unique()
-                if n == 1:
-                    fig_ext_count.update_layout(bargap=0.7)
-                if n == 2:
-                    fig_ext_count.update_layout(bargap=0.4)
+                if n == 1: fig_ext_count.update_layout(bargap=0.7)
+                if n == 2: fig_ext_count.update_layout(bargap=0.4)
 
                 report_elements.append(dcc.Graph(figure=fig_ext_count))
 
@@ -86,12 +107,6 @@ class FileStatisticsWidget:
                     color_discrete_map=color_map,
                     title="Total Size by Extension",
                 )
-                n = plot_data_ext_size["file_extension"].n_unique()
-                if n == 1:
-                    fig_ext_size.update_layout(bargap=0.7)
-                if n == 2:
-                    fig_ext_size.update_layout(bargap=0.4)
-
                 report_elements.append(dcc.Graph(figure=fig_ext_size))
 
             # --- 2) File Size Analysis ---

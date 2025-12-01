@@ -6,9 +6,9 @@ from dash import html, dcc, Input, Output
 from plotly.subplots import make_subplots
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class FileSummaryWidget:
+class FileSummaryWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "File Data Summary"
     TAB: str = WidgetCategories.SUMMARY.value
@@ -20,7 +20,13 @@ class FileSummaryWidget:
     GRAPH_ID = "file-summary-graph"
     TABLE_ID = "file-summary-table"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return (
+            "Summarizes file counts, total size, and file types present in each folder."
+        )
+
+    def get_content_layout(self) -> List:
         return [
             html.Div(id=self.INTRO_ID, style={"marginBottom": "20px"}),
             dcc.Graph(id=self.GRAPH_ID),
