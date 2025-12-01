@@ -5,9 +5,9 @@ import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class DimSizeWidget:
+class DimSizeWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "Dimension Size Distribution"
     TAB: str = WidgetCategories.METADATA.value
@@ -19,7 +19,11 @@ class DimSizeWidget:
     XY_AREA_ID = "xy-size-plot-area"
     INDV_AREA_ID = "individual-dim-plots-area"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return "Comparison of image dimensions (X, Y, Z, T, etc.) across the dataset."
+
+    def get_content_layout(self) -> List:
         """Defines the layout of the Dimension Size Distribution widget."""
         return [
             html.Div(id=self.INFO_ID, style={"marginBottom": "15px"}),

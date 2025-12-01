@@ -1,7 +1,7 @@
 # pixel_patrol/plugins/widgets/dynamic_stats_widget.py
 from typing import List, Set
 
-from pixel_patrol_base.plugins.widgets.base_dynamic_table_widget import BaseDynamicTableWidget
+from pixel_patrol_base.plugins.widgets.base_dynamic_table import BaseDynamicTableWidget
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
 from pixel_patrol_base.report.widget_categories import WidgetCategories

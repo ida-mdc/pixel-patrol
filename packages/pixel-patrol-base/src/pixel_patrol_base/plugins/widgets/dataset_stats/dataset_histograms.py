@@ -6,15 +6,16 @@ from dash import html, dcc, Input, Output, ALL
 import numpy as np
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
+## New:
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class DatasetHistogramWidget:
+class DatasetHistogramWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "Pixel Value Histograms"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES = set()
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]
-
+    # ... existing properties ...
     @property
     def tab(self) -> str:
         return self.TAB
@@ -26,11 +27,21 @@ class DatasetHistogramWidget:
     def required_columns(self) -> List[str]:
         return ["histogram"]
 
+    @property
+    def help_text(self) -> str:
+        return (
+            "### Histogram Visualization\n"
+            "The histograms are computed per image and grouped by the selected folder names. "
+            "The mean histogram for each selected group is shown as a bold line.\n\n"
+            "**Modes:**\n"
+            "- **Fixed 0–255 bins:** Compares distribution *shapes* regardless of range.\n"
+            "- **Native range:** Maps bins to the *actual* pixel values used in the image."
+        )
+
     # ------------------------------ UI Layout ------------------------------ #
-    def layout(self) -> List:
+    def get_content_layout(self) -> List:
         """
         Defines the static layout of the Pixel Value Histograms widget.
-        Dropdowns are initialized empty; options are populated in the callback.
         """
         return [
             html.P(
@@ -93,39 +104,14 @@ class DatasetHistogramWidget:
                     style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"},
                 ),
             ]),
-            html.Div(
-                className="markdown-content",
-                children=[
-                    html.H4("Histogram Visualization"),
-                    html.P(
-                        [
-                            "The histograms are computed per image and grouped by the selected folder names. The computation focuses on each images' content range, hence it is based on the range of pixel values present in the image data. ",
-                            "The mean histogram for each selected group (folder name) is shown as a bold line. ",
-                            "Histograms are normalized to sum to 1. \n",
-                            "Select your dimension and the visualization mode: ",
-                            html.Ul(
-                                [
-                                    html.Li(
-                                        "Show the bins 0-255 to compare the images based on their contents' distribution shapes: "
-                                        "This mode displays 256 bins (0-255) regardless of the actual pixel value range. "
-                                        "This allows comparing the shape of the distributions across images with different intensity ranges or even data types."
-                                    ),
-                                    html.Li(
-                                        "Map the bins in regards to the used pixel value ranges across all images: "
-                                        "This mode uses the actual pixel value ranges found in the images to define the histogram bins. "
-                                        "This allows investigation of where most pixel values lie in absolute terms, but may make shape comparison more difficult if the images have different intensity ranges."
-                                    ),
-                                ]
-                            ),
-                        ]
-                    ),
-                ],
-            ),
+            # Markdown removed from here
         ]
+##
 
     # ---------------------------- Core helpers ----------------------------- #
     @staticmethod
     def _edges_from_minmax(n_bins: int, minv: float, maxv: float) -> np.ndarray:
+        # ... existing code ...
         """
         Folder-level edges using safe_hist_range to mirror processor semantics (left-bounded,
         right edge adjusted via max_adj).

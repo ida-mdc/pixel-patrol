@@ -30,7 +30,7 @@ import re
 from typing import List, Tuple, Dict, Optional
 
 
-def _parse_dynamic_col(
+def parse_dynamic_col(
     col_name: str, supported_metrics: List[str]
 ) -> Optional[Tuple[str, Dict[str, int]]]:
     """
@@ -93,7 +93,7 @@ def _parse_dynamic_col(
 
     return base_metric + "_" + attribute if attribute else base_metric, dims
 
-def _create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Figure:
+def create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Figure:
     """Creates a minimalist, aggregated line plot for a table cell."""
     dim_pattern = re.compile(rf'_{dim_name}(\d+)')
 

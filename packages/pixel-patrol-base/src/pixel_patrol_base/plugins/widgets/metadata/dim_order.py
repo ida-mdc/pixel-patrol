@@ -5,9 +5,9 @@ import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class DimOrderWidget:
+class DimOrderWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "Dim Order Distribution"
     TAB: str = WidgetCategories.METADATA.value
@@ -19,7 +19,11 @@ class DimOrderWidget:
     RATIO_ID = "dim-order-present-ratio"
     GRAPH_ID = "dim-order-bar-chart"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return "Shows how different dimension orderings (e.g., TZYX vs ZYX) are distributed across the dataset."
+
+    def get_content_layout(self) -> List:
         """Defines the layout of the Dim Order Distribution widget."""
         return [
             html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),

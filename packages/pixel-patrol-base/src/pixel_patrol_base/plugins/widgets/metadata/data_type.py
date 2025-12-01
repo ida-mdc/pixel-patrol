@@ -5,9 +5,9 @@ import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class DataTypeWidget:
+class DataTypeWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "Data Type Distribution"
     TAB: str = WidgetCategories.METADATA.value
@@ -18,7 +18,11 @@ class DataTypeWidget:
     RATIO_ID = "dtype-present-ratio"
     GRAPH_ID = "data-type-bar-chart"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return "Shows the distribution of file data types (e.g., uint8, float32) across different folders."
+
+    def get_content_layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""
         return [
             html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),

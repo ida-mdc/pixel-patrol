@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 import polars as pl
 from dash import dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-
-class FileSunburstWidget:
+class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
 
     # ---- Declarative spec ----
@@ -20,7 +20,14 @@ class FileSunburstWidget:
     # Component IDs
     GRAPH_ID = "file-sunburst-plot"
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return (
+            "Interactive visualization of the file structure. "
+            "Click on a folder slice to zoom in."
+        )
+
+    def get_content_layout(self) -> List:
         return [dcc.Graph(id=self.GRAPH_ID)]
 
     def register(self, app, df_global: pl.DataFrame):

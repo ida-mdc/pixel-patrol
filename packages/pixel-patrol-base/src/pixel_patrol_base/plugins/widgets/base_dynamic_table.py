@@ -4,16 +4,23 @@ from typing import List
 import polars as pl
 from dash import html, dcc, Input, Output, ALL, ctx
 
-from pixel_patrol_base.report.utils import _parse_dynamic_col, _create_sparkline
+from pixel_patrol_base.report.utils import parse_dynamic_col, create_sparkline
+## Old:
+# class BaseDynamicTableWidget:
+#     """
+#     Reusable base for widgets that display dynamic stats in a table with dimension filters.
+# ...
+#     def layout(self) -> List:
+##
+
+## New:
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 
-class BaseDynamicTableWidget:
+class BaseDynamicTableWidget(BaseReportWidget):
     """
-    Reusable base for widgets that display dynamic stats in a table with dimension filters.
-    Not a Protocol, just a convenience base for shared layout + callbacks.
-    Subclasses should provide:
-      - NAME, TAB, REQUIRES, REQUIRES_PATTERNS (class attributes, for gating)
-      - get_supported_metrics(self) -> List[str]
+    Reusable base for widgets that display dynamic stats in a table.
+    Inherits from BaseReportWidget to provide standard Card layout.
     """
 
     # Subclasses set these:
@@ -26,22 +33,26 @@ class BaseDynamicTableWidget:
         # Unique ID prefix to avoid Dash callback collisions
         self.widget_id = widget_id
 
+    @property
+    def help_text(self) -> str:
+        return (
+            "This table displays statistics dynamically calculated across different image dimensions.\n\n"
+            "Use the dropdowns to filter specific slices (e.g., Timepoint 0, Channel 1)."
+        )
+
     def get_supported_metrics(self) -> List[str]:
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")
 
-    def layout(self) -> List:
+    def get_content_layout(self) -> List:
         """Defines the generic layout with unique IDs derived from widget_id."""
         return [
-            html.Div([
-                html.P("Filter the dataset by specific dimension slices."),
-                html.Div(id=f"{self.widget_id}-filters-container", className="row"),
-            ]),
+            html.Div(id=f"{self.widget_id}-filters-container", className="row"),
             html.Div(id=f"{self.widget_id}-table-container"),
         ]
 
+    ##
     def register(self, app, df_global: pl.DataFrame):
-        """Registers generic callbacks using the unique widget_id."""
-
+        # ... existing code ...
         # Populate filters based on the dynamic columns present
         @app.callback(
             Output(f"{self.widget_id}-filters-container", "children"),
@@ -49,10 +60,11 @@ class BaseDynamicTableWidget:
         )
         def populate_filters(_color_map_data):
             all_dims = defaultdict(set)
+            # ... existing code ...
             supported_metrics = self.get_supported_metrics()
 
             for col in df_global.columns:
-                parsed = _parse_dynamic_col(col, supported_metrics=supported_metrics)
+                parsed = parse_dynamic_col(col, supported_metrics=supported_metrics)
                 if parsed:
                     _, dims = parsed
                     for dim_name, dim_idx in dims.items():
@@ -85,6 +97,7 @@ class BaseDynamicTableWidget:
             Input({"type": f"dynamic-filter-{self.widget_id}", "dim": ALL}, "value"),
         )
         def update_stats_table(filter_values):
+            # ... existing code ...
             # Pattern-matching Input gives us ctx.inputs_list
             inputs_list = ctx.inputs_list[0] if ctx.inputs_list else []
             filters = {prop["id"]["dim"]: value for prop, value in zip(inputs_list, filter_values)}
@@ -92,7 +105,7 @@ class BaseDynamicTableWidget:
 
             parsed_cols = []
             for col in df_global.columns:
-                parsed = _parse_dynamic_col(col, supported_metrics=supported_metrics)
+                parsed = parse_dynamic_col(col, supported_metrics=supported_metrics)
                 if parsed:
                     parsed_cols.append({"col": col, "metric": parsed[0], "dims": parsed[1]})
 
@@ -125,9 +138,10 @@ class BaseDynamicTableWidget:
 
                     # require at least 2 slices for that dim; otherwise no plot
                     if cols_for_cell and len(slice_idxs) > 1:
-                        fig = _create_sparkline(df_global, plot_dim, cols_for_cell)
+                        fig = create_sparkline(df_global, plot_dim, cols_for_cell)
                         fig.update_layout(height=120, margin=dict(l=30, r=10, t=10, b=30))
-                        fig.update_xaxes(visible=True, showticklabels=True, showgrid=True, ticks="outside", title_text=None,
+                        fig.update_xaxes(visible=True, showticklabels=True, showgrid=True, ticks="outside",
+                                         title_text=None,
                                          tickmode="linear", dtick=1, tickformat="d")
                         fig.update_yaxes(visible=True, showticklabels=True, ticks="outside", tickformat=".2f")
                         cell_content = dcc.Graph(figure=fig, config={"displayModeBar": False})
@@ -141,4 +155,3 @@ class BaseDynamicTableWidget:
                 className="striped-table",
                 style={"width": "100%"},
             )
-

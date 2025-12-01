@@ -1,6 +1,6 @@
 from typing import List, Set
 
-from pixel_patrol_base.plugins.widgets.base_dynamic_table_widget import BaseDynamicTableWidget
+from pixel_patrol_base.plugins.widgets.base_dynamic_table import BaseDynamicTableWidget
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 

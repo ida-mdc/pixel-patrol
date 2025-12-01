@@ -4,7 +4,7 @@ from typing import List, Dict, Set
 
 import plotly.graph_objects as go
 import polars as pl
-import statsmodels.stats.multitest as smm  # For Bonferroni correction
+import statsmodels.stats.multitest as smm
 from dash import html, dcc, Input, Output, ALL
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from scipy.stats import mannwhitneyu
@@ -14,13 +14,18 @@ from pixel_patrol_base.report.global_controls import (
     apply_global_config,
     GLOBAL_CONFIG_STORE_ID,
 )
+## New:
+from pixel_patrol_base.report.base_widget import BaseReportWidget
 
-class DatasetStatsWidget:
+
+class DatasetStatsWidget(BaseReportWidget):
     # ---- Declarative spec (plugin registry expects these at class-level) ----
     NAME: str = "Pixel Value Statistics"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"imported_path", "name"}
     REQUIRES_PATTERNS = None
+
+    # ... existing properties ...
     @property
     def tab(self) -> str:
         return WidgetCategories.DATASET_STATS.value
@@ -30,10 +35,28 @@ class DatasetStatsWidget:
         return "Pixel Value Statistics"
 
     def required_columns(self) -> List[str]:
-        # These are the columns needed for statistical analysis and plotting
         return ["mean", "median", "std", "min", "max", "name", "imported_path"]
 
-    def layout(self) -> List:
+    @property
+    def help_text(self) -> str:
+        return (
+            "### Description of the test\n"
+            "The selected representation of intensities within an image is plotted on the y-axis, "
+            "while the x-axis shows the different groups (folders) selected.\n\n"
+            "Each image is represented by a dot, and the boxplot shows the distribution of the selected value.\n\n"
+            "**Images with >2 dimensions:**\n"
+            "As images can contain multiple time points (t), channels (c), and z-slices (z), "
+            "statistics are calculated across all dimensions. Select specific slices (e.g. `mean_intensity_t0`) "
+            "to narrow down.\n\n"
+            "**Statistical hints:**\n"
+            "The symbols (* or ns) indicate significance (Mann-Whitney U test with Bonferroni correction).\n"
+            "- ns: not significant\n"
+            "- *: p < 0.05\n"
+            "- **: p < 0.01\n"
+            "- ***: p < 0.001"
+        )
+
+    def get_content_layout(self) -> List:
         """Defines the layout of the Pixel Value Statistics widget."""
         return [
             html.P(id="dataset-stats-warning", className="text-warning", style={"marginBottom": "15px"}),
@@ -50,60 +73,13 @@ class DatasetStatsWidget:
                 dcc.Store(id="stats-dims-store")
             ]),
             dcc.Graph(id="stats-violin-chart", style={"height": "600px"}),
-            html.Div(className="markdown-content", children=[
-                html.H4("Description of the test"),
-                html.P([
-                    html.Strong("Selectable values to plot: "),
-                    "The selected representation of intensities within an image is plotted on the y-axis, while the x-axis shows the different groups (folders) selected. This is calculated on each individual image in the selected folders."
-                ]),
-                html.P([
-                    "Each image is represented by a dot, and the boxplot shows the distribution of the selected value for each group."
-                ]),
-                html.P([
-                    html.Strong("Images with more than 2 dimensions: "),
-                    "As images can contain multiple time points (t), channels (c), and z-slices (z), the statistics are calculated across all dimensions. To e.g. visualize the distribution of mean intensities across all z-slices and channels at time point t0, please select e.g. ",
-                    html.Code("mean_intensity_t0"), "."
-                ]),
-                html.P([
-                    "If you want to display the mean intensity across the whole image, select ", html.Code("mean_intensity"),
-                    " (without any suffix)."
-                ]),
-                html.P([
-                    html.Strong("Higher dimensional images that include RGB data: "),
-                    "When an image with Z-slices or even time points contains RGB data, the S-dimension is added. Therefore, the RGB color is indicated by the suffix ",
-                    html.Code("s0"), ", ", html.Code("s1"), ", and ", html.Code("s2"),
-                    " for red, green, and blue channels, respectively. This allows for images with multiple channels, where each channels consists of an RGB image itself, while still being able to select the color channel."
-                ]),
-                html.P([
-                    "The suffixes are as follows:", html.Br(),
-                    html.Ul([
-                        html.Li(html.Code("t: time point")),
-                        html.Li(html.Code("c: channel")),
-                        html.Li(html.Code("z: z-slice")),
-                        html.Li(html.Code("s: color in RGB images (red, green, blue)"))
-                    ])
-                ]),
-                html.H4("Statistical hints:"),
-                html.P([
-                    "The symbols (", html.Code("*"), " or ", html.Code("ns"),
-                    ") shown above indicate the significance of the differences between two groups, with more astersisk indicating a more significant difference. The Mann-Whitney U test is applied to compare the distributions of the selected value between pairs of groups. This non-parametric test is used as a first step to assess whether the distributions of two independent samples. The results are adjusted with a Bonferroni correction to account for multiple comparisons, reducing the risk of false positives."
-                ]),
-                html.P([
-                    "Significance levels:", html.Br(),
-                    html.Ul([
-                        html.Li(html.Code("ns: not significant")),
-                        html.Li(html.Code("*: p < 0.05")),
-                        html.Li(html.Code("**: p < 0.01")),
-                        html.Li(html.Code("***: p < 0.001"))
-                    ])
-                ]),
-                html.H5("Disclaimer:"),
-                html.P(
-                    "Please do not interpret the results as a final conclusion, but rather as a first step to assess the differences between groups. This may not be the appropriate test for your data, and you should always consult a statistician for a more detailed analysis.")
-            ])
+            # Markdown description removed from here (moved to help_text)
         ]
 
+    ##
+
     def register(self, app, df_global: pl.DataFrame):
+        # ... existing code ...
         # Populate dropdown options dynamically
         @app.callback(
             Output("stats-value-to-plot-dropdown", "options"),
@@ -115,15 +91,18 @@ class DatasetStatsWidget:
         )
         def set_stats_dropdown_options(color_map: Dict[str, str]):
             # Determine available base metrics from the processor declaration if possible
-            processor_metrics = list(BasicStatsProcessor.OUTPUT_SCHEMA.keys()) if hasattr(BasicStatsProcessor, 'OUTPUT_SCHEMA') else []
+            processor_metrics = list(BasicStatsProcessor.OUTPUT_SCHEMA.keys()) if hasattr(BasicStatsProcessor,
+                                                                                          'OUTPUT_SCHEMA') else []
             # Fallback: find numeric columns resembling metrics
             numeric_candidates = [
                 col for col in df_global.columns
                 if df_global[col].dtype.is_numeric()
             ]
             # Build dropdown options (prefer processor-declared metrics if available)
-            dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [{'label': col, 'value': col} for col in numeric_candidates]
-            default_value_to_plot = processor_metrics[0] if processor_metrics else (numeric_candidates[0] if numeric_candidates else None)
+            dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [
+                {'label': col, 'value': col} for col in numeric_candidates]
+            default_value_to_plot = processor_metrics[0] if processor_metrics else (
+                numeric_candidates[0] if numeric_candidates else None)
 
             # Build dynamic filter dropdowns for the chosen base metric using shared helper
             children = []
@@ -146,11 +125,11 @@ class DatasetStatsWidget:
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )
         def update_stats_chart(
-            color_map: Dict[str, str],
-            value_to_plot: str,
-            dim_values_list,
-            dims_order,
-            global_config: Dict,
+                color_map: Dict[str, str],
+                value_to_plot: str,
+                dim_values_list,
+                dims_order,
+                global_config: Dict,
         ):
             if not value_to_plot:
                 return go.Figure(), "Please select a value to plot."
@@ -167,8 +146,8 @@ class DatasetStatsWidget:
             # Find best matching column for the chosen metric on the processed df
             from pixel_patrol_base.report.utils import find_best_matching_column
             chosen_col = (
-                find_best_matching_column(df_processed.columns, value_to_plot, selections)
-                or value_to_plot
+                    find_best_matching_column(df_processed.columns, value_to_plot, selections)
+                    or value_to_plot
             )
 
             # Drop rows without the chosen metric
