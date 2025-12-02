@@ -3,8 +3,7 @@ from typing import List, Set, Optional, Iterable, Union, Pattern
 import polars as pl
 from dash.development.base_component import Component
 
-# Import the layouts module we created in the structure folder
-from pixel_patrol_base.report.structure.layouts import create_widget_card
+from pixel_patrol_base.report.factory import create_widget_card
 
 
 class BaseReportWidget(ABC):
