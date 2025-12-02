@@ -5,7 +5,7 @@ from dash import html, Input, Output
 
 from pixel_patrol_image.plugins.processors.quality_metrics_processor import QualityMetricsProcessor
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
-from pixel_patrol_base.report.utils import generate_column_violin_plots
+from pixel_patrol_base.report.data_utils import generate_column_violin_plots
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 

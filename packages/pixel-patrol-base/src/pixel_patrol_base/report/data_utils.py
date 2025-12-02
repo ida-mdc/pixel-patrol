@@ -1,7 +1,6 @@
 import re
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Tuple, Dict, Optional
 import polars as pl
-from dash import html, dcc
 
 
 # --- Data Helpers ---
@@ -101,7 +100,7 @@ def parse_dynamic_col(
 
     suffix = col_name[len(matched_metric):]
     if not suffix:
-        return (matched_metric, {})
+        return matched_metric, {}
 
     dim_matches = list(re.finditer(r"_([a-zA-Z])(\d+)", suffix))
     dims = {m.group(1).lower(): int(m.group(2)) for m in dim_matches}
@@ -109,42 +108,4 @@ def parse_dynamic_col(
     if not dims and suffix:
         return None
 
-    return (matched_metric, dims)
-
-
-# --- UI Generation Helpers ---
-# These generate Dash components based on Logic.
-# It is okay to keep them here to keep the Factory focused purely on "Styling".
-
-def build_dimension_dropdown_children(
-        columns: List[str],
-        base: str,
-        id_type: str
-) -> Tuple[List[Any], List[str]]:
-    """Generates the row of Dropdowns for T/C/Z/S filtering."""
-    raw_tokens = extract_dimension_tokens(columns, base)
-
-    children = []
-    dims_order = []
-
-    for dim_name in ['t', 'c', 'z', 's']:
-        if dim_name in raw_tokens and raw_tokens[dim_name]:
-            dims_order.append(dim_name)
-            dropdown_id = {"type": id_type, "dim": dim_name}
-
-            # Options: Label="t0", Value="t0"
-            options = [{"label": "All", "value": "All"}] + [
-                {"label": tok, "value": tok} for tok in raw_tokens[dim_name]
-            ]
-
-            children.append(
-                html.Div(
-                    [
-                        html.Label(f"{dim_name.upper()} slice"),
-                        dcc.Dropdown(id=dropdown_id, options=options, value="All", clearable=False),
-                    ],
-                    style={"display": "inline-block", "marginRight": "15px", "width": "120px"}
-                )
-            )
-
-    return children, dims_order
+    return matched_metric, dims

@@ -6,52 +6,29 @@ from dash import html, dcc, Input, Output, ALL
 import numpy as np
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
-## New:
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.factory import create_dimension_selectors
+
 
 class DatasetHistogramWidget(BaseReportWidget):
-    # ---- Declarative spec ----
     NAME: str = "Pixel Value Histograms"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES = set()
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]
-    # ... existing properties ...
-    @property
-    def tab(self) -> str:
-        return self.TAB
-
-    @property
-    def name(self) -> str:
-        return self.NAME
-
-    def required_columns(self) -> List[str]:
-        return ["histogram"]
 
     @property
     def help_text(self) -> str:
         return (
             "### Histogram Visualization\n"
-            "The histograms are computed per image and grouped by the selected folder names. "
-            "The mean histogram for each selected group is shown as a bold line.\n\n"
-            "**Modes:**\n"
-            "- **Fixed 0–255 bins:** Compares distribution *shapes* regardless of range.\n"
-            "- **Native range:** Maps bins to the *actual* pixel values used in the image."
+            "The histograms are computed per image and grouped by the selected folder names."
         )
 
-    # ------------------------------ UI Layout ------------------------------ #
     def get_content_layout(self) -> List:
-        """
-        Defines the static layout of the Pixel Value Histograms widget.
-        """
         return [
-            html.P(
-            id="dataset-histograms-warning",
-            className="text-warning",
-            style={"marginBottom": "15px"},
-            ),
+            html.P(id="dataset-histograms-warning", className="text-warning", style={"marginBottom": "15px"}),
             html.Div(
                 [
-                    html.Label("Select histogram dimensions to plot (choose 'All' to omit a suffix):"),
+                    html.Label("Select histogram dimensions to plot:"),
                     html.Div(id="histogram-filters-container"),
                     dcc.Store(id="histogram-dims-store"),
                 ]
@@ -62,14 +39,8 @@ class DatasetHistogramWidget(BaseReportWidget):
                     dcc.RadioItems(
                         id="histogram-remap-mode",
                         options=[
-                            {
-                                "label": "Fixed 0–255 bins",
-                                "value": "shape",
-                            },
-                            {
-                                "label": "Bin on the native pixel range",
-                                "value": "native",
-                            },
+                            {"label": "Fixed 0–255 bins", "value": "shape"},
+                            {"label": "Bin on the native pixel range", "value": "native"},
                         ],
                         value="shape",
                         labelStyle={"display": "inline-block", "marginRight": "12px"},
@@ -85,11 +56,7 @@ class DatasetHistogramWidget(BaseReportWidget):
                         options=[],
                         value=[],
                         multi=True,
-                        style={
-                            "width": "300px",
-                            "marginTop": "10px",
-                            "marginBottom": "20px",
-                        },
+                        style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"},
                     ),
                 ]
             ),
@@ -104,24 +71,11 @@ class DatasetHistogramWidget(BaseReportWidget):
                     style={"width": "300px", "marginTop": "10px", "marginBottom": "20px"},
                 ),
             ]),
-            # Markdown removed from here
         ]
-##
 
-    # ---------------------------- Core helpers ----------------------------- #
+    # --- Static Helpers (Restored from old file) ---
     @staticmethod
-    def _edges_from_minmax(n_bins: int, minv: float, maxv: float) -> np.ndarray:
-        # ... existing code ...
-        """
-        Folder-level edges using safe_hist_range to mirror processor semantics (left-bounded,
-        right edge adjusted via max_adj).
-        Args:
-            n_bins (int): Number of histogram bins.
-            minv (float): Minimum pixel value for the histogram range.
-            maxv (float): Maximum pixel value present in the image for the histogram range.
-        Returns:
-            np.ndarray: Array of bin edges of length n_bins + 1.
-        """
+    def _edges_from_minmax(n_bins, minv, maxv):
         if float(minv).is_integer() and float(maxv).is_integer():
             sample = np.array([int(minv), int(maxv)], dtype=np.int64)
         else:
@@ -133,138 +87,40 @@ class DatasetHistogramWidget(BaseReportWidget):
         return np.concatenate([lefts, [smin_f + n_bins * width]])
 
     @staticmethod
-    def _folder_minmax_using_polars(
-        df_group: pl.DataFrame, min_key: str, max_key: str
-    ) -> Tuple[Optional[float], Optional[float]]:
-        """
-        Fast folder-wide min/max using Polars.
-        Args:
-            df_group (pl.DataFrame): DataFrame filtered to the folder group.
-            min_key (str): Column name for per-image minimum values.
-            max_key (str): Column name for per-image maximum values.
-        Returns:
-            Tuple[Optional[float], Optional[float]]: (folder_min, folder_max)
-        """
+    def _folder_minmax_using_polars(df_group, min_key, max_key):
         if min_key in df_group.columns and max_key in df_group.columns:
-            agg = df_group.select(
-                [
-                    pl.col(min_key).min().alias("_min"),
-                    pl.col(max_key).max().alias("_max"),
-                ]
-            ).to_dict(as_series=False)
-            gmin = agg["_min"][0]
-            gmax = agg["_max"][0]
-            return (
-                float(gmin) if gmin is not None else None,
-                float(gmax) if gmax is not None else None,
-            )
+            agg = df_group.select([pl.col(min_key).min().alias("_min"), pl.col(max_key).max().alias("_max")]).to_dict(
+                as_series=False)
+            return (float(agg["_min"][0]) if agg["_min"][0] is not None else None,
+                    float(agg["_max"][0]) if agg["_max"][0] is not None else None)
         return None, None
 
     @staticmethod
-    def _compute_edges(
-        counts: np.ndarray, minv: float | None, maxv: float | None
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Compute left-oriented edges/widths consistent with processor semantics via safe_hist_range.
-
-        Args:
-            counts (np.ndarray): 1-D array of non-negative counts (frequencies) for each bin.
-            minv (float | None): Minimum pixel value for the histogram range.
-            maxv (float | None): Maximum pixel value present in the image for the histogram range.
-        Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray]: edges, lefts, widths
-        """
+    def _compute_edges(counts, minv, maxv):
         n = counts.size
         if minv is None or maxv is None:
-            # assume bins 0..n
             edges = np.arange(n + 1).astype(float)
-            lefts = edges[:-1]
-            widths = np.diff(edges)
-            return edges, lefts, widths
-
-        # compute adjusted right-edge
+            return edges, edges[:-1], np.diff(edges)
         if float(minv).is_integer() and float(maxv).is_integer():
             sample = np.array([int(minv), int(maxv)], dtype=np.int64)
         else:
             sample = np.array([minv, maxv], dtype=float)
         smin, _smax, max_adj = safe_hist_range(sample)
-
-        # Instead of using linspace (which computes edges and then diffs),
-        # compute a uniform bin width and construct left edges directly. This
-        # makes the arithmetic explicit and avoids subtle floating rounding
-        # differences that can arise from linspace endpoints.
-        smin_f = float(smin)
-        max_adj_f = float(max_adj)
+        smin_f, max_adj_f = float(smin), float(max_adj)
         width = (max_adj_f - smin_f) / float(n)
         lefts = smin_f + np.arange(n, dtype=float) * width
-        edges = np.concatenate([lefts, np.array([smin_f + n * width], dtype=float)])
-        widths = np.full(n, width, dtype=float)
-        return edges, lefts, widths
+        return np.concatenate([lefts, [smin_f + n * width]]), lefts, np.full(n, width, dtype=float)
 
     @staticmethod
-    def _rebin_via_cdf(
-        counts: np.ndarray, src_edges: np.ndarray, tgt_edges: np.ndarray
-    ) -> np.ndarray:
-        """
-        Rebin via CDF, evaluated at target edges; returns per-target-bin probability.
-
-        Rebin histogram counts from source bin edges to target bin edges by evaluating the
-        CDF at the target edges and taking differences.
-        The method treats the input counts as frequencies for contiguous source bins defined
-        by src_edges (length = counts.size + 1). It constructs a stepwise CDF from the
-        source histogram, interpolates that CDF at the target bin edges, and returns the
-        probability mass assigned to each target bin as the difference of interpolated CDF
-        values at consecutive target edges.
-
-        Args:
-            counts (np.ndarray):
-                1-D array of non-negative counts (frequencies) for each source bin.
-                Converted to float internally. May be empty.
-            src_edges (np.ndarray):
-                1-D array of source bin edges of length counts.size + 1. Edges must be
-                monotonic (increasing). Values outside the range are supported via
-                interpolation/clamping rules described below.
-            tgt_edges (np.ndarray):
-                1-D array of target bin edges (length M+1) at which the CDF is evaluated.
-                The function returns an array of length M giving the probability mass in
-                each target bin.
-        Returns:
-            np.ndarray:
-                1-D array of length len(tgt_edges) - 1 containing the probability mass for
-                each target bin (sums to 1.0 for a strictly positive total count). If
-                counts is empty or the total count is <= 0, returns an array of zeros of
-                the appropriate length. The returned values are floats.
-        Raises:
-            ValueError:
-                If src_edges does not have length counts.size + 1.
-        Notes:
-            - The source CDF is constructed as a left-continuous step function with values
-              starting at 0.0 and increasing by counts/total at each source edge.
-            - Interpolation of the CDF at target edges uses numpy.interp with left=0.0
-              and right=1.0: target edges left of the first source edge map to 0.0, and
-              edges right of the last source edge map to 1.0.
-            - Output is suitable as per-target-bin probabilities (not raw counts).
-        """
+    def _rebin_via_cdf(counts, src_edges, tgt_edges):
         counts = np.asarray(counts, float)
         se = np.asarray(src_edges, float)
         te = np.asarray(tgt_edges, float)
-        if counts.size == 0:
-            return np.zeros(te.size - 1, float)
-        if se.size != counts.size + 1:
-            raise ValueError("src_edges must have len(counts)+1")
-
-        total = counts.sum()
-        if total <= 0:
-            return np.zeros(te.size - 1, float)
-
-        # Step CDF at source edges
-        cdf_src = np.concatenate([[0.0], np.cumsum(counts) / total])  # len N+1
-        # Interpolate CDF at target edges
+        if counts.size == 0 or counts.sum() <= 0: return np.zeros(te.size - 1, float)
+        cdf_src = np.concatenate([[0.0], np.cumsum(counts) / counts.sum()])
         cdf_t = np.interp(te, se, cdf_src, left=0.0, right=1.0)
-        out = np.diff(cdf_t)  # sums to 1
-        return out
+        return np.diff(cdf_t)
 
-    # ---------------------------- Dash callbacks --------------------------- #
     def register(self, app, df_global: pl.DataFrame):
         @app.callback(
             Output("histogram-filters-container", "children"),
@@ -274,15 +130,11 @@ class DatasetHistogramWidget(BaseReportWidget):
             Input("color-map-store", "data"),
         )
         def populate_dropdowns(color_map):
+            from pixel_patrol_base.report.data_utils import extract_dimension_tokens
 
-            # discover per-dimension tokens using the shared helper when possible
-            # This prefers columns named like 'histogram_counts_t0_c0', but will
-            # gracefully fall back to a generic scan if none are found.
-            # Build dropdown children using the shared utility to keep parsing consistent
-            from pixel_patrol_base.report.utils import build_dimension_dropdown_children
-
-            children, dims_order = build_dimension_dropdown_children(
-                df_global.columns, base="histogram_counts", id_type="histogram-dim-filter"
+            children, dims_order = create_dimension_selectors(
+                tokens=extract_dimension_tokens(df_global.columns, "histogram_counts"),
+                id_type="histogram-dim-filter"
             )
 
             folder_names = (
@@ -301,21 +153,13 @@ class DatasetHistogramWidget(BaseReportWidget):
             Input("histogram-folder-dropdown", "value"),
         )
         def update_file_options(selected_folders):
-            # Filter files according to the selected folders; if none selected, return all files
-            if "name" not in df_global.columns:
-                return [], None
+            if "name" not in df_global.columns: return [], None
             if not selected_folders:
-                file_names = df_global["name"].unique().to_list()
+                names = df_global["name"].unique().to_list()
             else:
-                file_names = (
-                    df_global.filter(pl.col("imported_path_short").is_in(selected_folders))
-                    .select("name")
-                    .unique()
-                    .to_series()
-                    .to_list()
-                )
-            file_options = [{"label": str(Path(f).name), "value": f} for f in file_names]
-            return file_options, None
+                names = df_global.filter(pl.col("imported_path_short").is_in(selected_folders))[
+                    "name"].unique().to_list()
+            return [{"label": n, "value": n} for n in names], None
 
         @app.callback(
             Output("histogram-plot", "figure"),
@@ -327,227 +171,139 @@ class DatasetHistogramWidget(BaseReportWidget):
             Input("histogram-file-dropdown", "value"),
             Input("histogram-dims-store", "data"),
         )
-        def update_histogram_plot(
-            color_map, remap_mode, dim_values_list, selected_folders, selected_file, dims_order
-        ):
-            # dim_values_list is a list of values from the dynamically-created dropdowns
-            if not selected_folders:
-                return go.Figure(), "Please select at least one folder."
+        def update_histogram_plot(color_map, remap_mode, dim_values_list, selected_folders, selected_file, dims_order):
+            if not selected_folders: return go.Figure(), "Select a folder."
 
-            # reconstruct selections dict from dims_order and values
             selections = {}
             if dims_order and dim_values_list:
-                # dim_values_list aligns with children order (we generated children in sorted order)
                 for dim_name, val in zip(dims_order, dim_values_list):
                     selections[dim_name] = val
 
-            # find best matching histogram column
-            from pixel_patrol_base.report.utils import find_best_matching_column
+            from pixel_patrol_base.report.data_utils import find_best_matching_column
             histogram_columns = [col for col in df_global.columns if "histogram" in col]
             base = "histogram_counts"
             histogram_key = find_best_matching_column(histogram_columns, base, selections) or base
 
+            # Identify suffix (e.g., '_t0_z0') from the chosen key
+            suffix = histogram_key[len(base):]
+
+            # Construct related column names based on that suffix
+            min_key = f"histogram_min{suffix}"
+            max_key = f"histogram_max{suffix}"
+            bin_key = f"histogram_bin_size{suffix}"
+
+            if histogram_key not in df_global.columns:
+                return go.Figure(), f"Column {histogram_key} not found."
+
             chart = go.Figure()
+
+            # Optional: Show individual file
+            if selected_file:
+                row = df_global.filter(pl.col("name") == selected_file)
+                if row.height > 0:
+                    counts = row.get_column(histogram_key).to_list()[0]
+                    if counts:
+                        counts = np.array(counts, dtype=float)
+                        if counts.sum() > 0:
+                            counts /= counts.sum()
+
+                        minv = row.get_column(min_key).to_list()[0] if min_key in row.columns else 0
+                        maxv = row.get_column(max_key).to_list()[0] if max_key in row.columns else 255
+
+                        edges, centers, width = self._compute_edges(counts, minv, maxv)
+
+                        chart.add_trace(go.Bar(
+                            x=centers,
+                            y=counts,
+                            width=width,
+                            name=f"File: {selected_file}",
+                            marker_color="black", opacity=0.3
+                        ))
+
+            # Main Logic: Plot Group Means
             for folder in selected_folders:
                 df_group = df_global.filter(pl.col("imported_path_short") == folder)
-                if df_group.is_empty():
-                    continue
+                if df_group.height == 0: continue
 
-                # Column keys
-                min_key = histogram_key.replace("counts", "min")
-                max_key = histogram_key.replace("counts", "max")
+                color = color_map.get(folder, "#333333")
 
-                counts_list = df_group[histogram_key].to_list()
-                min_list = (
-                    df_group[min_key].to_list()
-                    if min_key in df_group.columns
-                    else [None] * len(counts_list)
-                )
-                max_list = (
-                    df_group[max_key].to_list()
-                    if max_key in df_group.columns
-                    else [None] * len(counts_list)
-                )
-                names = (
-                    df_group["name"].to_list()
-                    if "name" in df_group.columns
-                    else [""] * len(counts_list)
-                )
-
-                n_bins = (
-                    len(counts_list[0])
-                    if counts_list and counts_list[0] is not None
-                    else 256
-                )
-                color = color_map.get(folder, None) if color_map else None
-
-                # compute per-image opacity scaling when no specific file is selected
-                n_images_present = max(sum(1 for c in counts_list if c is not None), 1) # avoids div by zero later
-                if selected_file:
-                    per_image_opacity = 0.7
-                else:
-                    per_image_opacity = 0.6 / n_images_present
-
+                # Mode 1: Remap to Fixed 0-255 (Shape comparison)
                 if remap_mode == "shape":
-                    # ------------------- Shape (bin-index) mode ------------------- #
-                    mats_all = []
-                    for counts, minv, maxv, file_name in zip(
-                        counts_list, min_list, max_list, names
-                    ):
-                        if counts is None:
-                            continue
-                        h = np.asarray(counts, float)
-                        s = h.sum()
-                        p = (h / s) if s > 0 else h
-                        mats_all.append(p)
+                    accumulated = np.zeros(256, dtype=float)
+                    count_files = 0
 
-                        # per-image plotting: show only the selected file's bars when
-                        # a specific file is chosen, otherwise show all per-image bars
-                        if selected_file and file_name != selected_file:
-                            # skip plotting this file's bar but keep it for mean
-                            continue
+                    fixed_edges = np.linspace(0, 255, 257)  # 256 bins
 
-                        chart.add_trace(
-                            go.Bar(
-                                x=list(range(p.size + 1)),
-                                y=list(p) + [0], # NOTE: make p + bin_width*0.5 to shift bar centers to the right so it aligns
-                                width=1,
-                                name=Path(folder).name,
-                                marker=dict(color=color, opacity=per_image_opacity),
-                                showlegend=False,
-                                legendgroup=Path(folder).name,
-                                hovertemplate=(
-                                    f"File: {file_name}<br>Bin idx: %{{x}}<br>Prob: %{{y:.3f}}"
-                                    + (
-                                        f"<br>Range: {minv:.3f}..{maxv:.3f}"
-                                        if (minv is not None and maxv is not None)
-                                        else ""
-                                    )
-                                    + "<extra></extra>",
-                                ),
-                                offset=0.0,
-                            )
-                        )
+                    for row in df_group.iter_rows(named=True):
+                        c_list = row.get(histogram_key)
+                        if not c_list: continue
 
-                    if not mats_all:
-                        continue
+                        c_arr = np.array(c_list, dtype=float)
+                        if c_arr.sum() == 0: continue
 
-                    mean_hist = np.mean(mats_all, axis=0)
-                    mean_hist = (
-                        mean_hist / mean_hist.sum()
-                        if mean_hist.sum() > 0
-                        else mean_hist
-                    )
+                        minv = row.get(min_key)
+                        maxv = row.get(max_key)
 
-                    chart.add_trace(
-                        go.Scatter(
-                            x=list(range(mean_hist.size)),
-                            y=mean_hist,
-                            mode="lines",
-                            name=Path(folder).name,
-                            line=dict(width=2, color=color),
-                            fill="tozeroy",
-                            opacity=0.6,
-                            legendgroup=Path(folder).name,
-                            hovertemplate=(
-                                f"Folder: {Path(folder).name}<br>Bin idx: %{{x}}<br>Mean Prob: %{{y:.3f}}<extra></extra>"
-                            ),
-                        )
-                    )
+                        src_edges, _, _ = self._compute_edges(c_arr, minv, maxv)
 
+                        # Rebin to fixed 256 bins for averaging
+                        rebinned = self._rebin_via_cdf(c_arr, src_edges, fixed_edges)
+                        accumulated += rebinned
+                        count_files += 1
+
+                    if count_files > 0:
+                        avg_hist = accumulated / count_files
+                        if avg_hist.sum() > 0: avg_hist /= avg_hist.sum()
+
+                        centers = 0.5 * (fixed_edges[:-1] + fixed_edges[1:])
+                        chart.add_trace(go.Scatter(
+                            x=centers, y=avg_hist, mode='lines',
+                            name=folder, line=dict(color=color, width=2),
+                            fill='tozeroy', opacity=0.6
+                        ))
+
+                # Mode 2: Native Range (using group min/max)
                 else:
-                    # --------------------- Native (true-range) --------------------- #
-                    valid_items = [
-                        (np.asarray(c, float), mn, mx, nm)
-                        for c, mn, mx, nm in zip(counts_list, min_list, max_list, names)
-                        if c is not None
-                    ]
-                    if not valid_items:
-                        continue
+                    gmin, gmax = self._folder_minmax_using_polars(df_group, min_key, max_key)
+                    if gmin is None or gmax is None: continue
 
-                    # Per-image bars at native edges
-                    for counts, minv, maxv, file_name in valid_items:
-                        # if a specific file is requested, only show bars for that file
-                        if selected_file and file_name != selected_file:
-                            continue
-                        edges, lefts, widths = self._compute_edges(counts, minv, maxv)
-                        total = counts.sum()
-                        h_norm = counts / total if total > 0 else counts
+                    # Heuristic for bin count: max of lengths of individual histograms
+                    # or fixed 256. Let's use 256 for smoothness.
+                    n_bins = 256
+                    group_edges = self._edges_from_minmax(n_bins, gmin, gmax)
 
-                        chart.add_trace(
-                            go.Bar(
-                                x=list(lefts),
-                                y=list(h_norm),
-                                width=list(widths),
-                                name=Path(folder).name,
-                                marker=dict(color=color, opacity=per_image_opacity),
-                                showlegend=False,
-                                legendgroup=Path(folder).name,
-                                hovertemplate=(
-                                    f"File: {file_name}<br>Pixel value: %{{x:.3f}}<br>Freq: %{{y:.3f}}<extra></extra>"
-                                ),
-                                offset=0.0,
-                            )
-                        )
+                    accumulated = np.zeros(n_bins, dtype=float)
+                    count_files = 0
 
-                    # Folder group edges from Polars-derived min/max (data-derived native range)
-                    gmin, gmax = self._folder_minmax_using_polars(
-                        df_group, min_key, max_key
-                    )
-                    if gmin is None or gmax is None:
-                        # Fallback from per-image lists
-                        valid_mins = [m for _, m, _, _ in valid_items if m is not None]
-                        valid_maxs = [M for _, _, M, _ in valid_items if M is not None]
-                        if valid_mins and valid_maxs:
-                            gmin, gmax = float(np.min(valid_mins)), float(
-                                np.max(valid_maxs)
-                            )
+                    for row in df_group.iter_rows(named=True):
+                        c_list = row.get(histogram_key)
+                        if not c_list: continue
+                        c_arr = np.array(c_list, dtype=float)
+                        if c_arr.sum() == 0: continue
 
-                    if gmin is not None and gmax is not None:
-                        group_edges = self._edges_from_minmax(n_bins, gmin, gmax)
-                    else:
-                        group_edges, _, _ = self._compute_edges(
-                            valid_items[0][0], valid_items[0][1], valid_items[0][2]
-                        )
+                        minv = row.get(min_key)
+                        maxv = row.get(max_key)
+                        src_edges, _, _ = self._compute_edges(c_arr, minv, maxv)
 
-                    # Rebin each image to group_edges via CDF; then mean (equal image weight)
-                    mats = []
-                    for counts, minv, maxv, _ in valid_items:
-                        src_edges, _, _ = self._compute_edges(counts, minv, maxv)
-                        reb_prob = self._rebin_via_cdf(
-                            counts, src_edges, group_edges
-                        )  # sums to 1
-                        mats.append(reb_prob)
+                        rebinned = self._rebin_via_cdf(c_arr, src_edges, group_edges)
+                        accumulated += rebinned
+                        count_files += 1
 
-                    mean_hist = np.mean(mats, axis=0)
-                    mean_centers = group_edges[:-1] # NOTE: + 0.5 * np.diff(group_edges) to have the center in the middle of the bin
-                    mean_hover_texts = [
-                        f"Mean of folder: {Path(folder).name}<br>Pixel value: {float(c):.3f}<br>Nearest pixel: {int(round(c))}<br>Mean Prob: {float(v):.3f}"
-                        for c, v in zip(mean_centers, mean_hist)
-                    ]
-                    chart.add_trace(
-                        go.Scatter(
-                            x=list(mean_centers),
-                            y=list(mean_hist),
-                            mode="lines",
-                            name=Path(folder).name,
-                            line=dict(width=2, color=color),
-                            fill="tozeroy",
-                            opacity=0.6,
-                            legendgroup=Path(folder).name,
-                            text=mean_hover_texts,
-                            hovertemplate="%{text}<extra></extra>",
-                        )
-                    )
+                    if count_files > 0:
+                        avg_hist = accumulated / count_files
+                        if avg_hist.sum() > 0: avg_hist /= avg_hist.sum()
+
+                        centers = 0.5 * (group_edges[:-1] + group_edges[1:])
+                        chart.add_trace(go.Scatter(
+                            x=centers, y=avg_hist, mode='lines',
+                            name=folder, line=dict(color=color, width=2),
+                            fill='tozeroy', opacity=0.6
+                        ))
 
             chart.update_layout(
                 title="Mean Pixel Value Histogram (per group)",
-                xaxis_title=(
-                    "Pixel intensity - Fixed 0–255 Bins"
-                    if remap_mode == "shape"
-                    else "Native-range bins (actual values)"
-                ),
+                xaxis_title="Pixel intensity (0-255)" if remap_mode == "shape" else "Native Pixel Intensity",
                 yaxis_title="Normalized Frequency",
-                legend_title="Folder name",
+                hovermode="x unified"
             )
             return chart, ""
