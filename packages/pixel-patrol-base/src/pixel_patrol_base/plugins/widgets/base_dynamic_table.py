@@ -4,16 +4,8 @@ from typing import List
 import polars as pl
 from dash import html, dcc, Input, Output, ALL, ctx
 
-from pixel_patrol_base.report.utils import parse_dynamic_col, create_sparkline
-## Old:
-# class BaseDynamicTableWidget:
-#     """
-#     Reusable base for widgets that display dynamic stats in a table with dimension filters.
-# ...
-#     def layout(self) -> List:
-##
-
-## New:
+from pixel_patrol_base.report.utils import parse_dynamic_col
+from pixel_patrol_base.report.factory import create_sparkline
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 
