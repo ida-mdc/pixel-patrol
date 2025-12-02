@@ -4,7 +4,7 @@ from typing import List
 import polars as pl
 from dash import html, dcc, Input, Output, ALL, ctx
 
-from pixel_patrol_base.report.utils import parse_dynamic_col
+from pixel_patrol_base.report.data_utils import parse_dynamic_col
 from pixel_patrol_base.report.factory import create_sparkline
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 
@@ -42,9 +42,9 @@ class BaseDynamicTableWidget(BaseReportWidget):
             html.Div(id=f"{self.widget_id}-table-container"),
         ]
 
-    ##
     def register(self, app, df_global: pl.DataFrame):
-        # ... existing code ...
+        """Registers callbacks for the table widget."""
+
         # Populate filters based on the dynamic columns present
         @app.callback(
             Output(f"{self.widget_id}-filters-container", "children"),
@@ -52,7 +52,6 @@ class BaseDynamicTableWidget(BaseReportWidget):
         )
         def populate_filters(_color_map_data):
             all_dims = defaultdict(set)
-            # ... existing code ...
             supported_metrics = self.get_supported_metrics()
 
             for col in df_global.columns:
@@ -89,7 +88,6 @@ class BaseDynamicTableWidget(BaseReportWidget):
             Input({"type": f"dynamic-filter-{self.widget_id}", "dim": ALL}, "value"),
         )
         def update_stats_table(filter_values):
-            # ... existing code ...
             # Pattern-matching Input gives us ctx.inputs_list
             inputs_list = ctx.inputs_list[0] if ctx.inputs_list else []
             filters = {prop["id"]["dim"]: value for prop, value in zip(inputs_list, filter_values)}
@@ -130,12 +128,20 @@ class BaseDynamicTableWidget(BaseReportWidget):
 
                     # require at least 2 slices for that dim; otherwise no plot
                     if cols_for_cell and len(slice_idxs) > 1:
+                        # Call Factory for Visuals
                         fig = create_sparkline(df_global, plot_dim, cols_for_cell)
+
+                        ## New: Restore Layout settings for Table Sparklines (Overrides Factory defaults)
                         fig.update_layout(height=120, margin=dict(l=30, r=10, t=10, b=30))
-                        fig.update_xaxes(visible=True, showticklabels=True, showgrid=True, ticks="outside",
-                                         title_text=None,
-                                         tickmode="linear", dtick=1, tickformat="d")
-                        fig.update_yaxes(visible=True, showticklabels=True, ticks="outside", tickformat=".2f")
+                        fig.update_xaxes(
+                            visible=True, showticklabels=True, showgrid=True, ticks="outside",
+                            title_text=None, tickmode="linear", dtick=1, tickformat="d"
+                        )
+                        fig.update_yaxes(
+                            visible=True, showticklabels=True, ticks="outside", tickformat=".2f"
+                        )
+                        ##
+
                         cell_content = dcc.Graph(figure=fig, config={"displayModeBar": False})
                     else:
                         cell_content = html.Div("N/A", style={"textAlign": "center", "padding": "15px"})

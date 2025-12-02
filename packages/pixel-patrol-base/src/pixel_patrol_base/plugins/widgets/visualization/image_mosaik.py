@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output
 
-from pixel_patrol_base.report.utils import get_sortable_columns
+from pixel_patrol_base.report.data_utils import get_sortable_columns
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 ## New:
 from pixel_patrol_base.report.base_widget import BaseReportWidget

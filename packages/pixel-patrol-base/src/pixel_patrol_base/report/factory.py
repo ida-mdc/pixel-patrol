@@ -1,12 +1,12 @@
 import re
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Tuple
 from collections import defaultdict
 import statistics
 
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
-from dash import html
+from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 # =============================================================================
@@ -35,7 +35,7 @@ def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
 
 
 # =============================================================================
-#  SECTION 2: HTML CONTAINERS (Formerly in layouts.py)
+#  SECTION 2: HTML CONTAINERS
 # =============================================================================
 
 def create_info_icon(widget_id: str, help_text: str):
@@ -99,7 +99,7 @@ def create_widget_card(title: str, content: list, widget_id: str, help_text: str
 
 
 # =============================================================================
-#  SECTION 3: PLOTLY CHARTS (Standardized Generators)
+#  SECTION 3: PLOTLY CHARTS
 # =============================================================================
 
 def plot_bar(
@@ -266,3 +266,71 @@ def create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Fig
     )
 
     return fig
+
+
+# =============================================================================
+#  SECTION 4: CONTROLS
+# =============================================================================
+
+def create_labeled_dropdown(
+        label: str,
+        id: str | Dict,
+        options: List[Dict],
+        value: Any = None,
+        clearable: bool = False,
+        multi: bool = False,
+        width: str = "300px",
+        style: Dict = None,
+) -> html.Div:
+    """Creates a standardized labeled dropdown."""
+    default_style = {"width": width, "marginBottom": "20px"}
+    if style:
+        default_style.update(style)
+
+    return html.Div(
+        [
+            html.Label(label, style={"marginBottom": "5px", "fontWeight": "500"}),
+            dcc.Dropdown(
+                id=id,
+                options=options,
+                value=value,
+                clearable=clearable,
+                multi=multi,
+            ),
+        ],
+        style=default_style,
+    )
+
+
+def create_dimension_selectors(
+        tokens: Dict[str, List[str]],
+        id_type: str
+) -> Tuple[List[html.Div], List[str]]:
+    """
+    Creates standardized T/C/Z/S dimension selectors based on extracted tokens.
+    Returns: (List of Components, List of dimensions found)
+    """
+    children = []
+    dims_order = []
+
+    # Preferred stable order: t, c, z, s (TCZS)
+    for dim_name in ['t', 'c', 'z', 's']:
+        if dim_name in tokens and tokens[dim_name]:
+            dims_order.append(dim_name)
+            dropdown_id = {"type": id_type, "dim": dim_name}
+
+            options = [{"label": "All", "value": "All"}] + [
+                {"label": tok, "value": tok} for tok in tokens[dim_name]
+            ]
+
+            children.append(
+                html.Div(
+                    [
+                        html.Label(f"{dim_name.upper()} slice"),
+                        dcc.Dropdown(id=dropdown_id, options=options, value="All", clearable=False),
+                    ],
+                    style={"display": "inline-block", "marginRight": "15px", "width": "100px"}
+                )
+            )
+
+    return children, dims_order
