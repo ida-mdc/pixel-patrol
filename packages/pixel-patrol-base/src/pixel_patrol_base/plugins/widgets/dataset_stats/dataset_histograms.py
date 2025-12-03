@@ -236,8 +236,7 @@ class DatasetHistogramWidget(BaseReportWidget):
 
                     for row in df_group.iter_rows(named=True):
                         c_list = row.get(histogram_key)
-                        if not c_list: continue
-
+                        if c_list is None or len(c_list) == 0: continue
                         c_arr = np.array(c_list, dtype=float)
                         if c_arr.sum() == 0: continue
 
