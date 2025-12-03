@@ -67,7 +67,10 @@ def _create_app(
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
     df = df.with_row_index(name="unique_id")
-    external_stylesheets = [dbc.themes.BOOTSTRAP, "https://codepen.io/chriddyp/pen/bWLwgP.css"]
+    external_stylesheets = [dbc.themes.BOOTSTRAP,
+                            "https://codepen.io/chriddyp/pen/bWLwgP.css",
+                            "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
+                            ]
     #app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 
     app = Dash(
@@ -166,14 +169,6 @@ def _create_app(
                         )
                         current_group_cols, current_row_width = [], 0
 
-                    title = getattr(w, "NAME", w.__class__.__name__)
-
-                    # title row
-                    current_group_cols.append(
-                        dbc.Row(
-                            dbc.Col(html.H4(title, className="my-3 text-primary"))
-                        )
-                    )
                     # widget body
                     current_group_cols.append(
                         dbc.Col(

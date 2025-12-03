@@ -23,7 +23,9 @@ class DataFrameWidget(BaseReportWidget):
     @property
     def help_text(self) -> str:
         return (
-            f"Displays the first {MAX_ROWS_DISPLAYED} rows and {MAX_COLS_DISPLAYED} columns of the processed data table."
+            f"Displays the first {MAX_ROWS_DISPLAYED} rows and {MAX_COLS_DISPLAYED} columns of the processed data table.\n\n"
+            "Sorting is available by clicking on column headers."
+
         )
 
     def get_content_layout(self) -> List:

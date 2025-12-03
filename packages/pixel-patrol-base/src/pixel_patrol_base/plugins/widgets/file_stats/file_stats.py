@@ -23,21 +23,18 @@ class FileStatisticsWidget(BaseReportWidget):
 
     CONTENT_ID = "file-stats-report-content"
 
-    # --- New Base Class Properties ---
     @property
     def help_text(self) -> str:
         return (
-            "This widget provides a high-level overview of the dataset file structure.\n\n"
-            "**Charts:**\n"
-            "- File Count by Extension\n"
-            "- Total Size by Extension\n"
-            "- Size Distribution (Bins)\n"
-            "- Modification Timeline\n\n"
-            "If 'No Variance' is detected (e.g., all files are .png), "
-            "it is shown in the summary table."
+            "High-level **file statistics** for the dataset.\n\n"
+            "**Charts**\n"
+            "- File count by extension\n"
+            "- Total size by extension\n"
+            "- File count by size bin\n"
+            "- File modification timeline\n\n"
+            "If a property has **no variance** (e.g. all files share the same extension), "
+            "it is summarized in the table instead of a chart."
         )
-
-    # --- Implementation ---
 
     def get_content_layout(self) -> List:
         """

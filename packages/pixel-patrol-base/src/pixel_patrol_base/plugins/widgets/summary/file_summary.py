@@ -23,7 +23,7 @@ class FileSummaryWidget(BaseReportWidget):
     @property
     def help_text(self) -> str:
         return (
-            "Summarizes file counts, total size, and file types present in each folder."
+            "Summarizes file counts, total size, and file types present in each group."
         )
 
     def get_content_layout(self) -> List:

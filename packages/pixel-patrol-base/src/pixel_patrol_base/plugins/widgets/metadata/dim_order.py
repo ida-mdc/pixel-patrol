@@ -21,7 +21,12 @@ class DimOrderWidget(BaseReportWidget):
 
     @property
     def help_text(self) -> str:
-        return "Shows how different dimension orderings (e.g., TZYX vs ZYX) are distributed across the dataset."
+        return (
+            "Shows how often each **dimension ordering** (e.g., `TZYX`, `ZYX`, `CTZYX`) appears in the dataset.\n\n"
+            "**Use this to detect**\n"
+            "- inconsistent dimension layouts between/within groupings\n"
+            "- files that may need reordering before analysis\n"
+        )
 
     def get_content_layout(self) -> List:
         """Defines the layout of the Dim Order Distribution widget."""
