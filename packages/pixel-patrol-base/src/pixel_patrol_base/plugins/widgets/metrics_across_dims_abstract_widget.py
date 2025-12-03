@@ -9,7 +9,7 @@ from pixel_patrol_base.report.factory import create_sparkline
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 
-class BaseDynamicTableWidget(BaseReportWidget):
+class MetricsAcrossDimensionsWidget(BaseReportWidget):
     """
     Reusable base for widgets that display dynamic stats in a table.
     Inherits from BaseReportWidget to provide standard Card layout.
@@ -24,13 +24,6 @@ class BaseDynamicTableWidget(BaseReportWidget):
     def __init__(self, widget_id: str):
         # Unique ID prefix to avoid Dash callback collisions
         self.widget_id = widget_id
-
-    @property
-    def help_text(self) -> str:
-        return (
-            "This table displays statistics dynamically calculated across different image dimensions.\n\n"
-            "Use the dropdowns to filter specific slices (e.g., Timepoint 0, Channel 1)."
-        )
 
     def get_supported_metrics(self) -> List[str]:
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")

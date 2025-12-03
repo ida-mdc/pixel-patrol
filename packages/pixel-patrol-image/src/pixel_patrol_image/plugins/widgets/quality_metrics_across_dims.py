@@ -1,14 +1,14 @@
 from typing import List, Set
 
-from pixel_patrol_base.plugins.widgets.base_dynamic_table import BaseDynamicTableWidget
+from pixel_patrol_base.plugins.widgets.metrics_across_dims_abstract_widget import MetricsAcrossDimensionsWidget
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 from pixel_patrol_image.plugins.processors.quality_metrics_processor import QualityMetricsProcessor
 
 
-class DynamicQualityMetricsWidget(BaseDynamicTableWidget):
-    NAME: str = "Quality metrics across dimensions"
+class QualityMetricsAcrossDimensionsWidget(MetricsAcrossDimensionsWidget):
+    NAME: str = "Quality Metrics Across Dimensions"
     TAB: str = WidgetCategories.DATASET_STATS.value
 
     # No fixed columns; rely on the processor's dynamic outputs
