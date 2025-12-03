@@ -5,11 +5,12 @@ from dash import html, Input, Output
 
 from pixel_patrol_image.plugins.processors.quality_metrics_processor import QualityMetricsProcessor
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
-from pixel_patrol_base.report.data_utils import generate_column_violin_plots
+from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.factory import generate_column_violin_plots
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
-class ImageQualityWidget:
+class ImageQualityWidget(BaseReportWidget):
     # ---- Declarative spec ----
     NAME: str = "Image Quality"
     TAB: str = WidgetCategories.DATASET_STATS.value
@@ -20,6 +21,17 @@ class ImageQualityWidget:
 
     # Component IDs
     CONTAINER_ID = "image-quality-container"
+
+    @property
+    def help_text(self) -> str:
+        return (
+            "Shows **per-image quality metrics** (sharpness, noise, compression artifacts) as distributions per groupings.\n\n"
+            "**Metrics**\n"
+            "- **Laplacian variance**: edge-based sharpness; higher → sharper.\n"
+            "- **Tenengrad** and **Brenner**: gradient-based focus / fine detail.\n"
+            "- **Noise std**: estimated noise level.\n"
+            "- **Blocking / ringing records**: compression artifacts (e.g. JPEG blocking, edge ringing).\n"
+        )
 
     def get_descriptions(self) -> Dict[str, str]:
         """Descriptions of image quality metrics shown below."""
@@ -46,28 +58,8 @@ class ImageQualityWidget:
             ),
         }
 
-    def layout(self) -> List:
-        """Static description + a single container populated by the callback."""
-        description_items = [
-            html.Li([html.Strong(f"{k.replace('_', ' ').title()}: "), v])
-            for k, v in self.get_descriptions().items()
-        ]
-        return [
-            html.Div(
-                className="markdown-content",
-                children=[
-                    html.H4("Image Quality Metric Descriptions"),
-                    html.P(
-                        "The following metrics assess various aspects of image quality, such as sharpness, noise, "
-                        "and compression records. Each plot shows the distribution of a quality score for images "
-                        "in the selected folders."
-                    ),
-                    html.Ul(description_items),
-                ],
-            ),
-            html.Hr(),
-            html.Div(id=self.CONTAINER_ID),
-        ]
+    def get_content_layout(self) -> List:
+        return [html.Div(id=self.CONTAINER_ID)]
 
     def register(self, app, df_global: pl.DataFrame):
         """One callback that renders all violin plots."""
@@ -79,3 +71,4 @@ class ImageQualityWidget:
         def update_image_quality_layout(color_map: Dict[str, str]):
             metric_cols = list(self.get_descriptions().keys())
             return generate_column_violin_plots(df_global, color_map or {}, metric_cols)
+

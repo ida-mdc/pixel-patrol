@@ -18,6 +18,16 @@ class DynamicQualityMetricsWidget(BaseDynamicTableWidget):
     def __init__(self):
         super().__init__(widget_id="quality-stats")
 
+    @property
+    def help_text(self) -> str:
+        return (
+            "Shows how **image quality metrics** change across (e.g. T, C, Z, S) slices.\n\n"
+            "Use this view to detect:\n"
+            "- drift in focus or noise over time (T)\n"
+            "- channel-specific artifacts (C)\n"
+            "- depth-dependent quality changes (Z)\n"
+        )
+
     def get_supported_metrics(self) -> List[str]:
         # Base metric names expected in dynamic columns (e.g., "snr", "focus", …)
         return list(getattr(QualityMetricsProcessor, "OUTPUT_SCHEMA", {}).keys())
