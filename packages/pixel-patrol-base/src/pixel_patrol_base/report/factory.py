@@ -2,11 +2,12 @@ import re
 from typing import Dict, Optional, List, Any, Tuple
 from collections import defaultdict
 import statistics
+from pathlib import Path
 
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
-from dash import html, dcc
+from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 
 # =============================================================================
@@ -268,6 +269,150 @@ def create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Fig
     )
 
     return fig
+
+
+def generate_column_violin_plots(
+    df_global: pl.DataFrame,
+    color_map: Dict[str, str],
+    numeric_cols: List[str],
+):
+    """
+    Build a grid of violin plots (one per metric column) grouped by folder,
+    plus an optional table listing metrics that have no variance.
+    """
+    df_filtered = df_global.select(
+        pl.col("name"),
+        pl.col("imported_path_short"),
+        pl.col(numeric_cols),
+    )
+
+    # Drop rows where any of the numeric columns is null
+    df_filtered = df_filtered.filter(
+        pl.all_horizontal([pl.col(c).is_not_null() for c in numeric_cols])
+    )
+
+    groups = df_filtered["imported_path_short"].unique().sort().to_list()
+    if not groups:
+        return html.P(
+            "No data available to generate statistics.",
+            className="text-warning",
+        )
+
+    # Decide which metrics get a plot vs. go into the “no variance” table
+    cols_to_plot: List[str] = []
+    no_variance_data: List[Dict[str, str]] = []
+
+    for col in numeric_cols:
+        series = df_filtered.get_column(col).drop_nulls()
+        if series.n_unique() == 1:
+            no_variance_data.append(
+                {
+                    "Metric": col.replace("_", " ").title(),
+                    "Value": f"{series[0]:.4f}",
+                }
+            )
+        elif series.n_unique() > 1:
+            cols_to_plot.append(col)
+
+    # Layout width based on number of groups
+    num_groups = len(groups)
+    if num_groups <= 2:
+        col_class = "four columns"      # 3 plots per row
+    elif num_groups == 3:
+        col_class = "six columns"       # 2 plots per row
+    else:
+        col_class = "twelve columns"    # 1 plot per row
+
+    plot_divs: List[html.Div] = []
+    for col_name in cols_to_plot:
+        fig = _create_single_violin_plot(
+            plot_data=df_filtered,
+            value_to_plot=col_name,
+            groups=groups,
+            color_map=color_map,
+        )
+        plot_divs.append(
+            html.Div(
+                dcc.Graph(figure=fig),
+                className=col_class,
+                style={"marginBottom": "20px"},
+            )
+        )
+
+    plots_container = html.Div(plot_divs, className="row")
+
+    table_component: List = []
+    if no_variance_data:
+        table_component = [
+            html.Hr(),
+            html.H4(
+                "Metrics with No Variance",
+                style={"marginTop": "30px", "marginBottom": "15px"},
+            ),
+            dash_table.DataTable(
+                data=no_variance_data,
+                columns=[{"name": i, "id": i} for i in ["Metric", "Value"]],
+                style_cell={"textAlign": "left"},
+                style_header={"fontWeight": "bold"},
+                style_as_list_view=True,
+            ),
+        ]
+
+    return [plots_container] + table_component
+
+
+def _create_single_violin_plot(
+    plot_data: pl.DataFrame,
+    value_to_plot: str,
+    groups: List[str],
+    color_map: Dict[str, str],
+) -> go.Figure:
+    """Generate one violin plot figure for a single metric grouped by folder."""
+    chart = go.Figure()
+
+    for group_name in groups:
+        df_group = plot_data.filter(pl.col("imported_path_short") == group_name)
+        group_color = color_map.get(group_name, "#333333")
+
+        chart.add_trace(
+            go.Violin(
+                y=df_group.get_column(value_to_plot),
+                name=group_name,
+                customdata=df_group.get_column("name").map_elements(
+                    lambda p: Path(p).name, return_dtype=pl.String
+                ),
+                marker_color=group_color,
+                opacity=0.9,
+                showlegend=True,
+                points="all",
+                spanmode="hard",
+                pointpos=0,
+                box_visible=True,
+                meanline=dict(visible=True),
+                hovertemplate=(
+                    f"<b>Group: {group_name}</b>"
+                    "<br>Value: %{y:.2f}"
+                    "<br>Filename: %{customdata}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    chart.update_traces(
+        marker=dict(line=dict(width=1, color="black")),
+        box=dict(line_color="black"),
+    )
+
+    nice_name = value_to_plot.replace("_", " ").title()
+    chart.update_layout(
+        title_text=f"Distribution of {nice_name}",
+        xaxis_title="Folder",
+        yaxis_title=nice_name,
+        margin=dict(l=50, r=50, t=80, b=50),
+        hovermode="closest",
+        showlegend=False,
+    )
+    return chart
 
 
 # =============================================================================
