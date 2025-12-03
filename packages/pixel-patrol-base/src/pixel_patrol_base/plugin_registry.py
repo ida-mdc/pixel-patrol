@@ -7,7 +7,7 @@ from pixel_patrol_base.plugins.processors.histogram_processor import HistogramPr
 from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
 from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_histograms import DatasetHistogramWidget
 from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
-from pixel_patrol_base.plugins.widgets.dataset_stats.dynamic_dataset_metrics import DynamicStatsWidget
+from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats_across_dims import DatasetStatsAcrossDimensionsWidget
 from pixel_patrol_base.plugins.widgets.file_stats.file_stats import FileStatisticsWidget
 from pixel_patrol_base.plugins.widgets.metadata.data_type import DataTypeWidget
 from pixel_patrol_base.plugins.widgets.metadata.dim_order import DimOrderWidget
@@ -74,6 +74,6 @@ def register_widget_plugins():
         DimSizeWidget,
         ImageMosaikWidget,
         DatasetStatsWidget,
-        DynamicStatsWidget,
+        DatasetStatsAcrossDimensionsWidget,
         DatasetHistogramWidget,
     ]

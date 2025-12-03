@@ -10,9 +10,9 @@ from pixel_patrol_base.report.factory import generate_column_violin_plots
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
-class ImageQualityWidget(BaseReportWidget):
+class QualityMetricsWidget(BaseReportWidget):
     # ---- Declarative spec ----
-    NAME: str = "Image Quality"
+    NAME: str = "Image Quality Metrics"
     TAB: str = WidgetCategories.DATASET_STATS.value
     # Grouping by folder is typical for these plots; require the label column.
     REQUIRES: Set[str] = {"imported_path_short"}
