@@ -23,8 +23,8 @@ class FileSunburstWidget(BaseReportWidget):
     @property
     def help_text(self) -> str:
         return (
-            "Interactive visualization of the file structure. "
-            "Click on a folder slice to zoom in."
+            "Sunburst view of the **file and folder hierarchy**.\n\n"
+            "Click a slice to zoom in; click the center to zoom out.\n"
         )
 
     def get_content_layout(self) -> List:

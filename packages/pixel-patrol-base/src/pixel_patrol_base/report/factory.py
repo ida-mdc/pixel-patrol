@@ -53,14 +53,16 @@ def create_info_icon(widget_id: str, help_text: str):
                 style={
                     "cursor": "pointer",
                     "color": "#6c757d",
-                    "fontSize": "1.2rem",
-                    "marginLeft": "10px"
+                    "fontSize": "1.6rem",
+                    "marginLeft": "8px"
                 }
             ),
             dbc.Popover(
                 [
                     dbc.PopoverHeader("Widget Info"),
-                    dbc.PopoverBody(help_text),
+                    dbc.PopoverBody(
+                        dcc.Markdown(help_text, style={"marginBottom": 0, "fontSize": "1.4rem"})
+                        ),
                 ],
                 target=target_id,
                 trigger="legacy",
@@ -79,7 +81,7 @@ def create_widget_card(title: str, content: list, widget_id: str, help_text: str
 
     if help_text:
         header_children.append(
-            html.Div(create_info_icon(widget_id, help_text), className="ms-auto")
+            html.Div(create_info_icon(widget_id, help_text), className="ms-2")
         )
 
     return dbc.Card(

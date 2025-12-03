@@ -21,7 +21,13 @@ class DimSizeWidget(BaseReportWidget):
 
     @property
     def help_text(self) -> str:
-        return "Comparison of image dimensions (X, Y, Z, T, etc.) across the dataset."
+        return (
+            "Shows how **image dimensions** (X, Y, Z, T, …) vary across the dataset.\n\n"
+            "Includes one X/Y size plot and per-dimension size plot.\n\n"
+            "**Use this to identify**\n"
+            "- unexpected dimension sizes\n"
+            "- mismatched shapes between groupings\n"
+        )
 
     def get_content_layout(self) -> List:
         """Defines the layout of the Dimension Size Distribution widget."""

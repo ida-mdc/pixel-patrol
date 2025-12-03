@@ -18,5 +18,14 @@ class DynamicStatsWidget(BaseDynamicTableWidget):
     def __init__(self):
         super().__init__(widget_id="basic-stats")
 
+    @property
+    def help_text(self) -> str:
+        return (
+            "Shows how image statistics (e.g., mean, std, min, max) change **across different dimension slices**.\n\n"
+            "Useful for identifying drift, artifacts, or unexpected variation within (e.g.) T/C/Z/S dimensions.\n\n"
+            "You can select slices in the dropdowns to filter the tables.\n"
+        )
+
+
     def get_supported_metrics(self) -> List[str]:
         return list(getattr(BasicStatsProcessor, "OUTPUT_SCHEMA", {}).keys())

@@ -131,10 +131,10 @@ class EmbeddingProjectorWidget(BaseReportWidget):
     @property
     def help_text(self) -> str:
         return (
-            "The Embedding Projector allows you to explore high-dimensional data by reducing it to 2D or 3D using "
-            "**Principal Component Analysis (PCA)** or **t-SNE**.\n\n"
-            "Embeddings represent data as points in a high-dimensional space; closer points are more similar. "
-            "This tool helps visualize relationships, clusters, and patterns in large datasets."
+            "Launches the TensorBoard **Embedding Projector** for interactive exploration of high-dimensional data.\n\n"
+            "- Embeddings are built from numeric columns of the table.  \n"
+            "- TensorBoard can reduce them to 2D/3D using **PCA**, **t-SNE**, etc.\n"
+            "- Nearby points represent more similar images/entries; clusters may reveal structure in the dataset."
         )
 
     def get_content_layout(self) -> List:

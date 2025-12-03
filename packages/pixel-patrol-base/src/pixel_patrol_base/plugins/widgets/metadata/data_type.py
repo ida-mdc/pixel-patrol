@@ -20,7 +20,13 @@ class DataTypeWidget(BaseReportWidget):
 
     @property
     def help_text(self) -> str:
-        return "Shows the distribution of file data types (e.g., uint8, float32) across different folders."
+        return (
+            "Shows the distribution of **pixel data types** (e.g., `uint8`, `uint16`, `float32`) across groupings.\n\n"
+            "**Use this to check**\n"
+            "- whether different images/groupings use different numeric formats\n"
+            "- potential range differences (e.g., 0–255 vs. arbitrary floats)\n"
+        )
+
 
     def get_content_layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""

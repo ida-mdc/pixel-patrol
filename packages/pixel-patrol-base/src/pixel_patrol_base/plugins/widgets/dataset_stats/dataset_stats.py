@@ -28,16 +28,13 @@ class DatasetStatsWidget(BaseReportWidget):
     @property
     def help_text(self) -> str:
         return (
-            "### Description of the test\n"
-            "The selected representation of intensities within an image is plotted on the y-axis, "
-            "while the x-axis shows the different groups (folders) selected.\n\n"
-            "Each image is represented by a dot, and the boxplot shows the distribution of the selected value.\n\n"
-            "**Statistical hints:**\n"
-            "The symbols (* or ns) indicate significance (Mann-Whitney U test with Bonferroni correction).\n"
-            "- ns: not significant\n"
-            "- *: p < 0.05\n"
-            "- **: p < 0.01\n"
-            "- ***: p < 0.001"
+            "Shows **per-image intensity statistics** across groups.\n\n"
+            "You can choose which statistic to plot and filter by image dimensions.\n\n"
+            "In the plot each point is one image; the box shows the distribution per group.\n\n"
+            "**Statistics**\n"
+            "Pairwise group comparisons use a Mann–Whitney U test with Bonferroni correction:\n"
+            "- `ns`: not significant\n"
+            "- `*: p < 0.05`, `**: p < 0.01`, `***: p < 0.001`"
         )
 
     def get_content_layout(self) -> List:

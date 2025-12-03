@@ -17,10 +17,17 @@ class DatasetHistogramWidget(BaseReportWidget):
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]
 
     @property
-    def help_text(self) -> str:
+    def help_text(self) -> str: # Markdown
         return (
-            "### Histogram Visualization\n"
-            "The histograms are computed per image and grouped by the selected folder names."
+            "The histograms are computed **per image** and grouped based on your groupings.  \n"
+            "They are normalized to sum to **1**, and the **mean histogram per group** is shown as a bold line.\n\n"
+            "**Modes**\n"
+            "- **0–255 bins (shape comparison)**  \n"
+            "  Uses 256 fixed bins (0–255) regardless of the actual pixel range. "
+            "Best for comparing overall *shape* across images with different value ranges or data types.\n"
+            "- **Native pixel-range bins**  \n"
+            "  Bins are defined using the actual min/max pixel values across the selected images. "
+            "Best for seeing where intensities lie in *absolute* terms, but shapes may differ if ranges vary.\n"
         )
 
     def get_content_layout(self) -> List:
