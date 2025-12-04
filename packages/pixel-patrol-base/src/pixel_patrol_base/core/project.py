@@ -161,7 +161,7 @@ class Project:
         # simpler: callers of `process_files()` no longer need to remember to
         # set the chunk directory themselves to get chunked writes.
         if getattr(self.settings, "records_flush_dir", None) is None and self.base_dir is not None:
-            inferred = Path(self.base_dir) / f"{self.name}_records_chunks"
+            inferred = Path(self.base_dir) / f"{self.name}_batches"
             # Do not overwrite if explicitly set to None; only set when unset.
             self.settings.records_flush_dir = inferred
             logger.info(
