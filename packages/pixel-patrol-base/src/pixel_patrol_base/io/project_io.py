@@ -1,5 +1,4 @@
 import zipfile
-import numpy as np
 import yaml
 import polars as pl
 import tempfile
@@ -11,6 +10,10 @@ import dataclasses
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core import validation
+from pixel_patrol_base.io.parquet_utils import (
+    _deserialize_ndarray_columns_dataframe,
+    _write_dataframe_to_parquet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,83 +74,6 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
             f"Project IO: Could not fully reconstruct Settings from filtered dictionary. Using default settings. Error: {e}")
         return Settings()
 
-
-def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Serializes columns containing numpy ndarrays to lists of int64 for compatibility with Parquet.
-    This is necessary because Polars does not support direct serialization of numpy ndarrays.
-    Args:
-        df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with ndarray columns serialized to lists.
-    """
-    for col in polars_df.columns:
-        if polars_df[col].dtype == pl.Object:
-            try:
-                # Attempt to convert ndarray columns to lists
-                polars_df = polars_df.with_columns(
-                    pl.col(col).map_elements(lambda x: x.tolist() if isinstance(x, np.ndarray) else x, return_dtype=pl.List(pl.Int64))
-                )
-                # logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
-            except Exception as e:
-                logger.warning(f"Project IO: Failed to serialize column '{col}' to list. Error: {e}. This column will be excluded from the Parquet export.")
-                polars_df = polars_df.drop(col)
-    return polars_df
-
-def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Deserializes columns containing lists of int64 back to numpy ndarrays.
-    Args:
-        polars_df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with list columns deserialized to ndarrays.
-    """
-    for col in polars_df.columns:
-        if polars_df[col].dtype == pl.List(pl.Int64):
-            try:
-                polars_df = polars_df.with_columns(
-                    pl.col(col)
-                    .map_elements(
-                        lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x, # in case a series appears in a saved dataframe.
-                        return_dtype=pl.Object,
-                    )
-                    .cast(pl.Object)
-                )
-                # logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
-            except Exception as e:
-                logger.warning(f"Project IO: Failed to deserialize column '{col}' to ndarray. Error: {e}. This column will be excluded from the DataFrame.")
-                polars_df = polars_df.drop(col)
-    return polars_df
-
-def _write_dataframe_to_parquet(
-        df: Optional[pl.DataFrame],
-        base_filename: str,
-        tmp_path: Path,
-) -> Optional[Path]:
-    """Helper to write an optional Polars DataFrame to a Parquet file in a temporary path."""
-    if df is None:
-        return None
-
-    df = _serialize_ndarray_columns_dataframe(df)
-
-    # Identify columns with empty Struct types
-    empty_struct_cols = [
-        name for name, dtype in df.schema.items()
-        if isinstance(dtype, pl.Struct) and not dtype.fields
-    ]
-
-    # Add a dummy field to each problematic column
-    for col in empty_struct_cols:
-        df = df.with_columns(pl.lit(None).alias(col))
-
-    file_path = tmp_path / base_filename
-    data_name = file_path.stem
-    try:
-        df.write_parquet(file_path)
-        return file_path
-    except Exception as e:
-        logger.warning(f"Project IO: Could not write {data_name} data ({base_filename}) to temporary file: {e}")
-        return None
 
 
 def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
