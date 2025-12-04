@@ -8,13 +8,16 @@ def main():
 
     # --- Step 1: choose a base directory with files to be processed, sub-paths, and loader ---
     base_path = Path("datasets/bioio")
+    # output path 
+    zip_path = Path("out_parallel/quickstart_project.zip")
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Optional: Define sub-dirs that in the report are compared as experimental conditions
     # If you don't specify any paths, all files in base_path and its subfolders are processed as one condition.
     # You can specify the paths either as absolute or relevant to base_path.
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     # OR e.g.
-    # paths = ['/home/ella/work/pixel-patrol/examples/datasets/bioio/pngs', 'tifs', 'jpgs'] # those are relative paths inside the base_path
+    # paths = ['/home/yourusername/work/pixel-patrol/examples/datasets/bioio/pngs', 'tifs', 'jpgs'] # those are relative paths inside the base_path
     # OR e.g.
     # paths = []
 
@@ -34,7 +37,21 @@ def main():
     api.add_paths(project, paths)
 
     # --- Step 4: set basic settings (e.g. file types to process) ---
-    api.set_settings(project, Settings(selected_file_extensions=selected_file_extensions))
+    # `process_files()` will infer a default chunk directory 
+    # inside the project's base dir when none is provided. 
+    # We keep small batch/flush settings for the quickstart so the 
+    # example writes visible chunks during the demo.
+    records_flush_dir = zip_path.parent / f"{project.name}_batches"
+
+    settings = Settings(
+        selected_file_extensions=selected_file_extensions,
+        processing_batch_size=2,       # small for quick example; increase for real runs
+        records_flush_every_n=2,
+        processing_max_workers=4,
+        records_flush_dir=records_flush_dir,
+        
+    )
+    api.set_settings(project, settings)
 
     # --- Step 5: process files ---
     # This step creates a dataframe with file information, and if available metadata and data (e.g. the image itself) metrics.
@@ -43,8 +60,6 @@ def main():
     print(records_df.head())
 
     # --- Step 6: export project ---
-    zip_path = Path("out/quickstart_project.zip")
-    zip_path.parent.mkdir(parents=True, exist_ok=True)
     api.export_project(project, zip_path) # project exports to zip_path 'out/'
 
     # --- Step 7: open the dashport report ---
