@@ -17,6 +17,7 @@ from pixel_patrol_base.config import (
     DEFAULT_RECORDS_FLUSH_EVERY_N,
 )
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.io.parquet_utils import _write_dataframe_to_parquet
 
 
 logger = logging.getLogger(__name__)
@@ -346,9 +347,22 @@ class _RecordsAccumulator:
         # individually usable without needing to stitch chunk files later.
         if self._flush_dir:
             try:
-                combined_path = self._flush_dir / "records_df.parquet"
-                logger.info("Processing Core: writing combined records DataFrame to %s", combined_path)
-                final_df.write_parquet(combined_path, compression="zstd")
+                combined_path = _write_dataframe_to_parquet(
+                    final_df,
+                    "records_df.parquet",
+                    self._flush_dir,
+                    compression="zstd",
+                )
+                if combined_path is None:
+                    logger.warning(
+                        "Processing Core: failed to write combined records parquet to %s",
+                        self._flush_dir,
+                    )
+                    return final_df
+                logger.info(
+                    "Processing Core: writing combined records DataFrame to %s",
+                    combined_path,
+                )
 
                 # Remove the individual chunk files now that we have a combined file
                 for p in list(self._written_files):
@@ -365,7 +379,10 @@ class _RecordsAccumulator:
                     # If not empty or cannot remove, leave it in place.
                     pass
             except Exception:
-                logger.exception("Processing Core: failed to write combined records parquet to %s", self._flush_dir)
+                logger.exception(
+                    "Processing Core: failed to finalize combined records parquet in %s",
+                    self._flush_dir,
+                )
 
         return final_df
 
@@ -404,16 +421,21 @@ class _RecordsAccumulator:
         if not force and self._active_df.height < self._flush_every_n:
             return
         print(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
-        self._flush_dir.mkdir(parents=True, exist_ok=True)
-        chunk_path = self._flush_dir / f"records_batch_{self._chunk_index:05d}.parquet"
+        chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
+        chunk_path = _write_dataframe_to_parquet(
+            self._active_df,
+            chunk_filename,
+            self._flush_dir,
+            compression="zstd",
+        )
+        if chunk_path is None:
+            logger.warning("Processing Core: failed to write partial chunk %s", chunk_filename)
+            return
+
+        logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
+        self._written_files.append(chunk_path)
+        self._active_df = pl.DataFrame([])
         self._chunk_index += 1
-        try:
-            logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
-            self._active_df.write_parquet(chunk_path, compression="zstd")
-            self._written_files.append(chunk_path)
-            self._active_df = pl.DataFrame([])
-        except Exception as exc:
-            logger.exception("Processing Core: failed to write partial chunk %s: %s", chunk_path, exc)
 
     def load_existing_chunks(self) -> Set[str]:
         """Load existing parquet chunk files from the flush directory.

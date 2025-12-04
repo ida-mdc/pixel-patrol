@@ -1,5 +1,4 @@
 import zipfile
-import numpy as np
 import yaml
 import polars as pl
 import tempfile
@@ -11,6 +10,10 @@ import dataclasses
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core import validation
+from pixel_patrol_base.io.parquet_utils import (
+    _deserialize_ndarray_columns_dataframe,
+    _write_dataframe_to_parquet,
+)
 
 logger = logging.getLogger(__name__)
 
