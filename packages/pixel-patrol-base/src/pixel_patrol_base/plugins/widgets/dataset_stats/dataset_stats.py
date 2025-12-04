@@ -43,7 +43,7 @@ class DatasetStatsWidget(BaseReportWidget):
             html.Div([
                 create_labeled_dropdown(
                     label="Select value to plot:",
-                    id="stats-value-to-plot-dropdown",
+                    component_id="stats-value-to-plot-dropdown",
                     options=[],
                     value=None
                 ),

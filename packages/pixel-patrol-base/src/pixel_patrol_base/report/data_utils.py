@@ -46,16 +46,16 @@ def extract_dimension_tokens(columns: List[str], base: str, dims: List[str] = No
             if d in tokens:
                 tokens[d].add(f"{d}{n}")
 
-                # Sort numerically
-    sorted_tokens = {}
-    for k, v in tokens.items():
-        def sort_key(s):
-            m = re.search(r"(\d+)$", s)
-            return int(m.group(1)) if m else 0
+    sorted_tokens: Dict[str, List[str]] = {}
+    for key, values in tokens.items():
+        def sort_key(token: str) -> int:
+            match = re.search(r"(\d+)$", token)
+            return int(match.group(1)) if match else 0
 
-        sorted_tokens[k] = sorted(list(v), key=sort_key)
+        sorted_tokens[key] = sorted(list(values), key=sort_key)
 
     return sorted_tokens
+
 
 
 def find_best_matching_column(
@@ -77,12 +77,11 @@ def find_best_matching_column(
             candidates = [c for c in candidates if f"_{token}" in c]
 
     if candidates:
-        # Return shortest match (assumption: fewest extra dimensions is best)
-        return sorted(candidates, key=len)[0]
+        return min(candidates, key=len)
     return None
 
 
-def parse_dynamic_col(
+def parse_metric_dimension_column(
         col_name: str, supported_metrics: List[str]
 ) -> Optional[Tuple[str, Dict[str, int]]]:
     """

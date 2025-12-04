@@ -9,7 +9,7 @@ from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 class DimOrderWidget(BaseReportWidget):
     # ---- Declarative spec ----
-    NAME: str = "Dim Order Distribution"
+    NAME: str = "Dimension Order Distribution"
     TAB: str = WidgetCategories.METADATA.value
     # columns used below: dim_order for grouping; imported_path_short/name for hover grouping
     REQUIRES: Set[str] = {"dim_order", "imported_path_short", "name"}

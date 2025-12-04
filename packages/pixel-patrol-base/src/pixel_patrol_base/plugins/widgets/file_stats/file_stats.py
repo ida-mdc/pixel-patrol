@@ -11,7 +11,7 @@ from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 class FileStatisticsWidget(BaseReportWidget):
     # --- Configuration ---
-    NAME: str = "File Statistics Report"
+    NAME: str = "File Statistics"
     TAB: str = WidgetCategories.FILE_STATS.value
     REQUIRES: Set[str] = {
         "name",

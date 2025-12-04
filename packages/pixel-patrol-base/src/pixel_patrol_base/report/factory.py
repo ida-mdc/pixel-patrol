@@ -2,7 +2,6 @@ import re
 from typing import Dict, Optional, List, Any, Tuple
 from collections import defaultdict
 import statistics
-from pathlib import Path
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -109,34 +108,36 @@ def plot_bar(
         df: pl.DataFrame,
         x: str,
         y: str,
-        color: str,
-        color_map: Dict[str, str],
+        color: Optional[str] = None,
+        color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         barmode: str = "stack",
-        order_x: Optional[List[str]] = None
+        order_x: Optional[List[str]] = None,
 ) -> go.Figure:
-    """Standardized Bar Chart."""
+    """Standardized bar chart."""
     fig = px.bar(
         df,
         x=x,
         y=y,
         color=color,
         barmode=barmode,
-        color_discrete_map=color_map,
+        color_discrete_map=color_map or {},
         title=title,
-        labels=labels
+        labels=labels,
     )
 
     if order_x:
-        fig.update_layout(xaxis={"categoryorder": "array", "categoryarray": order_x})
+        fig.update_layout(
+            xaxis={"categoryorder": "array", "categoryarray": order_x}
+        )
 
     try:
-        n = df[x].n_unique()
-    except Exception:
-        n = 0
+        n_categories = df[x].n_unique()
+    except (KeyError, AttributeError):
+        n_categories = 0
 
-    _apply_standard_styling(fig, n)
+    _apply_standard_styling(fig, n_categories)
     return fig
 
 
@@ -144,46 +145,64 @@ def plot_scatter(
         df: pl.DataFrame,
         x: str,
         y: str,
-        size: str,
-        color: str,
-        color_map: Dict[str, str],
+        size: Optional[str] = None,
+        color: Optional[str] = None,
+        color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
-        hover_data: Optional[List[str]] = None
+        hover_data: Optional[List[str]] = None,
 ) -> go.Figure:
-    """Standardized Scatter/Bubble Chart."""
+    """Standardized scatter / bubble chart."""
     fig = px.scatter(
         df,
         x=x,
         y=y,
         size=size,
         color=color,
-        color_discrete_map=color_map,
+        color_discrete_map=color_map or {},
         title=title,
         labels=labels,
-        hover_data=hover_data
+        hover_data=hover_data,
     )
     _apply_standard_styling(fig)
     return fig
 
 
-def plot_violin_distribution(
+
+def plot_violin(
         df: pl.DataFrame,
         y: str,
         group_col: str,
-        color_map: Dict[str, str],
-        title: str,
-        custom_data_cols: List[str] = None
+        color_map: Optional[Dict[str, str]] = None,
+        title: Optional[str] = None,
+        custom_data_cols: Optional[List[str]] = None,
 ) -> go.Figure:
-    """Standardized Violin/Distribution Plot."""
+    """
+    Standardized violin / distribution plot.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+    y : str
+        Column to plot on the Y axis.
+    group_col : str
+        Categorical column used for grouping (X axis).
+    color_map : dict, optional
+        Mapping group -> color.
+    title : str, optional
+    custom_data_cols : list[str], optional
+        Extra columns to attach as `customdata` (only first is used currently).
+    """
+    color_map = color_map or {}
     chart = go.Figure()
     groups = df.get_column(group_col).unique().sort().to_list()
 
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
 
-        group_color = color_map.get(group_name, "#333333") if group_col in ["imported_path",
-                                                                            "imported_path_short"] else None
+        group_color = None
+        if group_col in ["imported_path", "imported_path_short"]:
+            group_color = color_map.get(group_name, "#333333")
 
         custom_data = None
         if custom_data_cols:
@@ -197,33 +216,41 @@ def plot_violin_distribution(
             showlegend=True,
             points="all",
             pointpos=0,
-            box_visible=True,
+            box=dict(visible=True),
             meanline=dict(visible=True),
         )
         if group_color:
-            violin_kwargs["marker_color"] = group_color
+            violin_kwargs["marker"] = dict(color=group_color)
+
 
         chart.add_trace(go.Violin(**violin_kwargs))
 
     chart.update_traces(
         marker=dict(line=dict(width=1, color="black")),
-        box=dict(line_color="black")
+        box=dict(line_color="black"),
     )
 
     layout = STANDARD_LAYOUT_KWARGS.copy()
-    layout.update(dict(
-        title_text=title,
-        yaxis_title=y.replace('_', ' ').title(),
-        xaxis_title="Group"
-    ))
+    layout.update(
+        dict(
+            title_text=title or y.replace("_", " ").title(),
+            yaxis_title=y.replace("_", " ").title(),
+            xaxis_title="Group",
+        )
+    )
     chart.update_layout(**layout)
     return chart
 
 
-def create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Figure:
+
+def plot_sparkline(
+        df: pl.DataFrame,
+        dim_name: str,
+        cols: List[str],
+) -> go.Figure:
     """
-    Creates a minimalist sparkline plot.
-    Aggregates multiple columns mapping to the same index (e.g. t0_c0, t0_c1 -> t0).
+    Minimalist sparkline plot aggregating multiple columns that share an index
+    (e.g. t0_c0, t0_c1 -> t0).
     """
     pattern = re.compile(f"_{dim_name}(\\d+)")
 
@@ -244,30 +271,30 @@ def create_sparkline(df: pl.DataFrame, dim_name: str, cols: List[str]) -> go.Fig
     if not grouped_points:
         return go.Figure()
 
-    # 3. Average the values for each index to ensure 1 point per X
-    final_points = []
-    for idx in sorted(grouped_points.keys()):
-        avg_val = statistics.mean(grouped_points[idx])
-        final_points.append((idx, avg_val))
+    # 3. Compute mean per index
+    x_vals = sorted(grouped_points.keys())
+    y_vals = [statistics.mean(grouped_points[idx]) for idx in x_vals]
 
-    x_vals, y_vals = zip(*final_points)
-
-    fig = go.Figure(data=go.Scatter(
-        x=x_vals,
-        y=y_vals,
-        mode='lines+markers',
-        line=dict(width=2, color='#007eff'),
-        marker=dict(size=4)
-    ))
-
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="lines+markers",
+                line=dict(width=1),
+                marker=dict(size=4),
+            )
+        ]
     )
 
+    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout.update(
+        xaxis=dict(showgrid=False, zeroline=False, title=None),
+        yaxis=dict(showgrid=False, zeroline=False, title=None),
+        margin=dict(l=20, r=20, t=10, b=20),
+        height=80,
+    )
+    fig.update_layout(**layout)
     return fig
 
 
@@ -325,7 +352,7 @@ def generate_column_violin_plots(
 
     plot_divs: List[html.Div] = []
     for col_name in cols_to_plot:
-        fig = _create_single_violin_plot(
+        fig = _plot_single_violin(
             plot_data=df_filtered,
             value_to_plot=col_name,
             groups=groups,
@@ -361,7 +388,7 @@ def generate_column_violin_plots(
     return [plots_container] + table_component
 
 
-def _create_single_violin_plot(
+def _plot_single_violin(
     plot_data: pl.DataFrame,
     value_to_plot: str,
     groups: List[str],
@@ -376,24 +403,20 @@ def _create_single_violin_plot(
 
         chart.add_trace(
             go.Violin(
-                y=df_group.get_column(value_to_plot),
+                y=df_group.get_column(value_to_plot).to_list(),
                 name=group_name,
-                customdata=df_group.get_column("name").map_elements(
-                    lambda p: Path(p).name, return_dtype=pl.String
-                ),
-                marker_color=group_color,
+                customdata=df_group.get_column("name").to_list(),
                 opacity=0.9,
-                showlegend=True,
+                showlegend=False,
                 points="all",
-                spanmode="hard",
                 pointpos=0,
-                box_visible=True,
+                box=dict(visible=True),
                 meanline=dict(visible=True),
+                marker=dict(color=group_color),
                 hovertemplate=(
-                    f"<b>Group: {group_name}</b>"
-                    "<br>Value: %{y:.2f}"
-                    "<br>Filename: %{customdata}"
-                    "<extra></extra>"
+                    "<b>Folder: %{x}</b><br>"
+                    f"{value_to_plot}: " "%{y:.2f}<br>"
+                    "File: %{customdata}<extra></extra>"
                 ),
             )
         )
@@ -421,7 +444,7 @@ def _create_single_violin_plot(
 
 def create_labeled_dropdown(
         label: str,
-        id: str | Dict,
+        component_id: str | Dict,
         options: List[Dict],
         value: Any = None,
         clearable: bool = False,
@@ -438,7 +461,7 @@ def create_labeled_dropdown(
         [
             html.Label(label, style={"marginBottom": "5px", "fontWeight": "500"}),
             dcc.Dropdown(
-                id=id,
+                id=component_id,
                 options=options,
                 value=value,
                 clearable=clearable,
@@ -476,7 +499,7 @@ def create_dimension_selectors(
                         html.Label(f"{dim_name.upper()} slice"),
                         dcc.Dropdown(id=dropdown_id, options=options, value="All", clearable=False),
                     ],
-                    style={"display": "inline-block", "marginRight": "15px", "width": "100px"}
+                    style={"display": "inline-block", "marginRight": "15px", "width": "100px"}  # type: ignore[arg-type]
                 )
             )
 
