@@ -4,19 +4,19 @@ from typing import List
 import polars as pl
 from dash import html, dcc, Input, Output, ALL, ctx
 
-from pixel_patrol_base.report.data_utils import parse_dynamic_col
-from pixel_patrol_base.report.factory import create_sparkline
+from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
+from pixel_patrol_base.report.factory import plot_sparkline
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 
 
 class MetricsAcrossDimensionsWidget(BaseReportWidget):
     """
-    Reusable base for widgets that display dynamic stats in a table.
+    Reusable base for widgets that display stats across dimensions in a table.
     Inherits from BaseReportWidget to provide standard Card layout.
     """
 
     # Subclasses set these:
-    NAME: str = "Dynamic Table"
+    NAME: str = "Metrics Across Dimensions"
     TAB: str = ""
     REQUIRES = set()
     REQUIRES_PATTERNS = None
@@ -38,7 +38,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     def register(self, app, df_global: pl.DataFrame):
         """Registers callbacks for the table widget."""
 
-        # Populate filters based on the dynamic columns present
+        # Populate filters based on the dimension columns present
         @app.callback(
             Output(f"{self.widget_id}-filters-container", "children"),
             Input("color-map-store", "data"),  # just a trigger; not used directly
@@ -48,7 +48,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             supported_metrics = self.get_supported_metrics()
 
             for col in df_global.columns:
-                parsed = parse_dynamic_col(col, supported_metrics=supported_metrics)
+                parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
                 if parsed:
                     _, dims = parsed
                     for dim_name, dim_idx in dims.items():
@@ -58,7 +58,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             for dim_name, indices in sorted(all_dims.items()):
                 if len(indices) <= 1:
                     continue
-                dropdown_id = {"type": f"dynamic-filter-{self.widget_id}", "dim": dim_name}
+                dropdown_id = {"type": f"dimension-filter-{self.widget_id}", "dim": dim_name}
                 dropdowns.append(
                     html.Div(
                         [
@@ -78,7 +78,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
         @app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
-            Input({"type": f"dynamic-filter-{self.widget_id}", "dim": ALL}, "value"),
+            Input({"type": f"dimension-filter-{self.widget_id}", "dim": ALL}, "value"),
         )
         def update_stats_table(filter_values):
             # Pattern-matching Input gives us ctx.inputs_list
@@ -88,9 +88,11 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
             parsed_cols = []
             for col in df_global.columns:
-                parsed = parse_dynamic_col(col, supported_metrics=supported_metrics)
-                if parsed:
-                    parsed_cols.append({"col": col, "metric": parsed[0], "dims": parsed[1]})
+                parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
+                if parsed is None:
+                    continue
+                metric, dims = parsed
+                parsed_cols.append({"col": col, "metric": metric, "dims": dims})
 
             metrics_to_show = sorted({p["metric"] for p in parsed_cols})
             from collections import defaultdict
@@ -103,7 +105,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             dims_to_plot = sorted([d for d, idxs in all_dims.items() if len(idxs) > 1])
 
             if not metrics_to_show or not dims_to_plot:
-                return html.P("No matching dynamic statistics found.")
+                return html.P("No matching dimension statistics found.")
 
             header = [html.Th("Metric")] + [html.Th(f"Trend across '{d.upper()}'") for d in dims_to_plot]
             table_rows = []
@@ -121,21 +123,14 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
                     # require at least 2 slices for that dim; otherwise no plot
                     if cols_for_cell and len(slice_idxs) > 1:
-                        # Call Factory for Visuals
-                        fig = create_sparkline(df_global, plot_dim, cols_for_cell)
+                        # Use Factory for visual; layout fully defined in plot_sparkline
+                        fig = plot_sparkline(df_global, plot_dim, cols_for_cell)
 
-                        ## New: Restore Layout settings for Table Sparklines (Overrides Factory defaults)
-                        fig.update_layout(height=120, margin=dict(l=30, r=10, t=10, b=30))
-                        fig.update_xaxes(
-                            visible=True, showticklabels=True, showgrid=True, ticks="outside",
-                            title_text=None, tickmode="linear", dtick=1, tickformat="d"
+                        cell_content = dcc.Graph(
+                            figure=fig,
+                            config={"displayModeBar": False},
                         )
-                        fig.update_yaxes(
-                            visible=True, showticklabels=True, ticks="outside", tickformat=".2f"
-                        )
-                        ##
 
-                        cell_content = dcc.Graph(figure=fig, config={"displayModeBar": False})
                     else:
                         cell_content = html.Div("N/A", style={"textAlign": "center", "padding": "15px"})
                     row_cells.append(html.Td(cell_content))

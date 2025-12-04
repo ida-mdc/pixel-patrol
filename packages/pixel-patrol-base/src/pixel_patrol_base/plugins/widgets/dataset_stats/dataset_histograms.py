@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List
 import polars as pl
 import plotly.graph_objects as go
 from dash import html, dcc, Input, Output, ALL
