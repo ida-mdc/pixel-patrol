@@ -56,7 +56,7 @@ def cli():
               help='If set, clear previous partial chunk files and re-run processing from scratch. Default: resume where left off.')
 @click.option('--chunk-dir', type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=Path),
                   default=None,
-                  help='Optional: Directory to store intermediate parquet chunk files. Defaults to <output_zip_parent>/<output_stem>_records_chunks.')
+                  help='Optional: Directory to store intermediate parquet chunk files. Defaults to <output_zip_parent>/<project_name>_batches.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
               loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str,
               rerun_incomplete: bool, chunk_dir: Path | None):
@@ -89,9 +89,12 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     if chunk_dir is not None:
         chosen_chunk_dir = Path(chunk_dir).resolve()
     else:
-        chosen_chunk_dir = (output_zip.parent / f"{output_zip.stem}_records_chunks").resolve()
+        chosen_chunk_dir = (output_zip.parent / f"{my_project.name}_batches").resolve()
+    chunk_dir_was_inferred = chunk_dir is None
 
-    # If user requested a clean rerun, clear existing partials in the chosen dir
+    # Note: Do not clear existing chunk dir by default so runs may be resumed.
+    # Use --rerun-incomplete flag to force clearing of partial results before processing.
+    # Clear existing partial chunks only when explicitly requested by the user.
     if chosen_chunk_dir.exists() and rerun_incomplete:
         try:
             click.echo(f"--rerun-incomplete passed: clearing previous records chunk directory: '{chosen_chunk_dir}'")
@@ -106,15 +109,6 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
         pixel_patrol_flavor=flavor,
         records_flush_dir=chosen_chunk_dir,
     )
-    # Note: Do not clear existing chunk dir by default so runs may be resumed.
-    # Use --rerun-incomplete flag to force clearing of partial results before processing.
-    # Clear existing partial chunks only when explicitly requested by the user.
-    if chunk_dir.exists() and rerun_incomplete:
-        try:
-            click.echo(f"--rerun-incomplete passed: clearing previous records chunk directory: '{chunk_dir}'")
-            shutil.rmtree(chunk_dir)
-        except OSError as exc:
-            click.echo(f"Warning: Could not clear '{chunk_dir}': {exc}")
     click.echo(f"Setting project settings: {initial_settings}")
     set_settings(my_project, initial_settings)
 
@@ -124,6 +118,14 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     click.echo(f"Exporting project to: '{output_zip}'")
     export_project(my_project, Path(output_zip)) # Assuming export_project takes string path
     click.echo("Export complete.")
+
+    # Remove the batches directory we created once the archive is ready.
+    if chosen_chunk_dir.exists() and chunk_dir_was_inferred:
+        try:
+            shutil.rmtree(chosen_chunk_dir)
+            click.echo(f"Removed intermediate batches directory: '{chosen_chunk_dir}'")
+        except OSError as exc:
+            click.echo(f"Warning: Could not remove batches directory '{chosen_chunk_dir}': {exc}")
 
 
 @cli.command()
