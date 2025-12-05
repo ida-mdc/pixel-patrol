@@ -1,6 +1,6 @@
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple, Iterable, Callable
 from tqdm.auto import tqdm
@@ -9,7 +9,7 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import walk_filesystem
-from pixel_patrol_base.plugin_registry import discover_processor_plugins
+from pixel_patrol_base.plugin_registry import discover_processor_plugins, discover_loader
 from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import (
@@ -21,6 +21,34 @@ from pixel_patrol_base.io.parquet_utils import _write_dataframe_to_parquet
 
 
 logger = logging.getLogger(__name__)
+
+_PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
+
+
+def _process_worker_initializer(loader_id: Optional[str], processor_classes: List[type]) -> None:
+    """Initialize per-process loader and processor instances."""
+    global _PROCESS_WORKER_CONTEXT
+    loader_instance = discover_loader(loader_id) if loader_id else None
+    processors = [cls() for cls in processor_classes]
+    _PROCESS_WORKER_CONTEXT = {
+        "loader": loader_instance,
+        "processors": processors,
+    }
+
+
+def _process_path_in_worker(file_path: str) -> Dict:
+    """Worker entry point for processing a single file path."""
+    loader = _PROCESS_WORKER_CONTEXT.get("loader")
+    processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
+    if loader is None:
+        logger.warning("Processing Core: worker lacks loader; skipping %s", file_path)
+        return {}
+    return get_all_record_properties(
+        Path(file_path),
+        loader,
+        processors,
+        show_processor_progress=False,
+    )
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -69,6 +97,7 @@ def _build_deep_record_df(
                           Called for each file processed. If provided, tqdm progress bar is disabled.
     """
     processors = discover_processor_plugins()
+    processor_classes = [proc.__class__ for proc in processors]
     worker_count = _resolve_worker_count(settings)
     show_processor_progress = worker_count == 1
 
@@ -112,25 +141,53 @@ def _build_deep_record_df(
                 if record_dict:
                     accumulator.add_row({"path": file_path, **record_dict})
         else:
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                future_map = {
-                    executor.submit(
-                        get_all_record_properties,
-                        file_path,
-                        loader_instance,
-                        processors,
-                        show_processor_progress,
-                    ): file_path
-                    for file_path in to_process
-                }
+            loader_name = getattr(loader_instance, "NAME", None)
+            try:
+                with ProcessPoolExecutor(
+                    max_workers=worker_count,
+                    initializer=_process_worker_initializer,
+                    initargs=(loader_name, processor_classes),
+                ) as executor:
+                    future_map = {
+                        executor.submit(_process_path_in_worker, file_path): file_path
+                        for file_path in to_process
+                    }
 
-                for future in as_completed(future_map):
-                    file_path = future_map[future]
-                    try:
-                        record_dict = future.result()
-                    except Exception:  # pragma: no cover - logged for observability
-                        logger.exception("Processor failed for %s", file_path)
-                        record_dict = {}
+                    for future in as_completed(future_map):
+                        file_path = future_map[future]
+                        try:
+                            record_dict = future.result()
+                        except Exception:  # pragma: no cover - logged for observability
+                            logger.exception("Process worker failed for %s", file_path)
+                            record_dict = {}
+
+                        if record_dict:
+                            accumulator.add_row({"path": file_path, **record_dict})
+                        progress.update(1)
+            except Exception as exc:
+                logger.warning(
+                    "Processing Core: ProcessPoolExecutor unavailable (%s); falling back to threads.",
+                    exc,
+                )
+                with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                    future_map = {
+                        executor.submit(
+                            get_all_record_properties,
+                            Path(file_path),
+                            loader_instance,
+                            processors,
+                            False,
+                        ): file_path
+                        for file_path in to_process
+                    }
+
+                    for future in as_completed(future_map):
+                        file_path = future_map[future]
+                        try:
+                            record_dict = future.result()
+                        except Exception:  # pragma: no cover - logged for observability
+                            logger.exception("Processor failed for %s", file_path)
+                            record_dict = {}
 
                     if record_dict:
                         accumulator.add_row({"path": file_path, **record_dict})
