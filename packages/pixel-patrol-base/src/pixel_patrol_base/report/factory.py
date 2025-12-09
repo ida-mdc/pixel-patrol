@@ -17,7 +17,7 @@ STANDARD_LAYOUT_KWARGS = dict(
     margin=dict(l=50, r=50, t=50, b=50),
     hovermode="closest",
     template="plotly_white",
-    legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
+    legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None),
 )
 
 
@@ -167,6 +167,52 @@ def plot_scatter(
     _apply_standard_styling(fig)
     return fig
 
+
+def plot_strip(
+        df: pl.DataFrame,
+        x: str,
+        y: str,
+        color: Optional[str] = None,
+        facet_col: Optional[str] = None,
+        facet_col_wrap: int = 3,
+        # Added spacing parameter (0.1 is larger than default ~0.02)
+        facet_row_spacing: float = 0.1,
+        color_map: Optional[Dict[str, str]] = None,
+        title: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
+        hover_data: Optional[List[str]] = None,
+        height: Optional[int] = None,
+) -> go.Figure:
+    """Standardized strip plot. Handles both single plots and faceted grids."""
+    fig = px.strip(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        facet_col=facet_col,
+        facet_col_wrap=facet_col_wrap,
+        # Pass the spacing to px.strip
+        facet_row_spacing=facet_row_spacing,
+        color_discrete_map=color_map or {},
+        title=title,
+        labels=labels,
+        hover_data=hover_data,
+    )
+
+    # Ensure axes match and ticks are shown
+    fig.update_xaxes(matches=None, showticklabels=True, title=None)
+    fig.update_yaxes(matches=None, showticklabels=True)
+
+    # Remove "variable=" prefix from subplot titles (e.g. "Dimension=X Size" -> "X Size")
+    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+
+    _apply_standard_styling(fig)
+
+    # Allow height override (useful for multi-row facets)
+    if height:
+        fig.update_layout(height=height)
+
+    return fig
 
 
 def plot_violin(

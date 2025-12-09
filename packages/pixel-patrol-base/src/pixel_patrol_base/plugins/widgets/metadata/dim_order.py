@@ -1,23 +1,26 @@
 from typing import List, Dict, Set
 
-import plotly.express as px
 import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
+from pixel_patrol_base.report.factory import plot_bar
 
 class DimOrderWidget(BaseReportWidget):
-    # ---- Declarative spec ----
     NAME: str = "Dimension Order Distribution"
     TAB: str = WidgetCategories.METADATA.value
-    # columns used below: dim_order for grouping; imported_path_short/name for hover grouping
-    REQUIRES: Set[str] = {"dim_order", "imported_path_short", "name"}
+    REQUIRES: Set[str] = {"dim_order", "name"}
     REQUIRES_PATTERNS = None
 
     # Component IDs
     RATIO_ID = "dim-order-present-ratio"
     GRAPH_ID = "dim-order-bar-chart"
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._df: pl.DataFrame | None = None
 
     @property
     def help_text(self) -> str:
@@ -29,78 +32,66 @@ class DimOrderWidget(BaseReportWidget):
         )
 
     def get_content_layout(self) -> List:
-        """Defines the layout of the Dim Order Distribution widget."""
         return [
             html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
             dcc.Graph(id=self.GRAPH_ID, style={"height": "500px"}),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        """Registers callbacks for the Dim Order Distribution widget."""
-        @app.callback(
+    def register(self, app, df: pl.DataFrame):
+        self._df = df
+
+        app.callback(
             Output(self.GRAPH_ID, "figure"),
             Output(self.RATIO_ID, "children"),
-            Input("color-map-store", "data"),  # color mapping
+            Input("color-map-store", "data"),
+            Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        )(self._update_plot)
+
+    def _update_plot(self, color_map: Dict[str, str], global_config: Dict):
+        color_map = color_map or {}
+        df = self._df
+
+        # Apply global filters (rows) and get dynamic group column
+        df_processed, group_col = apply_global_config(df, global_config)
+
+        # Count only rows with a dim_order value
+        df_filtered = (
+            df_processed
+            .with_columns(pl.lit(1).alias("value_count"))
+            .filter(pl.col("dim_order").is_not_null())
         )
-        def update_dim_order_chart(color_map: Dict[str, str]):
-            color_map = color_map or {}
 
-            # Count only rows with a dim_order value
-            processed_df = (
-                df_global
-                .with_columns(pl.lit(1).alias("value_count"))
-                .filter(pl.col("dim_order").is_not_null())
+        # Ratio text
+        present = df_filtered.height
+        total = df_processed.height
+        ratio_text = (
+            f"{present} of {total} files ({(present / total) * 100:.2f}%) have 'Dimension Order' information."
+            if total > 0 else "No files to display Dim Order information."
+        )
+
+        if present == 0:
+            return {}, ratio_text
+
+        # Aggregate counts per (dim_order, group)
+        plot_data_agg = (
+            df_filtered
+            .group_by(["dim_order", group_col])
+            .agg(
+                pl.sum("value_count").alias("count"),
             )
+            .sort(["dim_order", group_col])
+        )
 
-            # Ratio text
-            present = processed_df.height
-            total = df_global.height
-            ratio_text = (
-                f"{present} of {total} files ({(present / total) * 100:.2f}%) have 'Dim Order' information."
-                if total > 0 else "No files to display Dim Order information."
-            )
+        # Use factory plot
+        fig = plot_bar(
+            df=plot_data_agg,
+            x="dim_order",
+            y="count",
+            color=group_col,
+            color_map=color_map,
+            title="Dim Order Distribution",
+            labels={"dim_order": "Dimension Order", "count": "Count", group_col: "Group"},
+            barmode="stack"
+        )
 
-            # Aggregate counts per (dim_order, folder) and collect names for hover
-            plot_data_agg = (
-                processed_df
-                .group_by(["dim_order", "imported_path_short"])
-                .agg(
-                    pl.sum("value_count").alias("count"),
-                    pl.col("name").unique().alias("names_in_group"),
-                )
-                .sort(["dim_order", "imported_path_short"])
-            )
-
-            # Plot
-            fig = px.bar(
-                plot_data_agg,
-                x="dim_order",
-                y="count",
-                color="imported_path_short",
-                barmode="stack",
-                color_discrete_map=color_map,
-                title="Dim Order Distribution",
-                labels={
-                    "dim_order": "Dimension Order",
-                    "count": "Number of Files",
-                    "imported_path_short": "Folder",
-                },
-                hover_data=["imported_path_short", "count", "names_in_group"],
-            )
-
-            fig.update_traces(marker_line_color="white", marker_line_width=0.5, opacity=1)
-            fig.update_layout(
-                height=500,
-                margin=dict(l=50, r=50, t=80, b=100),
-                hovermode="closest",
-                bargap=0.1,
-                bargroupgap=0.05,
-                legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
-            )
-            n = plot_data_agg["dim_order"].n_unique()
-            if n==1:
-                fig.update_layout(bargap=0.7)
-            if n==2:
-                fig.update_layout(bargap=0.4)
-
-            return fig, ratio_text
+        return fig, ratio_text
