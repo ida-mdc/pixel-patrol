@@ -1,6 +1,5 @@
 import re
 from typing import List, Dict, Sequence
-import copy
 
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
@@ -30,9 +29,10 @@ from pixel_patrol_base.report.global_controls import (
     EXPORT_PROJECT_DOWNLOAD_ID,
 )
 
-
-
 from pathlib import Path  # add if missing
+
+DEFAULT_WIDGET_WIDTH = 12
+
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
 
 def load_and_concat_parquets(paths: List[str]) -> pl.DataFrame:
@@ -93,7 +93,6 @@ def _create_app(
             w.register_callbacks(app, df)
 
     def serve_layout_closure() -> html.Div:
-        DEFAULT_WIDGET_WIDTH = 12
 
         # --- Header (inside main content) ---
         header_row = dbc.Row(
@@ -158,9 +157,9 @@ def _create_app(
             current_group_cols = []
             current_row_width = 0
 
-            for w in ws:
-                if should_display_widget(w, df.columns):
-                    widget_width = getattr(w, "width", DEFAULT_WIDGET_WIDTH)
+            for widget in ws:
+                if should_display_widget(widget, df.columns):
+                    widget_width = getattr(widget, "width", DEFAULT_WIDGET_WIDTH)
 
                     # wrap to next row if needed
                     if current_row_width + widget_width > 12:
@@ -172,7 +171,7 @@ def _create_app(
                     # widget body
                     current_group_cols.append(
                         dbc.Col(
-                            html.Div(w.layout()),
+                            html.Div(widget.layout()),
                             width=widget_width,
                             className="mb-3",
                         )
@@ -260,10 +259,11 @@ def _create_app(
 
         cmap = cm.get_cmap(palette, len(groups))
 
-        return {
-            str(g): f"#{int(cmap(i)[0] * 255):02x}{int(cmap(i)[1] * 255):02x}{int(cmap(i)[2] * 255):02x}"
-            for i, g in enumerate(groups)
-        }
+        color_map: Dict[str, str] = {}
+        for i, group in enumerate(groups):
+            r, g_chan, b, _ = cmap(i)
+            color_map[str(group)] = f"#{int(r * 255):02x}{int(g_chan * 255):02x}{int(b * 255):02x}"
+        return color_map
 
 
     @app.callback(
@@ -275,7 +275,7 @@ def _create_app(
         prevent_initial_call=False,
     )
     def update_global_config(
-        n_clicks: int,
+        _n_clicks: int,
         group_col,
         filter_col,
         filter_text,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import polars as pl
@@ -43,7 +42,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
         # cardinality
         try:
             n_unique = df.select(pl.col(c).n_unique()).item()
-        except Exception:
+        except pl.exceptions.PolarsError:
             n_unique = None
 
         if n_unique is None:
