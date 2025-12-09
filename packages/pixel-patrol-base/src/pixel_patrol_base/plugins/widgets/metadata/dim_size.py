@@ -1,23 +1,27 @@
 from typing import List, Dict, Set
 
-import plotly.express as px
 import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
+from pixel_patrol_base.report.factory import plot_scatter, plot_strip
 
 class DimSizeWidget(BaseReportWidget):
-    # ---- Declarative spec ----
     NAME: str = "Dimension Size Distribution"
     TAB: str = WidgetCategories.METADATA.value
-    REQUIRES: Set[str] = {"imported_path_short", "name"}    # used for grouping/hover
-    REQUIRES_PATTERNS: List[str] = [r"^[a-zA-Z]_size$"]     # dynamic size columns
+    REQUIRES: Set[str] = {"name"}
+    REQUIRES_PATTERNS: List[str] = [r"^[a-zA-Z]_size$"]  # dynamic size columns
 
-    # Component IDs
-    INFO_ID = "dim-size-info"
-    XY_AREA_ID = "xy-size-plot-area"
-    INDV_AREA_ID = "individual-dim-plots-area"
+    # Component IDs renamed for clarity/consistency
+    RATIO_ID = "dim-size-ratio-summary"
+    XY_SCATTER_ID = "dim-size-xy-plot"
+    INDIVIDUAL_STRIP_ID = "dim-size-individual-strip-plot"
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._df: pl.DataFrame | None = None
 
     @property
     def help_text(self) -> str:
@@ -30,129 +34,144 @@ class DimSizeWidget(BaseReportWidget):
         )
 
     def get_content_layout(self) -> List:
-        """Defines the layout of the Dimension Size Distribution widget."""
         return [
-            html.Div(id=self.INFO_ID, style={"marginBottom": "15px"}),
+            html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
             html.Div(
-                id=self.XY_AREA_ID,
+                id=self.XY_SCATTER_ID,
                 children=[html.P("No valid data to plot for X and Y dimension sizes.")],
             ),
-            html.Div(id=self.INDV_AREA_ID),
+            html.Div(id=self.INDIVIDUAL_STRIP_ID),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        """Registers callbacks for the Dimension Size Distribution widget."""
-        @app.callback(
-            Output(self.INFO_ID, "children"),
-            Output(self.XY_AREA_ID, "children"),
-            Output(self.INDV_AREA_ID, "children"),
+    def register(self, app, df: pl.DataFrame):
+        self._df = df
+
+        app.callback(
+            Output(self.RATIO_ID, "children"),
+            Output(self.XY_SCATTER_ID, "children"),
+            Output(self.INDIVIDUAL_STRIP_ID, "children"),
             Input("color-map-store", "data"),
+            Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        )(self._update_plot)
+
+    def _update_plot(self, color_map: Dict[str, str], global_config: Dict):
+
+        color_map = color_map or {}
+        df = self._df
+
+        # Apply global filters (rows) and get dynamic group column
+        df_processed, group_col = apply_global_config(df, global_config)
+
+        # Identify all *_size columns present
+        dimension_size_cols = [col for col in df_processed.columns if col.endswith("_size")]
+        if not dimension_size_cols:
+            return [html.P("No dimension size columns (e.g., 'X_size') found in data.")], [], []
+
+        # Pre-filter rows where at least one size dimension is a valid number (>1)
+        filtered_df = df_processed.filter(
+            pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
         )
-        def update_dim_size_charts(color_map: Dict[str, str]):
-            color_map = color_map or {}
 
-            # --- 1) Identify all *_size columns present ---
-            dimension_size_cols = [col for col in df_global.columns if col.endswith("_size")]
-            if not dimension_size_cols:
-                return [html.P("No dimension size columns (e.g., 'X_size') found in data.")], [], []
+        # 1. Generate Availability Ratios
+        ratio_children = self._get_availability_ratios(filtered_df, df_processed.height, dimension_size_cols)
 
-            # Pre-filter rows where at least one size dimension is a valid number (>1)
-            filtered_df = df_global.filter(
-                pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
+        # 2. X/Y bubble chart
+        xy_plot_children = self._create_xy_scatter_plot(filtered_df, group_col, color_map)
+
+        # 3. Individual dimension strip plots
+        individual_dim_plots = self._create_dim_strip_plots(filtered_df, group_col, dimension_size_cols, color_map)
+
+        return ratio_children, xy_plot_children, individual_dim_plots
+
+    @staticmethod
+    def _get_availability_ratios(df_filtered: pl.DataFrame, total_files: int, cols: List[str]) -> List:
+        """Generates the availability summary text for each dimension."""
+        ratio_spans: List = []
+        for column in cols:
+            present = df_filtered.filter(pl.col(column) > 1).height
+
+            # Format text: e.g. "X Size: 100 of 100 files (100.00%)."
+            col_label = column.replace('_', ' ').title()
+            text = (
+                f"{col_label}: {present} of {total_files} files "
+                f"({(present / total_files) * 100:.2f}%)."
+                if total_files > 0 else f"{col_label}: No files."
             )
+            ratio_spans.extend([html.Span(text), html.Br()])
 
-            # --- 2) X/Y bubble chart (if both X_size and Y_size exist) ---
-            x_col, y_col = "X_size", "Y_size"
-            xy_plot_children = [
-                html.P("No valid data for X/Y plot. Requires 'X_size' and 'Y_size' columns with data > 1.")
-            ]
-            if x_col in filtered_df.columns and y_col in filtered_df.columns:
-                xy_plot_data = filtered_df.filter((pl.col(x_col) > 1) & (pl.col(y_col) > 1))
-                if xy_plot_data.height > 0:
-                    bubble_data_agg = (
-                        xy_plot_data
-                        .group_by([x_col, y_col, "imported_path_short"])
-                        .agg(
-                            pl.count().alias("bubble_size"),
-                            pl.col("name").unique().alias("names_in_group"),
-                        )
-                        .sort([x_col, y_col, "imported_path_short"])
-                    )
+        return [html.P(html.B("Data Availability by Dimension:")), html.P(ratio_spans)]
 
-                    fig_bubble = px.scatter(
-                        bubble_data_agg,
-                        x=x_col,
-                        y=y_col,
-                        size="bubble_size",
-                        color="imported_path_short",
-                        color_discrete_map=color_map,
-                        title="Distribution of X and Y Dimension Sizes",
-                        labels={"bubble_size": "Count", "imported_path_short": "Folder"},
-                        hover_data=["names_in_group"],
-                    )
-                    fig_bubble.update_layout(
-                        height=500,
-                        margin=dict(l=50, r=50, t=80, b=100),
-                        hovermode="closest",
-                        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
-                        template="plotly",
-                    )
-                    xy_plot_children = [dcc.Graph(figure=fig_bubble)]
+    @staticmethod
+    def _create_xy_scatter_plot(df: pl.DataFrame, group_col: str, color_map: Dict[str, str]) -> List:
+        """Creates the X vs Y scatter plot if data exists."""
 
-            # --- 3) Individual dimension strip plots (facet per *_size) ---
-            melted_df = (
-                filtered_df
-                .unpivot(
-                    index=["imported_path_short", "name"],
-                    on=dimension_size_cols,
-                    variable_name="dimension_name",
-                    value_name="dimension_value",
-                )
-                .filter(pl.col("dimension_value") > 1)
+        x_col, y_col = "X_size", "Y_size"
+        if x_col not in df.columns or y_col not in df.columns:
+            return [html.P("No valid data for X/Y plot. Requires 'X_size' and 'Y_size' columns with data > 1.")]
+
+        xy_plot_data = df.filter((pl.col(x_col) > 1) & (pl.col(y_col) > 1))
+
+        if xy_plot_data.height == 0:
+            return [html.P("No valid data for X/Y plot.")]
+
+        bubble_data_agg = (
+            xy_plot_data
+            .group_by([x_col, y_col, group_col])
+            .agg(pl.count().alias("bubble_size"))
+            .sort([x_col, y_col, group_col])
+        )
+
+        fig = plot_scatter(
+            df=bubble_data_agg,
+            x=x_col,
+            y=y_col,
+            size="bubble_size",
+            color=group_col,
+            color_map=color_map,
+            title="Distribution of X and Y Dimension Sizes",
+            labels={"bubble_size": "Count", group_col: "Group"}
+        )
+        return [dcc.Graph(figure=fig)]
+
+    @staticmethod
+    def _create_dim_strip_plots(df: pl.DataFrame, group_col: str, cols: List[str], color_map: Dict[str, str]) -> List:
+        """Creates the faceted strip plot for all dimensions."""
+        # Clean data for plotting: Replace "X_size" with "X Size" directly in the dataframe
+        melted_df = (
+            df.unpivot(
+                index=[group_col, "name"],
+                on=cols,
+                variable_name="dimension_name",
+                value_name="dimension_value",
             )
+            .filter(pl.col("dimension_value") > 1)
+            .with_columns(
+                pl.col("dimension_name")
+                .str.replace("_size", " Size")
+                .str.replace("_", " ")
+            )
+        )
 
-            if melted_df.height == 0:
-                individual_dim_plots = [html.P("No data to plot for individual dimension sizes.")]
-            else:
-                fig_strip = px.strip(
-                    melted_df,
-                    x="imported_path_short",
-                    y="dimension_value",
-                    color="imported_path_short",
-                    facet_col="dimension_name",
-                    facet_col_wrap=3,
-                    color_discrete_map=color_map,
-                    facet_row_spacing=0.16,
-                    title="Individual Dimension Sizes per Dataset",
-                    labels={"dimension_value": "Size", "imported_path_short": "Folder"},
-                    hover_data=["name"],
-                )
-                # Show numeric tick labels on all subplots
-                fig_strip.update_xaxes(matches=None, showticklabels=True)
-                fig_strip.update_yaxes(matches=None, showticklabels=True)
-                fig_strip.for_each_annotation(
-                    lambda a: a.update(text=a.text.replace("dimension_name=", "").replace("_size", " Size"))
-                )
-                fig_strip.update_layout(
-                    height=200 * ((len(dimension_size_cols) + 2) // 3),
-                    margin=dict(l=50, r=50, t=80, b=80),
-                    showlegend=False,
-                    template="plotly",
-                )
-                individual_dim_plots = [dcc.Graph(figure=fig_strip)]
+        if melted_df.height == 0:
+            return [html.P("No data to plot for individual dimension sizes.")]
 
-            # --- 4) Availability ratios for each *_size column ---
-            ratio_spans: List = []
-            total_files = df_global.height
-            for column in dimension_size_cols:
-                present = filtered_df.filter(pl.col(column) > 1).height
-                text = (
-                    f"{column.replace('_', ' ').title()}: {present} of {total_files} files "
-                    f"({(present / total_files) * 100:.2f}%)."
-                    if total_files > 0 else f"{column.replace('_', ' ').title()}: No files."
-                )
-                ratio_spans.extend([html.Span(text), html.Br()])
+        # Calculate dynamic height based on number of facets (cols // 3 rows)
+        plot_height = 200 * ((len(cols) + 2) // 3)
 
-            info_children = [html.P(html.B("Data Availability by Dimension:")), html.P(ratio_spans)]
+        fig = plot_strip(
+            df=melted_df,
+            x=group_col,
+            y="dimension_value",
+            color=group_col,
+            facet_col="dimension_name",
+            facet_col_wrap=3,
+            # Increased vertical spacing
+            facet_row_spacing=0.15,
+            color_map=color_map,
+            title="Individual Dimension Sizes per Dataset",
+            labels={"dimension_value": "Size", group_col: "Group", "dimension_name": "Dimension"},
+            hover_data=["name"],
+            height=plot_height
+        )
 
-            return info_children, xy_plot_children, individual_dim_plots
+        return [dcc.Graph(figure=fig)]
