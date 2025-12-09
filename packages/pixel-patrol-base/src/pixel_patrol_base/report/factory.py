@@ -176,6 +176,7 @@ def plot_violin(
         color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
         custom_data_cols: Optional[List[str]] = None,
+        height: Optional[int] = None,
 ) -> go.Figure:
     """
     Standardized violin / distribution plot.
@@ -192,6 +193,7 @@ def plot_violin(
     title : str, optional
     custom_data_cols : list[str], optional
         Extra columns to attach as `customdata` (only first is used currently).
+    height : int, optional
     """
     color_map = color_map or {}
     chart = go.Figure()
@@ -200,13 +202,12 @@ def plot_violin(
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
 
-        group_color = None
-        if group_col in ["imported_path", "imported_path_short"]:
-            group_color = color_map.get(group_name, "#333333")
+        group_color = color_map.get(str(group_name))
 
         custom_data = None
         if custom_data_cols:
-            custom_data = df_group.get_column(custom_data_cols[0]).to_list()
+            col_name = next(iter(custom_data_cols))
+            custom_data = df_group.get_column(col_name).to_list()
 
         violin_kwargs = dict(
             y=df_group.get_column(y).to_list(),
@@ -222,8 +223,17 @@ def plot_violin(
         if group_color:
             violin_kwargs["marker"] = dict(color=group_color)
 
-
-        chart.add_trace(go.Violin(**violin_kwargs))
+        chart.add_trace(
+            go.Violin(
+                **violin_kwargs,
+                hovertemplate=(
+                        "<b>Group:</b> %{x}<br>"
+                        "<b>Value:</b> %{y:.2f}"
+                        + ("<br><b>Name:</b> %{customdata}" if custom_data is not None else "")
+                        + "<extra></extra>"
+                ),
+            )
+        )
 
     chart.update_traces(
         marker=dict(line=dict(width=1, color="black")),
@@ -233,12 +243,16 @@ def plot_violin(
     layout = STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         dict(
-            title_text=title or y.replace("_", " ").title(),
+            title_text=title,
             yaxis_title=y.replace("_", " ").title(),
             xaxis_title="Group",
         )
     )
-    chart.update_layout(**layout)
+
+    if height is not None:
+        chart.update_layout(**layout, height=height)
+    else:
+        chart.update_layout(**layout)
     return chart
 
 
@@ -292,9 +306,8 @@ def plot_sparkline(
         xaxis=dict(showgrid=False, zeroline=False, title=None),
         yaxis=dict(showgrid=False, zeroline=False, title=None),
         margin=dict(l=20, r=20, t=10, b=20),
-        height=80,
     )
-    fig.update_layout(**layout)
+    fig.update_layout(**layout, height=80)
     return fig
 
 
@@ -414,9 +427,9 @@ def _plot_single_violin(
                 meanline=dict(visible=True),
                 marker=dict(color=group_color),
                 hovertemplate=(
-                    "<b>Folder: %{x}</b><br>"
-                    f"{value_to_plot}: " "%{y:.2f}<br>"
-                    "File: %{customdata}<extra></extra>"
+                    "<b>Group:</b> %{x}<br>"
+                    "<b>Value:</b> %{y:.2f}<br>"
+                    "<b>Name:</b> %{customdata}<extra></extra>"
                 ),
             )
         )
@@ -437,6 +450,60 @@ def _plot_single_violin(
     )
     return chart
 
+
+def plot_grouped_histogram(
+        group_data: Dict[str, Tuple[Any, Any]],  # {group_name: (x_centers, y_counts)}
+        color_map: Dict[str, str],
+        title: str = None,
+        xaxis_title: str = "Intensity",
+        yaxis_title: str = "Normalized Count",
+        overlay_data: Optional[Dict] = None,  # {x, y, width, name} for a specific file bar chart
+) -> go.Figure:
+    """
+    Plots aggregated line histograms for groups, optionally overlaying a bar chart for a single item.
+    """
+    chart = go.Figure()
+
+    # 1. Plot the overlay bar chart first (so lines appear on top, or vice versa depending on pref)
+    # Usually bars for single file, lines for group means.
+    if overlay_data:
+        chart.add_trace(
+            go.Bar(
+                x=overlay_data["x"],
+                y=overlay_data["y"],
+                width=overlay_data.get("width"),
+                name=overlay_data.get("name", "Selected"),
+                marker=dict(color="black"),
+                opacity=0.3,
+            )
+        )
+
+    # 2. Plot group lines
+    for group_name, (x_vals, y_vals) in group_data.items():
+        color = color_map.get(group_name, "#333333")
+        chart.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="lines",
+                name=str(group_name),
+                line=dict(color=color, width=2),
+                fill="tozeroy",
+                opacity=0.6,
+            )
+        )
+
+    # 3. Styling
+    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout.update(
+        title_text=title,
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+        bargap=0.0,
+    )
+    chart.update_layout(**layout)
+
+    return chart
 
 # =============================================================================
 #  SECTION 4: CONTROLS

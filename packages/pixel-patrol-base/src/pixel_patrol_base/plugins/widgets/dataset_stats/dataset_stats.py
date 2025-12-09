@@ -1,13 +1,8 @@
-import itertools
-from pathlib import Path
 from typing import List, Dict, Set
 
-import plotly.graph_objects as go
 import polars as pl
-import statsmodels.stats.multitest as smm
-from dash import html, dcc, Input, Output, ALL
+from dash import html, dcc, Input, Output, ALL, no_update
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
-from scipy.stats import mannwhitneyu
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.global_controls import (
@@ -15,15 +10,19 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
 )
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-# Import UI Factory controls
-from pixel_patrol_base.report.factory import create_dimension_selectors, create_labeled_dropdown
+from pixel_patrol_base.report.factory import create_dimension_selectors, create_labeled_dropdown, plot_violin
+from pixel_patrol_base.report.data_utils import find_best_matching_column, extract_dimension_tokens
 
 
 class DatasetStatsWidget(BaseReportWidget):
     NAME: str = "Pixel Value Statistics"
     TAB: str = WidgetCategories.DATASET_STATS.value
-    REQUIRES: Set[str] = {"imported_path", "name"}
+    REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS = None
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._df: pl.DataFrame | None = None
 
     @property
     def help_text(self) -> str:
@@ -40,54 +39,38 @@ class DatasetStatsWidget(BaseReportWidget):
     def get_content_layout(self) -> List:
         return [
             html.P(id="dataset-stats-warning", className="text-warning", style={"marginBottom": "15px"}),
+
+            # --- Controls Section ---
             html.Div([
                 create_labeled_dropdown(
-                    label="Select value to plot:",
+                    label="Select metric to plot:",
                     component_id="stats-value-to-plot-dropdown",
                     options=[],
-                    value=None
+                    value=None,
+                    width="100%"  # Utilize full width
                 ),
-                html.Div(id="stats-filters-container"),
+                html.Div(id="stats-filters-container", style={"marginTop": "10px"}),
                 dcc.Store(id="stats-dims-store")
-            ]),
+            ], style={"marginBottom": "20px"}),
+
+            # --- Plot Section ---
             dcc.Graph(id="stats-violin-chart", style={"height": "600px"}),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        @app.callback(
+    def register(self, app, df: pl.DataFrame):
+
+        self._df = df
+
+        app.callback(
             Output("stats-value-to-plot-dropdown", "options"),
             Output("stats-value-to-plot-dropdown", "value"),
             Output("stats-filters-container", "children"),
             Output("stats-dims-store", "data"),
             Input("color-map-store", "data"),
             prevent_initial_call=False,
-        )
-        def set_stats_dropdown_options(color_map: Dict[str, str]):
-            processor_metrics = list(BasicStatsProcessor.OUTPUT_SCHEMA.keys()) if hasattr(BasicStatsProcessor,
-                                                                                          'OUTPUT_SCHEMA') else []
-            numeric_candidates = [
-                col for col in df_global.columns
-                if df_global[col].dtype.is_numeric()
-            ]
-            dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [
-                {'label': col, 'value': col} for col in numeric_candidates]
-            default_value_to_plot = processor_metrics[0] if processor_metrics else (
-                numeric_candidates[0] if numeric_candidates else None)
+        )(self._set_control_options)
 
-            children = []
-            dims_order = []
-            if default_value_to_plot:
-                # Use Utils to analyze columns
-                from pixel_patrol_base.report.data_utils import extract_dimension_tokens
-                # Use Factory to generate UI components
-                children, dims_order = create_dimension_selectors(
-                    tokens=extract_dimension_tokens(df_global.columns, default_value_to_plot),
-                    id_type="stats-dim-filter"
-                )
-
-            return dropdown_options, default_value_to_plot, children, dims_order
-
-        @app.callback(
+        app.callback(
             Output("stats-violin-chart", "figure"),
             Output("dataset-stats-warning", "children"),
             Input("color-map-store", "data"),
@@ -95,68 +78,86 @@ class DatasetStatsWidget(BaseReportWidget):
             Input({"type": "stats-dim-filter", "dim": ALL}, "value"),
             Input("stats-dims-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        )(self._update_plot)
+
+    def _set_control_options(self, _color_map: Dict[str, str]):
+        df = self._df
+
+        processor_metrics = (
+            list(BasicStatsProcessor.OUTPUT_SCHEMA.keys())
+            if hasattr(BasicStatsProcessor, 'OUTPUT_SCHEMA')
+            else []
         )
-        def update_stats_chart(
-                color_map: Dict[str, str],
-                value_to_plot: str,
-                dim_values_list,
-                dims_order,
-                global_config: Dict,
-        ):
-            if not value_to_plot:
-                return go.Figure(), "Please select a value to plot."
+        numeric_candidates = [
+            col for col in df.columns
+            if df[col].dtype.is_numeric()
+        ]
+        dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [
+            {'label': col, 'value': col} for col in numeric_candidates]
+        if processor_metrics:
+            default_value_to_plot = next(iter(processor_metrics))
+        elif numeric_candidates:
+            default_value_to_plot = next(iter(numeric_candidates))
+        else:
+            default_value_to_plot = None
 
-            selections = {}
-            if dims_order and dim_values_list:
-                for dim_name, val in zip(dims_order, dim_values_list):
-                    selections[dim_name] = val
-
-            df_processed, group_col = apply_global_config(df_global, global_config)
-
-            from pixel_patrol_base.report.data_utils import find_best_matching_column
-            chosen_col = (
-                    find_best_matching_column(df_processed.columns, value_to_plot, selections)
-                    or value_to_plot
+        children = []
+        dims_order = []
+        if default_value_to_plot:
+            children, dims_order = create_dimension_selectors(
+                tokens=extract_dimension_tokens(df.columns, default_value_to_plot),
+                id_type="stats-dim-filter"
             )
 
-            plot_data = df_processed.filter(pl.col(chosen_col).is_not_null())
+        return dropdown_options, default_value_to_plot, children, dims_order
 
-            if plot_data.is_empty():
-                return (
-                    go.Figure(),
-                    html.P(f"No valid data found for '{value_to_plot}'.", className="text-warning"),
-                )
 
-            warning_message = ""
-            chart = go.Figure()
-            groups = plot_data.get_column(group_col).unique().to_list()
-            groups.sort()
+    def _update_plot(
+            self,
+            color_map: Dict[str, str],
+            value_to_plot: str,
+            dim_values_list,
+            dims_order,
+            global_config: Dict,
+    ):
+        df = self._df
 
-            for group_name in groups:
-                df_group = plot_data.filter(pl.col(group_col) == group_name)
-                group_color = color_map.get(group_name, "#333333") if group_col == "imported_path_short" else None
+        if not value_to_plot:
+            return no_update, "Please select a value to plot."
 
-                chart.add_trace(go.Violin(
-                    y=df_group.get_column(chosen_col).to_list(),
-                    name=group_name,
-                    customdata=df_group.get_column("name").to_list(),
-                    opacity=0.9,
-                    showlegend=True,
-                    points="all",
-                    pointpos=0,
-                    box_visible=True,
-                    meanline=dict(visible=True),
-                    marker_color=group_color,
-                    hovertemplate="<b>Group: %{x}</b><br>Value: %{y:.2f}<br>File: %{customdata}<extra></extra>"
-                ))
+        selections = {}
+        if dims_order and dim_values_list:
+            for dim_name, val in zip(dims_order, dim_values_list):
+                selections[dim_name] = val
 
-            chart.update_traces(marker=dict(line=dict(width=1, color="black")), box=dict(line_color="black"))
-            chart.update_layout(
-                title_text=f"Distribution of {value_to_plot.replace('_', ' ').title()}",
-                xaxis_title="Group",
-                yaxis_title=value_to_plot,
-                height=600,
-                margin=dict(l=50, r=50, t=80, b=100),
-                template="plotly_white"
+        df_processed, group_col = apply_global_config(df, global_config)
+
+        chosen_col = (
+                find_best_matching_column(df_processed.columns, value_to_plot, selections)
+                or value_to_plot
+        )
+
+        plot_data = df_processed.filter(pl.col(chosen_col).is_not_null())
+
+        if plot_data.is_empty():
+            return (
+                no_update,
+                html.P(
+                    f"No valid data found for '{value_to_plot}'.",
+                    className="text-warning",
+                ),
             )
-            return chart, warning_message
+
+        warning_message = ""
+
+        chart = plot_violin(
+            df=plot_data,
+            y=chosen_col,
+            group_col=group_col,
+            color_map=color_map or {},
+            custom_data_cols=["name"],
+            title=None,
+            height=600,
+        )
+
+        return chart, warning_message

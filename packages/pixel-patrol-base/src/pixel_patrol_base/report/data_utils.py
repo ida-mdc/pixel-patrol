@@ -1,7 +1,9 @@
 import re
 from typing import List, Tuple, Dict, Optional
 import polars as pl
+import numpy as np
 
+from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
 
 # --- Data Helpers ---
 
@@ -57,7 +59,6 @@ def extract_dimension_tokens(columns: List[str], base: str, dims: List[str] = No
     return sorted_tokens
 
 
-
 def find_best_matching_column(
         columns: List[str],
         base: str,
@@ -108,3 +109,131 @@ def parse_metric_dimension_column(
         return None
 
     return matched_metric, dims
+
+# --- Histogram Math & Aggregation Helpers ---
+
+def compute_histogram_edges(counts, minv, maxv):
+    """
+    Computes edges, centers, and width for a single histogram entry.
+    """
+    n = counts.size
+    if minv is None or maxv is None:
+        edges = np.arange(n + 1).astype(float)
+        return edges, edges[:-1], np.diff(edges)
+
+    # Handle integer vs float logic safely
+    if float(minv).is_integer() and float(maxv).is_integer():
+        sample = np.array([int(minv), int(maxv)], dtype=np.int64)
+    else:
+        sample = np.array([minv, maxv], dtype=float)
+
+    smin, _smax, max_adj = safe_hist_range(sample)
+    smin_f, max_adj_f = float(smin), float(max_adj)
+    width = (max_adj_f - smin_f) / float(n)
+
+    # Create edges
+    lefts = smin_f + np.arange(n, dtype=float) * width
+    edges = np.concatenate([lefts, [smin_f + n * width]])
+    centers = lefts
+    widths = np.full(n, width, dtype=float)
+
+    return edges, centers, widths
+
+
+def rebin_histogram(counts, src_edges, tgt_edges):
+    """
+    Re-bins a histogram count array from source edges to target edges using CDF interpolation.
+    """
+    counts = np.asarray(counts, float)
+    se = np.asarray(src_edges, float)
+    te = np.asarray(tgt_edges, float)
+
+    if counts.size == 0 or counts.sum() <= 0:
+        return np.zeros(te.size - 1, float)
+
+    # CDF construction
+    cdf_src = np.concatenate([[0.0], np.cumsum(counts) / counts.sum()])
+    # Interpolate to new edges
+    cdf_t = np.interp(te, se, cdf_src, left=0.0, right=1.0)
+    # Diff to get PDF
+    return np.diff(cdf_t)
+
+
+def aggregate_histograms_by_group(
+    df: pl.DataFrame,
+    group_col: str,
+    hist_col: str,
+    min_col: str,
+    max_col: str,
+    mode: str = "shape"
+) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Aggregates histograms per group.
+    Returns: { group_name: (x_centers, y_avg_counts) }
+    """
+    results = {}
+    groups = df.select(pl.col(group_col).unique()).to_series().to_list()
+
+    for group_val in groups:
+        # Filter logic
+        # We drop nulls explicitly for the relevant columns to avoid iteration crashes
+        df_group = df.filter(
+            (pl.col(group_col) == group_val) &
+            pl.col(hist_col).is_not_null()
+        )
+
+        if df_group.height == 0:
+            continue
+
+        # Prepare target edges
+        if mode == "shape":
+            # Fixed 0-255 bins
+            target_edges = np.linspace(0, 255, 257)
+            accumulated = np.zeros(256, dtype=float)
+        else:
+            # Native range logic
+            # Calculate global min/max for this group to define common edges
+            gmin = df_group.select(pl.col(min_col).min()).item()
+            gmax = df_group.select(pl.col(max_col).max()).item()
+
+            if gmin is None or gmax is None:
+                continue
+
+            # Create edges for the group
+            n_bins = 256
+            # Re-use logic from compute_histogram_edges but just for edges
+            smin, _, max_adj = safe_hist_range(np.array([gmin, gmax]))
+            width = (float(max_adj) - float(smin)) / float(n_bins)
+            target_edges = float(smin) + np.arange(n_bins + 1, dtype=float) * width
+            accumulated = np.zeros(n_bins, dtype=float)
+
+        count_files = 0
+
+        # Iterate and rebin
+        # We select only needed columns to speed up iteration
+        subset = df_group.select([hist_col, min_col, max_col])
+        for row in subset.iter_rows():
+            c_list, minv, maxv = row
+            # Fix: Explicitly check None to avoid ValueError with numpy arrays
+            if c_list is None: continue
+
+            c_arr = np.asarray(c_list, dtype=float)
+            if c_arr.size == 0 or c_arr.sum() == 0: continue
+
+            # Get source edges for this specific image
+            src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
+
+            # Rebin to group common edges
+            rebinned = rebin_histogram(c_arr, src_edges, target_edges)
+            accumulated += rebinned
+            count_files += 1
+
+        if count_files > 0:
+            avg_hist = accumulated / count_files
+            if avg_hist.sum() > 0:
+                avg_hist /= avg_hist.sum()
+
+            centers = 0.5 * (target_edges[:-1] + target_edges[1:])
+            results[str(group_val)] = (centers, avg_hist)
+
+    return results
