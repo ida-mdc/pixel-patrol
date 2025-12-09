@@ -7,6 +7,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
 
+from pixel_patrol_base.report.data_utils import get_all_available_dimensions
 
 # ---------- ID CONSTANTS ----------
 
@@ -15,6 +16,7 @@ GLOBAL_CONFIG_STORE_ID = "global-config-store"
 GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
 GLOBAL_FILTER_TEXT_ID = "global-filter-text"
+GLOBAL_DIM_FILTER_TYPE = "global-dim-filter" # _TYPE refers to a dynamic group
 GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
 EXPORT_CSV_BUTTON_ID = "export-csv-button"
 EXPORT_PROJECT_BUTTON_ID = "export-project-button"
@@ -64,6 +66,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 def build_sidebar(df: pl.DataFrame, default_palette_name: str):
 
     candidate_group_cols, candidate_filter_cols = _find_candidate_columns(df)
+    available_dims = get_all_available_dimensions(df)
 
     default_group_value: List[str] = []
     if REPORT_GROUP_COL in df.columns:
@@ -100,7 +103,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                         style={"width": "100%"},
                     ),
                     html.Small(
-                        "If left empty, falls back to imported_path_short (if available).",
+                        "If left empty, `report_group` is `imported_path_short` (if available).",
                         className="text-muted",
                     ),
                     html.Hr(),
@@ -120,6 +123,30 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                         placeholder="Allowed values (comma-separated)",
                         style={"width": "100%", "marginTop": "4px"},
                     ),
+                    html.Hr(),
+
+                    html.Label("Select Dimensions", className="mt-1"),
+                    html.Div([
+                        dbc.Row(
+                            [
+                                dbc.Col([
+                                    html.Small(dim.upper()),
+                                    dcc.Dropdown(
+                                        id={"type": GLOBAL_DIM_FILTER_TYPE, "index": dim},
+                                        options=[{"label": "All", "value": "All"}] + [{"label": x, "value": x} for x in
+                                                                                      vals],
+                                        value="All",
+                                        clearable=False,
+                                        className="mb-1"
+                                    )
+                                ], width=3, className="px-1")
+                                for dim, vals in sorted(available_dims.items())
+                                # Filter (>1) is now handled in get_all_available_dimensions
+                            ],
+                            className="g-0 mb-2"
+                        )
+                    ]),
+                    html.Hr(),
 
                     html.Button(
                         "Apply",
@@ -153,7 +180,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
     stores = [
         dcc.Store(
             id=GLOBAL_CONFIG_STORE_ID,
-            data={"group_cols": default_group_value, "filters": {}},
+            data={"group_cols": default_group_value, "filters": {}, "dimensions": {}},
         )
     ]
 
