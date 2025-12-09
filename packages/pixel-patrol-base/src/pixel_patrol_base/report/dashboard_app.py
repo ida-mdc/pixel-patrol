@@ -237,15 +237,34 @@ def _create_app(
 
     @app.callback(
         Output("color-map-store", "data"),
-        Input(PALETTE_SELECTOR_ID, "value"),
+        # Swapped Input/State: Updates only when Config Store updates (via Apply button)
+        Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        # Palette is now a State, so selecting it doesn't trigger immediate updates
+        State(PALETTE_SELECTOR_ID, "value"),
     )
-    def update_color_map(palette: str) -> Dict[str, str]:
-        folders = df.select(pl.col("imported_path_short")).unique().to_series().to_list()
-        cmap = cm.get_cmap(palette, len(folders))
+    def update_color_map(global_config: Dict, palette: str) -> Dict[str, str]:
+        df_processed, group_col = apply_global_config(df, global_config)
+
+        if group_col is None or group_col not in df_processed.columns or df_processed.is_empty():
+            return {}
+
+        groups = (
+            df_processed
+            .select(pl.col(group_col).unique())
+            .to_series()
+            .to_list()
+        )
+
+        if not groups:
+            return {}
+
+        cmap = cm.get_cmap(palette, len(groups))
+
         return {
-            f: f"#{int(cmap(i)[0] * 255):02x}{int(cmap(i)[1] * 255):02x}{int(cmap(i)[2] * 255):02x}"
-            for i, f in enumerate(folders)
+            str(g): f"#{int(cmap(i)[0] * 255):02x}{int(cmap(i)[1] * 255):02x}{int(cmap(i)[2] * 255):02x}"
+            for i, g in enumerate(groups)
         }
+
 
     @app.callback(
         Output(GLOBAL_CONFIG_STORE_ID, "data"),
