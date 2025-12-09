@@ -33,6 +33,33 @@ def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
     else:
         fig.update_layout(bargap=0.1)
 
+def _get_category_orders(
+    df: pl.DataFrame,
+    x: Optional[str],
+    color: Optional[str],
+    order_x: Optional[List[str]] = None
+) -> Dict[str, List[str]]:
+    """
+    Helper to calculate sorted category orders for Plotly Express functions.
+    Ensures x-axis and Legend (color) are sorted alphabetically unless order_x is provided.
+    """
+    orders = {}
+
+    # 1. Handle X-Axis Order
+    if x and x in df.columns:
+        if order_x:
+            # Respect explicit order (e.g. for Size Bins)
+            orders[x] = order_x
+        elif df[x].dtype in (pl.Utf8, pl.Categorical, pl.Boolean):
+            # Default: Sort strings/booleans alphabetically
+            orders[x] = df[x].unique().drop_nulls().sort().to_list()
+
+    # 2. Handle Legend (Color) Order
+    if color and color in df.columns:
+        if df[color].dtype in (pl.Utf8, pl.Categorical, pl.Boolean):
+            orders[color] = df[color].unique().drop_nulls().sort().to_list()
+
+    return orders
 
 # =============================================================================
 #  SECTION 2: HTML CONTAINERS
@@ -115,7 +142,9 @@ def plot_bar(
         barmode: str = "stack",
         order_x: Optional[List[str]] = None,
 ) -> go.Figure:
-    """Standardized bar chart."""
+
+    cat_orders = _get_category_orders(df, x, color, order_x)
+
     fig = px.bar(
         df,
         x=x,
@@ -123,6 +152,7 @@ def plot_bar(
         color=color,
         barmode=barmode,
         color_discrete_map=color_map or {},
+        category_orders=cat_orders,
         title=title,
         labels=labels,
     )
@@ -152,7 +182,9 @@ def plot_scatter(
         labels: Optional[Dict[str, str]] = None,
         hover_data: Optional[List[str]] = None,
 ) -> go.Figure:
-    """Standardized scatter / bubble chart."""
+
+    cat_orders = _get_category_orders(df, x, color)
+
     fig = px.scatter(
         df,
         x=x,
@@ -160,6 +192,7 @@ def plot_scatter(
         size=size,
         color=color,
         color_discrete_map=color_map or {},
+        category_orders=cat_orders,
         title=title,
         labels=labels,
         hover_data=hover_data,
@@ -183,7 +216,9 @@ def plot_strip(
         hover_data: Optional[List[str]] = None,
         height: Optional[int] = None,
 ) -> go.Figure:
-    """Standardized strip plot. Handles both single plots and faceted grids."""
+
+    cat_orders = _get_category_orders(df, x, color)
+
     fig = px.strip(
         df,
         x=x,
@@ -191,9 +226,9 @@ def plot_strip(
         color=color,
         facet_col=facet_col,
         facet_col_wrap=facet_col_wrap,
-        # Pass the spacing to px.strip
         facet_row_spacing=facet_row_spacing,
         color_discrete_map=color_map or {},
+        category_orders=cat_orders,
         title=title,
         labels=labels,
         hover_data=hover_data,
@@ -224,23 +259,7 @@ def plot_violin(
         custom_data_cols: Optional[List[str]] = None,
         height: Optional[int] = None,
 ) -> go.Figure:
-    """
-    Standardized violin / distribution plot.
 
-    Parameters
-    ----------
-    df : pl.DataFrame
-    y : str
-        Column to plot on the Y axis.
-    group_col : str
-        Categorical column used for grouping (X axis).
-    color_map : dict, optional
-        Mapping group -> color.
-    title : str, optional
-    custom_data_cols : list[str], optional
-        Extra columns to attach as `customdata` (only first is used currently).
-    height : int, optional
-    """
     color_map = color_map or {}
     chart = go.Figure()
     groups = df.get_column(group_col).unique().sort().to_list()
