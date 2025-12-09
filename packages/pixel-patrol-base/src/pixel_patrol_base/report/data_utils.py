@@ -77,6 +77,15 @@ def find_best_matching_column(
     return None
 
 
+def format_selection_title(dims_selection: Dict[str, str]) -> Optional[str]:
+    """
+    Formats a dictionary of selections (e.g., {'t': '0'}) into a readable title string.
+    """
+    if not dims_selection:
+        return None
+    return "Filter: " + ", ".join(f"{k.upper()}={v}" for k, v in sorted(dims_selection.items()))
+
+
 def parse_metric_dimension_column(
         col_name: str, supported_metrics: List[str]
 ) -> Optional[Tuple[str, Dict[str, int]]]:
