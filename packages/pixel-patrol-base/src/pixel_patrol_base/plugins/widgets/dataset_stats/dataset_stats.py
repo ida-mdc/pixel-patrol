@@ -1,7 +1,7 @@
 from typing import List, Dict, Set
 
 import polars as pl
-from dash import html, dcc, Input, Output, no_update
+from dash import html, dcc, Input, Output
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
@@ -10,7 +10,7 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
 )
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.factory import create_labeled_dropdown, plot_violin
+from pixel_patrol_base.report.factory import create_labeled_dropdown, plot_violin, show_no_data_message
 from pixel_patrol_base.report.data_utils import find_best_matching_column, format_selection_title
 
 
@@ -19,6 +19,7 @@ class DatasetStatsWidget(BaseReportWidget):
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS = None
+    CONTENT_ID = "stats-content-container"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -38,8 +39,6 @@ class DatasetStatsWidget(BaseReportWidget):
 
     def get_content_layout(self) -> List:
         return [
-            html.P(id="dataset-stats-warning", className="text-warning", style={"marginBottom": "15px"}),
-
             # --- Controls Section ---
             html.Div([
                 create_labeled_dropdown(
@@ -47,12 +46,12 @@ class DatasetStatsWidget(BaseReportWidget):
                     component_id="stats-value-to-plot-dropdown",
                     options=[],
                     value=None,
-                    width="100%"  # Utilize full width
+                    width="100%"
                 ),
             ], style={"marginBottom": "20px"}),
 
-            # --- Plot Section ---
-            dcc.Graph(id="stats-violin-chart", style={"height": "600px"}),
+            # --- Plot Section (Dynamic Container) ---
+            html.Div(id=self.CONTENT_ID, style={"minHeight": "400px"}),
         ]
 
     def register(self, app, df: pl.DataFrame):
@@ -67,8 +66,7 @@ class DatasetStatsWidget(BaseReportWidget):
         )(self._set_control_options)
 
         app.callback(
-            Output("stats-violin-chart", "figure"),
-            Output("dataset-stats-warning", "children"),
+            Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input("stats-value-to-plot-dropdown", "value"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
@@ -107,9 +105,8 @@ class DatasetStatsWidget(BaseReportWidget):
         df = self._df
 
         if not value_to_plot:
-            return no_update, "Please select a value to plot."
+            return show_no_data_message()
 
-        # Get dimensions from global store
         dims_selection = global_config.get("dimensions", {})
 
         df_processed, group_col = apply_global_config(df, global_config)
@@ -122,15 +119,7 @@ class DatasetStatsWidget(BaseReportWidget):
         plot_data = df_processed.filter(pl.col(chosen_col).is_not_null())
 
         if plot_data.is_empty():
-            return (
-                no_update,
-                html.P(
-                    f"No valid data found for '{value_to_plot}'.",
-                    className="text-warning",
-                ),
-            )
-
-        warning_message = ""
+            return show_no_data_message()
 
         chart = plot_violin(
             df=plot_data,
@@ -142,4 +131,4 @@ class DatasetStatsWidget(BaseReportWidget):
             height=600,
         )
 
-        return chart, warning_message
+        return dcc.Graph(figure=chart, style={"height": "600px"})
