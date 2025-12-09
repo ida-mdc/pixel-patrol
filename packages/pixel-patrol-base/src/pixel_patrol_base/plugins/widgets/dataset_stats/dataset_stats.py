@@ -11,7 +11,7 @@ from pixel_patrol_base.report.global_controls import (
 )
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.factory import create_labeled_dropdown, plot_violin
-from pixel_patrol_base.report.data_utils import find_best_matching_column
+from pixel_patrol_base.report.data_utils import find_best_matching_column, format_selection_title
 
 
 class DatasetStatsWidget(BaseReportWidget):
@@ -110,12 +110,12 @@ class DatasetStatsWidget(BaseReportWidget):
             return no_update, "Please select a value to plot."
 
         # Get dimensions from global store
-        selections = global_config.get("dimensions", {})
+        dims_selection = global_config.get("dimensions", {})
 
         df_processed, group_col = apply_global_config(df, global_config)
 
         chosen_col = (
-                find_best_matching_column(df_processed.columns, value_to_plot, selections)
+                find_best_matching_column(df_processed.columns, value_to_plot, dims_selection)
                 or value_to_plot
         )
 
@@ -138,7 +138,7 @@ class DatasetStatsWidget(BaseReportWidget):
             group_col=group_col,
             color_map=color_map or {},
             custom_data_cols=["name"],
-            title=None,
+            title=format_selection_title(dims_selection),
             height=600,
         )
 

@@ -9,7 +9,8 @@ from pixel_patrol_base.report.factory import plot_grouped_histogram
 from pixel_patrol_base.report.data_utils import (
     find_best_matching_column,
     aggregate_histograms_by_group,
-    compute_histogram_edges
+    compute_histogram_edges,
+    format_selection_title
 )
 from pixel_patrol_base.report.global_controls import (
     apply_global_config,
@@ -206,12 +207,13 @@ class DatasetHistogramWidget(BaseReportWidget):
                             "x": centers, "y": c_arr, "width": width, "name": f"File: {selected_file}"
                         }
 
+
         # 6. Plot (Delegated to Factory)
         fig = plot_grouped_histogram(
             group_data=group_data,
             color_map=color_map or {},
             overlay_data=overlay_data,
-            title=None,  # Clean title, card handles it
+            title=format_selection_title(dims_selection),  # Clean title, card handles it
         )
 
         return fig, ""
