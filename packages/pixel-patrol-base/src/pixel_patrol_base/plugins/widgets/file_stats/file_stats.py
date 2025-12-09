@@ -7,7 +7,7 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
-from pixel_patrol_base.report.factory import plot_bar
+from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 
 
 class FileStatisticsWidget(BaseReportWidget):
@@ -17,7 +17,6 @@ class FileStatisticsWidget(BaseReportWidget):
     REQUIRES: Set[str] = {
         "name",
         "file_extension",
-        "imported_path_short",
         "size_bytes",
         "modification_date",
     }
@@ -61,7 +60,7 @@ class FileStatisticsWidget(BaseReportWidget):
         df_processed, group_col = apply_global_config(df, global_config)
 
         if df_processed.height == 0:
-            return [html.P("No data available after filtering.", className="text-warning")]
+            return [show_no_data_message()]
 
         # Reduce DataFrame to needed columns for speed
         df_filtered = df_processed.select(

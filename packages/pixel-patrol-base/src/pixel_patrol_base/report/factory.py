@@ -127,6 +127,13 @@ def create_widget_card(title: str, content: list, widget_id: str, help_text: str
     )
 
 
+def show_no_data_message(text: str = "No data available after filtering.") -> html.Div:
+    return html.Div(
+        text,
+        className="text-warning p-3",
+        style={"textAlign": "center"}
+    )
+
 # =============================================================================
 #  SECTION 3: PLOTLY CHARTS
 # =============================================================================

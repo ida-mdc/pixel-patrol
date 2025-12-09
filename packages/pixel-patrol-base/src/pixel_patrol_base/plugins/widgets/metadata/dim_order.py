@@ -6,17 +6,14 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
-from pixel_patrol_base.report.factory import plot_bar
+from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 
 class DimOrderWidget(BaseReportWidget):
     NAME: str = "Dimension Order Distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"dim_order", "name"}
     REQUIRES_PATTERNS = None
-
-    # Component IDs
-    RATIO_ID = "dim-order-present-ratio"
-    GRAPH_ID = "dim-order-bar-chart"
+    CONTENT_ID = "dim-order-content"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -32,17 +29,13 @@ class DimOrderWidget(BaseReportWidget):
         )
 
     def get_content_layout(self) -> List:
-        return [
-            html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
-            dcc.Graph(id=self.GRAPH_ID, style={"height": "500px"}),
-        ]
+        return [html.Div(id=self.CONTENT_ID)]
 
     def register(self, app, df: pl.DataFrame):
         self._df = df
 
         app.callback(
-            Output(self.GRAPH_ID, "figure"),
-            Output(self.RATIO_ID, "children"),
+            Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
@@ -51,7 +44,6 @@ class DimOrderWidget(BaseReportWidget):
         color_map = color_map or {}
         df = self._df
 
-        # Apply global filters (rows) and get dynamic group column
         df_processed, group_col = apply_global_config(df, global_config)
 
         # Count only rows with a dim_order value
@@ -70,7 +62,7 @@ class DimOrderWidget(BaseReportWidget):
         )
 
         if present == 0:
-            return {}, ratio_text
+            return show_no_data_message()
 
         # Aggregate counts per (dim_order, group)
         plot_data_agg = (
@@ -94,4 +86,7 @@ class DimOrderWidget(BaseReportWidget):
             barmode="stack"
         )
 
-        return fig, ratio_text
+        return [
+            html.Div(ratio_text, style={"marginBottom": "15px"}),
+            dcc.Graph(figure=fig, style={"height": "500px"})
+        ]

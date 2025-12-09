@@ -4,17 +4,15 @@ from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import GLOBAL_CONFIG_STORE_ID
+from pixel_patrol_base.report.global_controls import GLOBAL_CONFIG_STORE_ID, apply_global_config
+from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 
 class DataTypeWidget(BaseReportWidget):
     NAME: str = "Data Type Distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"dtype", "name"}
     REQUIRES_PATTERNS = None
-
-    # Component IDs
-    RATIO_ID = "dtype-present-ratio"
-    GRAPH_ID = "data-type-bar-chart"
+    CONTENT_ID = "data-type-content"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -32,25 +30,19 @@ class DataTypeWidget(BaseReportWidget):
 
     def get_content_layout(self) -> List:
         """Defines the layout of the Data Type Distribution widget."""
-        return [
-            html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
-            dcc.Graph(id=self.GRAPH_ID, style={"height": "500px"}),
-        ]
+        return [html.Div(id=self.CONTENT_ID),]
 
     def register(self, app, df: pl.DataFrame):
 
         self._df = df
 
         app.callback(
-            Output(self.GRAPH_ID, "figure"),
-            Output(self.RATIO_ID, "children"),
+            Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
     def _update_plot(self, color_map: Dict[str, str], global_config: Dict):
-        from pixel_patrol_base.report.global_controls import apply_global_config
-        from pixel_patrol_base.report.factory import plot_bar
 
         color_map = color_map or {}
         df = self._df
@@ -74,15 +66,13 @@ class DataTypeWidget(BaseReportWidget):
         )
 
         if present == 0:
-            return {}, ratio_text
+            return show_no_data_message()
 
         # Aggregate counts per (dtype, group_col)
         plot_data_agg = (
             df_filtered
             .group_by(["dtype", group_col])
-            .agg(
-                pl.sum("value_count").alias("count"),
-            )
+            .agg(pl.sum("value_count").alias("count"),)
             .sort(["dtype", group_col])
         )
 
@@ -98,4 +88,7 @@ class DataTypeWidget(BaseReportWidget):
             barmode="stack"
         )
 
-        return fig, ratio_text
+        return [
+            html.Div(ratio_text, style={"marginBottom": "15px"}),
+            dcc.Graph(figure=fig, style={"height": "500px"})
+        ]

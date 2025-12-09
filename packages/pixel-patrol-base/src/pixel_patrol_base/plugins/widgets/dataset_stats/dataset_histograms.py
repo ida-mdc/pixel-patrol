@@ -5,7 +5,7 @@ from dash import html, dcc, Input, Output, no_update
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.factory import plot_grouped_histogram
+from pixel_patrol_base.report.factory import plot_grouped_histogram, show_no_data_message
 from pixel_patrol_base.report.data_utils import (
     find_best_matching_column,
     aggregate_histograms_by_group,
@@ -23,6 +23,7 @@ class DatasetHistogramWidget(BaseReportWidget):
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]
+    CONTENT_ID = "histogram-content-container"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -42,8 +43,6 @@ class DatasetHistogramWidget(BaseReportWidget):
 
     def get_content_layout(self) -> List:
         return [
-            html.P(id="dataset-histogram-warning", className="text-warning", style={"marginBottom": "15px"}),
-
             # --- Controls Section ---
             html.Div([
                 # 1. Mode
@@ -89,7 +88,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             ]),
 
             # --- Plot Section ---
-            dcc.Graph(id="histogram-plot", style={"height": "600px"}),
+            html.Div(id=self.CONTENT_ID, style={"minHeight": "400px"}),
         ]
 
     def register(self, app, df_global: pl.DataFrame):
@@ -114,8 +113,7 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         # 3. Main Plot Update
         app.callback(
-            Output("histogram-plot", "figure"),
-            Output("dataset-histogram-warning", "children"),
+            Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input("histogram-remap-mode", "value"),
             Input("histogram-group-dropdown", "value"),
@@ -154,7 +152,7 @@ class DatasetHistogramWidget(BaseReportWidget):
 
     def _update_plot(self, color_map, remap_mode, selected_groups, selected_file, global_config):
         df = self._df
-        if df is None: return no_update, "No data available."
+        if df is None: return show_no_data_message()
 
         # 1. Resolve Dimensions from Global Config
         dims_selection = global_config.get("dimensions", {})
@@ -163,7 +161,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         base = "histogram_counts"
         histogram_key = find_best_matching_column(df.columns, base, dims_selection) or base
         if histogram_key not in df.columns:
-            return no_update, f"Column {histogram_key} not found. Check global dimension settings."
+            return show_no_data_message(f"Column {histogram_key} not found. Check global dimension settings.")
 
         suffix = histogram_key.replace("histogram_counts", "")
         min_key, max_key = f"histogram_min{suffix}", f"histogram_max{suffix}"
@@ -175,7 +173,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             df_processed = df_processed.filter(pl.col(group_col).is_in(selected_groups))
 
         if df_processed.is_empty():
-            return no_update, "No data after filters."
+            return show_no_data_message()
 
         # 4. Process Data (Delegated to Data Utils)
         # Result: { "group_name": (x_centers_array, y_counts_array) }
@@ -216,4 +214,4 @@ class DatasetHistogramWidget(BaseReportWidget):
             title=format_selection_title(dims_selection),  # Clean title, card handles it
         )
 
-        return fig, ""
+        return dcc.Graph(figure=fig, style={"height": "600px"})

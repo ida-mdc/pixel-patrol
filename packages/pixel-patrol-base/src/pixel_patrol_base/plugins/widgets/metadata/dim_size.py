@@ -6,18 +6,14 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
-from pixel_patrol_base.report.factory import plot_scatter, plot_strip
+from pixel_patrol_base.report.factory import plot_scatter, plot_strip, show_no_data_message
 
 class DimSizeWidget(BaseReportWidget):
     NAME: str = "Dimension Size Distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS: List[str] = [r"^[a-zA-Z]_size$"]  # dynamic size columns
-
-    # Component IDs renamed for clarity/consistency
-    RATIO_ID = "dim-size-ratio-summary"
-    XY_SCATTER_ID = "dim-size-xy-plot"
-    INDIVIDUAL_STRIP_ID = "dim-size-individual-strip-plot"
+    CONTENT_ID = "dim-size-content"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -34,22 +30,13 @@ class DimSizeWidget(BaseReportWidget):
         )
 
     def get_content_layout(self) -> List:
-        return [
-            html.Div(id=self.RATIO_ID, style={"marginBottom": "15px"}),
-            html.Div(
-                id=self.XY_SCATTER_ID,
-                children=[html.P("No valid data to plot for X and Y dimension sizes.")],
-            ),
-            html.Div(id=self.INDIVIDUAL_STRIP_ID),
-        ]
+        return [html.Div(id=self.CONTENT_ID)]
 
     def register(self, app, df: pl.DataFrame):
         self._df = df
 
         app.callback(
-            Output(self.RATIO_ID, "children"),
-            Output(self.XY_SCATTER_ID, "children"),
-            Output(self.INDIVIDUAL_STRIP_ID, "children"),
+            Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
@@ -65,23 +52,25 @@ class DimSizeWidget(BaseReportWidget):
         # Identify all *_size columns present
         dimension_size_cols = [col for col in df_processed.columns if col.endswith("_size")]
         if not dimension_size_cols:
-            return [html.P("No dimension size columns (e.g., 'X_size') found in data.")], [], []
+            return [show_no_data_message("No dimension size columns found.")], [], []
 
         # Pre-filter rows where at least one size dimension is a valid number (>1)
         filtered_df = df_processed.filter(
             pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
         )
 
-        # 1. Generate Availability Ratios
-        ratio_children = self._get_availability_ratios(filtered_df, df_processed.height, dimension_size_cols)
+        if filtered_df.height == 0:
+            return show_no_data_message("No data available with current filters.")
 
-        # 2. X/Y bubble chart
-        xy_plot_children = self._create_xy_scatter_plot(filtered_df, group_col, color_map)
+        ratio_div = html.Div(
+            self._get_availability_ratios(filtered_df, df_processed.height, dimension_size_cols),
+            style={"marginBottom": "15px"}
+        )
+        xy_plots = self._create_xy_scatter_plot(filtered_df, group_col, color_map)
+        strip_plots = self._create_dim_strip_plots(filtered_df, group_col, dimension_size_cols, color_map)
 
-        # 3. Individual dimension strip plots
-        individual_dim_plots = self._create_dim_strip_plots(filtered_df, group_col, dimension_size_cols, color_map)
-
-        return ratio_children, xy_plot_children, individual_dim_plots
+        # Return combined list
+        return [ratio_div] + xy_plots + strip_plots
 
     @staticmethod
     def _get_availability_ratios(df_filtered: pl.DataFrame, total_files: int, cols: List[str]) -> List:
@@ -112,7 +101,7 @@ class DimSizeWidget(BaseReportWidget):
         xy_plot_data = df.filter((pl.col(x_col) > 1) & (pl.col(y_col) > 1))
 
         if xy_plot_data.height == 0:
-            return [html.P("No valid data for X/Y plot.")]
+            return [show_no_data_message("No valid data for X/Y plot.")]
 
         bubble_data_agg = (
             xy_plot_data
@@ -153,7 +142,7 @@ class DimSizeWidget(BaseReportWidget):
         )
 
         if melted_df.height == 0:
-            return [html.P("No data to plot for individual dimension sizes.")]
+            return [show_no_data_message("No data to plot for individual dimension sizes.")]
 
         # Calculate dynamic height based on number of facets (cols // 3 rows)
         plot_height = 200 * ((len(cols) + 2) // 3)
