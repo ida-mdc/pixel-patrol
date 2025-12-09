@@ -1,13 +1,12 @@
 from typing import List, Set
 import polars as pl
 import numpy as np
-from dash import html, dcc, Input, Output, ALL, no_update
+from dash import html, dcc, Input, Output, no_update
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.factory import create_dimension_selectors, plot_grouped_histogram
+from pixel_patrol_base.report.factory import plot_grouped_histogram
 from pixel_patrol_base.report.data_utils import (
-    extract_dimension_tokens,
     find_best_matching_column,
     aggregate_histograms_by_group,
     compute_histogram_edges
@@ -46,14 +45,7 @@ class DatasetHistogramWidget(BaseReportWidget):
 
             # --- Controls Section ---
             html.Div([
-                # 1. Dimensions
-                html.Div([
-                    html.Label("Select histogram dimensions to plot:", style={"fontWeight": "bold"}),
-                    html.Div(id="histogram-filters-container", style={"marginTop": "5px"}),
-                    dcc.Store(id="histogram-dims-store"),
-                ], style={"marginBottom": "15px"}),
-
-                # 2. Mode
+                # 1. Mode
                 html.Div([
                     html.Label("Histogram plot mode:", style={"fontWeight": "bold"}),
                     dcc.RadioItems(
@@ -68,7 +60,7 @@ class DatasetHistogramWidget(BaseReportWidget):
                     ),
                 ], style={"marginBottom": "15px"}),
 
-                # 3. Group Selection
+                # 2. Group Selection
                 html.Div([
                     html.Label("Select specific groups to compare (optional):", style={"fontWeight": "bold"}),
                     dcc.Dropdown(
@@ -81,7 +73,7 @@ class DatasetHistogramWidget(BaseReportWidget):
                     ),
                 ], style={"marginBottom": "15px"}),
 
-                # 4. File Overlay (Moved to Top as requested)
+                # 3. File Overlay (Moved to Top as requested)
                 html.Div([
                     html.Label("Overlay specific file (optional):", style={"fontWeight": "bold"}),
                     dcc.Dropdown(
@@ -104,8 +96,6 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         # 1. Populate basic controls
         app.callback(
-            Output("histogram-filters-container", "children"),
-            Output("histogram-dims-store", "data"),
             Output("histogram-group-dropdown", "options"),
             Output("histogram-group-dropdown", "value"),
             Input("color-map-store", "data"),  # Trigger on load/map change
@@ -127,31 +117,24 @@ class DatasetHistogramWidget(BaseReportWidget):
             Output("dataset-histogram-warning", "children"),
             Input("color-map-store", "data"),
             Input("histogram-remap-mode", "value"),
-            Input({"type": "histogram-dim-filter", "dim": ALL}, "value"),
             Input("histogram-group-dropdown", "value"),
             Input("histogram-file-dropdown", "value"),
-            Input("histogram-dims-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
     def _set_control_options(self, _color_map, global_config):
         df = self._df
-        if df is None: return [], [], [], []
-
-        children, dims_order = create_dimension_selectors(
-            tokens=extract_dimension_tokens(df.columns, "histogram_counts"),
-            id_type="histogram-dim-filter",
-        )
+        if df is None: return [], []
 
         df_processed, group_col = apply_global_config(df, global_config)
         if group_col is None or df_processed.is_empty():
-            return children, dims_order, [], []
+            return [], []
 
         group_values = df_processed[group_col].unique().sort().to_list()
         group_options = [{"label": str(g), "value": g} for g in group_values]
 
-        # Default: Don't pre-select specific groups, show all implicitly (or select first 2 if you prefer)
-        return children, dims_order, group_options, []
+        return group_options, []
+
 
     def _update_file_options(self, selected_groups, global_config):
         df = self._df
@@ -168,19 +151,18 @@ class DatasetHistogramWidget(BaseReportWidget):
         options = [{"label": n, "value": n} for n in names]
         return options, no_update
 
-    def _update_plot(self, color_map, remap_mode, dim_values, selected_groups, selected_file, dims_order,
-                     global_config):
+    def _update_plot(self, color_map, remap_mode, selected_groups, selected_file, global_config):
         df = self._df
         if df is None: return no_update, "No data available."
 
-        # 1. Resolve Dimensions
-        selections = dict(zip(dims_order, dim_values)) if (dims_order and dim_values) else {}
+        # 1. Resolve Dimensions from Global Config
+        dims_selection = global_config.get("dimensions", {})
 
         # 2. Identify Columns
         base = "histogram_counts"
-        histogram_key = find_best_matching_column(df.columns, base, selections) or base
+        histogram_key = find_best_matching_column(df.columns, base, dims_selection) or base
         if histogram_key not in df.columns:
-            return no_update, f"Column {histogram_key} not found."
+            return no_update, f"Column {histogram_key} not found. Check global dimension settings."
 
         suffix = histogram_key.replace("histogram_counts", "")
         min_key, max_key = f"histogram_min{suffix}", f"histogram_max{suffix}"

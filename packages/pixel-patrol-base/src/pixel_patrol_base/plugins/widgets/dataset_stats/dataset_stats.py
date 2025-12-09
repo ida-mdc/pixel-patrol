@@ -1,7 +1,7 @@
 from typing import List, Dict, Set
 
 import polars as pl
-from dash import html, dcc, Input, Output, ALL, no_update
+from dash import html, dcc, Input, Output, no_update
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
@@ -10,8 +10,8 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
 )
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.factory import create_dimension_selectors, create_labeled_dropdown, plot_violin
-from pixel_patrol_base.report.data_utils import find_best_matching_column, extract_dimension_tokens
+from pixel_patrol_base.report.factory import create_labeled_dropdown, plot_violin
+from pixel_patrol_base.report.data_utils import find_best_matching_column
 
 
 class DatasetStatsWidget(BaseReportWidget):
@@ -49,8 +49,6 @@ class DatasetStatsWidget(BaseReportWidget):
                     value=None,
                     width="100%"  # Utilize full width
                 ),
-                html.Div(id="stats-filters-container", style={"marginTop": "10px"}),
-                dcc.Store(id="stats-dims-store")
             ], style={"marginBottom": "20px"}),
 
             # --- Plot Section ---
@@ -64,8 +62,6 @@ class DatasetStatsWidget(BaseReportWidget):
         app.callback(
             Output("stats-value-to-plot-dropdown", "options"),
             Output("stats-value-to-plot-dropdown", "value"),
-            Output("stats-filters-container", "children"),
-            Output("stats-dims-store", "data"),
             Input("color-map-store", "data"),
             prevent_initial_call=False,
         )(self._set_control_options)
@@ -75,8 +71,6 @@ class DatasetStatsWidget(BaseReportWidget):
             Output("dataset-stats-warning", "children"),
             Input("color-map-store", "data"),
             Input("stats-value-to-plot-dropdown", "value"),
-            Input({"type": "stats-dim-filter", "dim": ALL}, "value"),
-            Input("stats-dims-store", "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
@@ -94,6 +88,7 @@ class DatasetStatsWidget(BaseReportWidget):
         ]
         dropdown_options = [{'label': m, 'value': m} for m in processor_metrics] if processor_metrics else [
             {'label': col, 'value': col} for col in numeric_candidates]
+
         if processor_metrics:
             default_value_to_plot = next(iter(processor_metrics))
         elif numeric_candidates:
@@ -101,23 +96,12 @@ class DatasetStatsWidget(BaseReportWidget):
         else:
             default_value_to_plot = None
 
-        children = []
-        dims_order = []
-        if default_value_to_plot:
-            children, dims_order = create_dimension_selectors(
-                tokens=extract_dimension_tokens(df.columns, default_value_to_plot),
-                id_type="stats-dim-filter"
-            )
-
-        return dropdown_options, default_value_to_plot, children, dims_order
-
+        return dropdown_options, default_value_to_plot
 
     def _update_plot(
             self,
             color_map: Dict[str, str],
             value_to_plot: str,
-            dim_values_list,
-            dims_order,
             global_config: Dict,
     ):
         df = self._df
@@ -125,10 +109,8 @@ class DatasetStatsWidget(BaseReportWidget):
         if not value_to_plot:
             return no_update, "Please select a value to plot."
 
-        selections = {}
-        if dims_order and dim_values_list:
-            for dim_name, val in zip(dims_order, dim_values_list):
-                selections[dim_name] = val
+        # Get dimensions from global store
+        selections = global_config.get("dimensions", {})
 
         df_processed, group_col = apply_global_config(df, global_config)
 

@@ -4,10 +4,10 @@ from typing import List, Dict, Sequence
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
 import polars as pl
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, ALL
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-
+from datetime import datetime
 import plotly.io as pio
 
 from pixel_patrol_base.core.contracts import PixelPatrolWidget
@@ -22,6 +22,7 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_GROUPBY_COLS_ID,
     GLOBAL_FILTER_COLUMN_ID,
     GLOBAL_FILTER_TEXT_ID,
+    GLOBAL_DIM_FILTER_TYPE,
     GLOBAL_APPLY_BUTTON_ID,
     EXPORT_CSV_BUTTON_ID,
     EXPORT_PROJECT_BUTTON_ID,
@@ -265,20 +266,23 @@ def _create_app(
             color_map[str(group)] = f"#{int(r * 255):02x}{int(g_chan * 255):02x}{int(b * 255):02x}"
         return color_map
 
-
     @app.callback(
         Output(GLOBAL_CONFIG_STORE_ID, "data"),
         Input(GLOBAL_APPLY_BUTTON_ID, "n_clicks"),
         State(GLOBAL_GROUPBY_COLS_ID, "value"),
         State(GLOBAL_FILTER_COLUMN_ID, "value"),
         State(GLOBAL_FILTER_TEXT_ID, "value"),
+        State({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "value"),
+        State({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "id"),
         prevent_initial_call=False,
     )
     def update_global_config(
-        _n_clicks: int,
-        group_col,
-        filter_col,
-        filter_text,
+            _n_clicks: int,
+            group_col,
+            filter_col,
+            filter_text,
+            dim_values,
+            dim_ids
     ) -> Dict:
         # Single grouping column; default to report_group if nothing chosen
         if not group_col:
@@ -292,7 +296,13 @@ def _create_app(
             if allowed_vals:
                 filters[filter_col] = allowed_vals
 
-        return {"group_cols": group_cols, "filters": filters}
+        # Reconstruct dimensions dictionary from pattern-matched inputs
+        dimensions = {}
+        for val, id_obj in zip(dim_values, dim_ids):
+            if val and val != "All":
+                dimensions[id_obj['index']] = val
+
+        return {"group_cols": group_cols, "filters": filters, "dimensions": dimensions}
 
     @app.callback(
         Output(EXPORT_CSV_DOWNLOAD_ID, "data"),
@@ -340,7 +350,8 @@ def _create_app(
 
         # 3. Export using PixelPatrol's real export_project API
         with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = Path(tmpdir) / f"{project_name}_filtered.zip"
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_path = Path(tmpdir) / f"{project_name}_filtered_{ts}.zip"
 
             # This creates ONE zip file (not a directory)
             pp_api.export_project(new_project, zip_path)
@@ -350,7 +361,7 @@ def _create_app(
                 zip_bytes = f.read()
 
         # 5. Return it to browser
-        return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.ppproj.zip")
+        return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.zip")
 
     return app
 

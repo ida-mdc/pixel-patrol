@@ -2,6 +2,7 @@ import re
 from typing import List, Tuple, Dict, Optional
 import polars as pl
 import numpy as np
+from collections import defaultdict
 
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
 
@@ -21,43 +22,31 @@ def get_sortable_columns(df: pl.DataFrame) -> List[str]:
         )
     ]
 
+# --- Dim Filter Helpers ---
 
-# --- Dimension Parsing Helpers ---
-
-def extract_dimension_tokens(columns: List[str], base: str, dims: List[str] = None) -> Dict[str, List[str]]:
+def get_all_available_dimensions(df: pl.DataFrame) -> Dict[str, List[str]]:
     """
-    Scans columns for a base metric (e.g. 'histogram') and finds available slices (e.g. t0, z1).
-    Returns: {'t': ['t0', 't1'], 'z': ['z0']}
-    """
-    if dims is None:
-        dims = ['t', 'c', 'z', 's']
+        Scans all columns to find unique indices for ANY dimension (e.g. _t0, _z1).
+        Returns: {'t': ['0', '1'], ...} sorted numerically.
+        Only returns dimensions with >1 unique index (size 0 or 1 are ignored).
+        """
+    dims_found = defaultdict(set)
+    # Strict regex: matches underscore + single lowercase letter + digits (e.g., _t0)
+    dim_pat = re.compile(r'_([a-z])(\d+)')
 
-    tokens = {d: set() for d in dims}
-    # Matches base + one or more _L# suffixes
-    pattern = re.compile(rf"^{re.escape(base)}((?:_[a-zA-Z]\d+)+)$")
-    dim_pat = re.compile(r'_([a-zA-Z])(\d+)')
+    for col in df.columns:
+        for m in dim_pat.finditer(col):
+            d = m.group(1)  # already lowercase
+            n = m.group(2)
+            dims_found[d].add(n)
 
-    for col in columns:
-        m = pattern.match(col)
-        if not m:
-            continue
-        suffix = m.group(1)
-        for mm in dim_pat.finditer(suffix):
-            d = mm.group(1).lower()
-            n = mm.group(2)
-            if d in tokens:
-                tokens[d].add(f"{d}{n}")
+    sorted_dims = {}
+    for k, v in dims_found.items():
+        # Only return dimensions that actually allow for filtering (more than 1 slice)
+        if len(v) > 1:
+            sorted_dims[k] = sorted(list(v), key=int)
 
-    sorted_tokens: Dict[str, List[str]] = {}
-    for key, values in tokens.items():
-        def sort_key(token: str) -> int:
-            match = re.search(r"(\d+)$", token)
-            return int(match.group(1)) if match else 0
-
-        sorted_tokens[key] = sorted(list(values), key=sort_key)
-
-    return sorted_tokens
-
+    return sorted_dims
 
 def find_best_matching_column(
         columns: List[str],
@@ -72,9 +61,15 @@ def find_best_matching_column(
         return None
 
     # Filter candidates to ensure they contain the selected tokens
-    for dim, token in selections.items():
-        if token != "All":
-            # If user selected 't0', the column MUST contain '_t0'
+    for dim, val in selections.items():
+        if val and val != "All":
+            # Global controls send indices ("0"), local legacy sends tokens ("t0")
+            # We construct the token ensuring it starts with the dimension letter
+            token = val
+            if not token.startswith(dim):
+                token = f"{dim}{val}"
+
+            # The column matches if it contains "_t0" (for example)
             candidates = [c for c in candidates if f"_{token}" in c]
 
     if candidates:
