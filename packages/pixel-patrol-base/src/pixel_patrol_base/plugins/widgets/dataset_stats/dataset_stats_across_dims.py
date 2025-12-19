@@ -1,4 +1,3 @@
-# pixel_patrol/plugins/widgets/dynamic_stats_widget.py
 from typing import List, Set
 
 from pixel_patrol_base.plugins.widgets.metrics_across_dims_abstract_widget import MetricsAcrossDimensionsWidget
@@ -11,7 +10,6 @@ class DatasetStatsAcrossDimensionsWidget(MetricsAcrossDimensionsWidget):
     NAME: str = "Basic Statistics Across Dimensions"
     TAB: str = WidgetCategories.DATASET_STATS.value
 
-    # No fixed columns; we require whatever dynamic columns the processor emits.
     REQUIRES: Set[str] = set()
     REQUIRES_PATTERNS: List[str] = patterns_from_processor(BasicStatsProcessor)
 
@@ -25,7 +23,6 @@ class DatasetStatsAcrossDimensionsWidget(MetricsAcrossDimensionsWidget):
             "Useful for identifying drift, artifacts, or unexpected variation within (e.g.) T/C/Z/S dimensions.\n\n"
             "You can select slices in the dropdowns to filter the tables.\n"
         )
-
 
     def get_supported_metrics(self) -> List[str]:
         return list(getattr(BasicStatsProcessor, "OUTPUT_SCHEMA", {}).keys())

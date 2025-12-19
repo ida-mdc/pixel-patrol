@@ -6,12 +6,17 @@ from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStat
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.global_controls import (
-    apply_global_config,
+    prepare_widget_data,
     GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
 )
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.factory import create_labeled_dropdown, plot_violin, show_no_data_message
-from pixel_patrol_base.report.data_utils import find_best_matching_column, format_selection_title
+from pixel_patrol_base.report.factory import (
+    create_labeled_dropdown,
+    plot_violin,
+    show_no_data_message,
+)
+from pixel_patrol_base.report.data_utils import format_selection_title
 
 
 class DatasetStatsWidget(BaseReportWidget):
@@ -55,7 +60,6 @@ class DatasetStatsWidget(BaseReportWidget):
         ]
 
     def register(self, app, df: pl.DataFrame):
-
         self._df = df
 
         app.callback(
@@ -69,6 +73,7 @@ class DatasetStatsWidget(BaseReportWidget):
             Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
             Input("stats-value-to-plot-dropdown", "value"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),  # NEW: filtered rows
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
@@ -88,42 +93,38 @@ class DatasetStatsWidget(BaseReportWidget):
             {'label': col, 'value': col} for col in numeric_candidates]
 
         if processor_metrics:
-            default_value_to_plot = next(iter(processor_metrics))
+            default_col_to_plot = next(iter(processor_metrics))
         elif numeric_candidates:
-            default_value_to_plot = next(iter(numeric_candidates))
+            default_col_to_plot = next(iter(numeric_candidates))
         else:
-            default_value_to_plot = None
+            default_col_to_plot = None
 
-        return dropdown_options, default_value_to_plot
+        return dropdown_options, default_col_to_plot
+
 
     def _update_plot(
-            self,
-            color_map: Dict[str, str],
-            value_to_plot: str,
-            global_config: Dict,
+        self,
+        color_map: Dict[str, str],
+        col_to_plot: str,
+        subset_indices: List[int] | None,
+        global_config: Dict,
     ):
-        df = self._df
 
-        if not value_to_plot:
-            return show_no_data_message()
-
-        dims_selection = global_config.get("dimensions", {})
-
-        df_processed, group_col = apply_global_config(df, global_config)
-
-        chosen_col = (
-                find_best_matching_column(df_processed.columns, value_to_plot, dims_selection)
-                or value_to_plot
+        df_filtered, group_col, resolved_col, warning_msg = prepare_widget_data(
+            self._df,
+            subset_indices,
+            global_config or {},
+            metric_base=col_to_plot,
         )
 
-        plot_data = df_processed.filter(pl.col(chosen_col).is_not_null())
-
-        if plot_data.is_empty():
+        if resolved_col is None or df_filtered.is_empty():
             return show_no_data_message()
 
+        dims_selection = (global_config or {}).get("dimensions", {}) or {}
+
         chart = plot_violin(
-            df=plot_data,
-            y=chosen_col,
+            df=df_filtered,
+            y=resolved_col,  # use the dimension-resolved column
             group_col=group_col,
             color_map=color_map or {},
             custom_data_cols=["name"],
@@ -132,3 +133,4 @@ class DatasetStatsWidget(BaseReportWidget):
         )
 
         return dcc.Graph(figure=chart, style={"height": "600px"})
+

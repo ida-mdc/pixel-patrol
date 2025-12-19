@@ -1,11 +1,15 @@
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 
 import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import apply_global_config, GLOBAL_CONFIG_STORE_ID
+from pixel_patrol_base.report.global_controls import (
+    prepare_widget_data,
+    GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
+)
 from pixel_patrol_base.report.factory import plot_scatter, plot_strip, show_no_data_message
 
 class DimSizeWidget(BaseReportWidget):
@@ -38,24 +42,31 @@ class DimSizeWidget(BaseReportWidget):
         app.callback(
             Output(self.CONTENT_ID, "children"),
             Input("color-map-store", "data"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
-        )(self._update_plot)
+            )(self._update_plot)
 
-    def _update_plot(self, color_map: Dict[str, str], global_config: Dict):
 
-        color_map = color_map or {}
-        df = self._df
+    def _update_plot(
+        self,
+        color_map: Dict[str, str],
+        subset_indices: List[int] | None,
+        global_config: Dict | None,
+    ):
 
-        # Apply global filters (rows) and get dynamic group column
-        df_processed, group_col = apply_global_config(df, global_config)
+        df_filtered, group_col, _resolved, _warning = prepare_widget_data(
+                                self._df,
+                               subset_indices,
+                               global_config or {},
+                               metric_base = None,
+        )
 
-        # Identify all *_size columns present
-        dimension_size_cols = [col for col in df_processed.columns if col.endswith("_size")]
-        if not dimension_size_cols:
-            return [show_no_data_message("No dimension size columns found.")], [], []
+        dimension_size_cols = [col for col in df_filtered.columns if col.endswith("_size")]
+        if df_filtered.height == 0 or not dimension_size_cols:
+            return [show_no_data_message()], [], []
 
         # Pre-filter rows where at least one size dimension is a valid number (>1)
-        filtered_df = df_processed.filter(
+        filtered_df = df_filtered.filter(
             pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
         )
 
@@ -63,7 +74,7 @@ class DimSizeWidget(BaseReportWidget):
             return show_no_data_message("No data available with current filters.")
 
         ratio_div = html.Div(
-            self._get_availability_ratios(filtered_df, df_processed.height, dimension_size_cols),
+            self._get_availability_ratios(filtered_df, df_filtered.height, dimension_size_cols),
             style={"marginBottom": "15px"}
         )
         xy_plots = self._create_xy_scatter_plot(filtered_df, group_col, color_map)
@@ -91,8 +102,7 @@ class DimSizeWidget(BaseReportWidget):
         return [html.P(html.B("Data Availability by Dimension:")), html.P(ratio_spans)]
 
     @staticmethod
-    def _create_xy_scatter_plot(df: pl.DataFrame, group_col: str, color_map: Dict[str, str]) -> List:
-        """Creates the X vs Y scatter plot if data exists."""
+    def _create_xy_scatter_plot(df: pl.DataFrame, group_col: Optional[str], color_map: Dict[str, str]) -> List:
 
         x_col, y_col = "X_size", "Y_size"
         if x_col not in df.columns or y_col not in df.columns:
@@ -103,22 +113,22 @@ class DimSizeWidget(BaseReportWidget):
         if xy_plot_data.height == 0:
             return [show_no_data_message("No valid data for X/Y plot.")]
 
-        bubble_data_agg = (
-            xy_plot_data
-            .group_by([x_col, y_col, group_col])
-            .agg(pl.count().alias("bubble_size"))
-            .sort([x_col, y_col, group_col])
-        )
+        group_keys = [x_col, y_col] + ([group_col] if group_col else [])
+        bubble_data_agg = (xy_plot_data.
+                           group_by(group_keys).
+                           agg(pl.count().alias("bubble_size"))
+                           .sort([x_col, y_col] + ([group_col] if group_col else []))
+                           )
 
         fig = plot_scatter(
             df=bubble_data_agg,
             x=x_col,
             y=y_col,
             size="bubble_size",
-            color=group_col,
+            color=group_col if group_col else None,
             color_map=color_map,
             title="Distribution of X and Y Dimension Sizes",
-            labels={"bubble_size": "Count", group_col: "Group"}
+            labels={"bubble_size": "Count", group_col: "Group"} if group_col else {"bubble_size": "Count"}
         )
         return [dcc.Graph(figure=fig)]
 

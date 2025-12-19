@@ -1,24 +1,31 @@
-from typing import List, Dict, Set
+from typing import Dict, List, Set
 
-import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output
-from plotly.subplots import make_subplots
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import (
+    prepare_widget_data,
+    GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
+)
+from pixel_patrol_base.report.factory import (
+    plot_bar,
+    show_no_data_message,
+)
 
 class FileSummaryWidget(BaseReportWidget):
-    # ---- Declarative spec ----
     NAME: str = "File Data Summary"
     TAB: str = WidgetCategories.SUMMARY.value
-    REQUIRES: Set[str] = {"size_bytes", "file_extension", "imported_path_short"}
+    REQUIRES: Set[str] = {"size_bytes", "file_extension"}
     REQUIRES_PATTERNS = None
 
-    # Component IDs
-    INTRO_ID = "file-summary-intro"
-    GRAPH_ID = "file-summary-graph"
-    TABLE_ID = "file-summary-table"
+    CONTENT_ID = "file-summary-content"
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._df: pl.DataFrame | None = None
 
     @property
     def help_text(self) -> str:
@@ -27,78 +34,146 @@ class FileSummaryWidget(BaseReportWidget):
         )
 
     def get_content_layout(self) -> List:
+        return [html.Div(id=self.CONTENT_ID)]
+
+    def register(self, app, df: pl.DataFrame):
+        self._df = df
+
+        app.callback(
+            Output(self.CONTENT_ID, "children"),
+            Input("color-map-store", "data"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),
+            Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        )(self._update_content)
+
+
+    def _update_content(
+        self,
+        color_map: Dict[str, str] | None,
+        subset_indices: List[int] | None,
+        global_config: Dict | None,
+    ):
+
+        df_filtered, group_col, _resolved, _warning_msg = prepare_widget_data(
+            self._df,
+            subset_indices,
+            global_config or {},
+            metric_base=None,
+        )
+
+        if df_filtered.is_empty():
+            return show_no_data_message()
+
+        required_cols = {"size_bytes", "file_extension"}
+        missing = [c for c in required_cols if c not in df_filtered.columns]
+        if missing:
+            return show_no_data_message()
+
+        summary = (
+            df_filtered
+            .group_by(group_col)
+            .agg(
+                pl.count().alias("file_count"),
+                (pl.col("size_bytes").sum() / (1024 * 1024)).alias("total_size_mb"),
+                pl.col("file_extension").unique().sort().alias("file_types"),
+            )
+            .sort(group_col)
+        )
+
+        if summary.height == 0:
+            return show_no_data_message()
+
+        intro = self._build_intro(summary, group_col)
+        graphs = self._build_plots(summary, group_col, color_map)
+        table = self._build_table(summary, group_col)
+
         return [
-            html.Div(id=self.INTRO_ID, style={"marginBottom": "20px"}),
-            dcc.Graph(id=self.GRAPH_ID),
-            html.Div(id=self.TABLE_ID, style={"marginTop": "20px"}),
+            html.Div(intro, style={"marginBottom": "20px"}),
+            html.Div(graphs, style={"marginBottom": "20px"}),
+            html.Div(table, style={"marginTop": "10px"}),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        @app.callback(
-            Output(self.INTRO_ID, "children"),
-            Output(self.GRAPH_ID, "figure"),
-            Output(self.TABLE_ID, "children"),
-            Input("color-map-store", "data"),
+
+    @staticmethod
+    def _build_intro(summary: pl.DataFrame, group_col: str) -> List:
+        intro_md: List = [
+            html.P(
+                f"This summary focuses on file properties across "
+                f"{summary.height} group(s) (by '{group_col}')."
+            )
+        ]
+
+        for row in summary.iter_rows(named=True):
+            ft_str = ", ".join(row["file_types"])
+            intro_md.append(
+                html.P(
+                    f"Group '{row[group_col]}' contains "
+                    f"{row['file_count']} files "
+                    f"({row['total_size_mb']:.3f} MB) with types: {ft_str}."
+                )
+            )
+
+        return intro_md
+
+    @staticmethod
+    def _build_plots(
+        summary: pl.DataFrame,
+        group_col: str,
+        color_map: Dict[str, str],
+    ) -> List:
+        figs: List = []
+
+        fig_count = plot_bar(
+            df=summary,
+            x=group_col,
+            y="file_count",
+            color=group_col,
+            color_map=color_map,
+            title="File Count per Group",
+            labels={group_col: group_col, "file_count": "Number of files"},
         )
-        def update_file_summary(color_map: Dict[str, str]):
-            color_map = color_map or {}
+        figs.append(dcc.Graph(figure=fig_count))
 
-            # --- Aggregations for File-Specific Data ---
-            summary = (
-                df_global
-                .group_by("imported_path_short")
-                .agg(
-                    pl.count().alias("file_count"),
-                    (pl.sum("size_bytes") / (1024 * 1024)).alias("total_size_mb"),
-                    pl.col("file_extension").unique().sort().alias("file_types"),
-                )
-                .sort("imported_path_short")
-            )
+        fig_size = plot_bar(
+            df=summary,
+            x=group_col,
+            y="total_size_mb",
+            color=group_col,
+            color_map=color_map,
+            title="Total Size per Group (MB)",
+            labels={group_col: group_col, "total_size_mb": "Size (MB)"},
+        )
+        figs.append(dcc.Graph(figure=fig_size))
 
-            # --- Intro Text ---
-            intro_md = [html.P(f"This summary focuses on file properties across {summary.height} folders.")]
-            for row in summary.iter_rows(named=True):
-                ft_str = ", ".join(row["file_types"])
-                intro_md.append(
-                    html.P(
-                        f"Folder '{row['imported_path_short']}' contains "
-                        f"{row['file_count']} files ({row['total_size_mb']:.3f} MB) with types: {ft_str}."
-                    )
-                )
+        return figs
 
-            # --- Figure ---
-            x_labels = summary["imported_path_short"].to_list()
-            counts = summary["file_count"].to_list()
-            sizes = summary["total_size_mb"].to_list()
-            colors = [color_map.get(lbl, "#333333") for lbl in x_labels]
-
-            fig = make_subplots(rows=1, cols=2, subplot_titles=("File Count", "Total Size (MB)"))
-            fig.add_trace(go.Bar(x=x_labels, y=counts, marker_color=colors), row=1, col=1)
-            fig.add_trace(go.Bar(x=x_labels, y=sizes, marker_color=colors), row=1, col=2)
-            fig.update_layout(height=400, showlegend=False, margin=dict(l=40, r=40, t=80, b=40), barmode="group")
-
-            n = len(x_labels)
-            if n == 1:
-                fig.update_layout(bargap=0.7)
-            if n == 2:
-                fig.update_layout(bargap=0.4)
-
-            table = html.Table(
+    @staticmethod
+    def _build_table(summary: pl.DataFrame, group_col: str) -> html.Table:
+        header = html.Thead(
+            html.Tr(
                 [
-                    html.Thead(html.Tr([
-                        html.Th("Folder"), html.Th("Files"), html.Th("Size (MB)"), html.Th("Types")
-                    ])),
-                    html.Tbody([
-                        html.Tr([
-                            html.Td(row["imported_path_short"]),
-                            html.Td(row["file_count"]),
-                            html.Td(f"{row['total_size_mb']:.3f}"),
-                            html.Td(", ".join(row["file_types"])),
-                        ]) for row in summary.iter_rows(named=True)
-                    ]),
-                ],
-                style={"width": "100%", "borderCollapse": "collapse"},
+                    html.Th(f"{group_col.replace('_',' ').title()}"),
+                    html.Th("Number of Files"),
+                    html.Th("Size (MB)"),
+                    html.Th("File Extension"),
+                ]
+            )
+        )
+
+        body_rows: List[html.Tr] = []
+        for row in summary.iter_rows(named=True):
+            body_rows.append(
+                html.Tr(
+                    [
+                        html.Td(row[group_col]),
+                        html.Td(row["file_count"]),
+                        html.Td(f"{row['total_size_mb']:.3f}"),
+                        html.Td(", ".join(row["file_types"])),
+                    ]
+                )
             )
 
-
-            return intro_md, fig, table
+        return html.Table(
+            [header, html.Tbody(body_rows)],
+            style={"width": "100%", "borderCollapse": "collapse"},
+        )

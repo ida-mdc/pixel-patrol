@@ -1,12 +1,17 @@
 from collections import defaultdict
-from typing import List
+from typing import List, Dict
 
 import polars as pl
-from dash import html, dcc, Input, Output, ALL, ctx
+from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
-from pixel_patrol_base.report.factory import plot_sparkline
+from pixel_patrol_base.report.factory import plot_sparkline, show_no_data_message
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import (
+    prepare_widget_data,
+    GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
+)
 
 
 class MetricsAcrossDimensionsWidget(BaseReportWidget):
@@ -14,130 +19,156 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     Reusable base for widgets that display stats across dimensions in a table.
     Inherits from BaseReportWidget to provide standard Card layout.
     """
-
     # Subclasses set these:
     NAME: str = "Metrics Across Dimensions"
     TAB: str = ""
     REQUIRES = set()
     REQUIRES_PATTERNS = None
 
-    def __init__(self, widget_id: str):
+    def __init__(self, widget_id: str, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         # Unique ID prefix to avoid Dash callback collisions
         self.widget_id = widget_id
-
-    def get_supported_metrics(self) -> List[str]:
-        raise NotImplementedError("Subclasses must return the list of supported metric base names.")
+        self._df: pl.DataFrame | None = None
 
     def get_content_layout(self) -> List:
         """Defines the generic layout with unique IDs derived from widget_id."""
         return [
-            html.Div(id=f"{self.widget_id}-filters-container", className="row"),
             html.Div(id=f"{self.widget_id}-table-container"),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        """Registers callbacks for the table widget."""
+    def register(self, app, df: pl.DataFrame) -> None:
+        self._df = df
 
-        # Populate filters based on the dimension columns present
-        @app.callback(
-            Output(f"{self.widget_id}-filters-container", "children"),
-            Input("color-map-store", "data"),  # just a trigger; not used directly
-        )
-        def populate_filters(_color_map_data):
-            all_dims = defaultdict(set)
-            supported_metrics = self.get_supported_metrics()
-
-            for col in df_global.columns:
-                parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
-                if parsed:
-                    _, dims = parsed
-                    for dim_name, dim_idx in dims.items():
-                        all_dims[dim_name].add(dim_idx)
-
-            dropdowns = []
-            for dim_name, indices in sorted(all_dims.items()):
-                if len(indices) <= 1:
-                    continue
-                dropdown_id = {"type": f"dimension-filter-{self.widget_id}", "dim": dim_name}
-                dropdowns.append(
-                    html.Div(
-                        [
-                            html.Label(f"Dimension '{dim_name.upper()}'"),
-                            dcc.Dropdown(
-                                id=dropdown_id,
-                                options=[{"label": "All", "value": "all"}]
-                                        + [{"label": i, "value": i} for i in sorted(indices)],
-                                value="all",
-                                clearable=False,
-                            ),
-                        ],
-                        className="three columns",
-                    )
-                )
-            return dropdowns
-
-        @app.callback(
+        app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
-            Input({"type": f"dimension-filter-{self.widget_id}", "dim": ALL}, "value"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),
+            Input(GLOBAL_CONFIG_STORE_ID, "data"),
+        )(self._update_plot)
+
+
+    def _update_plot(
+        self,
+        subset_indices: List[int] | None,
+        global_config: Dict | None,
+    ):
+        """Render the table of metrics vs. dimensions with sparklines."""
+
+        df_filtered, _group_col, _resolved, _warning_msg = prepare_widget_data(
+            self._df,
+            subset_indices,
+            global_config,
+            metric_base=None,
         )
-        def update_stats_table(filter_values):
-            # Pattern-matching Input gives us ctx.inputs_list
-            inputs_list = ctx.inputs_list[0] if ctx.inputs_list else []
-            filters = {prop["id"]["dim"]: value for prop, value in zip(inputs_list, filter_values)}
-            supported_metrics = self.get_supported_metrics()
 
-            parsed_cols = []
-            for col in df_global.columns:
-                parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
-                if parsed is None:
-                    continue
-                metric, dims = parsed
-                parsed_cols.append({"col": col, "metric": metric, "dims": dims})
+        if df_filtered.is_empty():
+            return show_no_data_message()
 
-            metrics_to_show = sorted({p["metric"] for p in parsed_cols})
-            from collections import defaultdict
-            all_dims = defaultdict(set)
+        # Parse metric/dimension columns from the filtered dataframe
+        supported_metrics = self.get_supported_metrics()
+        parsed_cols = []
+        for col in df_filtered.columns:
+            parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
+            if parsed is None:
+                continue
+            metric, dims = parsed
+            parsed_cols.append({"col": col, "metric": metric, "dims": dims})
 
-            for p in parsed_cols:
-                for dname, didx in p["dims"].items():
-                    all_dims[dname].add(didx)
+        if not parsed_cols:
+            return show_no_data_message()
 
-            dims_to_plot = sorted([d for d, idxs in all_dims.items() if len(idxs) > 1])
+        # --- Dimension filter (from global controls) ---
+        dims_selection_raw = global_config.get("dimensions") or {}
 
-            if not metrics_to_show or not dims_to_plot:
-                return html.P("No matching dimension statistics found.")
-
-            header = [html.Th("Metric")] + [html.Th(f"Trend across '{d.upper()}'") for d in dims_to_plot]
-            table_rows = []
-            for metric in metrics_to_show:
-                row_cells = [html.Td(metric.replace("_", " ").title())]
-                for plot_dim in dims_to_plot:
-                    cols_for_cell, slice_idxs = [], set()  # track which slice indices exist for this dim
-                    for pc in parsed_cols:
-                        if pc["metric"] == metric and plot_dim in pc["dims"]:
-                            # honor dropdown filters; 'all' passes through
-                            if all(f_val == "all" or pc["dims"].get(f_dim) == f_val for f_dim, f_val in
-                                   filters.items()):
-                                cols_for_cell.append(pc["col"])
-                                slice_idxs.add(pc["dims"][plot_dim])
-
-                    # require at least 2 slices for that dim; otherwise no plot
-                    if cols_for_cell and len(slice_idxs) > 1:
-                        # Use Factory for visual; layout fully defined in plot_sparkline
-                        fig = plot_sparkline(df_global, plot_dim, cols_for_cell)
-
-                        cell_content = dcc.Graph(
-                            figure=fig,
-                            config={"displayModeBar": False},
-                        )
-
-                    else:
-                        cell_content = html.Div("N/A", style={"textAlign": "center", "padding": "15px"})
-                    row_cells.append(html.Td(cell_content))
-                table_rows.append(html.Tr(row_cells))
-
-            return html.Table(
-                [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
-                className="striped-table",
-                style={"width": "100%"},
+        # Normalize values so they can be compared to parsed dim indices (ints)
+        # Values may be "0" or "t0"; we always keep just the numeric index as string.
+        dim_filter = {
+            dim.lower(): (
+                str(val)[len(dim):] if str(val).startswith(dim) else str(val)
             )
+            for dim, val in dims_selection_raw.items()
+            if val and val != "All"
+        }
+
+        # Filter parsed columns by the selected dimensions
+        if dim_filter:
+            filtered_parsed = [
+                pc
+                for pc in parsed_cols
+                if all(
+                    d in pc["dims"] and str(pc["dims"][d]) == idx
+                    for d, idx in dim_filter.items()
+                )
+            ]
+        else:
+            filtered_parsed = parsed_cols
+
+        if not filtered_parsed:
+            return show_no_data_message()
+
+        # --- Decide which metrics and dimensions to show ---
+        metrics_to_show = sorted({p["metric"] for p in filtered_parsed})
+
+        dim_slices = defaultdict(set)
+        for p in filtered_parsed:
+            for dname, didx in p["dims"].items():
+                dim_slices[dname].add(didx)
+
+        # Only keep dims that still have at least 2 slices after filtering
+        dims_to_plot = sorted(
+            dname for dname, idxs in dim_slices.items() if len(idxs) >= 2
+        )
+
+        if not metrics_to_show or not dims_to_plot:
+            return show_no_data_message()
+
+        # --- Build table with sparklines ---
+        header = [html.Th("Metric")] + [
+            html.Th(f"Trend across '{d.upper()}'") for d in dims_to_plot
+        ]
+
+        table_rows = []
+        for metric in metrics_to_show:
+            row_cells = [html.Td(metric.replace("_", " ").title())]
+
+            for plot_dim in dims_to_plot:
+                cols_for_cell = [
+                    pc["col"]
+                    for pc in filtered_parsed
+                    if pc["metric"] == metric and plot_dim in pc["dims"]
+                ]
+                slice_idxs = {
+                    pc["dims"][plot_dim]
+                    for pc in filtered_parsed
+                    if pc["metric"] == metric and plot_dim in pc["dims"]
+                }
+
+                # Require at least 2 slices for that dim; otherwise no plot
+                if cols_for_cell and len(slice_idxs) > 1:
+                    fig = plot_sparkline(df_filtered, plot_dim, cols_for_cell)
+                    cell_content = dcc.Graph(
+                        figure=fig,
+                        config={"displayModeBar": False},
+                        style={"height": "90px"},
+                    )
+                else:
+                    cell_content = html.Div(
+                        "N/A",
+                        style={
+                            "textAlign": "center",
+                            "padding": "15px",
+                            "color": "#6c757d",
+                        },
+                    )
+
+                row_cells.append(html.Td(cell_content))
+
+            table_rows.append(html.Tr(row_cells))
+
+        return html.Table(
+            [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
+            style={"width": "100%", "borderCollapse": "collapse"},
+        )
+
+    def get_supported_metrics(self) -> List[str]:
+        raise NotImplementedError("Subclasses must return the list of supported metric base names.")
