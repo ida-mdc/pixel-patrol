@@ -1,4 +1,4 @@
-from typing import List, Set
+from typing import List, Set, Dict
 import polars as pl
 import numpy as np
 from dash import html, dcc, Input, Output, no_update
@@ -7,16 +7,15 @@ from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.factory import plot_grouped_histogram, show_no_data_message
 from pixel_patrol_base.report.data_utils import (
-    find_best_matching_column,
     aggregate_histograms_by_group,
     compute_histogram_edges,
-    format_selection_title
+    format_selection_title,
 )
 from pixel_patrol_base.report.global_controls import (
-    apply_global_config,
+    prepare_widget_data,
     GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
 )
-
 
 class DatasetHistogramWidget(BaseReportWidget):
     NAME: str = "Pixel Value Histograms"
@@ -91,14 +90,14 @@ class DatasetHistogramWidget(BaseReportWidget):
             html.Div(id=self.CONTENT_ID, style={"minHeight": "400px"}),
         ]
 
-    def register(self, app, df_global: pl.DataFrame):
-        self._df = df_global
+    def register(self, app, df: pl.DataFrame):
+        self._df = df
 
-        # 1. Populate basic controls
+        # 1. Populate basic controls (based on globally filtered rows)
         app.callback(
             Output("histogram-group-dropdown", "options"),
             Output("histogram-group-dropdown", "value"),
-            Input("color-map-store", "data"),  # Trigger on load/map change
+            Input(FILTERED_INDICES_STORE_ID, "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._set_control_options)
 
@@ -108,6 +107,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             Output("histogram-file-dropdown", "value"),
             Input("histogram-group-dropdown", "value"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),
             prevent_initial_call=False,
         )(self._update_file_options)
 
@@ -118,15 +118,21 @@ class DatasetHistogramWidget(BaseReportWidget):
             Input("histogram-remap-mode", "value"),
             Input("histogram-group-dropdown", "value"),
             Input("histogram-file-dropdown", "value"),
+            Input(FILTERED_INDICES_STORE_ID, "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
-    def _set_control_options(self, _color_map, global_config):
-        df = self._df
-        if df is None: return [], []
 
-        df_processed, group_col = apply_global_config(df, global_config)
-        if group_col is None or df_processed.is_empty():
+    def _set_control_options(self, subset_indices, global_config):
+        df = self._df
+
+        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+            df,
+            subset_indices,
+            global_config or {},
+            metric_base="*",
+        )
+        if not group_col or df_processed.is_empty():
             return [], []
 
         group_values = df_processed[group_col].unique().sort().to_list()
@@ -135,83 +141,103 @@ class DatasetHistogramWidget(BaseReportWidget):
         return group_options, []
 
 
-    def _update_file_options(self, selected_groups, global_config):
+    def _update_file_options(self, selected_groups, global_config, subset_indices):
         df = self._df
-        if df is None: return [], None
 
-        df_processed, group_col = apply_global_config(df, global_config)
+        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+            df,
+            subset_indices,
+            global_config or {},
+            metric_base="*",
+        )
 
-        # Filter options based on the "Group" dropdown to narrow down file search
         if selected_groups:
             df_processed = df_processed.filter(pl.col(group_col).is_in(selected_groups))
+
+        if df_processed.is_empty():
+            return [], None
 
         # Limit to 500 files for performance in dropdown
         names = df_processed["name"].unique().head(500).to_list()
         options = [{"label": n, "value": n} for n in names]
         return options, no_update
 
-    def _update_plot(self, color_map, remap_mode, selected_groups, selected_file, global_config):
-        df = self._df
-        if df is None: return show_no_data_message()
+    def _update_plot(
+        self,
+        color_map: Dict[str, str],
+        remap_mode: str | None,
+        selected_groups: List[str] | None,
+        selected_file: str | None,
+        subset_indices: List[int] | None,
+        global_config: Dict,
+    ):
 
-        # 1. Resolve Dimensions from Global Config
-        dims_selection = global_config.get("dimensions", {})
-
-        # 2. Identify Columns
-        base = "histogram_counts"
-        histogram_key = find_best_matching_column(df.columns, base, dims_selection) or base
-        if histogram_key not in df.columns:
-            return show_no_data_message(f"Column {histogram_key} not found. Check global dimension settings.")
-
-        suffix = histogram_key.replace("histogram_counts", "")
-        min_key, max_key = f"histogram_min{suffix}", f"histogram_max{suffix}"
-
-        # 3. Apply Filters (Global + Local Group Selection)
-        df_processed, group_col = apply_global_config(df, global_config)
-
-        if selected_groups:
-            df_processed = df_processed.filter(pl.col(group_col).is_in(selected_groups))
-
-        if df_processed.is_empty():
-            return show_no_data_message()
-
-        # 4. Process Data (Delegated to Data Utils)
-        # Result: { "group_name": (x_centers_array, y_counts_array) }
-        group_data = aggregate_histograms_by_group(
-            df=df_processed,
-            group_col=group_col,
-            hist_col=histogram_key,
-            min_col=min_key,
-            max_col=max_key,
-            mode=remap_mode
+        metric_base = "histogram_counts"
+        df_filtered, group_col, resolved_col, warning_msg = prepare_widget_data(
+            self._df,
+            subset_indices,
+            global_config or {},
+            metric_base=metric_base,
         )
 
-        # 5. Process Single File Overlay (if selected)
-        overlay_data = None
-        if selected_file:
-            row = df.filter(pl.col("name") == selected_file)
-            if row.height > 0:
-                c_list = row.get_column(histogram_key).item()
-                minv = row.get_column(min_key).item() if min_key in row.columns else 0
-                maxv = row.get_column(max_key).item() if max_key in row.columns else 255
+        if resolved_col is None or df_filtered.is_empty():
+            return show_no_data_message()
 
-                if c_list is not None:
-                    c_arr = np.array(c_list, dtype=float)
-                    if c_arr.size > 0 and c_arr.sum() > 0:
-                        c_arr /= c_arr.sum()
-                        _, centers, width = compute_histogram_edges(c_arr, minv, maxv)
+        # Construct matching min/max keys from the same suffix
+        suffix = resolved_col.replace(metric_base, "")
+        min_key = f"histogram_min{suffix}"
+        max_key = f"histogram_max{suffix}"
 
-                        overlay_data = {
-                            "x": centers, "y": c_arr, "width": width, "name": f"File: {selected_file}"
-                        }
+        # Apply optional (within widget) group selection
+        if selected_groups:
+            df_filtered = df_filtered.filter(pl.col(group_col).is_in(selected_groups))
 
+        # Aggregate per-group histograms on the *already filtered* subset
+        group_data = aggregate_histograms_by_group(
+            df=df_filtered,
+            group_col=group_col,
+            hist_col=resolved_col,
+            min_col=min_key,
+            max_col=max_key,
+            mode=remap_mode,
+        )
 
-        # 6. Plot (Delegated to Factory)
+        if not group_data:
+            return show_no_data_message()
+
+        # Optional single-file overlay (respecting global filters)
+        overlay_data = get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
+
+        dims_selection = (global_config or {}).get("dimensions", {})
+
         fig = plot_grouped_histogram(
             group_data=group_data,
             color_map=color_map or {},
             overlay_data=overlay_data,
-            title=format_selection_title(dims_selection),  # Clean title, card handles it
+            title=format_selection_title(dims_selection),
         )
 
         return dcc.Graph(figure=fig, style={"height": "600px"})
+
+def get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file):
+    overlay_data = None
+    if selected_file:
+        row = df_filtered.filter(pl.col("name") == selected_file)
+        if row.height > 0:
+            c_list = row.get_column(resolved_col).item()
+            minv = row.get_column(min_key).item() if min_key in row.columns else 0
+            maxv = row.get_column(max_key).item() if max_key in row.columns else 255
+
+            if c_list is not None:
+                c_arr = np.array(c_list, dtype=float)
+                if c_arr.size > 0 and c_arr.sum() > 0:
+                    c_arr /= c_arr.sum()
+                    _, centers, width = compute_histogram_edges(c_arr, minv, maxv)
+
+                    overlay_data = {
+                        "x": centers,
+                        "y": c_arr,
+                        "width": width,
+                        "name": f"File: {selected_file}",
+                    }
+    return overlay_data

@@ -148,6 +148,7 @@ def plot_bar(
         labels: Optional[Dict[str, str]] = None,
         barmode: str = "stack",
         order_x: Optional[List[str]] = None,
+        force_category_x: bool = False,
 ) -> go.Figure:
 
     cat_orders = _get_category_orders(df, x, color, order_x)
@@ -163,6 +164,9 @@ def plot_bar(
         title=title,
         labels=labels,
     )
+
+    if force_category_x:
+        fig.update_xaxes(type="category")
 
     if order_x:
         fig.update_layout(
@@ -384,17 +388,18 @@ def plot_sparkline(
 
 
 def generate_column_violin_plots(
-    df_global: pl.DataFrame,
+    df: pl.DataFrame,
     color_map: Dict[str, str],
     numeric_cols: List[str],
+    group_col: str,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
     plus an optional table listing metrics that have no variance.
     """
-    df_filtered = df_global.select(
+    df_filtered = df.select(
         pl.col("name"),
-        pl.col("imported_path_short"),
+        pl.col(group_col),
         pl.col(numeric_cols),
     )
 
@@ -403,7 +408,7 @@ def generate_column_violin_plots(
         pl.all_horizontal([pl.col(c).is_not_null() for c in numeric_cols])
     )
 
-    groups = df_filtered["imported_path_short"].unique().sort().to_list()
+    groups = df_filtered.get_column(group_col).unique().sort().to_list()
     if not groups:
         return html.P(
             "No data available to generate statistics.",
@@ -442,6 +447,7 @@ def generate_column_violin_plots(
             value_to_plot=col_name,
             groups=groups,
             color_map=color_map,
+            group_col=group_col,
         )
         plot_divs.append(
             html.Div(
@@ -478,12 +484,13 @@ def _plot_single_violin(
     value_to_plot: str,
     groups: List[str],
     color_map: Dict[str, str],
+    group_col: str,
 ) -> go.Figure:
     """Generate one violin plot figure for a single metric grouped by folder."""
     chart = go.Figure()
 
     for group_name in groups:
-        df_group = plot_data.filter(pl.col("imported_path_short") == group_name)
+        df_group = plot_data.filter(pl.col(group_col) == group_name)
         group_color = color_map.get(group_name, "#333333")
 
         chart.add_trace(
@@ -514,7 +521,7 @@ def _plot_single_violin(
     nice_name = value_to_plot.replace("_", " ").title()
     chart.update_layout(
         title_text=f"Distribution of {nice_name}",
-        xaxis_title="Folder",
+        xaxis_title="Group",
         yaxis_title=nice_name,
         margin=dict(l=50, r=50, t=80, b=50),
         hovermode="closest",
@@ -576,6 +583,31 @@ def plot_grouped_histogram(
     chart.update_layout(**layout)
 
     return chart
+
+def plot_sunburst(
+        ids: List[str],
+        labels: List[str],
+        parents: List[str],
+        values: List[int],
+        colors: Optional[List[str]] = None,
+        hovertemplate: Optional[str] = None,
+) -> go.Figure:
+    marker = dict(colors=colors) if colors is not None else None
+
+    fig = go.Figure(
+        go.Sunburst(
+            ids=ids,
+            labels=labels,
+            parents=parents,
+            values=values,
+            marker=marker,
+            branchvalues="total",
+            hovertemplate=hovertemplate or "<b>%{label}</b><br>%{value}<extra></extra>",
+        )
+    )
+
+    _apply_standard_styling(fig)
+    return fig
 
 # =============================================================================
 #  SECTION 4: CONTROLS

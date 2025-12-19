@@ -1,10 +1,10 @@
 import re
 from typing import List, Dict, Sequence
-
+from pathlib import Path
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
 import polars as pl
-from dash import Dash, html, dcc, ALL
+from dash import Dash, html, dcc, ALL, callback_context
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from datetime import datetime
@@ -16,21 +16,24 @@ from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
 from pixel_patrol_base.report.global_controls import (
     build_sidebar,
-    apply_global_config,
+    apply_global_row_filters_and_grouping,
+    compute_filtered_indices,
+    resolve_group_column,
+    prepare_widget_data,
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
+    FILTERED_INDICES_STORE_ID,
     GLOBAL_GROUPBY_COLS_ID,
     GLOBAL_FILTER_COLUMN_ID,
     GLOBAL_FILTER_TEXT_ID,
     GLOBAL_DIM_FILTER_TYPE,
     GLOBAL_APPLY_BUTTON_ID,
+    GLOBAL_RESET_BUTTON_ID,
     EXPORT_CSV_BUTTON_ID,
     EXPORT_PROJECT_BUTTON_ID,
     EXPORT_CSV_DOWNLOAD_ID,
     EXPORT_PROJECT_DOWNLOAD_ID,
 )
-
-from pathlib import Path  # add if missing
 
 DEFAULT_WIDGET_WIDTH = 12
 
@@ -67,12 +70,12 @@ def _create_app(
     project: Project,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
+
     df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP,
                             "https://codepen.io/chriddyp/pen/bWLwgP.css",
                             "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
                             ]
-    #app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 
     app = Dash(
         __name__,
@@ -86,7 +89,6 @@ def _create_app(
     # Discover widget instances (new or legacy)
     group_widgets: List[PixelPatrolWidget] = discover_widget_plugins()
 
-    # ✅ prefer new API; fallback to legacy register_callbacks for older widgets
     for w in group_widgets:
         if hasattr(w, "register"):
             w.register(app, df)
@@ -95,7 +97,6 @@ def _create_app(
 
     def serve_layout_closure() -> html.Div:
 
-        # --- Header (inside main content) ---
         header_row = dbc.Row(
             [
                 dbc.Col(
@@ -189,6 +190,7 @@ def _create_app(
             [
                 dcc.Store(id="color-map-store"),
                 *global_control_stores,
+                dcc.Store(id=FILTERED_INDICES_STORE_ID, data=None),
                 dcc.Store(
                     id="tb-process-store-tensorboard-embedding-projector",
                     data={},
@@ -226,26 +228,43 @@ def _create_app(
             className="gx-0",  # no horizontal gutter between sidebar and content
         )
 
-        return html.Div(
-            [
-                stores,
-                layout_row,
-            ]
-        )
+        return html.Div([stores, layout_row])
 
     app.layout = serve_layout_closure
 
     @app.callback(
-        Output("color-map-store", "data"),
-        # Swapped Input/State: Updates only when Config Store updates (via Apply button)
+        Output(FILTERED_INDICES_STORE_ID, "data"),
         Input(GLOBAL_CONFIG_STORE_ID, "data"),
-        # Palette is now a State, so selecting it doesn't trigger immediate updates
+    )
+    def update_filtered_indices(global_config: Dict) -> List[int]:
+        """
+        Compute filtered row indices once per global-config change.
+        Widgets reuse this instead of re-applying filters on the full df.
+        """
+        return compute_filtered_indices(df, global_config)
+
+    @app.callback(
+        Output("color-map-store", "data"),
+        Input(FILTERED_INDICES_STORE_ID, "data"),
+        State(GLOBAL_CONFIG_STORE_ID, "data"),
         State(PALETTE_SELECTOR_ID, "value"),
     )
-    def update_color_map(global_config: Dict, palette: str) -> Dict[str, str]:
-        df_processed, group_col = apply_global_config(df, global_config)
+    def update_color_map(
+        subset_indices: List[int] | None,
+        global_config: Dict,
+        palette: str,
+    ) -> Dict[str, str]:
+        """
+        Build color map based on the *already filtered* subset and current grouping.
+        """
+        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+            df,
+            subset_indices,
+            global_config or {},
+            metric_base=None,  # just need grouping, no metric resolution
+        )
 
-        if group_col is None or group_col not in df_processed.columns or df_processed.is_empty():
+        if not group_col or group_col not in df_processed.columns or df_processed.is_empty():
             return {}
 
         groups = (
@@ -269,6 +288,7 @@ def _create_app(
     @app.callback(
         Output(GLOBAL_CONFIG_STORE_ID, "data"),
         Input(GLOBAL_APPLY_BUTTON_ID, "n_clicks"),
+        Input(GLOBAL_RESET_BUTTON_ID, "n_clicks"),
         State(GLOBAL_GROUPBY_COLS_ID, "value"),
         State(GLOBAL_FILTER_COLUMN_ID, "value"),
         State(GLOBAL_FILTER_TEXT_ID, "value"),
@@ -277,13 +297,21 @@ def _create_app(
         prevent_initial_call=False,
     )
     def update_global_config(
-            _n_clicks: int,
+            _apply_clicks: int,
+            _reset_clicks: int,
             group_col,
             filter_col,
             filter_text,
             dim_values,
             dim_ids
     ) -> Dict:
+        ctx = callback_context
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
+
+        # Reset logic: return to defaults
+        if trigger_id == GLOBAL_RESET_BUTTON_ID:
+            return {"group_cols": ["report_group"], "filters": {}, "dimensions": {}}
+
         # Single grouping column; default to report_group if nothing chosen
         if not group_col:
             group_cols = ["report_group"]
@@ -305,6 +333,19 @@ def _create_app(
         return {"group_cols": group_cols, "filters": filters, "dimensions": dimensions}
 
     @app.callback(
+        Output(GLOBAL_GROUPBY_COLS_ID, "value"),
+        Output(GLOBAL_FILTER_COLUMN_ID, "value"),
+        Output(GLOBAL_FILTER_TEXT_ID, "value"),
+        Output({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "value"),
+        Input(GLOBAL_RESET_BUTTON_ID, "n_clicks"),
+        State({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "value"),
+        prevent_initial_call=True
+    )
+    def reset_ui_controls(_n_clicks, current_dim_values):
+        # Reset dropdowns to None/Empty and all dimensions to "All"
+        return None, None, "", ["All"] * len(current_dim_values)
+
+    @app.callback(
         Output(EXPORT_CSV_DOWNLOAD_ID, "data"),
         Input(EXPORT_CSV_BUTTON_ID, "n_clicks"),
         State(GLOBAL_CONFIG_STORE_ID, "data"),
@@ -314,7 +355,7 @@ def _create_app(
         if not n_clicks:
             raise PreventUpdate
 
-        df_filtered, group_col = apply_global_config(df, global_config)
+        df_filtered, group_col = apply_global_row_filters_and_grouping(df, global_config)
 
         # add a human-readable group label column for clarity
         df_export = df_filtered.with_columns(
@@ -342,7 +383,7 @@ def _create_app(
         from pixel_patrol_base import api as pp_api
 
         # 1. Apply filters
-        df_filtered, _ = apply_global_config(df, global_config)
+        df_filtered, _ = apply_global_row_filters_and_grouping(df, global_config)
 
         # 2. Clone the project and override records_df
         new_project = copy.copy(project)
@@ -385,7 +426,7 @@ def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence
         print(f"DEBUG: Hiding widget '{name}' — missing columns: {missing}")
         return False
 
-    # 2) Pattern requirements (accept str or compiled regex)
+    # 2) Pattern requirements (accepts str or compiled regex)
     for pat in patterns:
         pattern_str = getattr(pat, "pattern", pat)  # support compiled or plain string
         if not any(re.search(pattern_str, c) for c in cols):

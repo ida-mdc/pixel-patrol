@@ -1,5 +1,5 @@
 import re
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Sequence
 import polars as pl
 import numpy as np
 from collections import defaultdict
@@ -75,6 +75,36 @@ def find_best_matching_column(
     if candidates:
         return min(candidates, key=len)
     return None
+
+def get_dim_aware_column(
+    all_columns: list[str],
+    base: str,
+    dims_selection: dict | None,
+):
+    """
+    - If user did NOT filter dimensions (all 'All'): return the base metric column if it exists.
+    - If user DID filter dimensions: return a matching dim-specific column if found, else None.
+    """
+    dims_selection = dims_selection or {}
+
+    # True if the user selected ANY concrete dimension instead of "All"
+    is_any_dim_filter = any(
+        value and value != "All"
+        for value in dims_selection.values()
+    )
+
+    if not is_any_dim_filter:
+        return base if base in all_columns else None
+
+    col = find_best_matching_column(all_columns, base, dims_selection)
+    return col  # None means: no data for these dims
+
+
+def get_all_grouping_cols(base_cols: list[str], group_col: Optional[str]) -> list[str]:
+    cols = base_cols.copy()
+    if group_col and group_col not in cols:
+        cols.append(group_col)
+    return cols
 
 
 def format_selection_title(dims_selection: Dict[str, str]) -> Optional[str]:

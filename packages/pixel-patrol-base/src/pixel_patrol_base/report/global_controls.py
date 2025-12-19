@@ -7,17 +7,22 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
 
-from pixel_patrol_base.report.data_utils import get_all_available_dimensions
+from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column
 
 # ---------- ID CONSTANTS ----------
 
 PALETTE_SELECTOR_ID = "palette-selector"
 GLOBAL_CONFIG_STORE_ID = "global-config-store"
+FILTERED_INDICES_STORE_ID = "global-filtered-indices-store"
+
 GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
 GLOBAL_FILTER_TEXT_ID = "global-filter-text"
 GLOBAL_DIM_FILTER_TYPE = "global-dim-filter" # _TYPE refers to a dynamic group
+
 GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
+GLOBAL_RESET_BUTTON_ID = "global-reset-button"
+
 EXPORT_CSV_BUTTON_ID = "export-csv-button"
 EXPORT_PROJECT_BUTTON_ID = "export-project-button"
 EXPORT_CSV_DOWNLOAD_ID = "export-csv-download"
@@ -148,12 +153,25 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                     ]),
                     html.Hr(),
 
-                    html.Button(
-                        "Apply",
-                        id=GLOBAL_APPLY_BUTTON_ID,
-                        n_clicks=0,
-                        className="btn btn-primary btn-sm mt-3 w-100",
-                    ),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Button(
+                                "Apply",
+                                id=GLOBAL_APPLY_BUTTON_ID,
+                                n_clicks=0,
+                                className="btn btn-primary btn-sm w-100",
+                            ), width=6
+                        ),
+                        dbc.Col(
+                            html.Button(
+                                "Reset",
+                                id=GLOBAL_RESET_BUTTON_ID,
+                                n_clicks=0,
+                                className="btn btn-outline-danger btn-sm w-100",
+                            ), width=6
+                        ),
+                    ], className="mt-3 g-2"),
+
                     html.Div(
                         [
                             html.Button(
@@ -192,9 +210,149 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
     return sidebar_controls, stores, extra_components
 
 
-# ---------- LOGIC: APPLY GLOBAL CONFIG ----------
+# ---------- LOGIC: CENTRALIZED HELPERS ----------
 
-def apply_global_config(
+def compute_filtered_indices(df: pl.DataFrame,
+                             global_config: Optional[Dict]
+                             ) -> Optional[List[int]]:
+    """
+    Computes the indices of rows that match the global row filters AND dimension filters.
+    Widgets will use these indices to quickly slice the dataframe.
+    """
+    global_config = global_config or {}
+    filters = global_config.get("filters") or {}
+    dimensions = global_config.get("dimensions") or {}
+
+    # If no filters and no dimension constraints, return all indices
+    if not filters and not dimensions:
+        return None
+
+    # 1. Apply Standard Value Filters
+    mask = pl.lit(True)
+    for col_name, allowed_vals in filters.items():
+        if col_name in df.columns and allowed_vals:
+            mask = mask & pl.col(col_name).is_in(allowed_vals)
+
+    df_subset = df.filter(mask)
+
+    # 2. Apply Dimension Filters (Optimization: computed once globally)
+    # This filters out rows that have NO data for the selected dimensions (e.g. T=0)
+    df_subset = filter_rows_by_any_dimension(df_subset, dimensions)
+
+    return df_subset.select(pl.col("unique_id")).to_series().to_list()
+
+
+def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str:
+    """Helper to safely extract the active grouping column."""
+    global_config = global_config or {}
+    group_cols = list(global_config.get("group_cols") or [])
+
+    group_col = group_cols[0] if group_cols else DEFAULT_GROUP_COL
+    if group_col not in df.columns:
+        group_col = DEFAULT_GROUP_COL if DEFAULT_GROUP_COL in df.columns else df.columns[0]
+
+    return group_col
+
+
+def filter_rows_by_any_dimension(
+    df: pl.DataFrame,
+    dims_selection: Dict[str, str],
+) -> pl.DataFrame:
+    """
+    Keep only rows that have *any* non-null metric column
+    for the currently selected dimensions.
+    """
+    dims_selection = dims_selection or {}
+
+    # Build tokens like "_t0", "_z1", ignoring "All"
+    tokens: List[str] = []
+    for dim, val in dims_selection.items():
+        if not val or val == "All":
+            continue
+        token = val if val.startswith(dim) else f"{dim}{val}"
+        tokens.append(f"_{token}")
+
+    if not tokens:
+        return df  # no dim filters -> no change
+
+    # Columns that match *all* selected dim tokens (order-independent)
+    dim_cols = [
+        c for c in df.columns
+        if all(tok in c for tok in tokens)
+    ]
+    if not dim_cols:
+        return df.head(0)  # no column exists for those dims
+
+    # Keep rows where at least one of those columns is non-null
+    mask = pl.col(dim_cols[0]).is_not_null()
+    for c in dim_cols[1:]:
+        mask = mask | pl.col(c).is_not_null()
+
+    return df.filter(mask)
+
+
+def prepare_widget_data(
+        df: pl.DataFrame,
+        subset_indices: Optional[List[int]],
+        global_config: Dict,
+        metric_base: Optional[str] = None
+) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str]]:
+    """
+    The main coordinator for widgets.
+    1. Slices the global `df` using `subset_indices`.
+    2. Resolves the correct grouping column.
+    3. If `metric_base` is provided, attempts to find the dimension-specific column (e.g. 'area_t0').
+
+    Returns:
+        (df_filtered, group_col, resolved_column_name, warning_message)
+    """
+    # 1. Filter Rows
+    if subset_indices is not None:
+        df_filtered = df.filter(pl.col("unique_id").is_in(subset_indices))
+    else:
+        df_filtered = df
+
+    if df_filtered.is_empty():
+        return df_filtered, "", None, "No data matches the current filters."
+
+    # 2. Resolve Grouping
+    group_col = resolve_group_column(df_filtered, global_config)
+
+    # 3. Resolve Dimension-Specific Column (if needed)
+    resolved_col = None
+    warning_msg = None
+    dims_selection = global_config.get("dimensions", {})
+
+    if metric_base:
+        resolved_col = get_dim_aware_column(
+            df_filtered.columns,
+            metric_base,
+            dims_selection,
+        )
+
+        if resolved_col is None:
+            has_dim_filter = any(v and v != "All" for v in dims_selection.values())
+            if has_dim_filter:
+                warning_msg = (
+                    f"Metric '{metric_base}' is not available for the selected dimensions "
+                    f"({', '.join(f'{k}={v}' for k, v in dims_selection.items() if v != 'All')})."
+                )
+            else:
+                warning_msg = f"Metric '{metric_base}' not found in dataset."
+            df_filtered = df_filtered.head(0)
+
+        else:
+            df_filtered = df_filtered.filter(pl.col(resolved_col).is_not_null())
+            if df_filtered.is_empty():
+                warning_msg = (
+                    "No data matches the selected dimensions for "
+                    f"metric '{metric_base}'."
+                )
+
+    return df_filtered, group_col, resolved_col, warning_msg
+
+
+def apply_global_row_filters_and_grouping(
     df: pl.DataFrame,
     global_config: Optional[Dict],
     default_group_col: str = DEFAULT_GROUP_COL,
