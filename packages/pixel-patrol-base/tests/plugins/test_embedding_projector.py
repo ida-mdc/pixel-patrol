@@ -217,7 +217,7 @@ def test_data_separation_and_types():
     widget = EmbeddingProjectorWidget()
 
     # Act
-    embeddings, metadata_df = widget.prepare_data(df)
+    embeddings, metadata_df = widget._prepare_embeddings_and_meta(df)
 
     # Assert
     # 1. Check that embeddings have the correct shape and source columns
