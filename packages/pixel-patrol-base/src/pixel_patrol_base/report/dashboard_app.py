@@ -18,7 +18,6 @@ from pixel_patrol_base.report.global_controls import (
     build_sidebar,
     apply_global_row_filters_and_grouping,
     compute_filtered_indices,
-    resolve_group_column,
     prepare_widget_data,
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
@@ -38,19 +37,6 @@ from pixel_patrol_base.report.global_controls import (
 DEFAULT_WIDGET_WIDTH = 12
 
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
-
-def load_and_concat_parquets(paths: List[str]) -> pl.DataFrame:
-    """Read parquet files/dirs and concatenate into one DataFrame."""
-    dfs = []
-    for base_str in paths:
-        base = Path(base_str)
-        files = sorted(base.rglob("*.parquet")) if base.is_dir() else []
-        if base.is_file() and base.suffix == ".parquet":
-            files = [base]
-        for file in files:
-            dfs.append(pl.read_parquet(file))
-    return pl.concat(dfs, how="diagonal", rechunk=True) if dfs else pl.DataFrame()
-
 
 def create_app(project: Project) -> Dash:
     return _create_app(
