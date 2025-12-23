@@ -1,7 +1,4 @@
-import re
 from typing import Dict, Optional, List, Any, Tuple
-from collections import defaultdict
-import statistics
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -332,58 +329,67 @@ def plot_violin(
     return chart
 
 
-
-def plot_sparkline(
+def plot_grouped_scatter(
         df: pl.DataFrame,
-        dim_name: str,
-        cols: List[str],
+        x_col: str,
+        y_col: str,
+        group_col: str,
+        *,
+        mode: str = "lines+markers",
+        color_map: Optional[Dict[str, str]] = None,
+        show_legend: bool = False,
+        height: int = 120,
 ) -> go.Figure:
     """
-    Minimalist sparkline plot aggregating multiple columns that share an index
-    (e.g. t0_c0, t0_c1 -> t0).
+    Generic grouped XY plot. Expects df already in long/aggregated form.
     """
-    pattern = re.compile(f"_{dim_name}(\\d+)")
+    color_map = color_map or {}
+    fig = go.Figure()
 
-    # 1. Get mean of each column across the whole filtered dataframe
-    stats_row = df.select([pl.col(c).mean() for c in cols]).row(0)
-
-    # 2. Group values by their dimension index (e.g. {0: [val_c0, val_c1], 1: [...]})
-    grouped_points = defaultdict(list)
-
-    for col, val in zip(cols, stats_row):
-        if val is None:
-            continue
-        m = pattern.search(col)
-        if m:
-            idx = int(m.group(1))
-            grouped_points[idx].append(val)
-
-    if not grouped_points:
-        return go.Figure()
-
-    # 3. Compute mean per index
-    x_vals = sorted(grouped_points.keys())
-    y_vals = [statistics.mean(grouped_points[idx]) for idx in x_vals]
-
-    fig = go.Figure(
-        data=[
-            go.Scatter(
-                x=x_vals,
-                y=y_vals,
-                mode="lines+markers",
-                line=dict(width=1),
-                marker=dict(size=4),
-            )
-        ]
+    groups = (
+        df.get_column(group_col)
+          .unique()
+          .drop_nulls()
+          .sort()
+          .to_list()
     )
+
+    for g in groups:
+        dfg = df.filter(pl.col(group_col) == g)
+        fig.add_trace(
+            go.Scatter(
+                x=dfg[x_col].to_list(),
+                y=dfg[y_col].to_list(),
+                mode=mode,
+                name=str(g),
+                line=dict(width=2, color=color_map.get(str(g))),
+                marker=dict(size=5),
+            )
+        )
 
     layout = STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
-        xaxis=dict(showgrid=False, zeroline=False, title=None),
-        yaxis=dict(showgrid=False, zeroline=False, title=None),
-        margin=dict(l=20, r=20, t=10, b=20),
+        margin=dict(l=30, r=10, t=10, b=25),
+        showlegend=show_legend,
+        xaxis=dict(
+            type="category",
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            mirror=True,
+            ticks="outside",
+            title=None,
+        ),
+        yaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            mirror=True,
+            ticks="outside",
+            title=None,
+        ),
     )
-    fig.update_layout(**layout, height=80)
+    fig.update_layout(**layout, height=height)
     return fig
 
 
