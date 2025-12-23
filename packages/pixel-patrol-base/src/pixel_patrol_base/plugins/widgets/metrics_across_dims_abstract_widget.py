@@ -5,7 +5,7 @@ import polars as pl
 from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
-from pixel_patrol_base.report.factory import plot_sparkline, show_no_data_message
+from pixel_patrol_base.report.factory import plot_grouped_scatter, show_no_data_message
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import (
     prepare_widget_data,
@@ -42,6 +42,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
         app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
+            Input("color-map-store", "data"),
             Input(FILTERED_INDICES_STORE_ID, "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
@@ -49,12 +50,13 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
     def _update_plot(
         self,
+        color_map: Dict[str, str] | None,
         subset_indices: List[int] | None,
         global_config: Dict | None,
     ):
         """Render the table of metrics vs. dimensions with sparklines."""
 
-        df_filtered, _group_col, _resolved, _warning_msg = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning = prepare_widget_data(
             self._df,
             subset_indices,
             global_config,
@@ -123,7 +125,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             return show_no_data_message()
 
         # --- Build table with sparklines ---
-        header = [html.Th("Metric")] + [
+        header = [html.Th("Metric", style={"width": "140px"})] + [
             html.Th(f"Trend across '{d.upper()}'") for d in dims_to_plot
         ]
 
@@ -145,12 +147,30 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
                 # Require at least 2 slices for that dim; otherwise no plot
                 if cols_for_cell and len(slice_idxs) > 1:
-                    fig = plot_sparkline(df_filtered, plot_dim, cols_for_cell)
+                    agg = _aggregate_cell_series(
+                        df_filtered,
+                        group_col=group_col,
+                        cols=cols_for_cell,
+                        dim_name=plot_dim,
+                    )
+
+                    fig = plot_grouped_scatter(
+                        agg,
+                        x_col="x",
+                        y_col="y",
+                        group_col=group_col,
+                        mode="lines+markers",
+                        color_map=color_map or {},
+                        show_legend=False,
+                        height=120,
+                    )
+
                     cell_content = dcc.Graph(
                         figure=fig,
                         config={"displayModeBar": False},
-                        style={"height": "90px"},
+                        style={"height": "120px", "width": "260px"},
                     )
+
                 else:
                     cell_content = html.Div(
                         "N/A",
@@ -161,14 +181,61 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
                         },
                     )
 
-                row_cells.append(html.Td(cell_content))
+                row_cells.append(html.Td(cell_content, style={"width": "260px"}))
 
             table_rows.append(html.Tr(row_cells))
 
-        return html.Table(
-            [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
-            style={"width": "100%", "borderCollapse": "collapse"},
+        return html.Div(
+            html.Table(
+                [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
+                style={
+                    "width": "95%",
+                    "borderCollapse": "collapse",
+                    "tableLayout": "fixed",
+                },
+            ),
+            style={"overflowX": "auto"},
         )
 
     def get_supported_metrics(self) -> List[str]:
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")
+
+
+def _aggregate_cell_series(
+        df: pl.DataFrame,
+        *,
+        group_col: str,
+        cols: List[str],
+        dim_name: str,
+) -> pl.DataFrame:
+    """
+    Returns long aggregated df with columns: group_col, x, y
+    x is the discrete dim index (as string), y is mean value per group per x.
+    """
+    if not cols:
+        return pl.DataFrame()
+
+    # Keep only what we need
+    base = df.select([group_col, *cols])
+
+    # Long form
+    long = base.unpivot(
+        index=[group_col],
+        on=cols,
+        variable_name="var",
+        value_name="val",
+    )
+
+    # Extract dim index from column name, aggregate
+    # expects something like "..._{dim_name}12..." somewhere in var
+    out = (
+        long.with_columns(
+            pl.col("var").str.extract(f"_{dim_name}(\\d+)", 1).alias("x")
+        )
+        .drop_nulls(["x", "val"])
+        .group_by([group_col, "x"])
+        .agg(pl.mean("val").alias("y"))
+        .sort(["x"])
+        .select([group_col, "x", "y"])
+    )
+    return out
