@@ -83,7 +83,7 @@ def create_info_icon(widget_id: str, help_text: str):
             ),
             dbc.Popover(
                 [
-                    dbc.PopoverHeader("Widget Info"),
+                    dbc.PopoverHeader("Info"),
                     dbc.PopoverBody(
                         dcc.Markdown(help_text, style={"marginBottom": 0, "fontSize": "1.4rem"})
                         ),
