@@ -24,6 +24,7 @@ from pixel_patrol_base.report.global_controls import (
     FILTERED_INDICES_STORE_ID,
     GLOBAL_GROUPBY_COLS_ID,
     GLOBAL_FILTER_COLUMN_ID,
+    GLOBAL_FILTER_OP_ID,
     GLOBAL_FILTER_TEXT_ID,
     GLOBAL_DIM_FILTER_TYPE,
     GLOBAL_APPLY_BUTTON_ID,
@@ -277,6 +278,7 @@ def _create_app(
         Input(GLOBAL_RESET_BUTTON_ID, "n_clicks"),
         State(GLOBAL_GROUPBY_COLS_ID, "value"),
         State(GLOBAL_FILTER_COLUMN_ID, "value"),
+        State(GLOBAL_FILTER_OP_ID, "value"),
         State(GLOBAL_FILTER_TEXT_ID, "value"),
         State({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "value"),
         State({"type": GLOBAL_DIM_FILTER_TYPE, "index": ALL}, "id"),
@@ -287,6 +289,7 @@ def _create_app(
             _reset_clicks: int,
             group_col,
             filter_col,
+            filter_op,
             filter_text,
             dim_values,
             dim_ids
@@ -304,11 +307,11 @@ def _create_app(
         else:
             group_cols = [group_col]
 
-        filters: Dict[str, List[str]] = {}
-        if filter_col and filter_text:
-            allowed_vals = [v.strip() for v in filter_text.split(",") if v.strip()]
-            if allowed_vals:
-                filters[filter_col] = allowed_vals
+        filters: Dict[str, Dict[str, object]] = {}
+        if filter_col and filter_op and filter_text:
+            raw = filter_text.strip()
+            if raw:
+                filters[filter_col] = {"op": filter_op, "value": raw}
 
         # Reconstruct dimensions dictionary from pattern-matched inputs
         dimensions = {}

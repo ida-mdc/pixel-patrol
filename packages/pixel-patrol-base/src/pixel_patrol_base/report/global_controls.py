@@ -6,8 +6,10 @@ import polars as pl
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
+from textwrap import dedent
 
 from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column
+from pixel_patrol_base.report.factory import create_info_icon
 
 # ---------- ID CONSTANTS ----------
 
@@ -17,6 +19,7 @@ FILTERED_INDICES_STORE_ID = "global-filtered-indices-store"
 
 GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
+GLOBAL_FILTER_OP_ID = "global-filter-op"
 GLOBAL_FILTER_TEXT_ID = "global-filter-text"
 GLOBAL_DIM_FILTER_TYPE = "global-dim-filter" # _TYPE refers to a dynamic group
 
@@ -60,6 +63,11 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
             if s.dtype in (pl.Utf8, pl.Boolean):
                 filter_cols.append(c)
 
+        # allow numeric columns for comparisons even if high-cardinality
+        if s.dtype in (
+        pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64, pl.Float32, pl.Float64):
+            filter_cols.append(c)
+
         # GROUP-BY candidates: stricter
         if n_unique <= MAX_UNIQUE_GROUP:
             if s.dtype in (pl.Utf8, pl.Boolean):
@@ -69,6 +77,20 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 
 
 def build_sidebar(df: pl.DataFrame, default_palette_name: str):
+
+    filter_help_md = dedent("""
+    Filter matches rows by one column.
+
+    **Text**  
+    - contains: substring match  
+    - doesn't contain: inverse substr match  
+    - equals (=): exact match  
+    - is in: comma-separated exact matches (text)  
+
+    **Numbers**  
+    >, ≥, <, ≤, equals (=)
+    """).strip()
+
 
     candidate_group_cols, candidate_filter_cols = _find_candidate_columns(df)
     available_dims = get_all_available_dimensions(df)
@@ -114,7 +136,13 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                     html.Hr(),
 
                     # Simple global filter
-                    html.Label("Filter rows (optional)", className="mt-1"),
+                    html.Div(
+                        [
+                            html.Label("Filter rows (optional)", className="mt-1 mb-0"),
+                            create_info_icon("global-filter", filter_help_md),
+                        ],
+                        className="d-flex align-items-center justify-content-between",
+                    ),
                     dcc.Dropdown(
                         id=GLOBAL_FILTER_COLUMN_ID,
                         options=[{"label": c, "value": c} for c in candidate_filter_cols],
@@ -122,10 +150,26 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                         clearable=True,
                         style={"width": "100%"},
                     ),
+                    dcc.Dropdown(
+                        id=GLOBAL_FILTER_OP_ID,
+                        options=[
+                            {"label": "contains (text)", "value": "contains"},
+                            {"label": "doesn't contain (text)", "value": "not_contains"},
+                            {"label": "equals (=) (text/number)", "value": "eq"},
+                            {"label": "> (number)", "value": "gt"},
+                            {"label": "≥ (number)", "value": "ge"},
+                            {"label": "< (number)", "value": "lt"},
+                            {"label": "≤ (number)", "value": "le"},
+                            {"label": "is in (comma-separated) (text)", "value": "in"},
+                        ],
+                        value="in",
+                        clearable=False,
+                        style={"width": "100%", "marginTop": "4px"},
+                    ),
                     dcc.Input(
                         id=GLOBAL_FILTER_TEXT_ID,
                         type="text",
-                        placeholder="Allowed values (comma-separated)",
+                        placeholder="Value (or comma-separated list for 'in')",
                         style={"width": "100%", "marginTop": "4px"},
                     ),
                     html.Hr(),
@@ -229,9 +273,9 @@ def compute_filtered_indices(df: pl.DataFrame,
 
     # 1. Apply Standard Value Filters
     mask = pl.lit(True)
-    for col_name, allowed_vals in filters.items():
-        if col_name in df.columns and allowed_vals:
-            mask = mask & pl.col(col_name).is_in(allowed_vals)
+    for col_name, spec in filters.items():
+        if col_name in df.columns:
+            mask = mask & _filter_expr(col_name, spec)
 
     df_subset = df.filter(mask)
 
@@ -383,3 +427,62 @@ def apply_global_row_filters_and_grouping(
 
     # no extra column; widgets will group directly by `group_col`
     return df, group_col
+
+def _parse_list(raw: str) -> List[str]:
+    return [v.strip() for v in raw.split(",") if v.strip()]
+
+def _try_float(raw: str) -> Optional[float]:
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+def _filter_expr(col: str, spec: object) -> pl.Expr:
+    # Back-compat: old format was list[str] meaning "in"
+    if isinstance(spec, list):
+        vals = [str(v) for v in spec if str(v).strip()]
+        return pl.col(col).is_in(vals)
+
+    if not isinstance(spec, dict):
+        return pl.lit(True)
+
+    op = spec.get("op")
+    raw = str(spec.get("value", "")).strip()
+    if not op or not raw:
+        return pl.lit(True)
+
+    s = pl.col(col)
+
+    if op == "in":
+        vals = _parse_list(raw)
+        return s.cast(pl.Utf8).is_in(vals)
+
+    if op == "eq":
+        # numeric if possible, else string
+        num = _try_float(raw)
+        if num is not None:
+            return s.cast(pl.Float64) == num
+        return s.cast(pl.Utf8) == raw
+
+    if op == "contains":
+        return s.cast(pl.Utf8).fill_null("").str.contains(raw, literal=True)
+
+    if op == "not_contains":
+        return ~s.cast(pl.Utf8).fill_null("").str.contains(raw, literal=True)
+
+    # numeric comparisons
+    num = _try_float(raw)
+    if num is None:
+        return pl.lit(True)
+
+    x = s.cast(pl.Float64)
+    if op == "gt":
+        return x > num
+    if op == "ge":
+        return x >= num
+    if op == "lt":
+        return x < num
+    if op == "le":
+        return x <= num
+
+    return pl.lit(True)
