@@ -124,15 +124,33 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         if not metrics_to_show or not dims_to_plot:
             return show_no_data_message()
 
-        # --- Build table with sparklines ---
-        header = [html.Th("Metric", style={"width": "140px"})] + [
-            html.Th(f"Trend across '{d.upper()}'") for d in dims_to_plot
-        ]
+        # --- Build table (metric as row title) ---
+        header = [html.Th(f"Across '{d.upper()}' Slices") for d in dims_to_plot]
 
         table_rows = []
-        for metric in metrics_to_show:
-            row_cells = [html.Td(metric.replace("_", " ").title())]
+        n_cols = len(dims_to_plot)
 
+        metric_title_style = {
+            "fontWeight": "500",  # less “header-ish”
+            "fontSize": "1.4rem",
+            "color": "#343a40",
+            "padding": "6px 10px",
+            "borderTop": "1px solid #e9ecef",
+            "backgroundColor": "#f8f9fa",
+        }
+
+        for metric in metrics_to_show:
+            metric_title = metric.replace("_", " ").title()
+
+            # 1) Full-width "row title"
+            table_rows.append(
+                html.Tr(
+                    [html.Td(metric_title, colSpan=n_cols, style=metric_title_style)]
+                )
+            )
+
+            # 2) Plots row (only dims)
+            row_cells = []
             for plot_dim in dims_to_plot:
                 cols_for_cell = [
                     pc["col"]
@@ -189,13 +207,14 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             html.Table(
                 [html.Thead(html.Tr(header)), html.Tbody(table_rows)],
                 style={
-                    "width": "95%",
+                    "width": "max-content",  # <- don't stretch when few dims
                     "borderCollapse": "collapse",
                     "tableLayout": "fixed",
                 },
             ),
             style={"overflowX": "auto"},
         )
+
 
     def get_supported_metrics(self) -> List[str]:
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")
