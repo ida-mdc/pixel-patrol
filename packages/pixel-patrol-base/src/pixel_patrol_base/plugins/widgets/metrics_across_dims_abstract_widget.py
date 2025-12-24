@@ -108,6 +108,14 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         if not filtered_parsed:
             return show_no_data_message()
 
+        # --- Row-filter awareness: drop slice-columns that have no data after filtering rows ---
+        cols_to_check = [pc["col"] for pc in filtered_parsed]
+        present_flags = df_filtered.select(
+            [pl.col(c).is_not_null().any().alias(c) for c in cols_to_check]).to_dicts()[0]
+        filtered_parsed = [pc for pc in filtered_parsed if present_flags.get(pc["col"], False)]
+        if not filtered_parsed:
+            return show_no_data_message()
+
         # --- Decide which metrics and dimensions to show ---
         metrics_to_show = sorted({p["metric"] for p in filtered_parsed})
 
