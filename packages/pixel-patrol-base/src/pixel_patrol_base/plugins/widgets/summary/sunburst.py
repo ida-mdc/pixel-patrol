@@ -108,7 +108,8 @@ class FileSunburstWidget(BaseReportWidget):
 
         path_sep = os.sep
 
-        vis_root_name = Path(common_root).name if common_root else "Root"
+        vis_root_name = Path(common_root).name if common_root else ""
+        display_root_label = "Root"
 
         # --- 2. Data Structures for Aggregation ---
         # Stores file_count for size and 'groups' for coloring logic
@@ -118,9 +119,18 @@ class FileSunburstWidget(BaseReportWidget):
                 "file_count": 0,
                 "groups": set(),
                 "parent": "",
-                "label": vis_root_name,
+                "label": display_root_label,
             }
         }
+
+        # so the sunburst always shows at least two levels (folder -> files).
+        if vis_root_name:
+            nodes[vis_root_name] = {
+                "file_count": 0,
+                "groups": set(),
+                "parent": "",
+                "label": vis_root_name,
+                }
 
         # --- 3. Iterate Files and Build Tree Upwards ---
         # Selects only path and group column (file size is not needed for file count)
@@ -140,6 +150,10 @@ class FileSunburstWidget(BaseReportWidget):
             else:
                 rel_path = full_path
 
+
+            if vis_root_name:
+                rel_path = os.path.join(vis_root_name, rel_path
+                                        ) if rel_path not in ("", ".") else vis_root_name
             parts = rel_path.split(path_sep)
 
             # --- Process Leaf (File) ---
@@ -165,7 +179,7 @@ class FileSunburstWidget(BaseReportWidget):
                     nodes[current_path]["groups"].add(group_val)
                 else:
                     # New folder node
-                    folder_label = os.path.basename(current_path) if current_path else vis_root_name
+                    folder_label = os.path.basename(current_path) if current_path else display_root_label
                     parent_of_folder = os.path.dirname(current_path) if current_path else ""
 
                     nodes[current_path] = {
