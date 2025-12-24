@@ -63,7 +63,7 @@ class DimSizeWidget(BaseReportWidget):
 
         dimension_size_cols = [col for col in df_filtered.columns if col.endswith("_size")]
         if df_filtered.height == 0 or not dimension_size_cols:
-            return [show_no_data_message()], [], []
+            return [show_no_data_message()]
 
         # Pre-filter rows where at least one size dimension is a valid number (>1)
         filtered_df = df_filtered.filter(
@@ -71,7 +71,7 @@ class DimSizeWidget(BaseReportWidget):
         )
 
         if filtered_df.height == 0:
-            return show_no_data_message("No data available with current filters.")
+            return [show_no_data_message("No data available with current filters.")]
 
         ratio_div = html.Div(
             self._get_availability_ratios(filtered_df, df_filtered.height, dimension_size_cols),
