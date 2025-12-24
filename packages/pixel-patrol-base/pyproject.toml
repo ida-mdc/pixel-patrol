@@ -25,6 +25,10 @@ package = true
 
 [tool.setuptools]
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"pixel_patrol_base.report" = ["assets/*.png"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
