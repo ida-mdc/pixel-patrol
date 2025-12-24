@@ -256,7 +256,7 @@ def _create_app(
 
         groups = (
             df_processed
-            .select(pl.col(group_col).unique())
+            .select(pl.col(group_col).unique().drop_nulls().sort())
             .to_series()
             .to_list()
         )
