@@ -110,7 +110,11 @@ class ImageMosaikWidget(BaseReportWidget):
             metric_base=None,
         )
 
-        df = df_filtered.filter(pl.col("thumbnail").is_not_null())
+        cols_needed = {"thumbnail"}
+        if group_col: cols_needed.add(group_col)
+        if sort_column: cols_needed.add(sort_column)
+
+        df = df_filtered.select([c for c in cols_needed if c in df_filtered.columns])
 
         if df.height == 0:
             return show_no_data_message()

@@ -188,6 +188,15 @@ class DatasetHistogramWidget(BaseReportWidget):
         min_key = f"histogram_min{suffix}"
         max_key = f"histogram_max{suffix}"
 
+        # Select only histogram columns + metadata
+        cols_needed = {resolved_col, min_key, max_key, "name"}
+        if group_col:
+            cols_needed.add(group_col)
+
+        # Only select columns that actually exist
+        valid_cols = [c for c in cols_needed if c in df_filtered.columns]
+        df_filtered = df_filtered.select(valid_cols)
+
         # Apply optional (within widget) group selection
         if selected_groups:
             df_filtered = df_filtered.filter(pl.col(group_col).is_in(selected_groups))

@@ -61,12 +61,21 @@ class DimSizeWidget(BaseReportWidget):
                                metric_base = None,
         )
 
+        # Identify size columns (fast string check)
         dimension_size_cols = [col for col in df_filtered.columns if col.endswith("_size")]
+
         if df_filtered.height == 0 or not dimension_size_cols:
             return [show_no_data_message()]
 
+        # Select only size columns + metadata
+        cols_needed = dimension_size_cols + ["name"]
+        if group_col:
+            cols_needed.append(group_col)
+
+        df_slim = df_filtered.select([c for c in cols_needed if c in df_filtered.columns])
+
         # Pre-filter rows where at least one size dimension is a valid number (>1)
-        filtered_df = df_filtered.filter(
+        filtered_df = df_slim.filter(
             pl.any_horizontal([pl.col(c).is_not_null() & (pl.col(c) > 1) for c in dimension_size_cols])
         )
 
