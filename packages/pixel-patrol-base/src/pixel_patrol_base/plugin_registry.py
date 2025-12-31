@@ -1,4 +1,5 @@
 import importlib
+import logging
 from typing import Type, Union, List
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
@@ -18,11 +19,13 @@ from pixel_patrol_base.plugins.widgets.summary.sunburst import FileSunburstWidge
 from pixel_patrol_base.plugins.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol_base.plugins.widgets.visualization.image_mosaik import ImageMosaikWidget
 
+logger = logging.getLogger(__name__)
+
 PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
-    print("Discovered loader plugins: ", ", ".join([plugin.NAME for plugin in plugins]))
+    logger.info("Discovered loader plugins: ", ", ".join([plugin.NAME for plugin in plugins]))
     for loader_plugin in plugins:
         if loader_plugin.NAME == loader_id:
             return loader_plugin()
@@ -31,13 +34,13 @@ def discover_loader(loader_id: str) -> PixelPatrolLoader:
 def discover_processor_plugins() -> List[PixelPatrolProcessor]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    print("Discovered processor plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
+    logger.info("Discovered processor plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
     return initialized_plugins
 
 def discover_widget_plugins() -> List[PixelPatrolWidget]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    print("Discovered widget plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
+    logger.info("Discovered widget plugins: ", ", ".join([plugin.NAME for plugin in initialized_plugins]))
     return initialized_plugins
 
 
@@ -50,7 +53,7 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
             components = registration_func()
             res.extend(components)
         except Exception as e:
-            print(f"Could not load plugin '{ep.name}': {e}")
+            logger.error(f"Could not load plugin '{ep.name}': {e}")
     return res
 
 
