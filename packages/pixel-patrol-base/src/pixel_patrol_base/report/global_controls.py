@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional, Tuple
 
 import polars as pl
@@ -41,40 +42,57 @@ MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x
 
 # ---------- LAYOUT: SIDEBAR + STORES ----------
 
-def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
+DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
 
+def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
     group_cols: List[str] = []
     filter_cols: List[str] = []
 
+    schema = df.schema
+
     for c in df.columns:
-        s = df[c]
-
-        # cardinality
-        try:
-            n_unique = df.select(pl.col(c).n_unique()).item()
-        except pl.exceptions.PolarsError:
-            n_unique = None
-
-        if n_unique is None:
+        # 1. Skip technical dimension columns (BIGGEST SPEEDUP)
+        if DIMENSION_COL_PATTERN.search(c):
             continue
 
-        # FILTER candidates
-        if n_unique <= MAX_UNIQUE_FILTER:
-            if s.dtype in (pl.Utf8, pl.Boolean):
-                filter_cols.append(c)
+        dtype = schema[c]
 
-        # allow numeric columns for comparisons even if high-cardinality
-        if s.dtype in (
-        pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64, pl.Float32, pl.Float64):
+        # 2. Check if it's a numeric float
+        is_float = dtype in (pl.Float32, pl.Float64)
+        is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+                           pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64)
+
+        # 3. Handle Floats (No cardinality check)
+        if is_float:
+            # Floats are always valid for filtering (comparisons), never for grouping
+            filter_cols.append(c)
+            continue
+
+            # 4. Handle Categoricals/Ints/Bools (Slow path - needs cardinality)
+        # We only run n_unique() here because we need it to decide if
+        # a string/int is "categorical enough" to be a dropdown option.
+        try:
+            n_unique = df.select(pl.col(c).n_unique()).item()
+        except Exception:
+            continue
+
+        # Strings/Bools/Ints with low cardinality are good for Grouping
+        if n_unique <= MAX_UNIQUE_GROUP:
+            group_cols.append(c)
+
+        # Strings/Bools/Ints with medium cardinality are good for Filtering
+        # (Ints are always added to filter_cols below, so this covers str/bool)
+        if n_unique <= MAX_UNIQUE_FILTER:
             filter_cols.append(c)
 
-        # GROUP-BY candidates: stricter
-        if n_unique <= MAX_UNIQUE_GROUP:
-            if s.dtype in (pl.Utf8, pl.Boolean):
-                group_cols.append(c)
+        # 5. Handle Integers specifically
+        # Integers are always valid filter candidates (like Floats), even if high cardinality
+        if is_int:
+            # Avoid duplicates if it was already added by the n_unique check above
+            if c not in filter_cols:
+                filter_cols.append(c)
 
     return group_cols, filter_cols
-
 
 def build_sidebar(df: pl.DataFrame, default_palette_name: str):
 
