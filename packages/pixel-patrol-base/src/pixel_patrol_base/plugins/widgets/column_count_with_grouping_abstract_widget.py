@@ -64,12 +64,16 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
         )
         n_total_rows = df_filtered.height
 
-        # Focus on rows where the category is present
-        df_filtered = (
-            df_filtered
-            .with_columns(pl.lit(1).alias("value_count"))
-            .filter(pl.col(self.CATEGORY_COLUMN).is_not_null())
-        )
+        # 1. Select only the columns strictly needed for grouping and counting.
+        cols_needed = {self.CATEGORY_COLUMN}
+        if group_col:
+            cols_needed.add(group_col)
+        valid_cols = [c for c in cols_needed if c in df_filtered.columns]
+        df_filtered = df_filtered.select(valid_cols)
+
+        # 2. Filter nulls from the category column
+        df_filtered = df_filtered.filter(pl.col(self.CATEGORY_COLUMN).is_not_null())
+
         if df_filtered.is_empty():
             return show_no_data_message()
 
@@ -88,7 +92,7 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
         plot_data_agg = (
             df_filtered
             .group_by(all_grouping_cols)
-            .agg(pl.sum("value_count").alias("count"))
+            .agg(pl.len().alias("count"))
             .sort(all_grouping_cols)
         )
 
