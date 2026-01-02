@@ -25,22 +25,22 @@ PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Ty
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
-    logger.info(f"Discovered loader plugins: f{", ".join([plugin.NAME for plugin in plugins])}")
+    logger.info(f'Discovered loader plugins: {", ".join([plugin.NAME for plugin in plugins])}')
     for loader_plugin in plugins:
         if loader_plugin.NAME == loader_id:
             return loader_plugin()
-    raise RuntimeError(f"Could not find loader plugin `{loader_id}` in discovered loader plugins: {[plugin.NAME for plugin in plugins]}")
+    raise RuntimeError(f'Could not find loader plugin "{loader_id}" in discovered loader plugins: {[plugin.NAME for plugin in plugins]}')
 
 def discover_processor_plugins() -> List[PixelPatrolProcessor]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    logger.info(f"Discovered processor plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}")
+    logger.info(f'Discovered processor plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
     return initialized_plugins
 
 def discover_widget_plugins() -> List[PixelPatrolWidget]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
-    logger.info(f"Discovered widget plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}")
+    logger.info(f'Discovered widget plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
     return initialized_plugins
 
 

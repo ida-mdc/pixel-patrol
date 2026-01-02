@@ -97,9 +97,15 @@ class QualityMetricsWidget(BaseReportWidget):
         if df_filtered.is_empty() or not group_col or not resolved_metric_cols:
             return show_no_data_message()
 
-        return generate_column_violin_plots(df_filtered,
-                                            color_map,
-                                            resolved_metric_cols,
-                                            group_col=group_col)
+        cols_needed = resolved_metric_cols + [group_col, "name"]
 
+        final_cols = [c for c in cols_needed if c in df_filtered.columns]
 
+        df_plot = df_filtered.select(final_cols)
+
+        return generate_column_violin_plots(
+            df_plot,
+            color_map,
+            resolved_metric_cols,
+            group_col=group_col
+        )
