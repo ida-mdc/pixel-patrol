@@ -1,8 +1,9 @@
 import logging
+import math
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Tuple, Iterable, Callable
+from typing import List, Optional, Dict, Set, Tuple, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
 
 import polars as pl
@@ -13,7 +14,6 @@ from pixel_patrol_base.plugin_registry import discover_processor_plugins, discov
 from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import (
-    DEFAULT_PROCESSING_BATCH_SIZE,
     DEFAULT_RECORDS_FLUSH_EVERY_N,
 )
 from pixel_patrol_base.core.project_settings import Settings
@@ -22,7 +22,15 @@ from pixel_patrol_base.io.parquet_utils import _write_dataframe_to_parquet
 
 logger = logging.getLogger(__name__)
 
+# When combining multiple parquet chunks into a single one in memory, we might need more RAM than the raw size of the files.
+COMBINE_HEADROOM_RATIO = 1.25
+
+# Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
+
+class _IndexedPath(NamedTuple):
+    row_index: int
+    path: str
 
 
 def _process_worker_initializer(loader_id: Optional[str], processor_classes: List[type]) -> None:
@@ -49,6 +57,28 @@ def _process_path_in_worker(file_path: str) -> Dict:
         processors,
         show_processor_progress=False,
     )
+
+
+def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object]]:
+    """Worker entry point for processing a batch of indexed paths."""
+    loader = _PROCESS_WORKER_CONTEXT.get("loader")
+    processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
+    if loader is None:
+        logger.warning("Processing Core: worker lacks loader; skipping batch of size %s", len(batch))
+        return []
+
+    deep_rows: List[Dict[str, object]] = []
+    for item in batch:
+        record_dict = get_all_record_properties(
+            Path(item.path),
+            loader,
+            processors,
+            show_processor_progress=False,
+        )
+        if record_dict:
+            deep_rows.append({"row_index": item.row_index, **record_dict})
+
+    return deep_rows
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -81,118 +111,183 @@ def _scan_dirs_for_extensions(
     return matched
 
 
+def _iter_indexed_batches(df: pl.DataFrame, batch_size: int) -> Iterator[List[_IndexedPath]]:
+    """Yield batches of indexed paths lazily to avoid materializing all rows."""
+    if df.is_empty():
+        return
+    size = max(1, batch_size)
+    for offset in range(0, df.height, size):
+        slice_df = df.slice(offset, size).select(["row_index", "path"])
+        batch = [_IndexedPath(int(row[0]), str(row[1])) for row in slice_df.iter_rows()]
+        if batch:
+            yield batch
+
+
+def _process_batch_locally(
+    batch: List[_IndexedPath],
+    loader_instance: PixelPatrolLoader,
+    processors: List[PixelPatrolProcessor],
+    show_processor_progress: bool,
+) -> List[Dict[str, object]]:
+    """Run loader+processors on a batch inside the main process."""
+    deep_rows: List[Dict[str, object]] = []
+    for item in batch:
+        record_dict = get_all_record_properties(
+            Path(item.path), loader_instance, processors, show_processor_progress
+        )
+        if record_dict:
+            deep_rows.append({"row_index": item.row_index, **record_dict})
+    return deep_rows
+
+
+def _combine_batch_with_basic(
+    basic: pl.DataFrame,
+    batch: List[_IndexedPath],
+    deep_rows: List[Dict[str, object]],
+) -> pl.DataFrame:
+    """Join deep batch results back to the corresponding basic rows by row_index."""
+    if not batch:
+        return pl.DataFrame([])
+
+    row_indices = [int(item.row_index) for item in batch]
+    basic_batch = basic.filter(pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64)))
+    if not deep_rows:
+        return basic_batch
+
+    deep_df = pl.DataFrame(
+        deep_rows,
+        nan_to_null=True,
+        strict=False,
+        infer_schema_length=None,
+    )
+    if deep_df.is_empty():
+        return basic_batch
+
+    deep_df = deep_df.with_columns(pl.col("row_index").cast(pl.Int64))
+    overlap = [c for c in deep_df.columns if c in basic_batch.columns and c != "row_index"]
+    if overlap:
+        deep_df = deep_df.drop(overlap)
+
+    return basic_batch.join(deep_df, on="row_index", how="left")
+
+
 def _build_deep_record_df(
-    paths: List[Path],
+    basic: pl.DataFrame,
     loader_instance: PixelPatrolLoader,
     settings: Optional[Settings] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> pl.DataFrame:
-    """Loop over paths, get_all_record_properties, return DataFrame (may be empty).
-    Optimized to minimize Python loop overhead where possible.
+    """Process each path (optionally in parallel) and build a Polars DataFrame.
     
     Args:
-        paths: List of file paths to process
-        loader_instance: Loader instance to use for loading files
-        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
-                          Called for each file processed. If provided, tqdm progress bar is disabled.
+        basic: Polars DataFrame with at least a 'path' column.
+        loader_instance: An instance of PixelPatrolLoader to load files.
+        settings: Optional Settings object to configure processing.
+        progress_callback: Optional GUI callback for progress updates.
     """
+    if basic.is_empty():
+        return pl.DataFrame([])
+
     processors = discover_processor_plugins()
     processor_classes = [proc.__class__ for proc in processors]
     worker_count = _resolve_worker_count(settings)
+    flush_threshold = _resolve_flush_threshold(settings)
+    batch_size = _resolve_batch_size(worker_count, flush_threshold, basic.height)
     show_processor_progress = worker_count == 1
 
     accumulator = _RecordsAccumulator(
-        batch_size=_resolve_batch_size(settings),
-        flush_every_n=_resolve_flush_threshold(settings),
+        flush_every_n=flush_threshold,
         flush_dir=getattr(settings, "records_flush_dir", None),
     )
 
-    path_strings = [str(p) for p in paths]
-
-    # If partial chunk files exist, load them and skip already-processed paths
-    processed_paths: Set[str] = set()
+    processed_rows: Set[int] = set()
     if accumulator._flush_dir:
-        processed_paths = accumulator.load_existing_chunks()
-    if processed_paths:
-        logger.info("Processing Core: skipping %d already-processed files; resuming %d remaining files", len(processed_paths), len(to_process))
+        processed_rows = accumulator.load_existing_chunks()
 
-    to_process = [Path(p) for p in path_strings if p not in processed_paths]
-    total = len(to_process)
+    remaining = basic
+    if processed_rows:
+        remaining = basic.filter(~pl.col("row_index").is_in(pl.Series(list(processed_rows), dtype=pl.Int64)))
 
-    # Use progress callback if provided, otherwise use tqdm
-    iterator = tqdm(
-        to_process,
+    if remaining.is_empty():
+        return pl.DataFrame([])
+
+    remaining_count = remaining.height
+
+    with tqdm(
+        total=remaining_count,
         desc="Processing files",
         unit="file",
         leave=True,
         colour="green",
         position=0,
-        disable=progress_callback is not None,  # Disable CLI bar if UI callback exists
-    )
+    ) as progress:
+        if processed_rows:
+            logger.info(
+                "Processing Core: skipping %d already-processed files; resuming %d remaining files",
+                len(processed_rows),
+                remaining_count,
+            )
 
-    for idx, file_path in enumerate(iterator, start=1):
-        if progress_callback is not None:
-            progress_callback(idx, total, file_path)
         if worker_count == 1:
-            for file_path in to_process:
-                record_dict = get_all_record_properties(
-                    file_path, loader_instance, processors, show_processor_progress
-                )
-                if record_dict:
-                    accumulator.add_row({"path": file_path, **record_dict})
-        else:
-            loader_name = getattr(loader_instance, "NAME", None)
-            try:
-                with ProcessPoolExecutor(
-                    max_workers=worker_count,
-                    initializer=_process_worker_initializer,
-                    initargs=(loader_name, processor_classes),
-                ) as executor:
-                    future_map = {
-                        executor.submit(_process_path_in_worker, file_path): file_path
-                        for file_path in to_process
-                    }
+            for batch in _iter_indexed_batches(remaining, batch_size):
+                deep_rows = _process_batch_locally(batch, loader_instance, processors, show_processor_progress)
+                batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
+                accumulator.add_batch(batch_df)
+                progress.update(len(batch))
+            return accumulator.finalize()
 
-                    for future in as_completed(future_map):
-                        file_path = future_map[future]
-                        try:
-                            record_dict = future.result()
-                        except Exception:  # pragma: no cover - logged for observability
-                            logger.exception("Process worker failed for %s", file_path)
-                            record_dict = {}
+        loader_name = getattr(loader_instance, "NAME", None)
+        try:
+            with ProcessPoolExecutor(
+                max_workers=worker_count,
+                initializer=_process_worker_initializer,
+                initargs=(loader_name, processor_classes),
+            ) as executor:
+                future_map: Dict = {}
+                for batch in _iter_indexed_batches(remaining, batch_size):
+                    fut = executor.submit(_process_batch_in_worker, batch)
+                    future_map[fut] = batch
 
-                        if record_dict:
-                            accumulator.add_row({"path": file_path, **record_dict})
-                        progress.update(1)
-            except Exception as exc:
-                logger.warning(
-                    "Processing Core: ProcessPoolExecutor unavailable (%s); falling back to threads.",
-                    exc,
-                )
-                with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                    future_map = {
-                        executor.submit(
-                            get_all_record_properties,
-                            Path(file_path),
-                            loader_instance,
-                            processors,
-                            False,
-                        ): file_path
-                        for file_path in to_process
-                    }
+                for future in as_completed(future_map):
+                    batch = future_map[future]
+                    try:
+                        deep_rows = future.result()
+                    except Exception:  # pragma: no cover - logged for observability
+                        logger.exception("Process worker failed for batch starting at %s", batch[0].path)
+                        deep_rows = []
 
-                    for future in as_completed(future_map):
-                        file_path = future_map[future]
-                        try:
-                            record_dict = future.result()
-                        except Exception:  # pragma: no cover - logged for observability
-                            logger.exception("Processor failed for %s", file_path)
-                            record_dict = {}
+                    batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
+                    accumulator.add_batch(batch_df)
+        except Exception as exc:
+            logger.warning(
+                "Processing Core: ProcessPoolExecutor unavailable (%s); falling back to threads.",
+                exc,
+            )
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_map: Dict = {}
+                for batch in _iter_indexed_batches(remaining, batch_size):
+                    fut = executor.submit(
+                        _process_batch_locally,
+                        batch,
+                        loader_instance,
+                        processors,
+                        False,
+                    )
+                    future_map[fut] = batch
 
-                    if record_dict:
-                        accumulator.add_row({"path": file_path, **record_dict})
+                for future in as_completed(future_map):
+                    batch = future_map[future]
+                    try:
+                        deep_rows = future.result()
+                    except Exception:  # pragma: no cover - logged for observability
+                        logger.exception("Processor failed for batch starting at %s", batch[0].path)
+                        deep_rows = []
 
-    return accumulator.finalize()
+                    batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
+                    accumulator.add_batch(batch_df)
+                    progress.update(len(batch))
+
+        return accumulator.finalize()
 
 
 def get_all_record_properties(
@@ -265,21 +360,20 @@ def build_records_df(
         bases: List of base directories to scan
         selected_extensions: File extensions to include
         loader: Optional loader instance
+        settings: Optional settings for processing
         progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
                           Called for each file processed during deep processing.
     """
-
+    # TODO: batch this function to avoid batching within deep and join
+    # NOTE: rejected, we join in the _build_deep_record_df step already
     basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
-    if loader is None or basic is None: return basic
+    if loader is None or basic is None:
+        return basic
 
-    deep = _build_deep_record_df(
-        [Path(p) for p in basic["path"].to_list()], 
-        loader,
-        settings=settings,
-        progress_callback=progress_callback
-    )
+    basic = basic.with_row_index("row_index").with_columns(pl.col("row_index").cast(pl.Int64))
+    deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback)
 
-    return basic.join(deep, on="path", how="left")
+    return deep
 
 
 def _build_basic_file_df(bases, loader, accepted_extensions):
@@ -330,20 +424,39 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
 
 
 def _resolve_worker_count(settings: Optional[Settings]) -> int:
+    """Determine the number of parallel workers to use for processing. If settings specify a value, use that; otherwise, default to CPU count."""
     if settings and settings.processing_max_workers is not None:
         return max(1, settings.processing_max_workers)
     cpu_count = os.cpu_count() or 1
     return max(1, cpu_count)
 
 
-def _resolve_batch_size(settings: Optional[Settings]) -> int:
-    value = settings.processing_batch_size if settings else DEFAULT_PROCESSING_BATCH_SIZE
-    return max(1, value)
+def _resolve_batch_size(worker_count: int, flush_threshold: int, total_rows: int) -> int:
+    """Derive batch size from flush threshold and available workers. """
+    if flush_threshold <= 0: # e.g. flush disabled
+        return max(1, math.ceil(total_rows / max(1, worker_count)))
+    return max(1, math.ceil(flush_threshold / max(1, worker_count)))
 
 
 def _resolve_flush_threshold(settings: Optional[Settings]) -> int:
+    """Sets the flush threshold from settings or defaults. Ensures non-negative."""
     value = settings.records_flush_every_n if settings else DEFAULT_RECORDS_FLUSH_EVERY_N
     return max(0, value)
+
+
+def _estimate_available_memory_bytes() -> Optional[int]:
+    """Best-effort estimate of available system memory in bytes."""
+    try:
+        import psutil  # type: ignore
+
+        return int(psutil.virtual_memory().available)
+    except Exception:
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+            return int(page_size * avail_pages)
+        except Exception:
+            return None
 
 
 class _RecordsAccumulator:
@@ -351,43 +464,61 @@ class _RecordsAccumulator:
 
     def __init__(
         self,
-        batch_size: int,
         flush_every_n: int,
         flush_dir: Optional[Path],
+        combine_headroom_ratio: float = COMBINE_HEADROOM_RATIO,
     ) -> None:
-        self._batch_size = batch_size
         self._flush_every_n = flush_every_n
         self._flush_dir = Path(flush_dir) if flush_dir else None
-        self._buffer: List[Dict[str, object]] = []
         self._active_df = pl.DataFrame([])
         self._written_files: List[Path] = []
         self._chunk_index = 0
+        self._combine_headroom_ratio = combine_headroom_ratio
         if self._flush_dir:
             logger.info(
                 "Processing Core: buffering %s rows per chunk; partial batches go to '%s'",
-                self._batch_size,
+                self._flush_every_n,
                 self._flush_dir,
             )
 
-    def add_row(self, row: Dict[str, object]) -> None:
-        self._buffer.append(row)
-        if len(self._buffer) >= self._batch_size:
-            self._flush_buffer_to_active()
+    def add_batch(self, batch: pl.DataFrame) -> None:
+        if batch is None or batch.is_empty():
+            return
+
+        if self._active_df.is_empty():
+            self._active_df = batch
+        else:
+            self._active_df = pl.concat(
+                [self._active_df, batch],
+                how="diagonal_relaxed",
+                rechunk=False,
+            )
+
+        if self._flush_dir and self._flush_every_n > 0 and self._active_df.height >= self._flush_every_n:
+            self._flush_active_to_disk(force=False)
 
     def finalize(self) -> pl.DataFrame:
-        if self._buffer:
-            self._flush_buffer_to_active()
-
-        if (
-            self._flush_dir
-            and self._flush_every_n > 0
-            and self._written_files
-            and not self._active_df.is_empty()
-        ):
-            self._flush_active_to_disk(force=True)
+        if self._flush_dir:
+            if not self._active_df.is_empty():
+                self._flush_active_to_disk(force=True)
+        elif not self._active_df.is_empty():
+            return self._active_df
 
         if not self._written_files:
             return self._active_df
+
+        total_size = sum(p.stat().st_size for p in self._written_files if p.exists())
+        available_memory = _estimate_available_memory_bytes()
+        if available_memory is not None:
+            projected = total_size * self._combine_headroom_ratio
+            if projected > available_memory:
+                logger.warning(
+                    "Processing Core: skipping final combine; chunk files remain at %s (total %.2f MB, available %.2f MB)",
+                    self._flush_dir,
+                    total_size / (1024 * 1024),
+                    available_memory / (1024 * 1024),
+                )
+                return pl.DataFrame([])
 
         frames = [pl.read_parquet(path) for path in self._written_files]
         if not self._active_df.is_empty():
@@ -425,7 +556,7 @@ class _RecordsAccumulator:
                 for p in list(self._written_files):
                     try:
                         p.unlink()
-                    except Exception as exc:  # pragma: no cover - best-effort cleanup
+                    except Exception as exc:  # pragma: no cover
                         logger.warning("Processing Core: could not remove partial chunk %s: %s", p, exc)
                 # Reset written files list
                 self._written_files = []
@@ -442,32 +573,6 @@ class _RecordsAccumulator:
                 )
 
         return final_df
-
-    def _flush_buffer_to_active(self) -> None:
-        if not self._buffer:
-            return
-
-        chunk = pl.DataFrame(
-            self._buffer,
-            nan_to_null=True,
-            strict=False,
-            infer_schema_length=None,
-        )
-        self._buffer.clear()
-        if chunk.is_empty():
-            return
-
-        if self._active_df.is_empty():
-            self._active_df = chunk
-        else:
-            self._active_df = pl.concat(
-                [self._active_df, chunk],
-                how="diagonal_relaxed",
-                rechunk=False,
-            )
-
-        if self._flush_dir and self._flush_every_n > 0 and self._active_df.height >= self._flush_every_n:
-            self._flush_active_to_disk(force=False)
 
     def _flush_active_to_disk(self, force: bool) -> None:
         if self._active_df.is_empty():
@@ -494,13 +599,13 @@ class _RecordsAccumulator:
         self._active_df = pl.DataFrame([])
         self._chunk_index += 1
 
-    def load_existing_chunks(self) -> Set[str]:
+    def load_existing_chunks(self) -> Set[int]:
         """Load existing parquet chunk files from the flush directory.
 
         Populates `_written_files` and `_chunk_index` and returns a set of already-processed
-        `path` values so the caller can skip re-processing those files.
+        `row_index` values so the caller can skip re-processing those rows.
         """
-        processed: Set[str] = set()
+        processed: Set[int] = set()
         if self._flush_dir is None or not self._flush_dir.exists():
             return processed
 
@@ -522,9 +627,9 @@ class _RecordsAccumulator:
                 continue
 
             try:
-                df = pl.read_parquet(f, columns=["path"])
-                if not df.is_empty() and "path" in df.columns:
-                    processed.update(df["path"].to_list())
+                df = pl.read_parquet(f, columns=["row_index"])
+                if not df.is_empty() and "row_index" in df.columns:
+                    processed.update(int(val) for val in df["row_index"].to_list())
             except Exception:
                 logger.warning("Processing Core: could not read existing chunk %s", f)
 
