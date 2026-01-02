@@ -1,6 +1,6 @@
 from pixel_patrol_image.plugins.processors.quality_metrics_processor import QualityMetricsProcessor
-from pixel_patrol_image.plugins.widgets.image_quality import ImageQualityWidget
-from pixel_patrol_image.plugins.widgets.dynamic_quality_metrics import DynamicQualityMetricsWidget
+from pixel_patrol_image.plugins.widgets.quality_metrics import QualityMetricsWidget
+from pixel_patrol_image.plugins.widgets.quality_metrics_across_dims import QualityMetricsAcrossDimensionsWidget
 
 def register_processor_plugins():
     return [
@@ -9,6 +9,6 @@ def register_processor_plugins():
 
 def register_widget_plugins():
     return [
-        ImageQualityWidget,
-        DynamicQualityMetricsWidget,
+        QualityMetricsWidget,
+        QualityMetricsAcrossDimensionsWidget,
     ]
