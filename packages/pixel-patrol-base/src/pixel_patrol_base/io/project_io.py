@@ -88,6 +88,7 @@ def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFram
                 polars_df = polars_df.drop(col)
     return polars_df
 
+
 def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
     """
     Deserializes columns containing lists of int64 back to numpy ndarrays.
@@ -96,21 +97,36 @@ def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFr
     Returns:
         A Polars DataFrame with list columns deserialized to ndarrays.
     """
-    for col in polars_df.columns:
-        if polars_df[col].dtype == pl.List(pl.Int64):
-            try:
-                polars_df = polars_df.with_columns(
-                    pl.col(col)
-                    .map_elements(
-                        lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x, # in case a series appears in a saved dataframe.
-                        return_dtype=pl.Object,
-                    )
-                    .cast(pl.Object)
-                )
-                # logger.info(f"Project IO: Successfully deserialized column '{col}' from list to ndarray.")
-            except Exception as e:
-                logger.warning(f"Project IO: Failed to deserialize column '{col}' to ndarray. Error: {e}. This column will be excluded from the DataFrame.")
-                polars_df = polars_df.drop(col)
+    # 1. Identify columns that need conversion
+    target_cols = [
+        col for col in polars_df.columns
+        if polars_df[col].dtype == pl.List(pl.Int64)
+    ]
+
+    if not target_cols:
+        return polars_df
+
+    # 2. Build a list of expressions to apply all at once
+    expressions = []
+    for col in target_cols:
+        expressions.append(
+            pl.col(col)
+            .map_elements(
+                lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x,
+                return_dtype=pl.Object
+            )
+            .alias(col)  # Ensure we overwrite the existing column
+        )
+
+    # 3. Apply all transformations in a single pass
+    try:
+        polars_df = polars_df.with_columns(expressions)
+        # logger.info(f"Project IO: Deserialized {len(target_cols)} columns to ndarray.")
+    except Exception as e:
+        # If the batch fails, you might need to fall back to the loop
+        # to identify exactly which column failed, or log the generic error.
+        logger.warning(f"Project IO: Batch deserialization failed. Error: {e}")
+
     return polars_df
 
 def _write_dataframe_to_parquet(

@@ -34,4 +34,8 @@ def postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
     ])
 
+    df = df.with_columns([
+        pl.col("imported_path_short").alias("report_group"), # TODO: is this what we want the default to be?
+    ])
+
     return df

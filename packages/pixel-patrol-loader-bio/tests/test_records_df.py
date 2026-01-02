@@ -150,12 +150,11 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
     props = processing.get_all_record_properties(
         img_file, loader=loader, processors=[]
     )
-    expected_shape = [
-        2 if d in ("Y", "X") else 1
-        for d in STANDARD_DIM_ORDER]
+    expected_shape = [2, 2]
 
     assert props["shape"] == expected_shape
-    assert props["ndim"] == len(STANDARD_DIM_ORDER)
+    assert props["ndim"] == 2
+    assert props["dim_order"] == "YX"
 
     assert props["pixel_size_X"] == 0.5
     assert props["channel_names"] == ["ch1", "ch2"]

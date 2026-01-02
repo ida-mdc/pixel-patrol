@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import bioio_imageio
 import numpy as np
+import dask.array as da
 import polars as pl
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
@@ -107,5 +108,22 @@ class BioIoLoader:
             raise UnsupportedFileFormatError(self.NAME, path=source)
 
         meta = _extract_metadata(img)
+
+        data = da.squeeze(img.dask_data)
+
+        dim_order = meta["dim_order"]
+        keep = [i for i, s in enumerate(meta["shape"]) if s != 1]
+
+        meta["shape"] = [meta["shape"][i] for i in keep]
+        meta["ndim"] = len(meta["shape"])
+        meta["dim_order"] = "".join(dim_order[i] for i in keep)
+
+        if "dim_names" in meta:
+            meta["dim_names"] = [meta["dim_names"][i] for i in keep]
+
+        for ax in list(dim_order):
+            if meta.get(f"{ax}_size", None) == 1:
+                meta.pop(f"{ax}_size", None)
+
         # dask-backed array; Record encapsulates axes/capabilities from meta["dim_order"]
-        return record_from(img.dask_data, meta, kind="intensity")
+        return record_from(data, meta, kind="intensity")
