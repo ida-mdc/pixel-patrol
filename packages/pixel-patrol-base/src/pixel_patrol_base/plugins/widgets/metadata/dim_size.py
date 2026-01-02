@@ -173,8 +173,6 @@ class DimSizeWidget(BaseReportWidget):
             color=group_col,
             facet_col="dimension_name",
             facet_col_wrap=3,
-            # Increased vertical spacing
-            facet_row_spacing=0.15,
             color_map=color_map,
             title="Individual Dimension Sizes per Dataset",
             labels={"dimension_value": "Size", group_col: "Group", "dimension_name": "Dimension"},
