@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List, Union, Iterable, Optional, Set
+from typing import List, Union, Iterable, Optional, Set, Callable
 
 import polars as pl
 
@@ -136,11 +136,17 @@ class Project:
         return self
 
 
-    def process_records(self, settings: Optional[Settings] = None) -> "Project":
+    def process_records(
+        self, 
+        settings: Optional[Settings] = None,
+        progress_callback: Optional[Callable[[int, int, Path], None]] = None
+    ) -> "Project":
         """
         Processes records (e.g. images) in the project, building `records_df`.
         Args:
             settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
+            progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
+                              Called for each file processed. Useful for progress tracking in UI.
 
         Returns:
             The Project instance with the `records_df` updated.
@@ -152,7 +158,12 @@ class Project:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
-        self.records_df = processing.build_records_df(self.paths, exts, loader=self.loader)
+        self.records_df = processing.build_records_df(
+            self.paths, 
+            exts, 
+            loader=self.loader,
+            progress_callback=progress_callback
+        )
 
         if self.records_df is None or self.records_df.is_empty():
             logger.warning(

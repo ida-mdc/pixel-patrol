@@ -198,7 +198,7 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
     })
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
-        lambda paths, cols: deep_df
+        lambda paths, loader_instance, progress_callback: deep_df
     )
 
     result = build_records_df(
@@ -234,13 +234,14 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
     })
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
-        lambda paths, cols: deep_df
+        lambda paths, loader, progress_callback: deep_df
     )
 
     result = build_records_df(
         bases=[base],
         selected_extensions={"jpg", "png"},
-        loader="bioio"
+        loader="bioio",
+        progress_callback=None
     )
 
     expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
