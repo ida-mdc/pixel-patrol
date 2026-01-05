@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
 import polars as pl
 from dash import Dash, html, dcc, ALL, callback_context
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash.exceptions import PreventUpdate
 from datetime import datetime
 import plotly.io as pio
@@ -33,6 +33,8 @@ from pixel_patrol_base.report.global_controls import (
     EXPORT_PROJECT_BUTTON_ID,
     EXPORT_CSV_DOWNLOAD_ID,
     EXPORT_PROJECT_DOWNLOAD_ID,
+    SAVE_SNAPSHOT_BUTTON_ID,
+    SAVE_SNAPSHOT_DOWNLOAD_ID,
 )
 
 DEFAULT_WIDGET_WIDTH = 12
@@ -392,6 +394,17 @@ def _create_app(
 
         # 5. Return it to browser
         return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.zip")
+
+    app.clientside_callback(
+        ClientsideFunction(
+            namespace="clientside",
+            function_name="save_snapshot"
+        ),
+        Output(SAVE_SNAPSHOT_DOWNLOAD_ID, "data"),
+        # This Output is technically dummy/unused by the JS return, but required by Dash
+        Input(SAVE_SNAPSHOT_BUTTON_ID, "n_clicks"),
+        prevent_initial_call=True
+    )
 
     return app
 
