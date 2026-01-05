@@ -14,6 +14,29 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 var parser = new DOMParser();
                 var doc = parser.parseFromString(document.documentElement.outerHTML, "text/html");
 
+                doc.querySelectorAll(".js-plotly-plot").forEach((plotDiv) => {
+                  const svg = plotDiv.querySelector("svg.main-svg");
+                  if (!svg) return;
+
+                  const hAttr = svg.getAttribute("height");
+                  const wAttr = svg.getAttribute("width");
+
+                  // Add extra padding for titles and axis labels (typically need 80-120px extra)
+                  if (hAttr) {
+                    const baseHeight = parseFloat(hAttr);
+                    const paddedHeight = baseHeight + Math.min(120, Math.max(60, baseHeight * 0.2));
+                    plotDiv.style.height = `${paddedHeight}px`;
+
+                    // Also freeze the immediate parent if present (Dash wraps graphs)
+                    const parent = plotDiv.parentElement;
+                    if (parent && (parent.style.height === "" || parent.style.height === "auto")) {
+                      parent.style.height = `${paddedHeight}px`;
+                    }
+                  }
+                  // keep width responsive; or uncomment to freeze:
+                  // if (wAttr) plotDiv.style.width = `${parseFloat(wAttr)}px`;
+                });
+
                 // 3. Set Title
                 doc.title = "PixelPatrol Snapshot " + timestamp;
 
@@ -39,6 +62,26 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 var style = doc.createElement('style');
                 style.innerHTML = ".modebar { display: none !important; }";
                 doc.head.appendChild(style);
+
+                var plotlyFix = doc.createElement("style");
+                plotlyFix.innerHTML = `
+                .js-plotly-plot .svg-container { position: relative !important; }
+
+                /* Plotly uses multiple sibling SVGs; they must be absolutely overlaid */
+                .js-plotly-plot .svg-container > svg {
+                  position: absolute !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                }
+
+                /* WebGL layer (if any) */
+                .js-plotly-plot .svg-container > .gl-container {
+                  position: absolute !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                }
+                `;
+                doc.head.appendChild(plotlyFix);
 
                 // 6. Fix Logo (broken rel links)
                 var logo = doc.querySelector('img[src*="prevalidation"]');
