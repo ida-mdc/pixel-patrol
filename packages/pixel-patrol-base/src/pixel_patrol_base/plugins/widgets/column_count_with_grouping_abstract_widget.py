@@ -110,6 +110,7 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
             title=self.NAME,
             labels=labels,
             barmode="stack",
+            show_legend=True,
         )
 
         return [

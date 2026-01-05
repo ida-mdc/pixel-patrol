@@ -14,9 +14,10 @@ STANDARD_LAYOUT_KWARGS = dict(
     margin=dict(l=50, r=50, t=50, b=50),
     hovermode="closest",
     template="plotly_white",
-    legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None),
+    showlegend=False,
 )
 
+STANDARD_LEGEND_KWARGS = dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None)
 
 def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
     """Applies global style rules and fixes bar chart gaps."""
@@ -29,6 +30,7 @@ def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
         fig.update_layout(bargap=0.4)
     else:
         fig.update_layout(bargap=0.1)
+
 
 def _get_category_orders(
     df: pl.DataFrame,
@@ -146,6 +148,7 @@ def plot_bar(
         barmode: str = "stack",
         order_x: Optional[List[str]] = None,
         force_category_x: bool = False,
+        show_legend: bool = False,
 ) -> go.Figure:
 
     cat_orders = _get_category_orders(df, x, color, order_x)
@@ -176,6 +179,12 @@ def plot_bar(
         n_categories = 0
 
     _apply_standard_styling(fig, n_categories)
+
+    if show_legend:
+        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    else:
+        fig.update_layout(showlegend=False, margin=dict(b=80))
+
     return fig
 
 
@@ -189,6 +198,7 @@ def plot_scatter(
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         hover_data: Optional[List[str]] = None,
+        show_legend: bool = True,
 ) -> go.Figure:
 
     cat_orders = _get_category_orders(df, x, color)
@@ -206,6 +216,8 @@ def plot_scatter(
         hover_data=hover_data,
     )
     _apply_standard_styling(fig)
+    if show_legend:
+        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
     return fig
 
 
@@ -588,8 +600,10 @@ def plot_grouped_histogram(
         bargap=0.0,
     )
     chart.update_layout(**layout)
+    chart.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
 
     return chart
+
 
 def plot_sunburst(
         ids: List[str],

@@ -159,7 +159,8 @@ class FileStatisticsWidget(BaseReportWidget):
                         title="File Count by Size Bin",
                         labels=labels,
                         order_x=size_order,
-                        force_category_x=True
+                        force_category_x=True,
+                        show_legend=True,
                     )
                 )
             )
@@ -184,7 +185,8 @@ class FileStatisticsWidget(BaseReportWidget):
                         color_map=color_map,
                         title="File Count by Modification Date",
                         labels=labels,
-                        force_category_x=True
+                        force_category_x=True,
+                        show_legend=True,
                     )
                 )
             )
