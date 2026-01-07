@@ -19,9 +19,12 @@ from dash.exceptions import PreventUpdate
 
 from pixel_patrol_base import api
 from pixel_patrol_base.core.project_settings import Settings
-from pixel_patrol_base.report.dashboard_app import create_app as create_report_app
+from pixel_patrol_base.report.factory import create_info_icon
 
 logger = logging.getLogger(__name__)
+
+# Use the same assets folder as the report dashboard
+ASSETS_DIR = (Path(__file__).parent / "report" / "assets").resolve()
 
 # Global state for processing progress
 # Note: Only JSON-serializable types should be stored here
@@ -138,16 +141,12 @@ def _get_available_loaders() -> List[Dict[str, Any]]:
 
 def create_processing_app() -> Dash:
     """Create and configure the processing dashboard app."""
-    from pathlib import Path
     
     external_stylesheets = [
         dbc.themes.BOOTSTRAP,
         "https://codepen.io/chriddyp/pen/bWLwgP.css",
         "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
     ]
-
-    # Use the same assets folder as the report dashboard
-    ASSETS_DIR = (Path(__file__).parent / "report" / "assets").resolve()
 
     app = Dash(
         __name__,
@@ -203,7 +202,28 @@ def _create_layout(app: Dash) -> html.Div:
                                 [
                                     dbc.Card(
                                         [
-                                            dbc.CardHeader("Processing Configuration"),
+                                            dbc.CardHeader(
+                                                dbc.Row([
+                                                    dbc.Col("Processing Configuration", width="auto"),
+                                                    dbc.Col(create_info_icon(
+                                                                widget_id="processing-config-info",
+                                                                help_text=(
+                                                                    "**What happens when you start processing:**\n\n"
+                                                                    "Pixel Patrol will scan for files **within the selected folders**:\n"
+                                                                    "  - If **Paths** are provided, only those subfolders/paths (relative to the Base Directory) are processed.\n"
+                                                                    "  - If **Paths** are empty, Pixel Patrol processes the Base Directory.\n\n"
+                                                                    "If no Loader is specified - only basic file information is extracted (e.g., path, size, timestamps).\n\n"
+                                                                    "If loader is specified - Only files matching the selected **File Extensions** are included (leave empty = all supported).\n"
+                                                                    "And PixelPatrol tries to extract rich data from those files - e.g. for images metadata and image data is processed.\n\n"
+                                                                    "When processing finishes, Pixel Patrol creates a **project ZIP** at the Output ZIP path. "
+                                                                    "This ZIP contains everything needed to generate the Pixel Patrol report.\n\n"
+                                                                    "You can open the report later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
+                                                                    "`pixel-patrol report /path/to/project.zip`\n\n"
+                                                                    "Or launch the report directly from this page once processing completes."
+                                                                )
+                                                            ), width="auto")
+                                                ], align="center", justify="start", className="g-2"),
+                                            ),
                                             dbc.CardBody(
                                                 [
                                                     dbc.Form(
@@ -220,7 +240,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Root folder containing your dataset",
+                                                                                "Path to root folder containing your dataset",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -228,7 +248,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     ),
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Output ZIP *", html_for="output-zip"),
+                                                                            dbc.Label("Output ZIP Path *", html_for="output-zip"),
                                                                             dbc.Input(
                                                                                 id="output-zip",
                                                                                 type="text",
@@ -236,7 +256,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Where to save the project ZIP file",
+                                                                                "Path where the output ZIP file will be saved - e.g., /path/to/project.zip",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -253,7 +273,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                             dbc.Input(
                                                                                 id="project-name",
                                                                                 type="text",
-                                                                                placeholder="Auto (uses directory name)",
+                                                                                placeholder="Auto (uses base-directory name)",
                                                                             ),
                                                                         ],
                                                                         md=6,
@@ -407,7 +427,7 @@ def _register_callbacks(app: Dash):
     )
     def update_processing_state_callback(
         n_clicks,
-        n_intervals,
+        _n_intervals,
         base_directory,
         output_zip,
         project_name,
@@ -631,7 +651,10 @@ def _register_callbacks(app: Dash):
         if selected_loader and selected_loader["extensions"]:
             extensions_str = ", ".join(selected_loader["extensions"])
             placeholder = f"e.g., {extensions_str[:50]}{'...' if len(extensions_str) > 50 else ''}"
-            help_text = f"Comma-separated extensions. Supported: {', '.join(selected_loader['extensions'][:10])}{'...' if len(selected_loader['extensions']) > 10 else ''}"
+            help_text = [f"Leave empty for all supported extensions. Otherwise, comma-separated extensions:",
+                         html.Br(),
+                         f"Supported: {', '.join(selected_loader['extensions'][:10])}"
+                         f"{'...' if len(selected_loader['extensions']) > 10 else ''}"]
         else:
             placeholder = "Leave empty for all supported extensions"
             help_text = "Comma-separated extensions (leave empty for all)"
@@ -664,7 +687,6 @@ def _run_processing(
             path_list = [p.strip() for p in paths.split(",") if p.strip()]
 
         # Parse file extensions
-        extensions = None
         if file_extensions:
             extensions = {ext.strip().lstrip(".") for ext in file_extensions.split(",") if ext.strip()}
         else:
