@@ -95,6 +95,30 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
 
 
 @cli.command()
+@click.option('--port', type=int, default=8051, show_default=True,
+              help='Port number for the Dash processing dashboard server.')
+def launch(port: int):
+    """
+    Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
+    """
+    from pixel_patrol_base.processing_dashboard import create_processing_app
+    
+    app = create_processing_app()
+    dashboard_url = f"http://127.0.0.1:{port}"
+    click.echo(f"Processing dashboard will run on {dashboard_url}/")
+    click.echo("Attempting to open dashboard in your default browser...")
+
+    def _open_browser():
+        if not os.environ.get("WERKZEUG_RUN_MAIN"):
+            webbrowser.open_new_tab(dashboard_url)
+
+    Timer(1, _open_browser).start()
+
+    click.echo("Starting processing dashboard...")
+    app.run(debug=False, host="127.0.0.1", port=port, use_reloader=False)
+
+
+@cli.command()
 @click.argument('input_zip', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
 @click.option('--port', type=int, default=8050, show_default=True,
               help='Port number for the Dash report server.')

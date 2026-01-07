@@ -1,14 +1,14 @@
-from pathlib import Path
-from typing import Union, Iterable, List, Optional
-import polars as pl
 import logging
+from pathlib import Path
+from typing import Union, Iterable, List, Optional, Callable
+
+import polars as pl
 
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.io.project_io import export_project as _io_export_project
 from pixel_patrol_base.io.project_io import import_project as _io_import_project
 from pixel_patrol_base.report.dashboard_app import create_app
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,23 @@ def set_settings(project: Project, settings: Settings) -> Project:
     logger.info(f"API Call: Attempting to set project settings for '{project.name}'.")
     return project.set_settings(settings)
 
-def process_files(project: Project) -> Project:
+def process_files(
+    project: Project, 
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None
+) -> Project:
+    """
+    Process files in the project.
+    
+    Args:
+        project: The project to process
+        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
+                          Called for each file processed. Useful for progress tracking in UI.
+    
+    Returns:
+        The project with processed records_df
+    """
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
-    return project.process_records()
+    return project.process_records(progress_callback=progress_callback)
 
 def show_report(project: Project, host: str = "127.0.0.1", port: int = None, debug: bool = False) -> None:
     """
