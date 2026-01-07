@@ -10,7 +10,7 @@ PixelPatrol is an early-version tool designed for the systematic validation of s
 * **Dataset-wide Visualization and Interactive Exploration**
 * **Detailed Statistical Summaries**: Generates plots and distributions covering image dimensions.
 * **Early Identification of Issues**: Helps in finding outliers and identifying potential issues, discrepancies, or unexpected characteristics, including those related to metadata and acquisition parameters.
-* **Interactive Processing Dashboard**: A user-friendly visual interface to configure your project.
+* **Interactive Project Set-Up**: A user-friendly visual interface to configure your project.
 * **Dashboard Report**: Interactive reports are served as a web application using Dash.
 * **Interactive comparison across experimental conditions** or other user defined metrics.
 
@@ -121,7 +121,7 @@ This will open a web browser tab that allows you to quickly and interactively co
 To launch it, open your terminal (activate the env) and run:
 
 ```bash
-pixel-patrol process
+pixel-patrol launch
 ```
 
 ## Command-Line Interface
