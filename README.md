@@ -10,14 +10,14 @@ PixelPatrol is an early-version tool designed for the systematic validation of s
 * **Dataset-wide Visualization and Interactive Exploration**
 * **Detailed Statistical Summaries**: Generates plots and distributions covering image dimensions.
 * **Early Identification of Issues**: Helps in finding outliers and identifying potential issues, discrepancies, or unexpected characteristics, including those related to metadata and acquisition parameters.
-* **Comparison Across Experimental Conditions**
+* **Interactive Processing Dashboard**: A user-friendly visual interface to configure your project.
 * **Dashboard Report**: Interactive reports are served as a web application using Dash.
+* **Interactive comparison across experimental conditions** or other user defined metrics.
 
 ### Coming soon:
 
-* **GUI**: A user-friendly graphical interface for easier project generation.
-* **User-Configurable**: Tailor checks to specific needs and datasets.
 * **Big data support**: Efficiently handle large datasets with optimized data processing.
+* **Support for more file formats**
 
 ## Installation
 
@@ -95,9 +95,12 @@ See `examples/minimal-extension` for a minimal template.
 ## Getting Started
 
 1. Install PixelPatrol (Instructions are in the previous section).
-2. Have all the files you would like to inspect under a common root directory.
-3. If you want to compare conditions - place files of each condition under a separate subdirectory within the root.
-4. Run Pixel Patrol via the CLI (see [Command-Line Interface](#command-line-interface)) or use the Python API demonstrated in [API Use](#api-use).
+2. Have all the files you would like to inspect under a common base directory.
+3. You can also specify subdirectory within the base directory - only those directories will be processed.
+4. Process your data - choose your way:  
+   * Visual Interface: Run `pixel-patrol dashboard` to configure and process your data using a web interface.
+   * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
+   * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
 
 ## Example visualizations
@@ -109,6 +112,17 @@ See `examples/minimal-extension` for a minimal template.
 * Many additional plots and distributions are available.*
         ![Statistical plots showing image dimensions and distributions.](readme_assets/example_stats_plot.png)
 
+
+## Interactive Processing Dashboard
+
+For users who prefer a visual interface over command-line arguments, PixelPatrol includes the Processing Dashboard.  
+This will open a web browser tab that allows you to quickly and interactively configure your project.
+
+To launch it, open your terminal (activate the env) and run:
+
+```bash
+pixel-patrol process
+```
 
 ## Command-Line Interface
 
