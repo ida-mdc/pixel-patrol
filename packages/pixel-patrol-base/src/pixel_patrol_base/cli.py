@@ -97,7 +97,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
 @cli.command()
 @click.option('--port', type=int, default=8051, show_default=True,
               help='Port number for the Dash processing dashboard server.')
-def process(port: int):
+def launch(port: int):
     """
     Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
     """
