@@ -10,7 +10,6 @@ import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-import logging
 
 import polars as pl
 import dash_bootstrap_components as dbc
@@ -20,6 +19,9 @@ from dash.exceptions import PreventUpdate
 from pixel_patrol_base import api
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.report.factory import create_info_icon
+
+import logging
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,36 @@ _processing_state = {
 
 _processing_lock = threading.Lock()
 
+# ============================================================================
+# WARNING CAPTURE FOR DASH UI
+# ============================================================================
+
+# Global queue to collect warnings during processing
+_warning_queue = deque(maxlen=100)  # Keep last 100 warnings
+
+class DashWarningHandler(logging.Handler):
+    """Custom logging handler that captures warnings for display in Dash."""
+
+    def emit(self, record):
+        if record.levelno >= logging.WARNING:  # WARNING, ERROR, CRITICAL
+            _warning_queue.append({
+                "level": record.levelname,
+                "message": record.getMessage(),
+                "timestamp": record.created,
+                "module": record.module
+            })
+
+
+def get_warnings():
+    """Get all warnings from the queue."""
+    return list(_warning_queue)
+
+
+def clear_warnings():
+    """Clear the warning queue."""
+    _warning_queue.clear()
+
+# ============================================================================
 
 def get_processing_state() -> Dict[str, Any]:
     """Get current processing state (thread-safe)."""
@@ -141,6 +173,11 @@ def _get_available_loaders() -> List[Dict[str, Any]]:
 
 def create_processing_app() -> Dash:
     """Create and configure the processing dashboard app."""
+
+    # Setup warning capture
+    handler = DashWarningHandler()
+    handler.setLevel(logging.WARNING)
+    logging.getLogger("pixel_patrol_base").addHandler(handler)
     
     external_stylesheets = [
         dbc.themes.BOOTSTRAP,
@@ -383,7 +420,8 @@ def _create_layout(app: Dash) -> html.Div:
                                                     html.Div(id="progress-status", children="Ready to start processing"),
                                                     html.Div(id="progress-bar-container", className="mt-3"),
                                                     html.Div(id="progress-details", className="mt-3"),
-                                                    html.Div(id="error-message", className="mt-3"),
+                                                    html.Div(id="error-message", className="mt-2"),
+                                                    html.Div(id="warnings-display", className="mt-1"),
                                                     html.Div(id="action-buttons", className="mt-4"),
                                                 ]
                                             ),
@@ -457,6 +495,8 @@ def _register_callbacks(app: Dash):
                     error="Base directory and output ZIP are required",
                 )
                 return get_processing_state(), True, False
+
+            clear_warnings()
 
             # Clear old output_zip from state when starting new processing
             update_processing_state(
@@ -590,6 +630,44 @@ def _register_callbacks(app: Dash):
             error_div,
             html.Div(action_buttons),
         )
+
+
+    @app.callback(
+        Output("warnings-display", "children"),
+        Input("processing-state-store", "data")
+    )
+    def display_warnings(_state):
+        """Display captured warnings and errors from processing."""
+        warnings = get_warnings()
+
+        if not warnings:
+            return None
+
+        warning_items = []
+        for w in warnings[-10:]:  # Show last 10 warnings
+            color = "danger" if w["level"] == "ERROR" else "warning"
+            icon = "bi-x-circle-fill" if w["level"] == "ERROR" else "bi-exclamation-triangle-fill"
+
+            warning_items.append(
+                dbc.Alert(
+                    [
+                        html.I(className=f"{icon} me-2"),
+                        html.Strong(f"{w['level']}: ", className="me-1"),
+                        w["message"],
+                    ],
+                    color=color,
+                    dismissable=True,
+                    className="mb-2 py-2",
+                    style={"fontSize": "0.9rem"}
+                )
+            )
+
+        if warning_items:
+            return html.Div([
+                *warning_items
+            ])
+
+        return None
 
     @app.callback(
         Output("launch-report-btn", "n_clicks"),
