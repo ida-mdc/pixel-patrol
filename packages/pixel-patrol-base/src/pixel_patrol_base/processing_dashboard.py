@@ -300,13 +300,14 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     dbc.Col(
                                                                         [
                                                                             dbc.Label("Paths (experimental conditions)", html_for="paths"),
-                                                                            dbc.Input(
+                                                                            dbc.Textarea(
                                                                                 id="paths",
-                                                                                type="text",
-                                                                                placeholder="path1, path2, ...",
+                                                                                placeholder="path1, path2...",
+                                                                                rows=3,
+                                                                                style={"resize": "vertical"},
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Comma-separated subdirectories or paths",
+                                                                                "Comma-separated. Subdirectories of Base Directory ((absolute or relative).",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
