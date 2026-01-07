@@ -66,12 +66,16 @@ def _build_deep_record_df(
     total = len(paths)
 
     # Use progress callback if provided, otherwise use tqdm
-    if progress_callback is not None:
-        # Disable tqdm when using callback
-        iterator = paths
-    else:
-        # Show a per-file progress bar for deep processing. Use tqdm when available.
-        iterator = tqdm(paths, desc="Processing files", unit="file", total=total, leave=True, colour="green", position=0)
+    iterator = tqdm(
+        paths,
+        desc="Processing files",
+        unit="file",
+        total=total,
+        leave=True,
+        colour="green",
+        position=0,
+        disable=progress_callback is not None  # Disable CLI bar if UI callback exists
+    )
 
     for idx, p in enumerate(iterator, start=1):
         if progress_callback is not None:
