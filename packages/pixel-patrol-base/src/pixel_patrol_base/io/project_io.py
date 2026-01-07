@@ -215,6 +215,11 @@ def export_project(project: Project, dest: Path) -> None:
     - metadata.yml: Project name, paths (as strings), settings.
     - records_df.parquet (if exists): Processed data.
     """
+
+    if dest.suffix.lower() != '.zip':
+        dest = dest.with_suffix('.zip')
+        logger.info(f"Project IO: Added .zip extension to output path: {dest}")
+
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmpdir:

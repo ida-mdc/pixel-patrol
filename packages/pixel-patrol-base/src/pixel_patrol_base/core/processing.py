@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Tuple
+from typing import List, Optional, Dict, Set, Tuple, Callable
 from tqdm.auto import tqdm
 
 import polars as pl
@@ -46,16 +46,41 @@ def _scan_dirs_for_extensions(
     return matched
 
 
-def _build_deep_record_df(paths: List[Path], loader_instance: PixelPatrolLoader) -> pl.DataFrame:
+def _build_deep_record_df(
+    paths: List[Path], 
+    loader_instance: PixelPatrolLoader,
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None
+) -> pl.DataFrame:
     """Loop over paths, get_all_record_properties, return DataFrame (may be empty).
     Optimized to minimize Python loop overhead where possible.
+    
+    Args:
+        paths: List of file paths to process
+        loader_instance: Loader instance to use for loading files
+        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
+                          Called for each file processed. If provided, tqdm progress bar is disabled.
     """
     processors = discover_processor_plugins()
 
     rows = []
+    total = len(paths)
 
-    # Show a per-file progress bar for deep processing. Use tqdm when available.
-    for p in tqdm(paths, desc="Processing files", unit="file", total=len(paths), leave=True, colour="green", position=0):
+    # Use progress callback if provided, otherwise use tqdm
+    iterator = tqdm(
+        paths,
+        desc="Processing files",
+        unit="file",
+        total=total,
+        leave=True,
+        colour="green",
+        position=0,
+        disable=progress_callback is not None  # Disable CLI bar if UI callback exists
+    )
+
+    for idx, p in enumerate(iterator, start=1):
+        if progress_callback is not None:
+            progress_callback(idx, total, p)
+        
         record_dict = get_all_record_properties(p, loader_instance, processors)
         if record_dict:
             rows.append({"path": str(p), **record_dict})
@@ -105,12 +130,27 @@ def build_records_df(
     bases: List[Path],
     selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> Optional[pl.DataFrame]:
+    """
+    Build records dataframe from file system.
+    
+    Args:
+        bases: List of base directories to scan
+        selected_extensions: File extensions to include
+        loader: Optional loader instance
+        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
+                          Called for each file processed during deep processing.
+    """
 
     basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
     if loader is None or basic is None: return basic
 
-    deep = _build_deep_record_df([Path(p) for p in basic["path"].to_list()], loader)
+    deep = _build_deep_record_df(
+        [Path(p) for p in basic["path"].to_list()], 
+        loader,
+        progress_callback=progress_callback
+    )
 
     return basic.join(deep, on="path", how="left")
 
