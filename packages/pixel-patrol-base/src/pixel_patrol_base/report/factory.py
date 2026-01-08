@@ -3,6 +3,7 @@ from typing import Dict, Optional, List, Any, Tuple
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
+from numpy import ndarray
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 
@@ -629,6 +630,47 @@ def plot_sunburst(
 
     _apply_standard_styling(fig)
     return fig
+
+
+def plot_image_mosaic(
+    sprite_np: ndarray,
+    *,
+    unique_groups: List[str],
+    color_map: Dict[str, str],
+    height: int,
+) -> go.Figure:
+    fig = px.imshow(sprite_np)
+    fig.update_traces(hovertemplate=None, selector=dict(type="image"))
+
+    for label in unique_groups:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker=dict(size=10, color=color_map.get(label, "#333333")),
+                name=label,
+                showlegend=True,
+            )
+        )
+
+    fig.update_layout(
+        autosize=True,
+        height=height,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        margin=dict(l=0, r=0, t=0, b=0),
+        hovermode=False,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.04,
+            xanchor="center",
+            x=0.5,
+        ),
+    )
+    return fig
+
 
 # =============================================================================
 #  SECTION 4: CONTROLS
