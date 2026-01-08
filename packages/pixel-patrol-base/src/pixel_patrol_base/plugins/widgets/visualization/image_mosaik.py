@@ -101,7 +101,7 @@ class ImageMosaikWidget(BaseReportWidget):
         global_config: Dict | None,
     ):
 
-        df_filtered, group_col, _resolved, _warning_msg = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning_msg, _order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config or {},

@@ -54,7 +54,7 @@ class DimSizeWidget(BaseReportWidget):
         global_config: Dict | None,
     ):
 
-        df_filtered, group_col, _resolved, _warning = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning, group_order = prepare_widget_data(
                                 self._df,
                                subset_indices,
                                global_config or {},

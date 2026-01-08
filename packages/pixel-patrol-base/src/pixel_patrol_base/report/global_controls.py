@@ -9,7 +9,7 @@ import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
 from textwrap import dedent
 
-from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column
+from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column, ensure_discrete_grouping
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -501,7 +501,7 @@ def prepare_widget_data(
         subset_indices: Optional[List[int]],
         global_config: Dict,
         metric_base: Optional[str] = None
-) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str]]:
+) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str], Optional[List[str]]]:
     """
     The main coordinator for widgets.
     1. Slices the global `df` using `subset_indices`.
@@ -509,7 +509,7 @@ def prepare_widget_data(
     3. If `metric_base` is provided, attempts to find the dimension-specific column (e.g. 'area_t0').
 
     Returns:
-        (df_filtered, group_col, resolved_column_name, warning_message)
+        (df_filtered, group_col, resolved_column_name, warning_message, group_order)
     """
     # 1. Filter Rows
     if subset_indices is not None:
@@ -518,10 +518,11 @@ def prepare_widget_data(
         df_filtered = df
 
     if df_filtered.is_empty():
-        return df_filtered, "", None, "No data matches the current filters."
+        return df_filtered, "", None, "No data matches the current filters.", None
 
     # 2. Resolve Grouping
     group_col = resolve_group_column(df_filtered, global_config)
+    df_filtered, group_order = ensure_discrete_grouping(df_filtered, group_col)
 
     # 3. Resolve Dimension-Specific Column (if needed)
     resolved_col = None
@@ -554,7 +555,7 @@ def prepare_widget_data(
                     f"metric '{metric_base}'."
                 )
 
-    return df_filtered, group_col, resolved_col, warning_msg
+    return df_filtered, group_col, resolved_col, warning_msg, group_order
 
 
 def apply_global_row_filters_and_grouping(

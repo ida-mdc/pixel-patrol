@@ -52,7 +52,7 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
         subset_indices: List[int] | None,
         global_config: Dict | None,
     ):
-        df_filtered, group_col, _resolved, _warning_msg = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config,
@@ -83,4 +83,5 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
             color_map or {},
             resolved_metric_cols,
             group_col=group_col,
+            order_x=group_order,
         )

@@ -70,7 +70,7 @@ class FileStatisticsWidget(BaseReportWidget):
         global_config: Dict | None,
     ):
 
-        df_processed, group_col, _resolved, _warning_msg = prepare_widget_data(
+        df_processed, group_col, _resolved, _warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config or {},
@@ -107,6 +107,7 @@ class FileStatisticsWidget(BaseReportWidget):
                         df=ext_count_df,
                         x="file_extension",
                         y="count",
+                        order_x=group_order,
                         color=group_col,
                         color_map=color_map,
                         title="File Count by Extension",
@@ -128,6 +129,7 @@ class FileStatisticsWidget(BaseReportWidget):
                             df=ext_size_df,
                             x="file_extension",
                             y="size_bytes",
+                            order_x=group_order,
                             color=group_col,
                             color_map=color_map,
                             title="Total Size by Extension",

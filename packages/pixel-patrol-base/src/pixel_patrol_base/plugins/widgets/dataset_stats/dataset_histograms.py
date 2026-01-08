@@ -126,7 +126,7 @@ class DatasetHistogramWidget(BaseReportWidget):
     def _set_control_options(self, subset_indices, global_config):
         df = self._df
 
-        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+        df_processed, group_col, _resolved, _warning, _order = prepare_widget_data(
             df,
             subset_indices,
             global_config or {},
@@ -144,7 +144,7 @@ class DatasetHistogramWidget(BaseReportWidget):
     def _update_file_options(self, selected_groups, global_config, subset_indices):
         df = self._df
 
-        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+        df_processed, group_col, _resolved, _warning, _order = prepare_widget_data(
             df,
             subset_indices,
             global_config or {},
@@ -173,7 +173,7 @@ class DatasetHistogramWidget(BaseReportWidget):
     ):
 
         metric_base = "histogram_counts"
-        df_filtered, group_col, resolved_col, warning_msg = prepare_widget_data(
+        df_filtered, group_col, resolved_col, warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config or {},
@@ -224,6 +224,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             color_map=color_map or {},
             overlay_data=overlay_data,
             title=format_selection_title(dims_selection),
+            group_order=group_order,
         )
 
         return dcc.Graph(figure=fig, style={"height": "600px"})
