@@ -251,7 +251,7 @@ def _create_app(
         """
         Build color map based on the *already filtered* subset and current grouping.
         """
-        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+        df_processed, group_col, _resolved, _warning, order = prepare_widget_data(
             df,
             subset_indices,
             global_config or {},

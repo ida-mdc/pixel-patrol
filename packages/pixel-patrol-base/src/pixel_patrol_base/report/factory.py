@@ -148,7 +148,7 @@ def plot_bar(
         labels: Optional[Dict[str, str]] = None,
         barmode: str = "stack",
         order_x: Optional[List[str]] = None,
-        force_category_x: bool = False,
+        force_category_x: bool = True,
         show_legend: bool = False,
 ) -> go.Figure:
 
@@ -281,11 +281,19 @@ def plot_violin(
         custom_data_col: Optional[str] = None,
         height: Optional[int] = None,
         show_legend: bool = False,
+        group_order: Optional[List[str]] = None,
 ) -> go.Figure:
 
     color_map = color_map or {}
     chart = go.Figure()
-    groups = df.get_column(group_col).unique().drop_nulls().sort().to_list()
+
+    if group_order:
+        present = set(df.get_column(group_col).drop_nulls().unique().to_list())
+        groups = [g for g in group_order if g in present]
+        groups += [g for g in df.get_column(group_col).unique().drop_nulls().sort().to_list()
+                        if g not in set(groups)]
+    else:
+        groups = df.get_column(group_col).unique().drop_nulls().sort().to_list()
 
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
@@ -414,6 +422,7 @@ def build_violin_grid(
     color_map: Dict[str, str],
     numeric_cols: List[str],
     group_col: str,
+    order_x: Optional[List[str]] = None,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
@@ -473,6 +482,7 @@ def build_violin_grid(
             title = f"Distribution of {nice_name}",
             custom_data_col = "name",
             show_legend = False,
+            group_order=order_x,
         )
         plot_divs.append(
             html.Div(
@@ -511,6 +521,7 @@ def plot_grouped_histogram(
         xaxis_title: str = "Intensity",
         yaxis_title: str = "Normalized Count",
         overlay_data: Optional[Dict] = None,  # {x, y, width, name} for a specific file bar chart
+        group_order: Optional[List[str]] = None,
 ) -> go.Figure:
     """
     Plots aggregated line histograms for groups, optionally overlaying a bar chart for a single item.
@@ -532,7 +543,14 @@ def plot_grouped_histogram(
         )
 
     # 2. Plot group lines
-    for group_name, (x_vals, y_vals) in group_data.items():
+    if group_order:
+        keys = [k for k in group_order if k in group_data]
+        keys += [k for k in group_data.keys() if k not in set(keys)]
+    else:
+        keys = list(group_data.keys())
+
+    for group_name in keys:
+        x_vals, y_vals = group_data[group_name]
         color = color_map.get(group_name, "#333333")
         chart.add_trace(
             go.Scatter(
