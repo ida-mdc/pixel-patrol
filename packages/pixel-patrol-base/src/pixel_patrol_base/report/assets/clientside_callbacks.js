@@ -40,13 +40,14 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 // 3. Set Title
                 doc.title = "PixelPatrol Snapshot " + timestamp;
 
-                // 4. CLEANUP: Remove Buttons from the Snapshot
+                // 4. CLEANUP: Remove Buttons, tensorboard widget,... from the Snapshot
                 var idsToRemove = [
                     "global-apply-button",
                     "global-reset-button",
                     "export-csv-button",
                     "export-project-button",
-                    "save-snapshot-button"
+                    "save-snapshot-button",
+                    "embedding-projector-container"
                 ];
 
                 idsToRemove.forEach(function(id) {

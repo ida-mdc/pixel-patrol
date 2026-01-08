@@ -31,6 +31,7 @@ class EmbeddingProjectorWidget(BaseReportWidget):
     REQUIRES: Set[str] = set()
     REQUIRES_PATTERNS = None
 
+    CONTAINER_ID = "embedding-projector-container"
     SUMMARY_ID = "projector-summary-info"
     STATUS_ID = "projector-status"
     LINK_ID = "projector-link-area"
@@ -55,31 +56,32 @@ class EmbeddingProjectorWidget(BaseReportWidget):
 
     def get_content_layout(self) -> List:
         return [
-            html.Div(id=self.SUMMARY_ID),
-            html.Div(
-                [
-                    html.Label("TensorBoard Port:"),
-                    dcc.Input(
-                        id=self.PORT_INPUT_ID,
-                        type="number",
-                        value=6006,
-                        min=1024,
-                        max=65535,
-                        style={"marginLeft": "10px", "width": "100px"},
-                    ),
-                    html.Button(
-                        "🚀 Start TensorBoard",
-                        id=self.START_BTN_ID,
-                        n_clicks=0,
-                        style={"marginLeft": "20px", "marginRight": "10px"},
-                    ),
-                    html.Button("🛑 Stop TensorBoard", id=self.STOP_BTN_ID, n_clicks=0),
-                ],
-                style={"marginTop": "20px"},
-            ),
-            html.Div(id=self.STATUS_ID, style={"marginTop": "10px"}),
-            html.Div(id=self.LINK_ID, style={"marginTop": "10px"}),
-            # NOTE: dcc.Store(id=self.STORE_ID, data={}) must exist in the app layout.
+            html.Div([
+                html.Div(id=self.SUMMARY_ID),
+                html.Div(
+                    [
+                        html.Label("TensorBoard Port:"),
+                        dcc.Input(
+                            id=self.PORT_INPUT_ID,
+                            type="number",
+                            value=6006,
+                            min=1024,
+                            max=65535,
+                            style={"marginLeft": "10px", "width": "100px"},
+                        ),
+                        html.Button(
+                            "🚀 Start TensorBoard",
+                            id=self.START_BTN_ID,
+                            n_clicks=0,
+                            style={"marginLeft": "20px", "marginRight": "10px"},
+                        ),
+                        html.Button("🛑 Stop TensorBoard", id=self.STOP_BTN_ID, n_clicks=0),
+                    ],
+                    style={"marginTop": "20px"},
+                ),
+                html.Div(id=self.STATUS_ID, style={"marginTop": "10px"}),
+                html.Div(id=self.LINK_ID, style={"marginTop": "10px"}),
+            ], id=self.CONTAINER_ID)
         ]
 
     def register(self, app, df: pl.DataFrame) -> None:
