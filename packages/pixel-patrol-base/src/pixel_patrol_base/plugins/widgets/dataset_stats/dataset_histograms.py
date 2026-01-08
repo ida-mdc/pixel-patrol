@@ -130,7 +130,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             df,
             subset_indices,
             global_config or {},
-            metric_base="*",
+            metric_base=None,
         )
         if not group_col or df_processed.is_empty():
             return [], []
@@ -148,7 +148,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             df,
             subset_indices,
             global_config or {},
-            metric_base="*",
+            metric_base=None,
         )
 
         if selected_groups:
