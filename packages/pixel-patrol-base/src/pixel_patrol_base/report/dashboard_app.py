@@ -35,7 +35,8 @@ from pixel_patrol_base.report.global_controls import (
     EXPORT_PROJECT_DOWNLOAD_ID,
     SAVE_SNAPSHOT_BUTTON_ID,
     SAVE_SNAPSHOT_DOWNLOAD_ID,
-    GC_GROUP_COLS,
+    DEFAULT_REPORT_GROUP_COL,
+    GC_GROUP_COL,
     GC_DIMENSIONS,
     GC_FILTER,
 )
@@ -306,13 +307,10 @@ def _create_app(
 
         # Reset logic: return to defaults
         if trigger_id == GLOBAL_RESET_BUTTON_ID:
-            return {GC_GROUP_COLS: ["report_group"], GC_FILTER: {}, GC_DIMENSIONS: {}}
+            return {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {}, GC_DIMENSIONS: {}}
 
         # Single grouping column; default to report_group if nothing chosen
-        if not group_col:
-            group_cols = ["report_group"]
-        else:
-            group_cols = [group_col]
+        group_col = group_col or DEFAULT_REPORT_GROUP_COL
 
         filters: Dict[str, Dict[str, object]] = {}
         if filter_col and filter_op and filter_text:
@@ -326,7 +324,7 @@ def _create_app(
             if val and val != "All":
                 dimensions[id_obj['index']] = val
 
-        return {GC_GROUP_COLS: group_cols, GC_FILTER: filters, GC_DIMENSIONS: dimensions}
+        return {GC_GROUP_COL: group_col, GC_FILTER: filters, GC_DIMENSIONS: dimensions}
 
     @app.callback(
         Output(GLOBAL_GROUPBY_COLS_ID, "value"),
