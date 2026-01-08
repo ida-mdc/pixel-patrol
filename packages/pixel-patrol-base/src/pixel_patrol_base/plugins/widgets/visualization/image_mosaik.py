@@ -1,8 +1,6 @@
 from typing import List, Dict, Set
 
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
 import polars as pl
 from dash import html, dcc, Input, Output
 
@@ -16,7 +14,7 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
     FILTERED_INDICES_STORE_ID,
 )
-from pixel_patrol_base.report.factory import show_no_data_message
+from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
 SPRITE_SIZE = 32
 
@@ -132,10 +130,6 @@ class ImageMosaikWidget(BaseReportWidget):
 
         sprite_np = np.array(sprite)
 
-        fig = px.imshow(sprite_np)
-        fig.update_traces(hovertemplate=None, selector=dict(type="image"))
-
-        # Build legend
         unique_groups = (
             df.select(group_col)
             .unique()
@@ -143,34 +137,12 @@ class ImageMosaikWidget(BaseReportWidget):
             .to_list()
         )
 
-        for label in unique_groups:
-            fig.add_trace(
-                go.Scatter(
-                    x=[None],
-                    y=[None],
-                    mode="markers",
-                    marker=dict(size=10, color=color_map.get(label, "#333333")),
-                    name=label,
-                    showlegend=True,
-                )
-            )
-
-        fig.update_layout(
-            autosize=True,
+        fig = plot_image_mosaic(
+            sprite_np,
+            unique_groups=unique_groups,
+            color_map=color_map or {},
             height=min(1200, sprite.height + 60),
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
-            margin=dict(l=0, r=0, t=0, b=0),
-            hovermode=False,
-            legend=dict(
-                orientation="h",
-                yanchor="top",
-                y=-0.04,
-                xanchor="center",
-                x=0.5,
-            ),
         )
-
         return fig
 
 
