@@ -152,7 +152,7 @@ def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | N
         filters[filter_col] = {"op": filter_op, "value": filter_value}
 
     global_config = {
-        "group_cols": [group_by] if group_by else ["report_group"],
+        "group_col": [group_by] if group_by else ["report_group"],
         "filter": filters,
         "dimensions": dim_dict,
     }

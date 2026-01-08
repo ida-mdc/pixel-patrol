@@ -40,13 +40,12 @@ SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 
 # ---------- GLOBAL CONSTANTS ----------
 
-REPORT_GROUP_COL = "report_group"
-DEFAULT_GROUP_COL = REPORT_GROUP_COL
+DEFAULT_REPORT_GROUP_COL = "report_group"
 
 MAX_UNIQUE_GROUP = 12  # TODO: move to config
 MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
 
-GC_GROUP_COLS = "group_cols"
+GC_GROUP_COL = "group_col"
 GC_FILTER = "filter"
 GC_DIMENSIONS = "dimensions"
 
@@ -57,6 +56,24 @@ DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
 
 # ---------- LAYOUT: SIDEBAR + STORES ----------
 
+def is_group_col_accepted(df: pl.DataFrame, col: str) -> bool:
+    """Single source of truth: is this column allowed for grouping?"""
+    try:
+        if not col or col not in df.columns:
+            return False
+        if DIMENSION_COL_PATTERN.search(col):
+            return False
+
+        dtype = df.schema[col]
+        if dtype in (pl.Float32, pl.Float64):
+            return False
+
+        n_unique = df.select(pl.col(col).n_unique()).item()
+        return n_unique <= MAX_UNIQUE_GROUP
+    except Exception:
+        return False
+
+
 def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
     """
     One-shot initializer for global config:
@@ -65,7 +82,7 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
     - returns a sanitized dict
     """
     cfg = {
-        GC_GROUP_COLS: [REPORT_GROUP_COL],
+        GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL,
         GC_FILTER: {},
         GC_DIMENSIONS: {},
     }
@@ -75,20 +92,20 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
         # ensure nested dicts exist even if someone passes None
         cfg[GC_FILTER] = cfg.get(GC_FILTER) or {}
         cfg[GC_DIMENSIONS] = cfg.get(GC_DIMENSIONS) or {}
-        cfg[GC_GROUP_COLS] = cfg.get(GC_GROUP_COLS) or []
+        cfg[GC_GROUP_COL] = cfg.get(GC_GROUP_COL)
     return _validate_global_config(df, cfg)
+
 
 def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> Dict:
     cfg: Dict = dict(global_config or {})
 
-    # --- group cols ---
-    group_cols = list(cfg.get(GC_GROUP_COLS) or [])
-    if group_cols:
-        g = group_cols[0]
-        if g and g not in df.columns:
-            logger.warning("Global group-by column '%s' not found; falling back to default.", g)
-            group_cols = []
-    cfg[GC_GROUP_COLS] = group_cols
+    g = cfg.get(GC_GROUP_COL)
+    if g and not is_group_col_accepted(df, g):
+        logger.warning(
+            "Global group-by column '%s' is not accepted; falling back to default.",
+            g,
+        )
+        cfg[GC_GROUP_COL] = None
 
     # --- filters ---
     filters = cfg.get(GC_FILTER) or {}
@@ -185,8 +202,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
         except Exception:
             continue
 
-        # Strings/Bools/Ints with low cardinality are good for Grouping
-        if n_unique <= MAX_UNIQUE_GROUP:
+        if is_group_col_accepted(df, c):
             group_cols.append(c)
 
         # Strings/Bools/Ints with medium cardinality are good for Filtering
@@ -236,10 +252,10 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
     >, ≥, <, ≤, equals (=)
     """).strip()
 
-    initial_global_config = initial_global_config or {GC_GROUP_COLS: [REPORT_GROUP_COL], GC_FILTER: {}, GC_DIMENSIONS: {}}
+    initial_global_config = initial_global_config or {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {}, GC_DIMENSIONS: {}}
 
     # defaults from initial config
-    init_group = (initial_global_config.get(GC_GROUP_COLS) or [None])[0]
+    init_group = initial_global_config.get(GC_GROUP_COL)
     init_filters = initial_global_config.get(GC_FILTER) or {}
     init_dims = initial_global_config.get(GC_DIMENSIONS) or {}
 
@@ -450,11 +466,11 @@ def compute_filtered_indices(df: pl.DataFrame,
 def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str:
     """Helper to safely extract the active grouping column."""
     global_config = global_config or {}
-    group_cols = list(global_config.get(GC_GROUP_COLS) or [])
 
-    group_col = group_cols[0] if group_cols else DEFAULT_GROUP_COL
+    group_col = global_config.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
+
     if group_col not in df.columns:
-        group_col = DEFAULT_GROUP_COL if DEFAULT_GROUP_COL in df.columns else df.columns[0]
+        group_col = DEFAULT_REPORT_GROUP_COL if DEFAULT_REPORT_GROUP_COL in df.columns else df.columns[0]
 
     return group_col
 
@@ -561,18 +577,12 @@ def prepare_widget_data(
 def apply_global_row_filters_and_grouping(
     df: pl.DataFrame,
     global_config: Optional[Dict],
-    default_group_col: str = DEFAULT_GROUP_COL,
+    default_group_col: str = DEFAULT_REPORT_GROUP_COL,
 ) -> Tuple[pl.DataFrame, str]:
 
     global_config = global_config or {}
 
-    # group_cols in the store is always a list; we take the first element
-    group_cols = list(global_config.get("group_cols") or [])
-
-    if not group_cols:
-        group_col = default_group_col
-    else:
-        group_col = group_cols[0]
+    group_col = global_config.get(GC_GROUP_COL) or default_group_col
 
     # ensure the chosen group_col exists; otherwise fall back to DEFAULT_GROUP_COL
     if group_col not in df.columns:
