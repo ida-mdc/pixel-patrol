@@ -12,6 +12,10 @@ from textwrap import dedent
 from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column
 from pixel_patrol_base.report.factory import create_info_icon
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ---------- ID CONSTANTS ----------
 
 PALETTE_SELECTOR_ID = "palette-selector"
@@ -42,9 +46,112 @@ DEFAULT_GROUP_COL = REPORT_GROUP_COL
 MAX_UNIQUE_GROUP = 12  # TODO: move to config
 MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
 
+GC_GROUP_COLS = "group_cols"
+GC_FILTER = "filter"
+GC_DIMENSIONS = "dimensions"
+
+_ALLOWED_FILTER_OPS = {"contains", "not_contains", "eq", "gt", "ge", "lt", "le", "in"}
+_NUMERIC_FILTER_OPS = {"gt", "ge", "lt", "le"}
+DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
+
+
 # ---------- LAYOUT: SIDEBAR + STORES ----------
 
-DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
+def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
+    """
+    One-shot initializer for global config:
+    - fills defaults
+    - validates keys/columns/ops/types
+    - returns a sanitized dict
+    """
+    cfg = {
+        GC_GROUP_COLS: [REPORT_GROUP_COL],
+        GC_FILTER: {},
+        GC_DIMENSIONS: {},
+    }
+
+    if initial:
+        cfg.update(initial)
+        # ensure nested dicts exist even if someone passes None
+        cfg[GC_FILTER] = cfg.get(GC_FILTER) or {}
+        cfg[GC_DIMENSIONS] = cfg.get(GC_DIMENSIONS) or {}
+        cfg[GC_GROUP_COLS] = cfg.get(GC_GROUP_COLS) or []
+    return _validate_global_config(df, cfg)
+
+def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> Dict:
+    cfg: Dict = dict(global_config or {})
+
+    # --- group cols ---
+    group_cols = list(cfg.get(GC_GROUP_COLS) or [])
+    if group_cols:
+        g = group_cols[0]
+        if g and g not in df.columns:
+            logger.warning("Global group-by column '%s' not found; falling back to default.", g)
+            group_cols = []
+    cfg[GC_GROUP_COLS] = group_cols
+
+    # --- filters ---
+    filters = cfg.get(GC_FILTER) or {}
+    clean_filters: Dict = {}
+    for col_name, spec in filters.items():
+        if col_name not in df.columns:
+            logger.warning("Global filter column '%s' not found; skipping filter.", col_name)
+            continue
+
+        # Back-compat: list -> "in"
+        if isinstance(spec, list):
+            vals = [str(v) for v in spec if str(v).strip()]
+            if vals:
+                clean_filters[col_name] = vals
+            continue
+
+        if not isinstance(spec, dict):
+            logger.warning("Global filter for '%s' has invalid spec type (%s); skipping.", col_name, type(spec).__name__)
+            continue
+
+        op = spec.get("op")
+        raw = str(spec.get("value", "")).strip()
+
+        if op not in _ALLOWED_FILTER_OPS:
+            logger.warning("Global filter op '%s' for column '%s' is invalid; skipping.", op, col_name)
+            continue
+        if not raw:
+            logger.warning("Global filter value for column '%s' is empty; skipping.", col_name)
+            continue
+        if op in _NUMERIC_FILTER_OPS and _try_float(raw) is None:
+            logger.warning("Global filter op '%s' for column '%s' requires a number; got '%s'. Skipping.", op, col_name, raw)
+            continue
+
+        clean_filters[col_name] = {"op": op, "value": raw}
+
+    cfg[GC_FILTER] = clean_filters
+
+    # --- dimensions ---
+    dims = cfg.get(GC_DIMENSIONS) or {}
+    available_dims = get_all_available_dimensions(df)  # {dim: [values]}
+    clean_dims: Dict[str, str] = {}
+
+    for dim, val in dims.items():
+        if dim not in available_dims:
+            logger.warning("Global dimension '%s' not available; skipping.", dim)
+            continue
+        if not val or val == "All":
+            continue
+
+        # accept "0" as well as "c0"
+        vals_set = set(available_dims[dim])
+        if val in vals_set or f"{dim}{val}" in vals_set:
+            clean_dims[dim] = val
+        else:
+            logger.warning(
+                "Global dimension selection '%s=%s' not found (known: %s); keeping it anyway (may yield empty data).",
+                dim, val, ", ".join(list(available_dims[dim])[:10]) + ("..." if len(available_dims[dim]) > 10 else "")
+            )
+            clean_dims[dim] = val
+
+    cfg[GC_DIMENSIONS] = clean_dims
+    return cfg
+
 
 def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
     group_cols: List[str] = []
@@ -114,7 +221,7 @@ def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
         ),
     ]
 
-def build_sidebar(df: pl.DataFrame, default_palette_name: str):
+def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_config: Optional[Dict] = None):
 
     filter_help_md = dedent("""
     Filter matches rows by one column.
@@ -129,13 +236,22 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
     >, ≥, <, ≤, equals (=)
     """).strip()
 
+    initial_global_config = initial_global_config or {GC_GROUP_COLS: [REPORT_GROUP_COL], GC_FILTER: {}, GC_DIMENSIONS: {}}
+
+    # defaults from initial config
+    init_group = (initial_global_config.get(GC_GROUP_COLS) or [None])[0]
+    init_filters = initial_global_config.get(GC_FILTER) or {}
+    init_dims = initial_global_config.get(GC_DIMENSIONS) or {}
+
+    init_filter_col, init_filter_op, init_filter_text = None, "in", ""
+    if init_filters:
+        init_filter_col, spec = next(iter(init_filters.items()))
+        if isinstance(spec, dict):
+            init_filter_op = spec.get("op", "in")
+            init_filter_text = str(spec.get("value", "") or "")
 
     candidate_group_cols, candidate_filter_cols = _find_candidate_columns(df)
     available_dims = get_all_available_dimensions(df)
-
-    default_group_value: List[str] = []
-    if REPORT_GROUP_COL in df.columns:
-        default_group_value = [REPORT_GROUP_COL]
 
     sidebar_controls = dbc.Card(
         [
@@ -161,7 +277,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                     dcc.Dropdown(
                         id=GLOBAL_GROUPBY_COLS_ID,
                         options=[{"label": c, "value": c} for c in candidate_group_cols],
-                        value=default_group_value[0] if default_group_value else None,
+                        value=init_group,
                         multi=False,
                         clearable=True,
                         placeholder="Choose grouping column",
@@ -184,6 +300,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                     dcc.Dropdown(
                         id=GLOBAL_FILTER_COLUMN_ID,
                         options=[{"label": c, "value": c} for c in candidate_filter_cols],
+                        value=init_filter_col,
                         placeholder="Choose column to filter on",
                         clearable=True,
                         style={"width": "100%"},
@@ -200,7 +317,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                             {"label": "≤ (number)", "value": "le"},
                             {"label": "is in (comma-separated) (text)", "value": "in"},
                         ],
-                        value="in",
+                        value=init_filter_op,
                         clearable=False,
                         style={"width": "100%", "marginTop": "4px"},
                     ),
@@ -209,6 +326,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                         type="text",
                         placeholder="Value (or comma-separated list for 'in')",
                         style={"width": "100%", "marginTop": "4px"},
+                        value=init_filter_text,
                     ),
                     html.Hr(),
 
@@ -222,7 +340,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
                                         id={"type": GLOBAL_DIM_FILTER_TYPE, "index": dim},
                                         options=[{"label": "All", "value": "All"}] + [{"label": x, "value": x} for x in
                                                                                       vals],
-                                        value="All",
+                                        value=init_dims.get(dim, "All"),
                                         clearable=False,
                                         className="mb-1"
                                     )
@@ -284,7 +402,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str):
     stores = [
         dcc.Store(
             id=GLOBAL_CONFIG_STORE_ID,
-            data={"group_cols": default_group_value, "filters": {}, "dimensions": {}},
+            data=initial_global_config,
         ),
     ]
 
@@ -307,8 +425,8 @@ def compute_filtered_indices(df: pl.DataFrame,
     Widgets will use these indices to quickly slice the dataframe.
     """
     global_config = global_config or {}
-    filters = global_config.get("filters") or {}
-    dimensions = global_config.get("dimensions") or {}
+    filters = global_config.get(GC_FILTER) or {}
+    dimensions = global_config.get(GC_DIMENSIONS) or {}
 
     # If no filters and no dimension constraints, return all indices
     if not filters and not dimensions:
@@ -332,7 +450,7 @@ def compute_filtered_indices(df: pl.DataFrame,
 def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str:
     """Helper to safely extract the active grouping column."""
     global_config = global_config or {}
-    group_cols = list(global_config.get("group_cols") or [])
+    group_cols = list(global_config.get(GC_GROUP_COLS) or [])
 
     group_col = group_cols[0] if group_cols else DEFAULT_GROUP_COL
     if group_col not in df.columns:
@@ -463,7 +581,8 @@ def apply_global_row_filters_and_grouping(
         group_col = df.columns[0]
 
     # filters: {column -> [allowed_values]}
-    filters = global_config.get("filters") or {}
+    filters = global_config.get(GC_FILTER) or {}
+
     for col, allowed_vals in filters.items():
         if col in df.columns and allowed_vals:
             df = df.filter(pl.col(col).is_in(allowed_vals))
