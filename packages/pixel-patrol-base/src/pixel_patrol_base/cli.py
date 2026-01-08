@@ -120,35 +120,45 @@ def launch(port: int):
 
 @cli.command()
 @click.argument('input_zip', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
-@click.option('--port', type=int, default=8050, show_default=True,
-              help='Port number for the Dash report server.')
-def report(input_zip: Path, port: int):
-    """
-    Displays the report of an exported Pixel Patrol project from a ZIP file.
-    """
-    click.echo(f"Importing project from: '{input_zip}'")
+@click.option('--port', type=int, default=8050, show_default=True)
+@click.option('--group-by', type=str, default=None)
+@click.option('--filter-col', type=str, default=None)
+@click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None)
+@click.option('--filter', 'filter_value', type=str, default=None)
+@click.option('--dim', 'dims', multiple=True, help="Repeatable, format like: t=0  z=1  c=0")
+def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | None,
+           filter_op: str | None, filter_value: str | None, dims: tuple[str, ...]):
+
     my_project = import_project(Path(input_zip))
-    click.echo("Project imported.")
 
-    report_url = f"http://127.0.0.1:{port}"
-    click.echo(f"Dash report will run on {report_url}/")
-    click.echo("Attempting to open report in your default browser...")
+    dim_dict: dict[str, str] = {}
+    for item in dims:
+        s = str(item)
+        if "=" not in s:
+            raise click.BadParameter("Expected format key=value (e.g. z=1)")
 
-    # We don't need a Timer here if show_report is blocking and we open BEFORE
-    # However, in some systems, opening too fast can fail. A small delay is safer.
-    def _open_browser():
-        # This check is still useful if Werkzeug debug mode spawns a second process
-        # and you want to ensure it only opens once from the parent.
-        if not os.environ.get("WERKZEUG_RUN_MAIN"):
-            webbrowser.open_new_tab(report_url)
+        k, v = s.split("=", 1)
+        k = k.strip()
+        v = v.strip()
 
-    # Schedule the browser open for slightly in the future to give the OS a moment
-    # and to potentially allow Dash's own startup messages to appear first.
-    Timer(1, _open_browser).start() # 0.5 seconds delay
+        # enforce unprefixed values: z=1 OK, z=z1 NOT OK
+        if v.startswith(k):
+            raise click.BadParameter(f"Use {k}=<value> (e.g. {k}=1), not {k}={v}")
 
-    click.echo("Showing report...")
-    # Pass the port to show_report. You must ensure show_report accepts this.
-    show_report(my_project, port=port)
+        dim_dict[k] = v
+
+    filters = {}
+    if filter_col and filter_op and filter_value:
+        filters[filter_col] = {"op": filter_op, "value": filter_value}
+
+    global_config = {
+        "group_cols": [group_by] if group_by else ["report_group"],
+        "filter": filters,
+        "dimensions": dim_dict,
+    }
+
+    show_report(my_project, port=port, global_config=global_config)
+
 
 if __name__ == '__main__':
     cli()

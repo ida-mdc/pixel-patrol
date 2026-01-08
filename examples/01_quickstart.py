@@ -51,6 +51,23 @@ def main():
     # Open http://127.0.0.1:8050/ in your browser
     api.show_report(project)
 
+    ## OR start report already with applied filters.
+    # api.show_report(
+    #     project,
+    #     global_config={
+    #         "group_cols": ["size_readable"],
+    #         "filter": {
+    #             "file_extension": {
+    #                 "op": "in",
+    #                 "value": "tif, png",
+    #             }
+    #         },
+    #         "dimensions": {
+    #             "c":"0"
+    #         },
+    #     },
+    # )
+
     # --- Step 8: (optional) import project ---
     imported = api.import_project(zip_path)
     print("Imported:", imported.name)
