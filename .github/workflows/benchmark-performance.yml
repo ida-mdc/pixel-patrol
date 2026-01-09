@@ -1,7 +1,10 @@
 name: Run Benchmarks
 
 on:
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch: # Keep this for later
+  push: # Remove later
+    branches:
+      - 'benchmark-performance'
 
 jobs:
   benchmark:
