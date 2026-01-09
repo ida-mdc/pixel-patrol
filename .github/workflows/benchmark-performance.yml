@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
           cache: "pip"
 
       - name: Install dependencies
@@ -27,6 +27,7 @@ jobs:
           pip install uv
           uv venv
           uv pip install -e "packages/pixel-patrol/.[dev]"
+          uv pip install pytest
 
       - name: Run Benchmarks
         # Generates benchmark_results.csv
@@ -36,7 +37,7 @@ jobs:
       - name: Generate Report
         # Generates REPORT.md, *.png, and writes tables to Job Summary
         run: |
-          uv run python packages/pixel-patrol/tests/benchmarks/generate_report.py
+          uv run python packages/pixel-patrol/tests/benchmarks/generate_benchmark_report.py
 
       - name: Upload Artifacts
         # Zips up the results so you can download them later
@@ -45,7 +46,7 @@ jobs:
         with:
           name: benchmark-report
           path: |
-            tests/benchmarks/benchmark_results/REPORT.md
-            tests/benchmarks/benchmark_results/assets/*.png
-            tests/benchmarks/benchmark_results/benchmark_results.csv
+            packages/pixel-patrol/tests/benchmarks/benchmark_results/REPORT.md
+            packages/pixel-patrol/tests/benchmarks/benchmark_results/assets/*.png
+            packages/pixel-patrol/tests/benchmarks/benchmark_results/benchmark_results.csv
           retention-days: 30
