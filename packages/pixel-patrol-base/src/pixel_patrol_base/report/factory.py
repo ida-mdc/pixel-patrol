@@ -3,6 +3,7 @@ from typing import Dict, Optional, List, Any, Tuple
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
+from numpy import ndarray
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 
@@ -14,9 +15,10 @@ STANDARD_LAYOUT_KWARGS = dict(
     margin=dict(l=50, r=50, t=50, b=50),
     hovermode="closest",
     template="plotly_white",
-    legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None),
+    showlegend=False,
 )
 
+STANDARD_LEGEND_KWARGS = dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None)
 
 def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
     """Applies global style rules and fixes bar chart gaps."""
@@ -29,6 +31,7 @@ def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
         fig.update_layout(bargap=0.4)
     else:
         fig.update_layout(bargap=0.1)
+
 
 def _get_category_orders(
     df: pl.DataFrame,
@@ -145,7 +148,8 @@ def plot_bar(
         labels: Optional[Dict[str, str]] = None,
         barmode: str = "stack",
         order_x: Optional[List[str]] = None,
-        force_category_x: bool = False,
+        force_category_x: bool = True,
+        show_legend: bool = False,
 ) -> go.Figure:
 
     cat_orders = _get_category_orders(df, x, color, order_x)
@@ -176,6 +180,12 @@ def plot_bar(
         n_categories = 0
 
     _apply_standard_styling(fig, n_categories)
+
+    if show_legend:
+        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    else:
+        fig.update_layout(showlegend=False, margin=dict(b=80))
+
     return fig
 
 
@@ -189,6 +199,7 @@ def plot_scatter(
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         hover_data: Optional[List[str]] = None,
+        show_legend: bool = True,
 ) -> go.Figure:
 
     cat_orders = _get_category_orders(df, x, color)
@@ -206,6 +217,8 @@ def plot_scatter(
         hover_data=hover_data,
     )
     _apply_standard_styling(fig)
+    if show_legend:
+        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
     return fig
 
 
@@ -265,37 +278,45 @@ def plot_violin(
         group_col: str,
         color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
-        custom_data_cols: Optional[List[str]] = None,
+        custom_data_col: Optional[str] = None,
         height: Optional[int] = None,
+        show_legend: bool = False,
+        group_order: Optional[List[str]] = None,
 ) -> go.Figure:
 
     color_map = color_map or {}
     chart = go.Figure()
-    groups = df.get_column(group_col).unique().sort().to_list()
+
+    if group_order:
+        present = set(df.get_column(group_col).drop_nulls().unique().to_list())
+        groups = [g for g in group_order if g in present]
+        groups += [g for g in df.get_column(group_col).unique().drop_nulls().sort().to_list()
+                        if g not in set(groups)]
+    else:
+        groups = df.get_column(group_col).unique().drop_nulls().sort().to_list()
 
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
 
-        group_color = color_map.get(str(group_name))
+        group_color = color_map.get(str(group_name), "#333333")
 
         custom_data = None
-        if custom_data_cols:
-            col_name = next(iter(custom_data_cols))
-            custom_data = df_group.get_column(col_name).to_list()
+        if custom_data_col and custom_data_col in df_group.columns:
+            custom_data = df_group.get_column(custom_data_col).to_list()
 
         violin_kwargs = dict(
             y=df_group.get_column(y).to_list(),
             name=group_name,
             customdata=custom_data,
             opacity=0.9,
-            showlegend=True,
+            showlegend=show_legend,
             points="all",
             pointpos=0,
             box=dict(visible=True),
             meanline=dict(visible=True),
         )
-        if group_color:
-            violin_kwargs["marker"] = dict(color=group_color)
+
+        violin_kwargs["marker"] = dict(color=group_color)
 
         chart.add_trace(
             go.Violin(
@@ -303,7 +324,8 @@ def plot_violin(
                 hovertemplate=(
                         "<b>Group:</b> %{x}<br>"
                         "<b>Value:</b> %{y:.2f}"
-                        + ("<br><b>Name:</b> %{customdata}" if custom_data is not None else "")
+                        + (f"<br><b>{'Name' if custom_data_col == 'name' else (custom_data_col or 'Info')}:</b> %{{customdata}}"
+                        if custom_data is not None else "")
                         + "<extra></extra>"
                 ),
             )
@@ -320,6 +342,7 @@ def plot_violin(
             title_text=title,
             yaxis_title=y.replace("_", " ").title(),
             xaxis_title="Group",
+            showlegend=show_legend,
         )
     )
 
@@ -394,11 +417,12 @@ def plot_grouped_scatter(
     return fig
 
 
-def generate_column_violin_plots(
+def build_violin_grid(
     df: pl.DataFrame,
     color_map: Dict[str, str],
     numeric_cols: List[str],
     group_col: str,
+    order_x: Optional[List[str]] = None,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
@@ -449,12 +473,16 @@ def generate_column_violin_plots(
 
     plot_divs: List[html.Div] = []
     for col_name in cols_to_plot:
-        fig = _plot_single_violin(
-            plot_data=df_filtered,
-            value_to_plot=col_name,
-            groups=groups,
-            color_map=color_map,
-            group_col=group_col,
+        nice_name = col_name.replace("_", " ").title()
+        fig = plot_violin(
+            df = df_filtered,
+            y = col_name,
+            group_col = group_col,
+            color_map = color_map,
+            title = f"Distribution of {nice_name}",
+            custom_data_col = "name",
+            show_legend = False,
+            group_order=order_x,
         )
         plot_divs.append(
             html.Div(
@@ -486,57 +514,6 @@ def generate_column_violin_plots(
     return [plots_container] + table_component
 
 
-def _plot_single_violin(
-    plot_data: pl.DataFrame,
-    value_to_plot: str,
-    groups: List[str],
-    color_map: Dict[str, str],
-    group_col: str,
-) -> go.Figure:
-    """Generate one violin plot figure for a single metric grouped by folder."""
-    chart = go.Figure()
-
-    for group_name in groups:
-        df_group = plot_data.filter(pl.col(group_col) == group_name)
-        group_color = color_map.get(group_name, "#333333")
-
-        chart.add_trace(
-            go.Violin(
-                y=df_group.get_column(value_to_plot).to_list(),
-                name=group_name,
-                customdata=df_group.get_column("name").to_list(),
-                opacity=0.9,
-                showlegend=False,
-                points="all",
-                pointpos=0,
-                box=dict(visible=True),
-                meanline=dict(visible=True),
-                marker=dict(color=group_color),
-                hovertemplate=(
-                    "<b>Group:</b> %{x}<br>"
-                    "<b>Value:</b> %{y:.2f}<br>"
-                    "<b>Name:</b> %{customdata}<extra></extra>"
-                ),
-            )
-        )
-
-    chart.update_traces(
-        marker=dict(line=dict(width=1, color="black")),
-        box=dict(line_color="black"),
-    )
-
-    nice_name = value_to_plot.replace("_", " ").title()
-    chart.update_layout(
-        title_text=f"Distribution of {nice_name}",
-        xaxis_title="Group",
-        yaxis_title=nice_name,
-        margin=dict(l=50, r=50, t=80, b=50),
-        hovermode="closest",
-        showlegend=False,
-    )
-    return chart
-
-
 def plot_grouped_histogram(
         group_data: Dict[str, Tuple[Any, Any]],  # {group_name: (x_centers, y_counts)}
         color_map: Dict[str, str],
@@ -544,6 +521,7 @@ def plot_grouped_histogram(
         xaxis_title: str = "Intensity",
         yaxis_title: str = "Normalized Count",
         overlay_data: Optional[Dict] = None,  # {x, y, width, name} for a specific file bar chart
+        group_order: Optional[List[str]] = None,
 ) -> go.Figure:
     """
     Plots aggregated line histograms for groups, optionally overlaying a bar chart for a single item.
@@ -565,7 +543,14 @@ def plot_grouped_histogram(
         )
 
     # 2. Plot group lines
-    for group_name, (x_vals, y_vals) in group_data.items():
+    if group_order:
+        keys = [k for k in group_order if k in group_data]
+        keys += [k for k in group_data.keys() if k not in set(keys)]
+    else:
+        keys = list(group_data.keys())
+
+    for group_name in keys:
+        x_vals, y_vals = group_data[group_name]
         color = color_map.get(group_name, "#333333")
         chart.add_trace(
             go.Scatter(
@@ -588,8 +573,10 @@ def plot_grouped_histogram(
         bargap=0.0,
     )
     chart.update_layout(**layout)
+    chart.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
 
     return chart
+
 
 def plot_sunburst(
         ids: List[str],
@@ -615,6 +602,47 @@ def plot_sunburst(
 
     _apply_standard_styling(fig)
     return fig
+
+
+def plot_image_mosaic(
+    sprite_np: ndarray,
+    *,
+    unique_groups: List[str],
+    color_map: Dict[str, str],
+    height: int,
+) -> go.Figure:
+    fig = px.imshow(sprite_np)
+    fig.update_traces(hovertemplate=None, selector=dict(type="image"))
+
+    for label in unique_groups:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker=dict(size=10, color=color_map.get(label, "#333333")),
+                name=label,
+                showlegend=True,
+            )
+        )
+
+    fig.update_layout(
+        autosize=True,
+        height=height,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        margin=dict(l=0, r=0, t=0, b=0),
+        hovermode=False,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.04,
+            xanchor="center",
+            x=0.5,
+        ),
+    )
+    return fig
+
 
 # =============================================================================
 #  SECTION 4: CONTROLS

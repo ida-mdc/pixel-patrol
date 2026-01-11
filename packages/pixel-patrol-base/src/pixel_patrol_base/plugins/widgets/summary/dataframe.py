@@ -1,9 +1,3 @@
-from typing import List, Dict, Set
-
-import dash_ag_grid as dag
-import polars as pl
-from dash import html, Input, Output
-
 from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
@@ -16,8 +10,6 @@ from pixel_patrol_base.report.factory import show_no_data_message
 
 
 from typing import List, Dict, Set
-import json
-import time
 
 import dash_ag_grid as dag
 import polars as pl
@@ -66,7 +58,7 @@ class DataFrameWidget(BaseReportWidget):
         global_config: Dict | None,
     ):
 
-        df_filtered, _group_col, _resolved, _warning = prepare_widget_data(
+        df_filtered, _group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config or {},

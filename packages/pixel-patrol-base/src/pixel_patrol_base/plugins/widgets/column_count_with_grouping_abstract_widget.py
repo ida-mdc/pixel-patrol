@@ -56,7 +56,7 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
     ):
         """Generic implementation: count rows by CATEGORY_COLUMN (+ optional group)."""
 
-        df_filtered, group_col, _resolved, warning_msg = prepare_widget_data(
+        df_filtered, group_col, _resolved, warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config,
@@ -107,9 +107,11 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
             y="count",
             color=group_col,
             color_map=color_map,
+            order_x=group_order,
             title=self.NAME,
             labels=labels,
             barmode="stack",
+            show_legend=True,
         )
 
         return [

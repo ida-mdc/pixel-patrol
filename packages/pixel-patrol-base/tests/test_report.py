@@ -201,7 +201,7 @@ def _base_df_for_global_controls():
 
 def test_compute_filtered_indices_none_when_no_filters_or_dims():
     df = _base_df_for_global_controls()
-    assert gc.compute_filtered_indices(df, {"filters": {}, "dimensions": {}}) is None
+    assert gc.compute_filtered_indices(df, {"filter": {}, "dimensions": {}}) is None
     assert gc.compute_filtered_indices(df, None) is None
 
 
@@ -210,7 +210,7 @@ def test_compute_filtered_indices_with_value_filter_and_dimension_filter():
 
     # Filter to only .tif and require the chosen dim slice to exist (non-null)
     cfg = {
-        "filters": {"file_extension": [".tif"]},
+        "filter": {"file_extension": [".tif"]},
         "dimensions": {"t": "0"},
     }
 
@@ -234,10 +234,10 @@ def test_prepare_widget_data_resolves_dim_aware_metric_and_warns_when_missing():
     df = _base_df_for_global_controls()
 
     # dims t=0, metric_base mean_intensity => resolve to mean_intensity_t0 and drop nulls
-    df_f, group_col, resolved, warn = gc.prepare_widget_data(
+    df_f, group_col, resolved, warn, _order = gc.prepare_widget_data(
         df=df,
         subset_indices=None,
-        global_config={"group_cols": ["report_group"], "filters": {}, "dimensions": {"t": "0"}},
+        global_config={"group_col": ["report_group"], "filter": {}, "dimensions": {"t": "0"}},
         metric_base="mean_intensity",
     )
 
@@ -247,10 +247,10 @@ def test_prepare_widget_data_resolves_dim_aware_metric_and_warns_when_missing():
     assert set(df_f["unique_id"].to_list()) == {100, 102, 104}
 
     # dims t=9 => no such slice column => empty + warning
-    df_f2, _gc2, resolved2, warn2 = gc.prepare_widget_data(
+    df_f2, _gc2, resolved2, warn2, _order = gc.prepare_widget_data(
         df=df,
         subset_indices=None,
-        global_config={"group_cols": ["report_group"], "filters": {}, "dimensions": {"t": "9"}},
+        global_config={"group_col": ["report_group"], "filter": {}, "dimensions": {"t": "9"}},
         metric_base="mean_intensity",
     )
     assert df_f2.height == 0
@@ -264,8 +264,8 @@ def test_apply_global_row_filters_and_grouping_filters_then_resolves_group_col()
     df2, group_col = gc.apply_global_row_filters_and_grouping(
         df,
         {
-            "group_cols": ["report_group"],
-            "filters": {"file_extension": [".png"]},
+            "group_col": ["report_group"],
+            "filter": {"file_extension": [".png"]},
             "dimensions": {},
         },
     )

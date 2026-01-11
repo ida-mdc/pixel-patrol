@@ -56,7 +56,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     ):
         """Render the table of metrics vs. dimensions with sparklines."""
 
-        df_filtered, group_col, _resolved, _warning = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config,
