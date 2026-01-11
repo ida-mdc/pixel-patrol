@@ -170,11 +170,27 @@ pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
 Launches the Dash dashboard from a previously exported project ZIP file. The command prints the URL and attempts to open the browser automatically.
 
 ```bash
-pixel-patrol report <REPORT_ZIP> [--port 8050]
+pixel-patrol report <REPORT_ZIP> [OPTIONS]
 ```
 
 If the default port is unavailable, supply `--port 8051` (or any free port). The command can be rerun at any time; the ZIP file is never modified.  
 Always run `export` before `report`; the exported ZIP is the on-disk representation of a Pixel Patrol project.
+
+
+#### Example with custom global grouping and filters:
+```bash
+pixel-patrol report examples/out/quickstart_project.zip \
+--group-by size_readable \
+--filter-col file_extension \
+--filter-op in \
+--filter "tif, png"
+--dim z=1 --dim t=0
+```
+
+#### For all filtering options, see:
+```bash
+pixel-patrol report --help
+```
 
 ### Troubleshooting
 

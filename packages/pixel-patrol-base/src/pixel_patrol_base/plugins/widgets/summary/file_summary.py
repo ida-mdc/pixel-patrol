@@ -54,7 +54,7 @@ class FileSummaryWidget(BaseReportWidget):
         global_config: Dict | None,
     ):
 
-        df_filtered, group_col, _resolved, _warning_msg = prepare_widget_data(
+        df_filtered, group_col, _resolved, _warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
             global_config or {},
@@ -84,7 +84,7 @@ class FileSummaryWidget(BaseReportWidget):
             return show_no_data_message()
 
         intro = self._build_intro(summary, group_col)
-        graphs = self._build_plots(summary, group_col, color_map)
+        graphs = self._build_plots(summary, group_col, color_map, group_order)
         table = self._build_table(summary, group_col)
 
         return [
@@ -120,17 +120,22 @@ class FileSummaryWidget(BaseReportWidget):
         summary: pl.DataFrame,
         group_col: str,
         color_map: Dict[str, str],
+        group_order
     ) -> List:
+
         figs: List = []
 
         fig_count = plot_bar(
             df=summary,
             x=group_col,
             y="file_count",
+            order_x=group_order,
             color=group_col,
             color_map=color_map,
             title="File Count per Group",
             labels={group_col: group_col, "file_count": "Number of files"},
+            force_category_x=True,
+            show_legend=False,
         )
         figs.append(dcc.Graph(figure=fig_count))
 
@@ -138,6 +143,7 @@ class FileSummaryWidget(BaseReportWidget):
             df=summary,
             x=group_col,
             y="total_size_mb",
+            order_x=group_order,
             color=group_col,
             color_map=color_map,
             title="Total Size per Group (MB)",

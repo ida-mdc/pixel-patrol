@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
 import polars as pl
 from dash import Dash, html, dcc, ALL, callback_context
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash.exceptions import PreventUpdate
 from datetime import datetime
 import plotly.io as pio
@@ -33,19 +33,26 @@ from pixel_patrol_base.report.global_controls import (
     EXPORT_PROJECT_BUTTON_ID,
     EXPORT_CSV_DOWNLOAD_ID,
     EXPORT_PROJECT_DOWNLOAD_ID,
+    SAVE_SNAPSHOT_BUTTON_ID,
+    SAVE_SNAPSHOT_DOWNLOAD_ID,
+    DEFAULT_REPORT_GROUP_COL,
+    GC_GROUP_COL,
+    GC_DIMENSIONS,
+    GC_FILTER,
 )
 
 DEFAULT_WIDGET_WIDTH = 12
 
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
 
-def create_app(project: Project) -> Dash:
+def create_app(project: Project, initial_global_config: dict | None = None) -> Dash:
     return _create_app(
         df=project.records_df,
         default_palette_name=project.get_settings().cmap,
         pixel_patrol_flavor=project.get_settings().pixel_patrol_flavor,
         project_name=project.name,
         project=project,
+        initial_global_config=initial_global_config,
     )
 
 
@@ -55,6 +62,7 @@ def _create_app(
     pixel_patrol_flavor: str,
     project_name: str,
     project: Project,
+    initial_global_config: dict | None = None,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
 
@@ -130,7 +138,7 @@ def _create_app(
 
         # --- Sidebar with global controls (built once, outside content container) ---
         sidebar_controls, global_control_stores, extra_components = build_sidebar(
-            df, default_palette_name
+                    df, default_palette_name, initial_global_config=initial_global_config
         )
 
         # --- Group Widget Layout Generation (content only) ---
@@ -244,7 +252,7 @@ def _create_app(
         """
         Build color map based on the *already filtered* subset and current grouping.
         """
-        df_processed, group_col, _resolved, _warning = prepare_widget_data(
+        df_processed, group_col, _resolved, _warning, order = prepare_widget_data(
             df,
             subset_indices,
             global_config or {},
@@ -299,13 +307,10 @@ def _create_app(
 
         # Reset logic: return to defaults
         if trigger_id == GLOBAL_RESET_BUTTON_ID:
-            return {"group_cols": ["report_group"], "filters": {}, "dimensions": {}}
+            return {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {}, GC_DIMENSIONS: {}}
 
         # Single grouping column; default to report_group if nothing chosen
-        if not group_col:
-            group_cols = ["report_group"]
-        else:
-            group_cols = [group_col]
+        group_col = group_col or DEFAULT_REPORT_GROUP_COL
 
         filters: Dict[str, Dict[str, object]] = {}
         if filter_col and filter_op and filter_text:
@@ -319,7 +324,7 @@ def _create_app(
             if val and val != "All":
                 dimensions[id_obj['index']] = val
 
-        return {"group_cols": group_cols, "filters": filters, "dimensions": dimensions}
+        return {GC_GROUP_COL: group_col, GC_FILTER: filters, GC_DIMENSIONS: dimensions}
 
     @app.callback(
         Output(GLOBAL_GROUPBY_COLS_ID, "value"),
@@ -392,6 +397,17 @@ def _create_app(
 
         # 5. Return it to browser
         return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.zip")
+
+    app.clientside_callback(
+        ClientsideFunction(
+            namespace="clientside",
+            function_name="save_snapshot"
+        ),
+        Output(SAVE_SNAPSHOT_DOWNLOAD_ID, "data"),
+        # This Output is technically dummy/unused by the JS return, but required by Dash
+        Input(SAVE_SNAPSHOT_BUTTON_ID, "n_clicks"),
+        prevent_initial_call=True
+    )
 
     return app
 
