@@ -12,6 +12,7 @@ from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
+from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 
 logger = logging.getLogger(__name__)
 
