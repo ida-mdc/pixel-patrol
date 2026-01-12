@@ -1,13 +1,17 @@
 import logging
-from typing import Tuple
+from typing import Dict, List, Tuple, Any
+from itertools import chain, combinations
 
 import dask.array as da
 import numpy as np
 import polars as pl
+import dask.array as da
+import threading
 
 from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 
 logger = logging.getLogger(__name__)
@@ -53,6 +57,36 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     return min_val, max_val, max_adj
 
 
+def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
+    """
+    Calculates a histogram on a Dask or NumPy array.
+    For Dask arrays this uses Dask's histogram to avoid pulling the full chunk into memory.
+    Returns a dict with:
+      - "counts": numpy.ndarray (dtype=np.int64)
+      - "min": Python float
+      - "max": Python float
+    """
+    # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
+    if getattr(arr, "size", 0) == 0:
+        zero_counts = np.zeros(bins, dtype=np.int64)
+        return {"counts": zero_counts, "min": 0.0, "max": 255.0}
+
+    # Compute min/max and adjusted upper bound with shared helper
+    min_val, max_val, max_adj_val = safe_hist_range(arr)
+
+    if isinstance(arr, da.Array):
+        # Use Dask's histogram function and compute the counts (we don't need edges to be stored)
+        counts, edges = da.histogram(arr, bins=bins, range=(min_val, max_adj_val))
+        computed_counts, _ = da.compute(counts, edges)
+        counts_arr = np.asarray(computed_counts, dtype=np.int64)
+    else:
+        # NumPy path: use numpy's histogram for in-memory arrays
+        counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
+        counts_arr = np.asarray(counts_np, dtype=np.int64)
+
+    return {"counts": counts_arr, "min": float(min_val), "max": float(max_val)}
+
+
 class HistogramProcessor:
     """
     Record-first processor that extracts a full hierarchy of pixel-value histograms.
@@ -80,63 +114,39 @@ class HistogramProcessor:
         the generic sliced statistics calculator.
         """
         data = art.data
+        dim_order = art.dim_order
 
-        if data.size == 0:
-            return {
-                "histogram_counts": [0] * 256,
-                "histogram_min": 0.0,
-                "histogram_max": 255.0
-            }
+        # Metric functions operate on 2D numpy planes provided by apply_gufunc.
+        # To avoid calling _hist_func three times per plane, compute once and reuse
+        # results. Use thread-local storage to remain safe when Dask runs in threads.
+        _thread_local = threading.local()
+        def _compute_once(plane: np.ndarray):
+            pid = id(plane)
+            if getattr(_thread_local, "last_id", None) != pid:
+                _thread_local.last_id = pid
+                _thread_local.last_result = _hist_func(plane, bins=256)
+            return _thread_local.last_result
 
-        # 1. Determine Global Range for Binning
-        # We must use a global range so that histogram counts from different slices
-        # align to the same bins, allowing them to be summed (aggregated).
-        global_min, _, global_max_adj = safe_hist_range(data)
-        hist_bins = 256
-        hist_range = (global_min, global_max_adj)
+        def _counts_fn(plane: np.ndarray):
+            return _compute_once(plane)["counts"]
 
-        # 2. Define Metric Functions (Applied to each 2D slice)
+        def _min_fn(plane: np.ndarray):
+            return _compute_once(plane)["min"]
 
-        def calc_counts(plane: np.ndarray) -> np.ndarray:
-            # Returns counts as a numpy array to allow vector addition during aggregation.
-            counts, _ = np.histogram(plane, bins=hist_bins, range=hist_range)
-            return counts.astype(np.int64)
+        def _max_fn(plane: np.ndarray):
+            return _compute_once(plane)["max"]
 
-        def calc_min(plane: np.ndarray) -> float:
-            # Use safe_hist_range to ensure we respect the uint8 override (0.0)
-            # or the actual min for other types.
-            min_val, _, _ = safe_hist_range(plane)
-            return float(min_val)
-
-        def calc_max(plane: np.ndarray) -> float:
-            # Use safe_hist_range to ensure we respect the uint8 override (255.0)
-            # or the actual max for other types.
-            _, max_val, _ = safe_hist_range(plane)
-            return float(max_val)
-
-        metric_fns = {
-            "histogram_counts": calc_counts,
-            "histogram_min": calc_min,
-            "histogram_max": calc_max
+        metrics = {
+            "histogram_counts": _counts_fn,
+            "histogram_min": _min_fn,
+            "histogram_max": _max_fn,
         }
 
-        # 3. Define Aggregation Functions
-        agg_fns = {
-            "histogram_counts": np.sum,  # Sum counts from slices to get parent histogram
-            "histogram_min": np.min,  # Parent min is the min of slice mins
-            "histogram_max": np.max  # Parent max is the max of slice maxs
+        # Aggregators: sum counts per-bin, and take min/max for boundaries
+        aggregators = {
+            "histogram_counts": np.sum,
+            "histogram_min": np.min,
+            "histogram_max": np.max,
         }
 
-        # 4. Calculate Statistics
-        results = calculate_sliced_stats(data, art.dim_order, metric_fns, agg_fns)
-
-        # 5. Format Output
-        # Convert numpy arrays to python lists for the schema
-        final_features = {}
-        for key, value in results.items():
-            if "counts" in key and isinstance(value, np.ndarray):
-                final_features[key] = value.tolist()
-            else:
-                final_features[key] = value
-
-        return final_features
+        return calculate_sliced_stats(data, dim_order, metrics, aggregators)
