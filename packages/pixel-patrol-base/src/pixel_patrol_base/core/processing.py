@@ -10,8 +10,14 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import walk_filesystem
-from pixel_patrol_base.plugin_registry import discover_processor_plugins, discover_loader
-from pixel_patrol_base.utils.df_utils import normalize_file_extension, postprocess_basic_file_metadata_df
+from pixel_patrol_base.plugin_registry import (
+    discover_processor_plugins,
+    discover_loader,
+)
+from pixel_patrol_base.utils.df_utils import (
+    normalize_file_extension,
+    postprocess_basic_file_metadata_df,
+)
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import (
     DEFAULT_RECORDS_FLUSH_EVERY_N,
@@ -28,12 +34,15 @@ COMBINE_HEADROOM_RATIO = 1.25
 # Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
 
+
 class _IndexedPath(NamedTuple):
     row_index: int
     path: str
 
 
-def _process_worker_initializer(loader_id: Optional[str], processor_classes: List[type]) -> None:
+def _process_worker_initializer(
+    loader_id: Optional[str], processor_classes: List[type]
+) -> None:
     """Initialize per-process loader and processor instances."""
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
@@ -64,7 +73,10 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
     loader = _PROCESS_WORKER_CONTEXT.get("loader")
     processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
     if loader is None:
-        logger.warning("Processing Core: worker lacks loader; skipping batch of size %s", len(batch))
+        logger.warning(
+            "Processing Core: worker lacks loader; skipping batch of size %s",
+            len(batch),
+        )
         return []
 
     deep_rows: List[Dict[str, object]] = []
@@ -91,12 +103,12 @@ PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
     "modification_date": pl.Datetime(time_unit="us", time_zone=None),
     "file_extension": pl.String,
     "size_readable": pl.String,
-    "imported_path": pl.String
+    "imported_path": pl.String,
 }
 
+
 def _scan_dirs_for_extensions(
-    bases: List[Path],
-    accepted_extensions: Set[str]
+    bases: List[Path], accepted_extensions: Set[str]
 ) -> List[Tuple[Path, Path]]:
     """
     Walk each base dir, filter by extension, and return a list of (file_path, base_dir) tuples.
@@ -105,13 +117,15 @@ def _scan_dirs_for_extensions(
     for base in bases:
         for root, _, files in os.walk(base):
             for name in files:
-                ext = Path(name).suffix.lower().lstrip('.')
+                ext = Path(name).suffix.lower().lstrip(".")
                 if ext in accepted_extensions:
                     matched.append((Path(root) / name, base))
     return matched
 
 
-def _iter_indexed_batches(df: pl.DataFrame, batch_size: int) -> Iterator[List[_IndexedPath]]:
+def _iter_indexed_batches(
+    df: pl.DataFrame, batch_size: int
+) -> Iterator[List[_IndexedPath]]:
     """Yield batches of indexed paths lazily to avoid materializing all rows."""
     if df.is_empty():
         return
@@ -150,7 +164,9 @@ def _combine_batch_with_basic(
         return pl.DataFrame([])
 
     row_indices = [int(item.row_index) for item in batch]
-    basic_batch = basic.filter(pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64)))
+    basic_batch = basic.filter(
+        pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64))
+    )
     if not deep_rows:
         return basic_batch
 
@@ -164,7 +180,9 @@ def _combine_batch_with_basic(
         return basic_batch
 
     deep_df = deep_df.with_columns(pl.col("row_index").cast(pl.Int64))
-    overlap = [c for c in deep_df.columns if c in basic_batch.columns and c != "row_index"]
+    overlap = [
+        c for c in deep_df.columns if c in basic_batch.columns and c != "row_index"
+    ]
     if overlap:
         deep_df = deep_df.drop(overlap)
 
@@ -191,7 +209,7 @@ def _build_deep_record_df(
     processors = discover_processor_plugins()
     processor_classes = [proc.__class__ for proc in processors]
     worker_count = _resolve_worker_count(settings)
-    flush_threshold = _resolve_flush_threshold(settings)
+    flush_threshold = _resolve_flush_threshold(basic.height, settings)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, basic.height)
     show_processor_progress = worker_count == 1
 
@@ -206,7 +224,9 @@ def _build_deep_record_df(
 
     remaining = basic
     if processed_rows:
-        remaining = basic.filter(~pl.col("row_index").is_in(pl.Series(list(processed_rows), dtype=pl.Int64)))
+        remaining = basic.filter(
+            ~pl.col("row_index").is_in(pl.Series(list(processed_rows), dtype=pl.Int64))
+        )
 
     if remaining.is_empty():
         return pl.DataFrame([])
@@ -230,7 +250,9 @@ def _build_deep_record_df(
 
         if worker_count == 1:
             for batch in _iter_indexed_batches(remaining, batch_size):
-                deep_rows = _process_batch_locally(batch, loader_instance, processors, show_processor_progress)
+                deep_rows = _process_batch_locally(
+                    batch, loader_instance, processors, show_processor_progress
+                )
                 batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                 accumulator.add_batch(batch_df)
                 progress.update(len(batch))
@@ -253,7 +275,10 @@ def _build_deep_record_df(
                     try:
                         deep_rows = future.result()
                     except Exception:  # pragma: no cover - logged for observability
-                        logger.exception("Process worker failed for batch starting at %s", batch[0].path)
+                        logger.exception(
+                            "Process worker failed for batch starting at %s",
+                            batch[0].path,
+                        )
                         deep_rows = []
 
                     batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
@@ -280,7 +305,9 @@ def _build_deep_record_df(
                     try:
                         deep_rows = future.result()
                     except Exception:  # pragma: no cover - logged for observability
-                        logger.exception("Processor failed for batch starting at %s", batch[0].path)
+                        logger.exception(
+                            "Processor failed for batch starting at %s", batch[0].path
+                        )
                         deep_rows = []
 
                     batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
@@ -309,7 +336,7 @@ def get_all_record_properties(
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return {}
-    
+
     extracted_properties = {}
     try:
         art = loader.load(str(file_path))
@@ -366,19 +393,26 @@ def build_records_df(
     """
     # TODO: batch this function to avoid batching within deep and join
     # NOTE: rejected, we join in the _build_deep_record_df step already
-    basic = _build_basic_file_df(bases, loader=loader, accepted_extensions=selected_extensions)
+    basic = _build_basic_file_df(
+        bases, loader=loader, accepted_extensions=selected_extensions
+    )
     if loader is None or basic is None:
         return basic
 
-    basic = basic.with_row_index("row_index").with_columns(pl.col("row_index").cast(pl.Int64))
+    basic = basic.with_row_index("row_index").with_columns(
+        pl.col("row_index").cast(pl.Int64)
+    )
     deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback)
 
     return deep
 
 
 def _build_basic_file_df(bases, loader, accepted_extensions):
-    basic = walk_filesystem(bases, loader=loader, accepted_extensions=accepted_extensions)
-    if basic.is_empty(): return None
+    basic = walk_filesystem(
+        bases, loader=loader, accepted_extensions=accepted_extensions
+    )
+    if basic.is_empty():
+        return None
     basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
 
     return basic
@@ -400,52 +434,76 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
         Returns {'all_files': 0} if paths_df is not available or empty.
     """
     if paths_df is None or paths_df.is_empty():
-        logger.warning("No paths DataFrame provided or it's empty. Cannot count file extensions.")
+        logger.warning(
+            "No paths DataFrame provided or it's empty. Cannot count file extensions."
+        )
         return {"all_files": 0}
 
     required_cols = {"type", "file_extension"}
     if not required_cols.issubset(paths_df.columns):
         logger.error(
-            f"Paths DataFrame is missing required columns for extension counting: {required_cols - set(paths_df.columns)}")
+            f"Paths DataFrame is missing required columns for extension counting: {required_cols - set(paths_df.columns)}"
+        )
         return {"all_files": paths_df.height}
 
     df_files = paths_df.filter(pl.col("type") == "file")
-    df_files = df_files.filter(pl.col("file_extension").is_not_null() & (pl.col("file_extension") != ""))
+    df_files = df_files.filter(
+        pl.col("file_extension").is_not_null() & (pl.col("file_extension") != "")
+    )
 
     if df_files.is_empty():
         logger.info("No files with valid extensions found in the DataFrame.")
         return {"all_files": 0}
 
     grouped = df_files.group_by("file_extension").agg(pl.count().alias("count"))
-    result = {row["file_extension"]: row["count"] for row in grouped.iter_rows(named=True)}
+    result = {
+        row["file_extension"]: row["count"] for row in grouped.iter_rows(named=True)
+    }
     result["all_files"] = df_files.height
 
     return result
 
 
 def _resolve_worker_count(settings: Optional[Settings]) -> int:
-    """Determine the number of parallel workers to use for processing. If settings specify a value, use that; otherwise, default to CPU count."""
+    """Determine the number of parallel workers to use for processing. If settings specify a value, use that within bounds of available workers; otherwise, default to CPU count."""
     if settings and settings.processing_max_workers is not None:
-        return max(1, settings.processing_max_workers)
-    cpu_count = os.cpu_count() or 1
-    return max(1, cpu_count)
+        return (
+            max(1, settings.processing_max_workers)
+            if settings.processing_max_workers <= os.cpu_count()
+            else os.cpu_count() or 1
+        )
+    return max(1, os.cpu_count())
 
 
-def _resolve_batch_size(worker_count: int, flush_threshold: int, total_rows: int) -> int:
-    """Derive batch size from flush threshold and available workers. """
-    if flush_threshold <= 0: # e.g. flush disabled
+def _resolve_batch_size(
+    worker_count: int, flush_threshold: int, total_rows: int
+) -> int:
+    """
+    Derive batch size from flush threshold and available workers.
+    Ensures that there is at least one checkpoint flush per dataset processing.
+    """
+    if flush_threshold <= 0:  # e.g. flush is completely disabled or not properly set
         return max(1, math.ceil(total_rows / max(1, worker_count)))
     return max(1, math.ceil(flush_threshold / max(1, worker_count)))
 
 
-def _resolve_flush_threshold(settings: Optional[Settings]) -> int:
-    """Sets the flush threshold from settings or defaults. Ensures non-negative."""
-    value = settings.records_flush_every_n if settings else DEFAULT_RECORDS_FLUSH_EVERY_N
-    return max(0, value)
+def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> int:
+    """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush."""
+    if total_rows <= 0:
+        return 0
+    value = (
+        settings.records_flush_every_n if settings and settings.records_flush_every_n is not None else DEFAULT_RECORDS_FLUSH_EVERY_N
+    )
+    # Preserve the ability to disable flushing when a non-positive value is configured.
+    if value is None or value <= 0:
+        return 0
+    # Ensure at least one flush can occur for small datasets while capping at roughly half the dataset size.
+    upper_bound = max(1, total_rows // 2)
+    return max(1, min(value, upper_bound))
 
 
 def _estimate_available_memory_bytes() -> Optional[int]:
-    """Best-effort estimate of available system memory in bytes."""
+    """Estimate of available system memory in bytes."""
     try:
         import psutil  # type: ignore
 
@@ -494,7 +552,11 @@ class _RecordsAccumulator:
                 rechunk=False,
             )
 
-        if self._flush_dir and self._flush_every_n > 0 and self._active_df.height >= self._flush_every_n:
+        if (
+            self._flush_dir
+            and self._flush_every_n > 0
+            and self._active_df.height >= self._flush_every_n
+        ):
             self._flush_active_to_disk(force=False)
 
     def finalize(self) -> pl.DataFrame:
@@ -557,7 +619,11 @@ class _RecordsAccumulator:
                     try:
                         p.unlink()
                     except Exception as exc:  # pragma: no cover
-                        logger.warning("Processing Core: could not remove partial chunk %s: %s", p, exc)
+                        logger.warning(
+                            "Processing Core: could not remove partial chunk %s: %s",
+                            p,
+                            exc,
+                        )
                 # Reset written files list
                 self._written_files = []
                 # Attempt to remove the directory if it's empty
@@ -591,7 +657,9 @@ class _RecordsAccumulator:
             compression="zstd",
         )
         if chunk_path is None:
-            logger.warning("Processing Core: failed to write partial chunk %s", chunk_filename)
+            logger.warning(
+                "Processing Core: failed to write partial chunk %s", chunk_filename
+            )
             return
 
         logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
@@ -634,5 +702,9 @@ class _RecordsAccumulator:
                 logger.warning("Processing Core: could not read existing chunk %s", f)
 
         self._chunk_index = max_idx + 1
-        logger.info("Processing Core: found %d existing partial chunk(s) (next chunk index=%d)", len(self._written_files), self._chunk_index)
+        logger.info(
+            "Processing Core: found %d existing partial chunk(s) (next chunk index=%d)",
+            len(self._written_files),
+            self._chunk_index,
+        )
         return processed
