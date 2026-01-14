@@ -6,5 +6,5 @@ MAX_COLS_DISPLAYED = 200
 SPRITE_SIZE = 64
 
 # Processing defaults
-DEFAULT_RECORDS_FLUSH_EVERY_N: int = 2048  # rows kept in-memory before optional disk flush
+DEFAULT_RECORDS_FLUSH_EVERY_N: int = 10000  # rows kept in-memory before optional disk flush
 

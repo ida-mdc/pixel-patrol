@@ -156,10 +156,6 @@ class Project:
             self.set_settings(settings)
         # Ensure we have a chunk directory set so processing will use on-disk
         # partial flushes to avoid building an ever-growing in-memory DataFrame.
-        # If the user didn't provide `records_flush_dir`, infer a sensible
-        # default inside the project's base directory. This makes API usage
-        # simpler: callers of `process_files()` no longer need to remember to
-        # set the chunk directory themselves to get chunked writes.
         if getattr(self.settings, "records_flush_dir", None) is None and self.base_dir is not None:
             inferred = Path(self.base_dir) / f"{self.name}_batches"
             # Do not overwrite if explicitly set to None; only set when unset.
