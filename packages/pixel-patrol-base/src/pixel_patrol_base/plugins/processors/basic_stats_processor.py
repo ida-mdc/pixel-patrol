@@ -19,6 +19,8 @@ def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
 
 def calculate_np_array_stats(array: da.array, dim_order: str) -> dict[str, float]:
     registry = _column_fn_registry()
+    if array.size == 0:
+        return {k: np.nan for k, v in registry.items()}
     all_metrics = {k: v['fn'] for k, v in registry.items()}
     all_aggregators = {k: v['agg'] for k, v in registry.items() if v['agg'] is not None}
     return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
