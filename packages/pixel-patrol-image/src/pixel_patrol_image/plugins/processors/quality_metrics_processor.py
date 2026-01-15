@@ -57,10 +57,20 @@ def _tenengrad_2d(image: np.ndarray) -> float:
 def _brenner_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
-        return float(np.nan)
-    diff = image[:, 2:] - image[:, :-2]
-    return float(np.mean(diff ** 2)) if diff.size > 0 else 0.0
+        return float("nan")
 
+    img = image.astype(np.float32, copy=False)
+
+    dx = img[:, 2:] - img[:, :-2]
+    dy = img[2:, :] - img[:-2, :]
+
+    if dx.size == 0 and dy.size == 0:
+        return 0.0
+
+    val = 0.0
+    if dx.size: val += float(np.mean(dx * dx))
+    if dy.size: val += float(np.mean(dy * dy))
+    return val
 
 def _noise_estimation_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
