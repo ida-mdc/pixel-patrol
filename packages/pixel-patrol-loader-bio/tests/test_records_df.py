@@ -13,7 +13,6 @@ from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
-    _scan_dirs_for_extensions,
     _build_deep_record_df,
     PATHS_DF_EXPECTED_SCHEMA,
 )
@@ -44,26 +43,6 @@ def test_build_records_df_from_file_system_no_images(tmp_path):
         records_df = build_records_df(paths, extensions, "bioio")
         assert records_df is None
         mock_get_deep_records_df.assert_not_called()
-
-
-def test_scan_dirs_for_extensions_filters_correct_extensions(tmp_path):
-    dir1 = tmp_path / "dir1"; dir1.mkdir()
-    dir2 = tmp_path / "dir2"; dir2.mkdir()
-    (dir1 / "a.jpg").write_bytes(b"")
-    (dir1 / "b.png").write_bytes(b"")
-    (dir1 / "c.txt").write_bytes(b"")
-    (dir2 / "d.JPG").write_bytes(b"")
-    result = _scan_dirs_for_extensions([dir1, dir2], {"jpg", "png"})
-    expected = {
-        (dir1 / "a.jpg", dir1),
-        (dir1 / "b.png", dir1),
-        (dir2 / "d.JPG", dir2),
-    }
-    assert set(result) == expected
-
-def test_scan_dirs_for_extensions_handles_empty_directory_list():
-    result = _scan_dirs_for_extensions([], {"jpg", "png"})
-    assert result == []
 
 
 def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):

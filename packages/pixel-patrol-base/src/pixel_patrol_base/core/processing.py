@@ -109,22 +109,6 @@ PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
 }
 
 
-def _scan_dirs_for_extensions(
-    bases: List[Path], accepted_extensions: Set[str]
-) -> List[Tuple[Path, Path]]:
-    """
-    Walk each base dir, filter by extension, and return a list of (file_path, base_dir) tuples.
-    """
-    matched: List[Tuple[Path, Path]] = []
-    for base in bases:
-        for root, _, files in os.walk(base):
-            for name in files:
-                ext = Path(name).suffix.lower().lstrip(".")
-                if ext in accepted_extensions:
-                    matched.append((Path(root) / name, base))
-    return matched
-
-
 def _iter_indexed_batches(
     df: pl.DataFrame, batch_size: int
 ) -> Iterator[List[_IndexedPath]]:
@@ -308,6 +292,7 @@ def _build_deep_record_df(
         leave=True,
         colour="green",
         position=0,
+        disable=progress_callback is not None,
     ) as progress:
         if processed_rows:
             logger.info(
@@ -324,6 +309,8 @@ def _build_deep_record_df(
                 batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                 accumulator.add_batch(batch_df)
                 progress.update(len(batch))
+                if progress_callback:
+                    progress_callback(len(batch), remaining_count, Path(batch[-1].path))
             return accumulator.finalize()
 
         loader_name = getattr(loader_instance, "NAME", None)
@@ -351,6 +338,11 @@ def _build_deep_record_df(
 
                     batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                     accumulator.add_batch(batch_df)
+                    progress.update(len(batch))
+                    if progress_callback:
+                        progress_callback(
+                            len(batch), remaining_count, Path(batch[-1].path)
+                        )
         except Exception as exc:
             logger.warning(
                 "Processing Core: ProcessPoolExecutor unavailable (%s); falling back to threads.",
@@ -381,6 +373,10 @@ def _build_deep_record_df(
                     batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                     accumulator.add_batch(batch_df)
                     progress.update(len(batch))
+                    if progress_callback:
+                        progress_callback(
+                            len(batch), remaining_count, Path(batch[-1].path)
+                        )
 
         return accumulator.finalize()
 
