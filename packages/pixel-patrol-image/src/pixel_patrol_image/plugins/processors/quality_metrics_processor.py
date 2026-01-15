@@ -5,9 +5,9 @@ import cv2
 import dask.array as da
 import numpy as np
 
-from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.utils.array_utils import calculate_np_array_stats
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +21,6 @@ def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
         "blocking_records": {"fn": _check_blocking_records_2d, "agg": da.mean},
         "ringing_records": {"fn": _check_ringing_records_2d, "agg": da.mean},
     }
-
-
-def calculate_np_array_stats(array: da.array, dim_order: str) -> Dict[str, float]:
-    registry = _column_fn_registry()
-    all_metrics = {k: v["fn"] for k, v in registry.items()}
-    all_aggregators = {k: v["agg"] for k, v in registry.items() if v["agg"] is not None}
-    return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
-
 
 def _prepare_2d_image(image: np.ndarray) -> Optional[np.ndarray]:
     if image.ndim != 2 or image.size == 0 or image.dtype == bool:
@@ -143,4 +135,5 @@ class QualityMetricsProcessor:
 
     def run(self, art: Record) -> Dict[str, float]:
         dim_order = art.dim_order
-        return calculate_np_array_stats(art.data, dim_order)
+        registry = _column_fn_registry()
+        return calculate_np_array_stats(art.data, dim_order, registry)

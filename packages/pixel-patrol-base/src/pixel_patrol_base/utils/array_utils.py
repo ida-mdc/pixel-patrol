@@ -12,6 +12,13 @@ class SliceAxisSpec(NamedTuple):
     idx: int   # index in dim_order
     size: int   # shape along that axis
 
+def calculate_np_array_stats(array: da.array, dim_order: str, registry: Dict[str, Dict[str, Callable]]) -> dict[str, float]:
+    if array.size == 0:
+        return {k: np.nan for k, v in registry.items()}
+    all_metrics = {k: v['fn'] for k, v in registry.items()}
+    all_aggregators = {k: v['agg'] for k, v in registry.items() if v['agg'] is not None}
+    return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
+
 def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, agg_fns: Dict) -> Dict[str, Any]:
     """
     Calculates statistics on a Dask array using an efficient `apply_gufunc` approach.
