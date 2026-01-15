@@ -258,12 +258,14 @@ def _build_deep_record_df(
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> pl.DataFrame:
     """Process each path (optionally in parallel) and build a Polars DataFrame.
-    
+
     Args:
-        basic: Polars DataFrame with at least a 'path' column.
+        basic: The basic Polars DataFrame with file paths and metadata.
         loader_instance: An instance of PixelPatrolLoader to load files.
-        settings: Optional Settings object to configure processing.
+        settings: Optional Settings object for processing configuration.
         progress_callback: Optional GUI callback for progress updates.
+    Returns:
+        A Polars DataFrame containing deep processed records, aka the results.
     """
     if basic.is_empty():
         return pl.DataFrame([])
@@ -446,19 +448,19 @@ def build_records_df(
     settings: Optional[Settings] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> Optional[pl.DataFrame]:
-    """
-    Build records dataframe from file system.
-    
+    """Build the full records DataFrame by scanning files and processing them.
+
     Args:
-        bases: List of base directories to scan
-        selected_extensions: File extensions to include
-        loader: Optional loader instance
-        settings: Optional settings for processing
-        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
-                          Called for each file processed during deep processing.
+        bases: List of base directories to scan for files.
+        selected_extensions: Set of file extensions to include, or "all" for all supported ('{"tif", "png", "jpg", ...}', or '"all"').
+        loader: Optional PixelPatrolLoader instance to use for loading files.
+        settings: Optional Settings object for processing configuration.
+        progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
+                            Called for each file processed during deep processing.
+    Returns:
+        A Polars DataFrame containing the full records, or None if no files were found.
     """
-    # TODO: batch this function to avoid batching within deep and join
-    # NOTE: rejected, we join in the _build_deep_record_df step already
+
     basic = _build_basic_file_df(
         bases, loader=loader, accepted_extensions=selected_extensions
     )
