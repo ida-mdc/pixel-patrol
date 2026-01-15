@@ -14,6 +14,7 @@ from pixel_patrol_base.io.parquet_utils import (
     _deserialize_ndarray_columns_dataframe,
     _write_dataframe_to_parquet,
 )
+from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
 
 logger = logging.getLogger(__name__)
 
@@ -266,33 +267,8 @@ def export_project(project: Project, dest: Path) -> None:
         # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
 
-    _cleanup_records_flush_dir(project.settings)
-
-
-def _cleanup_records_flush_dir(settings: Settings) -> None:
-    path_candidate = getattr(settings, "records_flush_dir", None)
-    if not path_candidate:
-        return
-
-    flush_dir = Path(path_candidate)
-    if not flush_dir.exists():
-        return
-
-    removed_any = False
-    for parquet_file in flush_dir.glob("records_batch_*.parquet"):
-        try:
-            parquet_file.unlink()
-            removed_any = True
-        except OSError as exc:
-            logger.warning("Project IO: Could not remove partial records file %s: %s", parquet_file, exc)
-
-    if removed_any:
-        logger.info("Project IO: Removed partial records batches under %s", flush_dir)
-        try:
-            flush_dir.rmdir()
-        except OSError:
-            # Directory might contain user files; leave it in place.
-            pass
+    # tidy up using procssing function; keeps combioned parquet intact
+    _cleanup_partial_chunks_dir(getattr(project.settings, "records_flush_dir", None))
 
 
 def _read_dataframe_from_parquet(

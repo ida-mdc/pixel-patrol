@@ -36,6 +36,12 @@ _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
 
 
 class _IndexedPath(NamedTuple):
+    """Represents a file path with its associated row index in the dataset.
+
+    Args:
+        NamedTuple: row_index (int): The index of the row in the dataset.
+                    path (str): The file system path to the file.
+    """
     row_index: int
     path: str
 
@@ -43,7 +49,12 @@ class _IndexedPath(NamedTuple):
 def _process_worker_initializer(
     loader_id: Optional[str], processor_classes: List[type]
 ) -> None:
-    """Initialize per-process loader and processor instances."""
+    """Initialize per-process loader and processor instances.
+    
+    Args:
+        loader_id: Optional string identifier for the loader to use.
+        processor_classes: List of PixelPatrolProcessor classes to instantiate.
+    """
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
     processors = [cls() for cls in processor_classes]
@@ -53,23 +64,14 @@ def _process_worker_initializer(
     }
 
 
-def _process_path_in_worker(file_path: str) -> Dict:
-    """Worker entry point for processing a single file path."""
-    loader = _PROCESS_WORKER_CONTEXT.get("loader")
-    processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
-    if loader is None:
-        logger.warning("Processing Core: worker lacks loader; skipping %s", file_path)
-        return {}
-    return get_all_record_properties(
-        Path(file_path),
-        loader,
-        processors,
-        show_processor_progress=False,
-    )
-
-
 def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object]]:
-    """Worker entry point for processing a batch of indexed paths."""
+    """Worker entry point for processing a batch of indexed paths.
+
+    Args:
+        batch: A list of _IndexedPath items representing the current batch.
+    Returns:
+        A list of dictionaries containing the results from deep processing.
+    """
     loader = _PROCESS_WORKER_CONTEXT.get("loader")
     processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
     if loader is None:
@@ -126,7 +128,14 @@ def _scan_dirs_for_extensions(
 def _iter_indexed_batches(
     df: pl.DataFrame, batch_size: int
 ) -> Iterator[List[_IndexedPath]]:
-    """Yield batches of indexed paths lazily to avoid materializing all rows."""
+    """Yield batches of indexed paths lazily to avoid materializing all rows when requesting batches from a large DataFrame.
+
+    Args:
+        df: Polars DataFrame with 'row_index' and 'path' columns.
+        batch_size: Number of rows per batch.
+    Yields:
+        A list of _IndexedPath items representing the current batch.
+    """
     if df.is_empty():
         return
     size = max(1, batch_size)
@@ -143,7 +152,16 @@ def _process_batch_locally(
     processors: List[PixelPatrolProcessor],
     show_processor_progress: bool,
 ) -> List[Dict[str, object]]:
-    """Run loader+processors on a batch inside the main process."""
+    """Run loader+processors on a batch inside the main process.
+
+    Args:
+        batch: A list of _IndexedPath items representing the current batch.
+        loader_instance: An instance of PixelPatrolLoader to load files.
+        processors: A list of PixelPatrolProcessor instances to process the loaded data.
+        show_processor_progress: A boolean indicating whether to show progress during processing.
+    Returns:
+        A list of dictionaries containing the results from deep processing.
+    """
     deep_rows: List[Dict[str, object]] = []
     for item in batch:
         record_dict = get_all_record_properties(
@@ -159,16 +177,24 @@ def _combine_batch_with_basic(
     batch: List[_IndexedPath],
     deep_rows: List[Dict[str, object]],
 ) -> pl.DataFrame:
-    """Join deep batch results back to the corresponding basic rows by row_index."""
+    """Join deep batch results back to the corresponding basic rows by row_index.
+
+    Args:
+        basic: The full basic Polars DataFrame with all file metadata.
+        batch: A list of _IndexedPath items representing the current batch.
+        deep_rows: A list of dictionaries containing the results from deep processing.
+    Returns:
+        A Polars DataFrame combining the basic and deep data for the batch.
+    """
     if not batch:
         return pl.DataFrame([])
+    if not deep_rows:
+        return basic_batch
 
     row_indices = [int(item.row_index) for item in batch]
     basic_batch = basic.filter(
         pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64))
     )
-    if not deep_rows:
-        return basic_batch
 
     deep_df = pl.DataFrame(
         deep_rows,
@@ -187,6 +213,42 @@ def _combine_batch_with_basic(
         deep_df = deep_df.drop(overlap)
 
     return basic_batch.join(deep_df, on="row_index", how="left")
+
+
+def _cleanup_partial_chunks_dir(flush_dir: Path) -> None:
+    """Remove intermediate parquet chunk files (records_batch_*.parquet) from a flush directory.
+
+    Keeps other files (e.g., a combined "records_df.parquet") intact. Attempts to remove
+    the directory if it becomes empty. Errors are logged but not raised.
+
+    Args:
+        flush_dir: Path to the directory containing partial chunk files.
+    """
+    # If the directory doesn't exist, nothing to do.
+    if not flush_dir.exists():
+        return
+
+    removed_any = False
+    for p in flush_dir.glob("records_batch_*.parquet"):
+        try:
+            p.unlink()
+            removed_any = True
+            logger.debug("Processing Core: removed partial chunk %s", p)
+        except OSError as exc:
+            logger.warning(
+                "Processing Core: Could not remove partial chunk %s: %s", p, exc
+            )
+
+    if removed_any:
+        logger.info(
+            "Processing Core: Removed partial records batches under %s", flush_dir
+        )
+        try:
+            # try removing the dir if empty
+            flush_dir.rmdir()
+        except Exception:
+            # If not empty or cannot remove, leave it in place.
+            pass
 
 
 def _build_deep_record_df(
@@ -220,14 +282,18 @@ def _build_deep_record_df(
 
     processed_rows: Set[int] = set()
     if accumulator._flush_dir:
-        processed_rows = accumulator.load_existing_chunks()
+        if settings and getattr(settings, "resume", False):
+            # Resume: adopt existing partial chunks and skip already-processed files
+            processed_rows = accumulator.load_existing_chunks()
+        else:
+            # ensure fresh run
+            _cleanup_partial_chunks_dir(accumulator._flush_dir)
 
     remaining = basic
     if processed_rows:
         remaining = basic.filter(
             ~pl.col("row_index").is_in(pl.Series(list(processed_rows), dtype=pl.Int64))
         )
-
     if remaining.is_empty():
         return pl.DataFrame([])
 
@@ -325,11 +391,11 @@ def get_all_record_properties(
 ) -> Dict:
     """
     Load a file with the given loader, run all matching processors, and return combined metadata.
+
     Args:
         file_path: Path to the file to process.
         loader: An instance of PixelPatrolLoader to load the file.
         processors: A list of PixelPatrolProcessor instances to run on the loaded record.
-
     Returns:
         A dictionary of combined data (metadata) from the loader and all applicable processors.
     """
@@ -428,7 +494,6 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     Args:
         paths_df: The Polars DataFrame containing file system path data,
                   expected to have 'type' and 'file_extension' columns.
-
     Returns:
         A dictionary with file extension counts and a total count under 'all_files'.
         Returns {'all_files': 0} if paths_df is not available or empty.
@@ -465,7 +530,15 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
 
 
 def _resolve_worker_count(settings: Optional[Settings]) -> int:
-    """Determine the number of parallel workers to use for processing. If settings specify a value, use that within bounds of available workers; otherwise, default to CPU count."""
+    """
+    Determine the number of parallel workers to use for processing with a minimum of 1.
+    If settings specify a value, use that within bounds of available workers; otherwise, default to CPU count.
+
+    Args:
+        settings: Optional Settings object that may specify `processing_max_workers`.
+    Returns:
+        An integer representing the number of parallel workers to use.
+    """
     if settings and settings.processing_max_workers is not None:
         return (
             max(1, settings.processing_max_workers)
@@ -481,6 +554,13 @@ def _resolve_batch_size(
     """
     Derive batch size from flush threshold and available workers.
     Ensures that there is at least one checkpoint flush per dataset processing.
+
+    Args:
+        worker_count: Number of parallel workers aka CPU cores.
+        flush_threshold: Number of rows after which to flush records to disk.
+        total_rows: Total number of rows/files in the dataset to process.
+    Returns:
+        An integer representing the batch size per worker for processing.
     """
     if flush_threshold <= 0:  # e.g. flush is completely disabled or not properly set
         return max(1, math.ceil(total_rows / max(1, worker_count)))
@@ -488,11 +568,20 @@ def _resolve_batch_size(
 
 
 def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> int:
-    """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush."""
+    """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush.
+
+    Args:
+        total_rows: Total number of rows/files to process.
+        settings: Optional Settings object that may specify `records_flush_every_n`.
+    Returns:
+        An integer representing the flush threshold for records.
+    """
     if total_rows <= 0:
         return 0
     value = (
-        settings.records_flush_every_n if settings and settings.records_flush_every_n is not None else DEFAULT_RECORDS_FLUSH_EVERY_N
+        settings.records_flush_every_n
+        if settings and settings.records_flush_every_n is not None
+        else DEFAULT_RECORDS_FLUSH_EVERY_N
     )
     # Preserve the ability to disable flushing when a non-positive value is configured.
     if value is None or value <= 0:
@@ -503,7 +592,11 @@ def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> i
 
 
 def _estimate_available_memory_bytes() -> Optional[int]:
-    """Estimate of available system memory in bytes."""
+    """Estimate of available system memory in bytes.
+
+    Returns:
+        An integer representing available memory in bytes, or None if it cannot be determined.
+    """
     try:
         import psutil  # type: ignore
 
@@ -540,6 +633,13 @@ class _RecordsAccumulator:
             )
 
     def add_batch(self, batch: pl.DataFrame) -> None:
+        """
+        Add a batch of records to the accumulative active dataframe.
+        Flushes active dataframe to a Parquet chunk if the active dataframe exceeds `self._flush_every_n`.
+
+        Args:
+            batch (pl.DataFrame): A Polars DataFrame containing the batch of records to add.
+        """
         if batch is None or batch.is_empty():
             return
 
@@ -560,6 +660,13 @@ class _RecordsAccumulator:
             self._flush_active_to_disk(force=False)
 
     def finalize(self) -> pl.DataFrame:
+        """
+        Finalize accumulation: flush remaining active data and combine all chunks into one Parquet file if applicable, while remopving partial chunks.
+        If insufficient memory is available for combining, skips the combine step and retains chunk files.
+
+        Returns:
+            A Polars DataFrame containing all accumulated records, or an empty DataFrame if combining was skipped.
+        """
         if self._flush_dir:
             if not self._active_df.is_empty():
                 self._flush_active_to_disk(force=True)
@@ -591,10 +698,7 @@ class _RecordsAccumulator:
 
         final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
 
-        # If a flush directory is configured, also write a single combined
-        # Parquet file there for convenience and remove the per-chunk files
-        # to keep the directory tidy. This makes the processed records
-        # individually usable without needing to stitch chunk files later.
+        # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
             try:
                 combined_path = _write_dataframe_to_parquet(
@@ -614,24 +718,10 @@ class _RecordsAccumulator:
                     combined_path,
                 )
 
-                # Remove the individual chunk files now that we have a combined file
-                for p in list(self._written_files):
-                    try:
-                        p.unlink()
-                    except Exception as exc:  # pragma: no cover
-                        logger.warning(
-                            "Processing Core: could not remove partial chunk %s: %s",
-                            p,
-                            exc,
-                        )
-                # Reset written files list
+                # tidy up
+                _cleanup_partial_chunks_dir(self._flush_dir)
+                # reset written files list
                 self._written_files = []
-                # Attempt to remove the directory if it's empty
-                try:
-                    self._flush_dir.rmdir()
-                except Exception:
-                    # If not empty or cannot remove, leave it in place.
-                    pass
             except Exception:
                 logger.exception(
                     "Processing Core: failed to finalize combined records parquet in %s",
@@ -641,6 +731,11 @@ class _RecordsAccumulator:
         return final_df
 
     def _flush_active_to_disk(self, force: bool) -> None:
+        """Flushes the active dataframe to disk as a parquet chunk file.
+
+        Args:
+            force (bool): Whether to force flushing regardless of the active dataframe size.
+        """
         if self._active_df.is_empty():
             return
         if self._flush_dir is None:
@@ -672,6 +767,9 @@ class _RecordsAccumulator:
 
         Populates `_written_files` and `_chunk_index` and returns a set of already-processed
         `row_index` values so the caller can skip re-processing those rows.
+
+        Returns:
+            A set of integers representing the `row_index` values of already-processed records.
         """
         processed: Set[int] = set()
         if self._flush_dir is None or not self._flush_dir.exists():
