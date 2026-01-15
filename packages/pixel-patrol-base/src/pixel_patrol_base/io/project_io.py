@@ -1,4 +1,5 @@
 import zipfile
+import numpy as np
 import yaml
 import polars as pl
 import tempfile
@@ -42,13 +43,6 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
     Converts a dictionary from YAML import back into a Settings dataclass instance.
     Handles cases where the input is not a dictionary or has malformed parts.
     """
-    # Ensure settings_dict is actually a dictionary before attempting to copy or access
-    if not isinstance(settings_dict, dict):
-        logger.warning(
-            f"Project IO: _dict_to_settings received non-dictionary input: {type(settings_dict).__name__}. Using default settings."
-        )
-        return Settings()
-
     s_dict = settings_dict.copy()
 
     # Handle 'selected_file_extensions' conversion from list to set
