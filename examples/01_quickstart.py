@@ -45,11 +45,9 @@ def main():
 
     settings = Settings(
         selected_file_extensions=selected_file_extensions,
-        processing_batch_size=2,       # small for quick example; increase for real runs
-        records_flush_every_n=2,
+        records_flush_every_n=2, # small value for quick intermediate results during demo
         processing_max_workers=4,
         records_flush_dir=records_flush_dir,
-        
     )
     api.set_settings(project, settings)
 
