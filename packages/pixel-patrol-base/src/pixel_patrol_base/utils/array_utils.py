@@ -1,5 +1,5 @@
 from itertools import combinations
-from typing import Callable, Tuple, Dict, List, Any
+from typing import Callable, Tuple, Dict, List, Any, Iterable
 from typing import NamedTuple
 
 import dask.array as da
@@ -12,12 +12,14 @@ class SliceAxisSpec(NamedTuple):
     idx: int   # index in dim_order
     size: int   # shape along that axis
 
+
 def calculate_np_array_stats(array: da.array, dim_order: str, registry: Dict[str, Dict[str, Callable]]) -> dict[str, float]:
     if array.size == 0:
         return {k: np.nan for k, v in registry.items()}
     all_metrics = {k: v['fn'] for k, v in registry.items()}
     all_aggregators = {k: v['agg'] for k, v in registry.items() if v['agg'] is not None}
     return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
+
 
 def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, agg_fns: Dict) -> Dict[str, Any]:
     """
@@ -56,7 +58,7 @@ def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, ag
 
 def _compute_all_metrics_gufunc(
         arr: da.Array,
-        metric_fns: List[Callable[[np.ndarray], Any]], # Return type is now Any
+        metric_fns: Iterable[Callable[[np.ndarray], Any]], # Return type is now Any
         xy_axes: Tuple[int, int],
         num_metrics: int
 ) -> da.Array:
