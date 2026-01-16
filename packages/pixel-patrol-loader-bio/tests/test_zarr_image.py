@@ -74,7 +74,7 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
     # assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
     # assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
     # assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
-    print(_resolve_worker_count(None))
+    raise Exception(_resolve_worker_count(None))
 
 
 # test decorator + signature (edit existing test)
