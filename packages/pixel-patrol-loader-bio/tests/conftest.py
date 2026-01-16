@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List
 
 import pytest
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 
 
 # --- Paths -------------------------------------------------------------------
@@ -55,9 +56,12 @@ def expected_image_data() -> Dict[str, Dict[str, object]]:
 # --- Auto-parametrize any test that asks for `image_file_path` ----------------
 
 def _iter_image_files(root: Path) -> Iterable[Path]:
-    # Accept anything under the folder except an explicit "not_an_image.txt".
+    # Accept only loader-supported image files; exclude any non-image artifacts.
+    supported_extensions = {ext.lower().lstrip(".") for ext in BioIoLoader.SUPPORTED_EXTENSIONS}
     for p in root.rglob("*"):
-        if p.is_file() and p.name != "not_an_image.txt":
+        if not p.is_file() or p.name == "not_an_image.txt":
+            continue
+        if p.suffix.lower().lstrip(".") in supported_extensions:
             yield p
 
 
