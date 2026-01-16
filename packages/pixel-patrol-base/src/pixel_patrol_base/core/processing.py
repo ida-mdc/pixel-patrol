@@ -172,13 +172,15 @@ def _combine_batch_with_basic(
     """
     if not batch:
         return pl.DataFrame([])
-    if not deep_rows:
-        return basic_batch
 
     row_indices = [int(item.row_index) for item in batch]
     basic_batch = basic.filter(
         pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64))
     )
+
+    if not deep_rows:
+        # Nothing deep to merge for this batch; return the basic rows as-is
+        return basic_batch
 
     deep_df = pl.DataFrame(
         deep_rows,
@@ -778,7 +780,7 @@ class _RecordsAccumulator:
             return processed
 
         # adopt existing files and set next chunk index
-        self._written_files = files.copy()
+        valid_files: List[Path] = []
         max_idx = -1
         for f in files:
             stem = f.stem  # e.g. records_batch_00001
@@ -794,8 +796,11 @@ class _RecordsAccumulator:
                 df = pl.read_parquet(f, columns=["row_index"])
                 if not df.is_empty() and "row_index" in df.columns:
                     processed.update(int(val) for val in df["row_index"].to_list())
+                valid_files.append(f)
             except Exception:
                 logger.warning("Processing Core: could not read existing chunk %s", f)
+
+        self._written_files = valid_files
 
         self._chunk_index = max_idx + 1
         logger.info(
