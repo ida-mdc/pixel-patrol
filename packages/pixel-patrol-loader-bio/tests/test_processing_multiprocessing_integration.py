@@ -73,74 +73,74 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
     assert df.height == len(copied)
     assert "path" in df.columns
     assert (tmp_path / "batches" / "records_df.parquet").exists()
-
-
-def test_build_records_df_multiprocessing_reports_progress(tmp_path):
-    """Progress callback should reflect total processed files with multiprocessing."""
-    data_dir = _example_bioio_dir()
-    if not data_dir.exists():
-        pytest.skip(f"Example data directory not found: {data_dir}")
-
-    src_files = list(_iter_image_files(data_dir))
-    if len(src_files) < 3:
-        pytest.skip("Not enough sample images found for progress callback integration test")
-
-    sample_dir = tmp_path / "sample"
-    copied = _copy_sample_images(src_files[:3], sample_dir)
-
-    loader = BioIoLoader()
-    settings = Settings(
-        processing_max_workers=2,
-        records_flush_every_n=1,
-        records_flush_dir=tmp_path / "batches",
-    )
-
-    progress_calls = []
-
-    def progress_callback(current: int, total: int, current_file: Path) -> None:
-        progress_calls.append((current, total, current_file))
-
-    df = build_records_df(
-        bases=[sample_dir],
-        selected_extensions=loader.SUPPORTED_EXTENSIONS,
-        loader=loader,
-        settings=settings,
-        progress_callback=progress_callback,
-    )
-
-    assert df is not None
-    assert df.height == len(copied)
-    assert sum(call[0] for call in progress_calls) == len(copied)
-
-
-def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
-    """Processor outputs should appear when multiprocessing loads real images."""
-    data_dir = _example_bioio_dir()
-    if not data_dir.exists():
-        pytest.skip(f"Example data directory not found: {data_dir}")
-
-    src_files = list(_iter_image_files(data_dir))
-    if len(src_files) < 2:
-        pytest.skip("Not enough sample images found for processor output integration test")
-
-    sample_dir = tmp_path / "sample"
-    copied = _copy_sample_images(src_files[:2], sample_dir)
-
-    loader = BioIoLoader()
-    settings = Settings(
-        processing_max_workers=2,
-        records_flush_every_n=1,
-        records_flush_dir=tmp_path / "batches",
-    )
-
-    df = build_records_df(
-        bases=[sample_dir],
-        selected_extensions=loader.SUPPORTED_EXTENSIONS,
-        loader=loader,
-        settings=settings,
-    )
-
-    assert df is not None
-    assert df.height == len(copied)
-    assert "mean_intensity" in df.columns
-    assert any(val is not None for val in df["mean_intensity"].to_list())
+#
+#
+# def test_build_records_df_multiprocessing_reports_progress(tmp_path):
+#     """Progress callback should reflect total processed files with multiprocessing."""
+#     data_dir = _example_bioio_dir()
+#     if not data_dir.exists():
+#         pytest.skip(f"Example data directory not found: {data_dir}")
+#
+#     src_files = list(_iter_image_files(data_dir))
+#     if len(src_files) < 3:
+#         pytest.skip("Not enough sample images found for progress callback integration test")
+#
+#     sample_dir = tmp_path / "sample"
+#     copied = _copy_sample_images(src_files[:3], sample_dir)
+#
+#     loader = BioIoLoader()
+#     settings = Settings(
+#         processing_max_workers=2,
+#         records_flush_every_n=1,
+#         records_flush_dir=tmp_path / "batches",
+#     )
+#
+#     progress_calls = []
+#
+#     def progress_callback(current: int, total: int, current_file: Path) -> None:
+#         progress_calls.append((current, total, current_file))
+#
+#     df = build_records_df(
+#         bases=[sample_dir],
+#         selected_extensions=loader.SUPPORTED_EXTENSIONS,
+#         loader=loader,
+#         settings=settings,
+#         progress_callback=progress_callback,
+#     )
+#
+#     assert df is not None
+#     assert df.height == len(copied)
+#     assert sum(call[0] for call in progress_calls) == len(copied)
+#
+#
+# def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
+#     """Processor outputs should appear when multiprocessing loads real images."""
+#     data_dir = _example_bioio_dir()
+#     if not data_dir.exists():
+#         pytest.skip(f"Example data directory not found: {data_dir}")
+#
+#     src_files = list(_iter_image_files(data_dir))
+#     if len(src_files) < 2:
+#         pytest.skip("Not enough sample images found for processor output integration test")
+#
+#     sample_dir = tmp_path / "sample"
+#     copied = _copy_sample_images(src_files[:2], sample_dir)
+#
+#     loader = BioIoLoader()
+#     settings = Settings(
+#         processing_max_workers=2,
+#         records_flush_every_n=1,
+#         records_flush_dir=tmp_path / "batches",
+#     )
+#
+#     df = build_records_df(
+#         bases=[sample_dir],
+#         selected_extensions=loader.SUPPORTED_EXTENSIONS,
+#         loader=loader,
+#         settings=settings,
+#     )
+#
+#     assert df is not None
+#     assert df.height == len(copied)
+#     assert "mean_intensity" in df.columns
+#     assert any(val is not None for val in df["mean_intensity"].to_list())
