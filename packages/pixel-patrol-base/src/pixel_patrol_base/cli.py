@@ -90,7 +90,10 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     if chunk_dir is not None:
         chosen_chunk_dir = Path(chunk_dir).resolve()
     else:
-        chosen_chunk_dir = (output_zip.parent / f"{my_project.name}_batches").resolve()
+        # Support implementations of create_project that return simple mappings (e.g. tests use a dict)
+        # Prefer project name attribute, fallback to CLI 'name' that was already derived from the base directory.
+        project_name_or_name = getattr(my_project, "name", None) or name
+        chosen_chunk_dir = (output_zip.parent / f"{project_name_or_name}_batches").resolve()
     chunk_dir_was_inferred = chunk_dir is None
 
     # By default clear existing chunk dir to ensure a fresh run.
