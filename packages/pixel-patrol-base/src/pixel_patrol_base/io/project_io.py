@@ -43,6 +43,14 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
     Converts a dictionary from YAML import back into a Settings dataclass instance.
     Handles cases where the input is not a dictionary or has malformed parts.
     """
+    # If the metadata contains unexpectedly typed 'settings' (e.g., a string), fall back to defaults
+    if not isinstance(settings_dict, dict):
+        logger.warning(
+            "Settings IO: Expected a dict for settings but got %s; using default Settings.",
+            type(settings_dict).__name__,
+        )
+        return Settings()
+
     s_dict = settings_dict.copy()
 
     # Handle 'selected_file_extensions' conversion from list to set
