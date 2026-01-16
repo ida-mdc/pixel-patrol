@@ -34,7 +34,7 @@ class FakeProcessPoolExecutor:
 
     last_instance: Optional["FakeProcessPoolExecutor"] = None
 
-    def __init__(self, max_workers: int, initializer=None, initargs=None) -> None:
+    def __init__(self, max_workers: int, initializer=None, initargs=None, mp_context=None) -> None:
         self.max_workers = max_workers
         self.initializer = initializer
         self.initargs = initargs or ()
