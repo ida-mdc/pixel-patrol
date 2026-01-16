@@ -76,3 +76,4 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         if not files:
             pytest.skip(f"No example images found under {root}")
         metafunc.parametrize("image_file_path", files, ids=[f.name for f in files])
+
