@@ -123,7 +123,7 @@ class QualityMetricsProcessor:
     # Declarative plugin metadata
     NAME = "quality-metrics"
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
-    OUTPUT = "features"  # or "record" if this produced another image
+    OUTPUT = "features"
 
     # Table schema (static + dynamic)
     OUTPUT_SCHEMA: Dict[str, Any] = {name: float for name in _column_fn_registry().keys()}
