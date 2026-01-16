@@ -320,9 +320,9 @@ def _build_deep_record_df(
         ctx = multiprocessing.get_context("spawn")
         try:
             with ProcessPoolExecutor(
-                max_workers=worker_count,
+                max_workers=2,
                 initializer=_process_worker_initializer,
-                mp_context=ctx,
+                # mp_context=ctx,
                 initargs=(loader_name, processor_classes),
             ) as executor:
                 future_map: Dict = {}
