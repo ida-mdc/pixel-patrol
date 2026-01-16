@@ -20,6 +20,7 @@ jobs:
           - pixel-patrol-loader-bio
           - pixel-patrol-image
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -45,4 +46,4 @@ jobs:
           uv pip freeze
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -vv
