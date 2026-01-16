@@ -24,7 +24,7 @@ from pixel_patrol_base.config import (
     DEFAULT_RECORDS_FLUSH_EVERY_N,
 )
 from pixel_patrol_base.core.project_settings import Settings
-from pixel_patrol_base.io.parquet_utils import _write_dataframe_to_parquet
+from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 
 
 logger = logging.getLogger(__name__)
@@ -703,7 +703,7 @@ class _RecordsAccumulator:
         # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
             try:
-                combined_path = _write_dataframe_to_parquet(
+                combined_path = write_dataframe_to_parquet(
                     final_df,
                     "records_df.parquet",
                     self._flush_dir,
@@ -747,7 +747,7 @@ class _RecordsAccumulator:
             return
         print(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
-        chunk_path = _write_dataframe_to_parquet(
+        chunk_path = write_dataframe_to_parquet(
             self._active_df,
             chunk_filename,
             self._flush_dir,

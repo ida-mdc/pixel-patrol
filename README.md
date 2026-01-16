@@ -98,7 +98,7 @@ See `examples/minimal-extension` for a minimal template.
 2. Have all the files you would like to inspect under a common base directory.
 3. You can also specify subdirectory within the base directory - only those directories will be processed.
 4. Process your data - choose your way:  
-   * Visual Interface: Run `pixel-patrol dashboard` to configure and process your data using a web interface.
+   * Visual Interface: Run `pixel-patrol launch` to configure and process your data using a web interface.
    * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
    * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
