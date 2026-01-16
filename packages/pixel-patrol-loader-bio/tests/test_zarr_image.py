@@ -8,7 +8,7 @@ import polars as pl
 
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
-from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df, _resolve_worker_count
+from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
@@ -64,17 +64,16 @@ def zarr_folder(tmp_path: Path) -> Path:
     return zarr_path
 
 def test_zarr_path_recognition_as_image(zarr_folder: Path):
-    # """
-    # Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
-    # """
-    # parent_dir = zarr_folder.parent
-    # paths_df = build_records_df([parent_dir], selected_extensions='all', loader=ZarrLoader())
-    # zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
-    #
-    # assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
-    # assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
-    # assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
-    raise Exception(_resolve_worker_count(None))
+    """
+    Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
+    """
+    parent_dir = zarr_folder.parent
+    paths_df = build_records_df([parent_dir], selected_extensions='all', loader=ZarrLoader())
+    zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
+
+    assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
+    assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
+    assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
 
 
 # test decorator + signature (edit existing test)

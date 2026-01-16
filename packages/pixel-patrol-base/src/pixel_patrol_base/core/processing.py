@@ -1,5 +1,6 @@
 import logging
 import math
+import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -316,10 +317,12 @@ def _build_deep_record_df(
             return accumulator.finalize()
 
         loader_name = getattr(loader_instance, "NAME", None)
+        ctx = multiprocessing.get_context("spawn")
         try:
             with ProcessPoolExecutor(
                 max_workers=worker_count,
                 initializer=_process_worker_initializer,
+                mp_context=ctx,
                 initargs=(loader_name, processor_classes),
             ) as executor:
                 future_map: Dict = {}
