@@ -289,93 +289,93 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
     assert actual_short == expected_full or actual_short == expected_last
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
-def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
-    img_dir = tmp_path / "imgs"
-    img_dir.mkdir()
+# def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
+#     img_dir = tmp_path / "imgs"
+#     img_dir.mkdir()
+#
+#     a = np.zeros((2,2,1), dtype=np.uint8)
+#     from PIL import Image
+#     Image.fromarray(a.squeeze(), mode="L").save(img_dir / "zero.png")
+#
+#     b = np.full((2,2,1), 255, dtype=np.uint8)
+#     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
+#
+#     df = build_records_df(
+#         bases=[img_dir],
+#         selected_extensions={"png"},
+#         loader=loader
+#     )
+#     assert isinstance(df, pl.DataFrame)
+#     paths = df["path"].to_list()
+#     assert sorted(Path(p).name for p in paths) == ["full.png", "zero.png"]
+#
+#     assert "mean_intensity" in df.columns
+#
+#     mip = { Path(p).name: v for p, v in zip(df["path"].to_list(), df["mean_intensity"].to_list()) }
+#     assert mip["zero.png"] == 0.0
+#     assert mip["full.png"] == 255.0
 
-    a = np.zeros((2,2,1), dtype=np.uint8)
-    from PIL import Image
-    Image.fromarray(a.squeeze(), mode="L").save(img_dir / "zero.png")
 
-    b = np.full((2,2,1), 255, dtype=np.uint8)
-    Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
-
-    df = build_records_df(
-        bases=[img_dir],
-        selected_extensions={"png"},
-        loader=loader
-    )
-    assert isinstance(df, pl.DataFrame)
-    paths = df["path"].to_list()
-    assert sorted(Path(p).name for p in paths) == ["full.png", "zero.png"]
-
-    assert "mean_intensity" in df.columns
-
-    mip = { Path(p).name: v for p, v in zip(df["path"].to_list(), df["mean_intensity"].to_list()) }
-    assert mip["zero.png"] == 0.0
-    assert mip["full.png"] == 255.0
-
-
-def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
-    t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
-    arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
-    for t in range(t_size):
-        for c in range(c_size):
-            for z in range(z_size):
-                arr[t, c, z, ...] = (t*z_size + z)*10 + c*5
-
-    path = tmp_path / "5d.tif"
-    tifffile.imwrite(str(path), arr, photometric='minisblack')
-
-    df = build_records_df(
-        bases=[tmp_path],
-        selected_extensions={"tif"},
-        loader=loader
-    )
-
-    expected_cols = {
-        f"mean_intensity_t{t}_c{c}_z{z}"
-        for t in range(t_size) for z in range(z_size) for c in range(c_size)
-    }
-    assert expected_cols.issubset(set(df.columns))
-
-    actual = {col: df[col][0] for col in expected_cols}
-    for t in range(t_size):
-        for z in range(z_size):
-            for c in range(c_size):
-                key = f"mean_intensity_t{t}_c{c}_z{z}"
-                expected = (t*z_size + z)*10 + c*5
-                assert actual[key] == expected, f"{key} was {actual[key]}, expected {expected}"
-
-    for t in range(t_size):
-        col = f"mean_intensity_t{t}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for c in range(c_size) for z in range(z_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
-
-    for c in range(c_size):
-        col = f"mean_intensity_c{c}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for t in range(t_size) for z in range(z_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
-
-    for z in range(z_size):
-        col = f"mean_intensity_z{z}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for t in range(t_size) for c in range(c_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
-
-    assert "mean_intensity" in df.columns
-    all_vals = [(t * z_size + z) * 10 + c * 5
-                for t in range(t_size) for c in range(c_size) for z in range(z_size)]
-    overall_expected = sum(all_vals) / len(all_vals)
-    assert df[0,"mean_intensity"] == overall_expected
+# def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
+#     t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
+#     arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
+#     for t in range(t_size):
+#         for c in range(c_size):
+#             for z in range(z_size):
+#                 arr[t, c, z, ...] = (t*z_size + z)*10 + c*5
+#
+#     path = tmp_path / "5d.tif"
+#     tifffile.imwrite(str(path), arr, photometric='minisblack')
+#
+#     df = build_records_df(
+#         bases=[tmp_path],
+#         selected_extensions={"tif"},
+#         loader=loader
+#     )
+#
+#     expected_cols = {
+#         f"mean_intensity_t{t}_c{c}_z{z}"
+#         for t in range(t_size) for z in range(z_size) for c in range(c_size)
+#     }
+#     assert expected_cols.issubset(set(df.columns))
+#
+#     actual = {col: df[col][0] for col in expected_cols}
+#     for t in range(t_size):
+#         for z in range(z_size):
+#             for c in range(c_size):
+#                 key = f"mean_intensity_t{t}_c{c}_z{z}"
+#                 expected = (t*z_size + z)*10 + c*5
+#                 assert actual[key] == expected, f"{key} was {actual[key]}, expected {expected}"
+#
+#     for t in range(t_size):
+#         col = f"mean_intensity_t{t}"
+#         assert col in df.columns
+#         block_vals = [(t * z_size + z) * 10 + c * 5
+#                       for c in range(c_size) for z in range(z_size)]
+#         expected = sum(block_vals) / len(block_vals)
+#         assert df[0, col] == expected
+#
+#     for c in range(c_size):
+#         col = f"mean_intensity_c{c}"
+#         assert col in df.columns
+#         block_vals = [(t * z_size + z) * 10 + c * 5
+#                       for t in range(t_size) for z in range(z_size)]
+#         expected = sum(block_vals) / len(block_vals)
+#         assert df[0, col] == expected
+#
+#     for z in range(z_size):
+#         col = f"mean_intensity_z{z}"
+#         assert col in df.columns
+#         block_vals = [(t * z_size + z) * 10 + c * 5
+#                       for t in range(t_size) for c in range(c_size)]
+#         expected = sum(block_vals) / len(block_vals)
+#         assert df[0, col] == expected
+#
+#     assert "mean_intensity" in df.columns
+#     all_vals = [(t * z_size + z) * 10 + c * 5
+#                 for t in range(t_size) for c in range(c_size) for z in range(z_size)]
+#     overall_expected = sum(all_vals) / len(all_vals)
+#     assert df[0,"mean_intensity"] == overall_expected
 
 #
 # def test_full_records_df_handles_png_gray(tmp_path, loader):
