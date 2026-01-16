@@ -11,8 +11,9 @@ from typing import List, Optional
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
-from pixel_patrol_base.io.project_io import METADATA_FILENAME, RECORDS_DF_FILENAME, _deserialize_ndarray_columns_dataframe
+from pixel_patrol_base.io.project_io import METADATA_FILENAME, RECORDS_DF_FILENAME
 from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
+from pixel_patrol_base.io.parquet_utils import _deserialize_ndarray_columns_dataframe
 
 # Configure logging for tests to capture warnings/errors
 logging.basicConfig(level=logging.INFO)
