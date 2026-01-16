@@ -2,6 +2,7 @@ import logging
 import math
 import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+import multiprocessing
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
@@ -321,6 +322,7 @@ def _build_deep_record_df(
                 max_workers=worker_count,
                 initializer=_process_worker_initializer,
                 initargs=(loader_name, processor_classes),
+                mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
                 for batch in _iter_indexed_batches(remaining, batch_size):

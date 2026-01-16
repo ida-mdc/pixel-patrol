@@ -20,7 +20,7 @@ jobs:
           - pixel-patrol-loader-bio
           - pixel-patrol-image
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
