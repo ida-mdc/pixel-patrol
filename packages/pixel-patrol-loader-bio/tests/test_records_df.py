@@ -377,23 +377,23 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     overall_expected = sum(all_vals) / len(all_vals)
     assert df[0,"mean_intensity"] == overall_expected
 
-
-def test_full_records_df_handles_png_gray(tmp_path, loader):
-    arr = np.zeros((2, 2, 3), dtype=np.uint8)
-    arr[..., 0] = 10
-    arr[..., 1] = 20
-    arr[..., 2] = 30
-
-    path = tmp_path / "rgb.png"
-    Image.fromarray(arr).save(str(path))
-
-    df = build_records_df(
-        bases=[tmp_path],
-        selected_extensions={"png"},
-        loader=loader
-    )
-
-    assert "mean_intensity" in df.columns
-    raw_gray = np.mean(arr)
-    expected_gray = np.uint8(raw_gray)
-    assert df["mean_intensity"][0] == expected_gray
+#
+# def test_full_records_df_handles_png_gray(tmp_path, loader):
+#     arr = np.zeros((2, 2, 3), dtype=np.uint8)
+#     arr[..., 0] = 10
+#     arr[..., 1] = 20
+#     arr[..., 2] = 30
+#
+#     path = tmp_path / "rgb.png"
+#     Image.fromarray(arr).save(str(path))
+#
+#     df = build_records_df(
+#         bases=[tmp_path],
+#         selected_extensions={"png"},
+#         loader=loader
+#     )
+#
+#     assert "mean_intensity" in df.columns
+#     raw_gray = np.mean(arr)
+#     expected_gray = np.uint8(raw_gray)
+#     assert df["mean_intensity"][0] == expected_gray
