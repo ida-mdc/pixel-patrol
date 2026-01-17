@@ -450,12 +450,19 @@ def get_all_record_properties(
     for P in processor_iter:
         if not is_record_matching_processor(art, P.INPUT):
             continue
-        out = P.run(art)
-        if isinstance(out, dict):
-            extracted_properties.update(out)
-        else:
-            art = out  # chainable: processors may transform the record
-            extracted_properties.update(art.meta)
+        try:
+            out = P.run(art)
+            if isinstance(out, dict):
+                extracted_properties.update(out)
+            else:
+                art = out
+                extracted_properties.update(art.meta)
+        except (RuntimeError, ValueError, TypeError) as e:
+            logger.exception(
+                "Processor %s failed for record %s",
+                getattr(P, "NAME", P.__class__.__name__),
+                getattr(art, "source_path", "unknown"),
+            )
 
     return extracted_properties
 
