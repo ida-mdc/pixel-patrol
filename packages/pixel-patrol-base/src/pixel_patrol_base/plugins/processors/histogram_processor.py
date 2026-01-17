@@ -2,14 +2,16 @@ import logging
 from typing import Dict, List, Tuple, Any
 from itertools import chain, combinations
 
+import dask.array as da
 import numpy as np
 import polars as pl
 import dask.array as da
 import threading
 
-from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.contracts import ProcessResult
+from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,7 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     Ensures the maximum is included in the last bin while having a right-bound that is strictly greater than the maximum.
     Args:
         x: Input image as array (Dask or NumPy)
-    Returns (min, max, max_adj) with correct right-edge handling for histograms. 
+    Returns (min, max, max_adj) with correct right-edge handling for histograms.
     """
     # compute min/max without pulling full arrays where possible
     if isinstance(x, da.Array):
@@ -33,8 +35,6 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     # use the full 0..255 bin range for display/processing. This ensures
     # bin-width=1 and use of all bins while remaining
     # flexible for other integer types (e.g., int16).
-    # If an image has values in e.g. 33..255, the bin holding value 255 would 
-    # fall into 254.x. The last bin would then start at 255.y and miss the max value.
     try:
         dtype = x.dtype
     except Exception:
@@ -92,8 +92,6 @@ class HistogramProcessor:
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
-    # Updated schema to include the full image histogram and patterns for all slice hierarchies
-    # TODO: Consider smaller data types for counts and bounds to save memory
     OUTPUT_SCHEMA = {
         "histogram_counts": pl.List(pl.Int64),
         "histogram_min": pl.Float64,

@@ -30,14 +30,16 @@ jobs:
           uv pip install pytest
 
       - name: Run Benchmarks
-        # Generates benchmark_results.csv
+        # Generates benchmark_results1.csv
         run: |
-          uv run pytest packages/pixel-patrol/tests/benchmarks/test_performance.py -v
+          uv run python packages/pixel-patrol/tests/benchmarks/benchmark_e2e.py --mode quick --branch main
 
       - name: Generate Report
         # Generates REPORT.md, *.png, and writes tables to Job Summary
         run: |
-          uv run python packages/pixel-patrol/tests/benchmarks/generate_benchmark_report.py
+              uv run python packages/pixel-patrol/tests/benchmarks/generate_benchmark_report.py \
+                  --csv packages/pixel-patrol/tests/benchmarks/results/e2e_results.csv \
+                  --figures
 
       - name: Upload Artifacts
         # Zips up the results so you can download them later
@@ -46,7 +48,7 @@ jobs:
         with:
           name: benchmark-report
           path: |
-            packages/pixel-patrol/tests/benchmarks/benchmark_results/REPORT.md
-            packages/pixel-patrol/tests/benchmarks/benchmark_results/assets/*.png
-            packages/pixel-patrol/tests/benchmarks/benchmark_results/benchmark_results.csv
+            packages/pixel-patrol/tests/benchmarks/results/REPORT.md
+            packages/pixel-patrol/tests/benchmarks/results/assets/*
+            packages/pixel-patrol/tests/benchmarks/results/*.csv
           retention-days: 30
