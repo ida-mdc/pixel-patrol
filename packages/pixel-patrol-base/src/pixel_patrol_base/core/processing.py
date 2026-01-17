@@ -82,18 +82,7 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
         )
         return []
 
-    deep_rows: List[Dict[str, object]] = []
-    for item in batch:
-        record_dict = get_all_record_properties(
-            Path(item.path),
-            loader,
-            processors,
-            show_processor_progress=False,
-        )
-        if record_dict:
-            deep_rows.append({"row_index": item.row_index, **record_dict})
-
-    return deep_rows
+    return _process_batch_locally(batch, loader, processors, False)
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
