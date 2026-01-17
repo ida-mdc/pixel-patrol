@@ -642,7 +642,7 @@ def build_violin_grid(
             html.Div(
                 dcc.Graph(figure=fig),
                 className=col_class,
-                style={"marginBottom": "20px"},
+                style={"marginBottom": "20px", "margin-left": "0px"},
             )
         )
 
