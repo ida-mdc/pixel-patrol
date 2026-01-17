@@ -7,7 +7,7 @@ import pytest
 from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.config import SPRITE_SIZE
-from pixel_patrol_base.core.processing import get_all_record_properties
+from pixel_patrol_base.core.processing import load_and_process_records_from_file
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
@@ -32,19 +32,19 @@ def get_image_files_from_data_dir(test_data_dir: Path):
 
 def test_nonexistent_path_raises(tmp_path, loader, processors):
     missing = tmp_path / "nope.tiny_png"
-    assert get_all_record_properties(missing, loader=loader, processors=processors) == {}
+    assert load_and_process_records_from_file(missing, loader=loader, processors=processors) == []
 
 
 def test_unsupported_file(test_data_dir: Path, loader, processors):
     non_image_file = test_data_dir / "not_an_image.txt"
-    properties = get_all_record_properties(non_image_file, loader=loader, processors=processors)
-    assert properties == {}, f"Expected empty dict for non-image file, got {properties}"
+    properties = load_and_process_records_from_file(non_image_file, loader=loader, processors=processors)
+    assert properties == [], f"Expected empty list for non-image file, got {properties}"
 
 
 def test_empty_or_corrupt_image(tmp_path, loader, processors):
     f = tmp_path / "zero.tif"
     f.write_bytes(b"")
-    assert get_all_record_properties(f, loader=loader, processors=processors) == {}
+    assert load_and_process_records_from_file(f, loader=loader, processors=processors) == []
 
 
 def test_bioio_image_properties_per_file(
@@ -58,9 +58,11 @@ def test_bioio_image_properties_per_file(
     and general sanity checks for all other files.
     """
     file_name = image_file_path.name
-    actual_properties = get_all_record_properties(image_file_path, loader=loader, processors=processors)
+    actual_properties_list = load_and_process_records_from_file(image_file_path, loader=loader, processors=processors)
 
-    assert actual_properties is not None, f"Failed to get properties for {file_name}"
+    assert actual_properties_list is not None, f"Failed to get properties for {file_name}"
+    assert len(actual_properties_list) > 0, f"Properties list is empty for {file_name}"
+    actual_properties = actual_properties_list[0]  # Get first record (backward compatible for single-record loaders)
     assert actual_properties != {}, f"Properties dictionary is empty for {file_name}"
 
     # Always enforce core presence
@@ -88,9 +90,11 @@ def test_all_image_files_load_and_standardize(
     Ensure all image files can be loaded by bioio, standardized, and a thumbnail generated.
     """
     file_name = image_file_path.name
-    properties = get_all_record_properties(image_file_path, loader=loader, processors=processors)
+    properties_list = load_and_process_records_from_file(image_file_path, loader=loader, processors=processors)
 
-    assert properties is not None, f"Failed to get properties for {file_name}"
+    assert properties_list is not None, f"Failed to get properties for {file_name}"
+    assert len(properties_list) > 0, f"Properties list is empty for {file_name}"
+    properties = properties_list[0]  # Get first record (backward compatible for single-record loaders)
     assert properties != {}, f"Properties dictionary is empty for {file_name}"
 
     assert "dim_order" in properties, f"Missing dim_order for {file_name}"

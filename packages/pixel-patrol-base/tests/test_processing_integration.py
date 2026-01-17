@@ -138,10 +138,10 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
         records_flush_dir=flush_dir,
     )
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
-        return {"width": 1}
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
+        return [{"width": 1}]
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -178,11 +178,11 @@ def test_build_deep_record_df_resumes_from_partial_chunks(tmp_path, monkeypatch)
 
     processed: List[str] = []
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
         processed.append(Path(path).name)
-        return {"width": 22}
+        return [{"width": 22}]
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -203,10 +203,10 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
 
     settings = Settings(processing_max_workers=2)
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
-        return {"width": 5}
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
+        return [{"width": 5}]
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
@@ -229,8 +229,8 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
 
     settings = Settings(processing_max_workers=2)
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
-        return {"width": 7}
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
+        return [{"width": 7}]
 
     class FailingProcessPoolExecutor:
         """Executor that fails immediately to trigger fallback."""
@@ -238,7 +238,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("process pool unavailable")
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FailingProcessPoolExecutor)
     monkeypatch.setattr(processing, "ThreadPoolExecutor", FakeThreadPoolExecutor)
@@ -289,10 +289,10 @@ def test_build_deep_record_df_ignores_corrupt_resume_chunk(tmp_path, monkeypatch
         resume=True,
     )
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
-        return {"width": 22}
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
+        return [{"width": 22}]
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -312,10 +312,10 @@ def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
 
     settings = Settings(processing_max_workers=2)
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
         return {"width": 33}
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutorWithFailure)
@@ -340,12 +340,12 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
         records_flush_dir=None,
     )
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
+    def fake_load_and_process_records_from_file(path, loader, processors=None, show_processor_progress=True):
         if Path(path).name == p1.name:
-            return {"width": 10, "extra": 99}
-        return {"width": 20}
+            return [{"width": 10, "extra": 99}]
+        return [{"width": 20}]
 
-    monkeypatch.setattr(processing, "get_all_record_properties", fake_get_all_record_properties)
+    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_load_and_process_records_from_file)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])

@@ -138,11 +138,12 @@ def _process_batch_locally(
     """
     deep_rows: List[Dict[str, object]] = []
     for item in batch:
-        record_dict = get_all_record_properties(
+        record_dicts = load_and_process_records_from_file(
             Path(item.path), loader_instance, processors, show_processor_progress
         )
-        if record_dict:
-            deep_rows.append({"row_index": item.row_index, **record_dict})
+        for record_dict in record_dicts:
+            if record_dict:
+                deep_rows.append({"row_index": item.row_index, **record_dict})
     return deep_rows
 
 
@@ -394,36 +395,45 @@ def _build_deep_record_df(
         return accumulator.finalize()
 
 
-def get_all_record_properties(
+def load_and_process_records_from_file(
     file_path: Path,
     loader: PixelPatrolLoader,
     processors: List[PixelPatrolProcessor],
     show_processor_progress: bool = True,
-) -> Dict:
+) -> List[Dict]:
     """
     Load a file with the given loader, run all matching processors, and return combined metadata.
 
     Args:
         file_path: Path to the file to process.
         loader: An instance of PixelPatrolLoader to load the file.
-        processors: A list of PixelPatrolProcessor instances to run on the loaded record.
+        processors: A list of PixelPatrolProcessor instances to run on the loaded record(s).
     Returns:
-        A dictionary of combined data (metadata) from the loader and all applicable processors.
+        A list of dictionaries containing combined data (metadata) from the loader and all applicable processors.
+        Returns empty list if file cannot be loaded or processed.
     """
     if not file_path.exists():
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
-        return {}
+        return []
 
-    extracted_properties = {}
     try:
-        art = loader.load(str(file_path))
-        metadata = dict(art.meta)
+        result = loader.load(str(file_path))
+        if result is None:
+            records = []
+        elif isinstance(result, list):
+            records = result
+        else:
+            # Single record - wrap in list
+            records = [result]
     except Exception as e:
         logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
-        return {}
+        return []
 
-    # Always process using Record; processors opt-in via INPUT spec
-    extracted_properties.update(metadata)
+    if not records:
+        return []
+
+    # Process each record through processors
+    result_list = []
     processor_iter: Iterable[PixelPatrolProcessor]
     if show_processor_progress:
         processor_iter = tqdm(
@@ -437,17 +447,24 @@ def get_all_record_properties(
     else:
         processor_iter = processors
 
-    for P in processor_iter:
-        if not is_record_matching_processor(art, P.INPUT):
-            continue
-        out = P.run(art)
-        if isinstance(out, dict):
-            extracted_properties.update(out)
-        else:
-            art = out  # chainable: processors may transform the record
-            extracted_properties.update(art.meta)
+    for art in records:
+        extracted_properties = {}
+        metadata = dict(art.meta)
+        extracted_properties.update(metadata)
 
-    return extracted_properties
+        for P in processor_iter:
+            if not is_record_matching_processor(art, P.INPUT):
+                continue
+            out = P.run(art)
+            if isinstance(out, dict):
+                extracted_properties.update(out)
+            else:
+                art = out  # chainable: processors may transform the record
+                extracted_properties.update(art.meta)
+
+        result_list.append(extracted_properties)
+
+    return result_list
 
 
 def build_records_df(
