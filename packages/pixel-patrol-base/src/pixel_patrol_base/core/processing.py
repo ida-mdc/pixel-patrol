@@ -455,12 +455,15 @@ def load_and_process_records_from_file(
         for P in processor_iter:
             if not is_record_matching_processor(art, P.INPUT):
                 continue
-            out = P.run(art)
-            if isinstance(out, dict):
-                extracted_properties.update(out)
-            else:
-                art = out  # chainable: processors may transform the record
-                extracted_properties.update(art.meta)
+            try:
+                out = P.run(art)
+                if isinstance(out, dict):
+                    extracted_properties.update(out)
+                else:
+                    art = out  # chainable: processors may transform the record
+                    extracted_properties.update(art.meta)
+            except Exception as e:
+                logger.warning(f"Processor {P} failed: {e}")
 
         result_list.append(extracted_properties)
 
