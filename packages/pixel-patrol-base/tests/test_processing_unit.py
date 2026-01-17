@@ -23,8 +23,8 @@ def test_iter_indexed_batches_respects_batch_size():
     assert batches[-1][0].path == "e"
 
 
-def test_combine_batch_with_basic_preserves_basic_overlaps():
-    """Verify overlapping columns are kept from the basic frame, not deep rows."""
+def test_combine_batch_with_basic_preserves_loader_overlaps():
+    """Verify overlapping columns are kept from the loader (deep) frame, not basic rows."""
     basic = pl.DataFrame({
         "row_index": [0, 1],
         "path": ["a", "b"],
@@ -38,7 +38,8 @@ def test_combine_batch_with_basic_preserves_basic_overlaps():
 
     combined = processing._combine_batch_with_basic(basic, batch, deep_rows)
 
-    assert combined.sort("row_index")["width"].to_list() == [5, 6]
+    # Loader metadata should take precedence
+    assert combined.sort("row_index")["width"].to_list() == [100, 200]
     assert combined.sort("row_index")["height"].to_list() == [9, 10]
 
 

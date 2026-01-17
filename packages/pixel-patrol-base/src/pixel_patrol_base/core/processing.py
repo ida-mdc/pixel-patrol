@@ -187,7 +187,8 @@ def _combine_batch_with_basic(
         c for c in deep_df.columns if c in basic_batch.columns and c != "row_index"
     ]
     if overlap:
-        deep_df = deep_df.drop(overlap)
+        # Drop overlapping columns from basic_batch so loader metadata takes precedence
+        basic_batch = basic_batch.drop(overlap)
 
     return basic_batch.join(deep_df, on="row_index", how="left")
 
