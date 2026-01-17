@@ -770,11 +770,11 @@ class _RecordsAccumulator:
         if self._active_df.is_empty():
             return
         if self._flush_dir is None:
-            print("Flush directory is not set. Skipping flush to disk.")
+            logger.info("Flush directory is not set. Skipping flush to disk.")
             return
         if not force and self._active_df.height < self._flush_every_n:
             return
-        print(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
+        logger.debug(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
         chunk_path = write_dataframe_to_parquet(
             self._active_df,
@@ -788,7 +788,7 @@ class _RecordsAccumulator:
             )
             return
 
-        logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
+        logger.debug("Processing Core: writing partial records chunk to %s", chunk_path)
         self._written_files.append(chunk_path)
         self._active_df = pl.DataFrame([])
         self._chunk_index += 1
