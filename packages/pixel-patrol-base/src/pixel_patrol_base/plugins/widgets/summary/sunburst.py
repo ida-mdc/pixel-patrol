@@ -15,6 +15,7 @@ from pixel_patrol_base.report.global_controls import (
 from pixel_patrol_base.report.factory import plot_sunburst, show_no_data_message
 
 MIXED_COLOR = "#cccccc"
+MAX_FILES_FOR_SUNBURST = 500  # Maximum number of files before switching to folders-only view
 
 class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
@@ -94,12 +95,17 @@ class FileSunburstWidget(BaseReportWidget):
     ) -> Tuple[List[str], List[str], List[str], List[int], List[str]]:
         """
         Constructs the node lists required for Plotly Sunburst, aggregating by file count.
+        If the number of files exceeds MAX_FILES_FOR_SUNBURST, only folders are shown.
         """
 
         # --- 1. Identify Common Root ---
         all_paths = df["path"].to_list()
         if not all_paths:
             return [], [], [], [], []
+
+        # Check if we should show folders only
+        num_files = len(all_paths)
+        folders_only = num_files > MAX_FILES_FOR_SUNBURST
 
         try:
             common_root = os.path.commonpath(all_paths)
@@ -156,22 +162,29 @@ class FileSunburstWidget(BaseReportWidget):
                                         ) if rel_path not in ("", ".") else vis_root_name
             parts = rel_path.split(path_sep)
 
-            # --- Process Leaf (File) ---
-            file_id = rel_path
-            file_label = parts[-1]
-            parent_id = path_sep.join(parts[:-1]) if len(parts) > 1 else ""
+            if folders_only:
+                # When showing folders only, skip individual file nodes
+                # Start from the parent folder (which contains the file)
+                parent_id = path_sep.join(parts[:-1]) if len(parts) > 1 else ""
+                current_path = parent_id
+            else:
+                # --- Process Leaf (File) ---
+                file_id = rel_path
+                file_label = parts[-1]
+                parent_id = path_sep.join(parts[:-1]) if len(parts) > 1 else ""
 
-            # Add Leaf Node (size = 1 file)
-            nodes[file_id] = {
-                "file_count": 1,
-                "groups": {group_val},
-                "parent": parent_id,
-                "label": file_label,
-            }
+                # Add Leaf Node (size = 1 file)
+                nodes[file_id] = {
+                    "file_count": 1,
+                    "groups": {group_val},
+                    "parent": parent_id,
+                    "label": file_label,
+                }
 
-            # --- Process Ancestors (Folders) ---
-            current_path = parent_id
+                # --- Process Ancestors (Folders) ---
+                current_path = parent_id
 
+            # Process folder hierarchy
             while True:
                 if current_path in nodes:
                     # Existing folder: update stats
@@ -189,6 +202,7 @@ class FileSunburstWidget(BaseReportWidget):
                         "label": folder_label,
                     }
 
+                # Break after processing root node
                 if current_path == "":
                     break
 
@@ -216,6 +230,7 @@ class FileSunburstWidget(BaseReportWidget):
                 colors.append(MIXED_COLOR)
                 continue
 
+            # When folders_only is True, we never created file nodes, so all nodes are folders
             ids.append(node_id)
             labels.append(data["label"])
             parents.append(data["parent"])
