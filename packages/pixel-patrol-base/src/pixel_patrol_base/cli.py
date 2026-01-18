@@ -14,6 +14,7 @@ from pixel_patrol_base.api import (
     export_project,
     import_project,
     show_report,
+    export_html_report,
 )
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
@@ -154,12 +155,14 @@ def launch(port: int):
 @click.argument('input_zip', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
 @click.option('--port', type=int, default=8050, show_default=True)
 @click.option('--group-by', type=str, default=None)
-@click.option('--filter-col', type=str, default=None)
+@click.option('--filter-col', 'filter_col', type=str, default=None)
 @click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None)
 @click.option('--filter', 'filter_value', type=str, default=None)
 @click.option('--dim', 'dims', multiple=True, help="Repeatable, format like: t=0  z=1  c=0")
+@click.option('--export-html', type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
+              help='Export the report as a static HTML file instead of launching the interactive dashboard.')
 def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | None,
-           filter_op: str | None, filter_value: str | None, dims: tuple[str, ...]):
+           filter_op: str | None, filter_value: str | None, dims: tuple[str, ...], export_html: Path | None):
 
     my_project = import_project(Path(input_zip))
 
@@ -189,7 +192,14 @@ def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | N
         "dimensions": dim_dict,
     }
 
-    show_report(my_project, port=port, global_config=global_config)
+    if export_html:
+        # Export as static HTML
+        click.echo(f"Exporting report to HTML: {export_html}")
+        export_html_report(my_project, export_html, port=port, global_config=global_config)
+        click.echo(f"HTML export complete: {export_html}")
+    else:
+        # Launch interactive dashboard
+        show_report(my_project, port=port, global_config=global_config)
 
 
 if __name__ == '__main__':
