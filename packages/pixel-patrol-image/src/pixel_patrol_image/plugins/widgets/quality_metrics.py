@@ -10,9 +10,7 @@ class QualityMetricsWidget(MultiMetricViolinGridWidget):
     # ---- Declarative spec ----
     NAME: str = "Image Quality Metrics"
     TAB: str = WidgetCategories.DATASET_STATS.value
-    REQUIRES: Set[str] = {"name"}
-    # Dynamic metric columns come from the processor (regex patterns).
-    REQUIRES_PATTERNS: List[str] = patterns_from_processor(QualityMetricsProcessor)
+    REQUIRES: Set[str] = QualityMetricsProcessor.OUTPUT_SCHEMA.keys()
 
     CONTENT_ID = "image-quality-container"
 
