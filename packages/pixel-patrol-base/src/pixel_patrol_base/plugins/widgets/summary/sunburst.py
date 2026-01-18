@@ -11,6 +11,7 @@ from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, MIXED_GROUPING_COLOR
 from pixel_patrol_base.report.factory import plot_sunburst, show_no_data_message
 
+MAX_FILES_FOR_SUNBURST = 500  # Maximum number of files before switching to folders-only view
 
 class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
@@ -88,6 +89,7 @@ class FileSunburstWidget(BaseReportWidget):
     ) -> Tuple[List[str], List[str], List[str], List[int], List[str]]:
         """
         Constructs the node lists required for Plotly Sunburst, aggregating by file count.
+        If the number of files exceeds MAX_FILES_FOR_SUNBURST, only folders are shown.
         """
 
         # --- 1. Identify Common Root ---
@@ -95,7 +97,11 @@ class FileSunburstWidget(BaseReportWidget):
         if path_series.is_empty():
             return [], [], [], [], []
 
+
         all_paths = path_series.to_list()
+
+        num_files = len(all_paths)
+        folders_only = num_files > MAX_FILES_FOR_SUNBURST
 
         try:
             common_root = os.path.commonpath(all_paths)
@@ -183,18 +189,20 @@ class FileSunburstWidget(BaseReportWidget):
 
         # Process all files
         for rel_path, group_val in file_data:
-            # --- Process Leaf (File) ---
             parent_id = get_parent(rel_path)
 
-            # Add leaf node
-            node_file_count[rel_path] = 1
-            node_groups[rel_path] = {group_val}
-            node_parent[rel_path] = parent_id
-            node_label[rel_path] = get_label(rel_path)
+            if folders_only:
+                current_path = parent_id
+            else:
+                # Add leaf node
+                node_file_count[rel_path] = 1
+                node_groups[rel_path] = {group_val}
+                node_parent[rel_path] = parent_id
+                node_label[rel_path] = get_label(rel_path)
 
-            # --- Process Ancestors (Folders) ---
-            current_path = parent_id
+                current_path = parent_id
 
+            # Process folder hierarchy
             while True:
                 if current_path in node_file_count:
                     # Existing folder: update stats
@@ -209,6 +217,7 @@ class FileSunburstWidget(BaseReportWidget):
                     node_parent[current_path] = parent_of_folder
                     node_label[current_path] = get_label(current_path)
 
+                # Break after processing root node
                 if current_path == "":
                     break
 
@@ -237,6 +246,7 @@ class FileSunburstWidget(BaseReportWidget):
                 colors.append(MIXED_GROUPING_COLOR)
                 continue
 
+            # When folders_only is True, we never created file nodes, so all nodes are folders
             ids.append(node_id)
             labels.append(node_label[node_id])
             parents.append(node_parent[node_id])
