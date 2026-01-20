@@ -7,6 +7,7 @@ from collections import defaultdict
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
 
 GROUPING_COL_PREFIX = "__grouping__"
+MISSING_LABEL = "missing"
 
 # --- Data Helpers ---
 
@@ -178,14 +179,20 @@ def prettify_col_name(col: Optional[str]) -> Optional[str]:
 def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
 
     if df[group_col].dtype.is_numeric():
+        new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
         # numeric sort order, but labels are strings
         unique_sorted = df.select(pl.col(group_col).unique().sort()).to_series().to_list()
-        order = [str(x) for x in unique_sorted]
+        order = [MISSING_LABEL if x is None else str(x) for x in unique_sorted]
 
-        new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
-
-        df = df.with_columns(pl.col(group_col).cast(pl.Utf8).alias(new_group_col))
+        df = df.with_columns(
+            pl.col(group_col).cast(pl.Utf8).fill_null(MISSING_LABEL).alias(new_group_col)
+        )
         return df, new_group_col, order
+
+    if df.select(pl.col(group_col).null_count()).item() > 0:
+        df = df.with_columns(
+            pl.col(group_col).cast(pl.Utf8).fill_null(MISSING_LABEL).alias(group_col)
+        )
 
     return df, group_col, None
 
