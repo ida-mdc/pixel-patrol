@@ -788,8 +788,6 @@ class _RecordsAccumulator:
             stem = f.stem  # e.g. records_batch_00001
             try:
                 idx = int(stem.rsplit("_", 1)[1])
-                if idx > max_idx:
-                    max_idx = idx
             except Exception:
                 # ignore files with unexpected names
                 continue
@@ -799,8 +797,14 @@ class _RecordsAccumulator:
                 if not df.is_empty() and "row_index" in df.columns:
                     processed.update(int(val) for val in df["row_index"].to_list())
                 valid_files.append(f)
+                if idx > max_idx:
+                    max_idx = idx
             except Exception:
-                logger.warning("Processing Core: could not read existing chunk %s", f)
+                logger.warning(
+                    "Processing Core: could not read existing chunk %s. This file will be skipped; the chunk may be overwritten on subsequent runs. "
+                    "If you still experience issues when viewing reports, consider removing or inspecting it manually.",
+                    f,
+                )
 
         self._written_files = valid_files
 
