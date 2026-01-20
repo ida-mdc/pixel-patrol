@@ -10,10 +10,12 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
     FILTERED_INDICES_STORE_ID,
 )
+from pixel_patrol_base.report.data_utils import prettify_col_name
 from pixel_patrol_base.report.factory import (
     plot_bar,
     show_no_data_message,
 )
+
 
 class FileSummaryWidget(BaseReportWidget):
     NAME: str = "File Data Summary"
@@ -99,7 +101,7 @@ class FileSummaryWidget(BaseReportWidget):
         intro_md: List = [
             html.P(
                 f"This summary focuses on file properties across "
-                f"{summary.height} group(s) (by '{group_col}')."
+                f"{summary.height} group(s) (by '{prettify_col_name(group_col)}')."
             )
         ]
 

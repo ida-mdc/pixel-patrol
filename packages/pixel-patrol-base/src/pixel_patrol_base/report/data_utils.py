@@ -6,6 +6,8 @@ from collections import defaultdict
 
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
 
+GROUPING_COL_PREFIX = "__grouping__"
+
 # --- Data Helpers ---
 
 def sort_strings_alpha(values: Sequence[str]) -> List[str]:
@@ -167,23 +169,25 @@ def parse_metric_dimension_column(
     return matched_metric, dims
 
 
-def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, Optional[List[str]]]:
-    """
-    Checks if the grouping column is numeric. If so:
-    1. Captures the sort order (so "1, 2, 10" doesn't become "1, 10, 2").
-    2. Casts the column to Utf8 (String) to force Plotly to use a discrete legend instead of a colorbar.
-    """
+def prettify_col_name(col: Optional[str]) -> Optional[str]:
+    if col and col.startswith(GROUPING_COL_PREFIX):
+        return col[len(GROUPING_COL_PREFIX):]
+    return col
 
-    # Check if the column is numeric
+
+def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
+
     if df[group_col].dtype.is_numeric():
-        # Get unique values in correct numeric order
-        order = [str(x) for x in df.select(pl.col(group_col).unique().sort()).to_series().to_list()]
+        # numeric sort order, but labels are strings
+        unique_sorted = df.select(pl.col(group_col).unique().sort()).to_series().to_list()
+        order = [str(x) for x in unique_sorted]
 
-        # Cast to String so Plotly treats it as a discrete category
-        df = df.with_columns(pl.col(group_col).cast(pl.Utf8))
-        return df, order
+        new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
 
-    return df, None
+        df = df.with_columns(pl.col(group_col).cast(pl.Utf8).alias(new_group_col))
+        return df, new_group_col, order
+
+    return df, group_col, None
 
 
 # --- Histogram Math & Aggregation Helpers ---

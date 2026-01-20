@@ -7,6 +7,9 @@ from numpy import ndarray
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 
+from pixel_patrol_base.report.data_utils import prettify_col_name
+
+
 # =============================================================================
 #  SECTION 1: GLOBAL STYLES
 # =============================================================================
@@ -60,6 +63,16 @@ def _get_category_orders(
             orders[color] = df[color].unique().drop_nulls().sort().to_list()
 
     return orders
+
+
+def _sanitize_labels(labels: Optional[Dict[str, str]], *cols: Optional[str]) -> Dict[str, str]:
+    out = dict(labels or {})
+    for c in cols:
+        if c:
+            pretty = prettify_col_name(c)
+            if pretty and c not in out:
+                out[c] = pretty
+    return out
 
 # =============================================================================
 #  SECTION 2: HTML CONTAINERS
@@ -154,6 +167,8 @@ def plot_bar(
 
     cat_orders = _get_category_orders(df, x, color, order_x)
 
+    labels = _sanitize_labels(labels, x, color)
+
     fig = px.bar(
         df,
         x=x,
@@ -178,6 +193,8 @@ def plot_bar(
         n_categories = df[x].n_unique()
     except (KeyError, AttributeError):
         n_categories = 0
+
+    fig.update_xaxes(title_text=prettify_col_name(x))
 
     _apply_standard_styling(fig, n_categories)
 
@@ -341,7 +358,7 @@ def plot_violin(
         dict(
             title_text=title,
             yaxis_title=y.replace("_", " ").title(),
-            xaxis_title="Group",
+            xaxis_title=prettify_col_name(group_col),
             showlegend=show_legend,
         )
     )

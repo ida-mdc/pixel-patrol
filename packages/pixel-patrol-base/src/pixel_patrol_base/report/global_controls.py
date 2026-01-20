@@ -188,8 +188,6 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 
         dtype = schema[c]
 
-        print(c, dtype)
-
         # 2. Check if it's a numeric float
         is_float = dtype in (pl.Float32, pl.Float64)
         is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
@@ -573,7 +571,7 @@ def prepare_widget_data(
 
     # 2. Resolve Grouping
     group_col = resolve_group_column(df_filtered, global_config)
-    df_filtered, group_order = ensure_discrete_grouping(df_filtered, group_col)
+    df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
 
     # 3. Resolve Dimension-Specific Column (if needed)
     resolved_col = None
