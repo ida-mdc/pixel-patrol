@@ -23,9 +23,9 @@ def main():
     # loader = None    # for basic file info only (no image data/metadata); only pixel-patrol-base package needed
     # loader = 'zarr'   # for zarr files; requires pixel-patrol-loader-zarr package
 
-    # selected_file_extensions = "all" # if loader is None all file types are processed, otherwise all file types supported by the loader
-    # OR e.g.
-    selected_file_extensions = {"tif", "png"} # only those file types are processed
+    # Set your preferred file extensions to process (alternatively set to `{"tif", "png", "jpeg", ...}`, etc.)
+    # if loader is None all file types are processed, otherwise all file types supported by the loader
+    selected_file_extensions = "all" 
 
     # --- Step 2: create a project ---
     project = api.create_project("Quickstart Project", base_dir=base_path, loader=loader)
@@ -35,7 +35,7 @@ def main():
 
     # --- Step 4: set basic settings (e.g. file types to process) ---
     # `process_files()` will infer a default chunk directory
-    # We keep small batch/flush settings for the quickstart so the 
+    # We keep small batch/flush settings for the quickstart so the
     # example writes visible chunks during the demo.
     records_flush_dir = zip_path.parent / f"{project.name}_batches"
 
