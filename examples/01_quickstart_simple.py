@@ -8,7 +8,7 @@ def main():
     # --- Step 1: choose a base directory with files to be processed, sub-paths, and loader ---
     base_path = Path("datasets/bioio")
     # output path of the project zip file to share your results
-    zip_path = Path("out_parallel/quickstart_project.zip")
+    zip_path = Path("out/quickstart_project.zip")
 
     # Optional: Define sub-dirs that in the report are compared as experimental conditions
     # If you don't specify any paths, all files in base_path and its subfolders are processed as one condition.
