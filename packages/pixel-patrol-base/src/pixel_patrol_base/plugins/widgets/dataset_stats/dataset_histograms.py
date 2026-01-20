@@ -10,7 +10,8 @@ from pixel_patrol_base.report.data_utils import (
     aggregate_histograms_by_group,
     compute_histogram_edges,
     format_selection_title,
-    sort_strings_alpha
+    sort_strings_alpha,
+    select_needed_columns
 )
 from pixel_patrol_base.report.global_controls import (
     prepare_widget_data,
@@ -206,14 +207,9 @@ class DatasetHistogramWidget(BaseReportWidget):
         min_key = f"histogram_min{suffix}"
         max_key = f"histogram_max{suffix}"
 
-        # Select only histogram columns + metadata
-        cols_needed = {resolved_col, min_key, max_key, "name"}
-        if group_col:
-            cols_needed.add(group_col)
-
-        # Only select columns that actually exist
-        valid_cols = [c for c in cols_needed if c in df_filtered.columns]
-        df_filtered = df_filtered.select(valid_cols)
+        cols_needed = [resolved_col, min_key, max_key, "name"]
+        extra = [group_col] if group_col else []
+        df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         # Apply optional (within widget) group selection
         if selected_groups:

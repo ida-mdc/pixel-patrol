@@ -10,7 +10,7 @@ from pixel_patrol_base.report.global_controls import (
     prepare_widget_data,
 )
 from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
-from pixel_patrol_base.report.data_utils import get_all_grouping_cols
+from pixel_patrol_base.report.data_utils import get_all_grouping_cols, select_needed_columns
 
 
 class ColumnCountWithGroupingBarWidget(BaseReportWidget):
@@ -65,11 +65,9 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
         n_total_rows = df_filtered.height
 
         # 1. Select only the columns strictly needed for grouping and counting.
-        cols_needed = {self.CATEGORY_COLUMN}
-        if group_col:
-            cols_needed.add(group_col)
-        valid_cols = [c for c in cols_needed if c in df_filtered.columns]
-        df_filtered = df_filtered.select(valid_cols)
+        cols_needed = [self.CATEGORY_COLUMN]
+        extra = [group_col] if group_col else []
+        df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         # 2. Filter nulls from the category column
         df_filtered = df_filtered.filter(pl.col(self.CATEGORY_COLUMN).is_not_null())

@@ -10,6 +10,7 @@ from pixel_patrol_base.report.global_controls import (
     GLOBAL_CONFIG_STORE_ID,
     FILTERED_INDICES_STORE_ID,
 )
+from pixel_patrol_base.report.data_utils import select_needed_columns
 from pixel_patrol_base.report.factory import plot_scatter, plot_strip, show_no_data_message
 
 class DimSizeWidget(BaseReportWidget):
@@ -67,12 +68,9 @@ class DimSizeWidget(BaseReportWidget):
         if df_filtered.height == 0 or not dimension_size_cols:
             return [show_no_data_message()]
 
-        # Select only size columns + metadata
         cols_needed = dimension_size_cols + ["name"]
-        if group_col:
-            cols_needed.append(group_col)
-
-        df_slim = df_filtered.select([c for c in cols_needed if c in df_filtered.columns])
+        extra = [group_col] if group_col else []
+        df_slim = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         # Pre-filter rows where at least one size dimension is a valid number (>1)
         filtered_df = df_slim.filter(

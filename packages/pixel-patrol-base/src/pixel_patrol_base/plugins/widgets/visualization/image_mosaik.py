@@ -6,7 +6,7 @@ from dash import html, dcc, Input, Output
 
 from PIL import Image
 
-from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strings_alpha
+from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strings_alpha, select_needed_columns
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import (
@@ -110,11 +110,12 @@ class ImageMosaikWidget(BaseReportWidget):
             metric_base=None,
         )
 
-        cols_needed = {"thumbnail"}
-        if group_col: cols_needed.add(group_col)
-        if sort_column: cols_needed.add(sort_column)
+        cols_needed = ["thumbnail"]
+        extra = []
+        if group_col: extra.append(group_col)
+        if sort_column: extra.append(sort_column)
 
-        df = df_filtered.select([c for c in cols_needed if c in df_filtered.columns])
+        df = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         if df.height == 0:
             return show_no_data_message()

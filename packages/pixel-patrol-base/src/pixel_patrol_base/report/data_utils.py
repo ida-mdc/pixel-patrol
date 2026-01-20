@@ -12,7 +12,22 @@ def sort_strings_alpha(values: Sequence[str]) -> List[str]:
     """
     Alphabetical, case-insensitive sort. Keeps original strings.
     """
-    return sorted(values, key=lambda x: x.lower())
+    return sorted([v for v in values if v is not None], key=lambda x: x.lower())
+
+
+def select_needed_columns(
+    df: pl.DataFrame,
+    cols_needed: Sequence[str],
+    extra_cols: Sequence[str] | None = None,
+) -> pl.DataFrame:
+
+    cols = list(cols_needed)
+    if extra_cols:
+        cols.extend(extra_cols)
+    cols = list(dict.fromkeys(cols))
+    # keep only existing
+    cols = [c for c in cols if c in df.columns]
+    return df.select(cols)
 
 
 def get_sortable_columns(df: pl.DataFrame) -> List[str]:
