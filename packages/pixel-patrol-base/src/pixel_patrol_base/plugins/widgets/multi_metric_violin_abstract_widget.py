@@ -10,7 +10,7 @@ from pixel_patrol_base.report.global_controls import (
     prepare_widget_data,
 )
 from pixel_patrol_base.report.factory import build_violin_grid, show_no_data_message
-from pixel_patrol_base.report.data_utils import get_dim_aware_column
+from pixel_patrol_base.report.data_utils import get_dim_aware_column, select_needed_columns
 
 
 class MultiMetricViolinGridWidget(BaseReportWidget):
@@ -74,9 +74,9 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
         if not resolved_metric_cols:
             return show_no_data_message()
 
-        cols_needed = resolved_metric_cols + [group_col, "name"]
-        final_cols = [c for c in cols_needed if c in df_filtered.columns]
-        df_plot = df_filtered.select(final_cols)
+        cols_needed = resolved_metric_cols + ["name"]
+        extra = [group_col] if group_col else []
+        df_plot = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         return build_violin_grid(
             df_plot,

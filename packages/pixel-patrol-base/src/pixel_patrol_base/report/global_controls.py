@@ -188,6 +188,8 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 
         dtype = schema[c]
 
+        print(c, dtype)
+
         # 2. Check if it's a numeric float
         is_float = dtype in (pl.Float32, pl.Float64)
         is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
