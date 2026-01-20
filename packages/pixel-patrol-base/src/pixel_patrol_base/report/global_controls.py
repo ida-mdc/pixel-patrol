@@ -9,7 +9,8 @@ import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
 from textwrap import dedent
 
-from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column, ensure_discrete_grouping
+from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column, \
+    ensure_discrete_grouping
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -26,7 +27,7 @@ GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
 GLOBAL_FILTER_OP_ID = "global-filter-op"
 GLOBAL_FILTER_TEXT_ID = "global-filter-text"
-GLOBAL_DIM_FILTER_TYPE = "global-dim-filter" # _TYPE refers to a dynamic group
+GLOBAL_DIM_FILTER_TYPE = "global-dim-filter"  # _TYPE refers to a dynamic group
 
 GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
 GLOBAL_RESET_BUTTON_ID = "global-reset-button"
@@ -43,7 +44,7 @@ SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 DEFAULT_REPORT_GROUP_COL = "report_group"
 
 MAX_UNIQUE_GROUP = 12  # TODO: move to config
-MAX_UNIQUE_FILTER = 200 # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
+MAX_UNIQUE_FILTER = 200  # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
 
 GC_GROUP_COL = "group_col"
 GC_FILTER = "filter"
@@ -123,7 +124,8 @@ def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> 
             continue
 
         if not isinstance(spec, dict):
-            logger.warning("Global filter for '%s' has invalid spec type (%s); skipping.", col_name, type(spec).__name__)
+            logger.warning("Global filter for '%s' has invalid spec type (%s); skipping.", col_name,
+                           type(spec).__name__)
             continue
 
         op = spec.get("op")
@@ -136,7 +138,8 @@ def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> 
             logger.warning("Global filter value for column '%s' is empty; skipping.", col_name)
             continue
         if op in _NUMERIC_FILTER_OPS and _try_float(raw) is None:
-            logger.warning("Global filter op '%s' for column '%s' requires a number; got '%s'. Skipping.", op, col_name, raw)
+            logger.warning("Global filter op '%s' for column '%s' requires a number; got '%s'. Skipping.", op, col_name,
+                           raw)
             continue
 
         clean_filters[col_name] = {"op": op, "value": raw}
@@ -219,6 +222,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
 
     return group_cols, filter_cols
 
+
 def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
     return [
         html.Button(
@@ -237,8 +241,8 @@ def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
         ),
     ]
 
-def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_config: Optional[Dict] = None):
 
+def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_config: Optional[Dict] = None):
     filter_help_md = dedent("""
     Filter matches rows by one column.
 
@@ -252,7 +256,8 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
     >, ≥, <, ≤, equals (=)
     """).strip()
 
-    initial_global_config = initial_global_config or {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {}, GC_DIMENSIONS: {}}
+    initial_global_config = initial_global_config or {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {},
+                                                      GC_DIMENSIONS: {}}
 
     # defaults from initial config
     init_group = initial_global_config.get(GC_GROUP_COL)
@@ -433,34 +438,89 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
 
 # ---------- LOGIC: CENTRALIZED HELPERS ----------
 
-def compute_filtered_indices(df: pl.DataFrame,
-                             global_config: Optional[Dict]
-                             ) -> Optional[List[int]]:
+def _get_dimension_columns(df: pl.DataFrame, dimensions: Dict[str, str]) -> List[str]:
     """
-    Computes the indices of rows that match the global row filters AND dimension filters.
-    Widgets will use these indices to quickly slice the dataframe.
+    Get the list of columns that match the selected dimension filters.
+    Returns empty list if no dimension filters are active.
+    """
+    if not dimensions:
+        return []
+
+    tokens: List[str] = []
+    for dim, val in dimensions.items():
+        if not val or val == "All":
+            continue
+        token = val if val.startswith(dim) else f"{dim}{val}"
+        tokens.append(f"_{token}")
+
+    if not tokens:
+        return []
+
+    return [c for c in df.columns if all(tok in c for tok in tokens)]
+
+
+def compute_filtered_row_positions(
+        df: pl.DataFrame,
+        global_config: Optional[Dict]
+) -> Optional[List[int]]:
+    """
+    Computes the ROW POSITIONS of rows that match
+    the global row filters AND dimension filters.
+
+    This is optimized to:
+    1. Work on a narrow subset of columns (fast)
+    2. Return positions so widgets can use fast positional indexing
+
+    Returns None if no filters are active (meaning use full df).
+    Returns empty list if filters result in no matches.
     """
     global_config = global_config or {}
     filters = global_config.get(GC_FILTER) or {}
     dimensions = global_config.get(GC_DIMENSIONS) or {}
 
-    # If no filters and no dimension constraints, return all indices
+    # If no filters and no dimension constraints, return None (use full df)
     if not filters and not dimensions:
         return None
 
-    # 1. Apply Standard Value Filters
+    # Determine which columns we need for filtering
+    filter_cols_needed = set(filters.keys()) & set(df.columns)
+    dim_cols = _get_dimension_columns(df, dimensions)
+
+    # Build the combined mask expression
     mask = pl.lit(True)
+
+    # 1. Apply standard value filters
     for col_name, spec in filters.items():
         if col_name in df.columns:
             mask = mask & _filter_expr(col_name, spec)
 
-    df_subset = df.filter(mask)
+    # 2. Apply dimension filters (any of the dim columns must be non-null)
+    if dim_cols:
+        dim_mask = pl.any_horizontal([pl.col(c).is_not_null() for c in dim_cols])
+        mask = mask & dim_mask
+    elif dimensions:
+        # Dimensions were specified but no matching columns found
+        return []
 
-    # 2. Apply Dimension Filters (Optimization: computed once globally)
-    # This filters out rows that have NO data for the selected dimensions (e.g. T=0)
-    df_subset = filter_rows_by_any_dimension(df_subset, dimensions)
+    # Select only the columns we need, add row index, filter, extract positions
+    cols_to_select = list(filter_cols_needed) + dim_cols
+    if not cols_to_select:
+        # No specific columns needed, just need row positions
+        cols_to_select = [df.columns[0]]  # Use any column as placeholder
 
-    return df_subset.select(pl.col("unique_id")).to_series().to_list()
+    # Ensure unique columns
+    cols_to_select = list(dict.fromkeys(cols_to_select))
+
+    row_positions = (
+        df
+        .select(cols_to_select)
+        .with_row_index("__row_idx__")
+        .filter(mask)
+        .get_column("__row_idx__")
+        .to_list()
+    )
+
+    return row_positions
 
 
 def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str:
@@ -475,61 +535,29 @@ def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str
     return group_col
 
 
-def filter_rows_by_any_dimension(
-    df: pl.DataFrame,
-    dims_selection: Dict[str, str],
-) -> pl.DataFrame:
-    """
-    Keep only rows that have *any* non-null metric column
-    for the currently selected dimensions.
-    """
-    dims_selection = dims_selection or {}
-
-    # Build tokens like "_t0", "_z1", ignoring "All"
-    tokens: List[str] = []
-    for dim, val in dims_selection.items():
-        if not val or val == "All":
-            continue
-        token = val if val.startswith(dim) else f"{dim}{val}"
-        tokens.append(f"_{token}")
-
-    if not tokens:
-        return df  # no dim filters -> no change
-
-    # Columns that match *all* selected dim tokens (order-independent)
-    dim_cols = [
-        c for c in df.columns
-        if all(tok in c for tok in tokens)
-    ]
-    if not dim_cols:
-        return df.head(0)  # no column exists for those dims
-
-    # Keep rows where at least one of those columns is non-null
-    mask = pl.col(dim_cols[0]).is_not_null()
-    for c in dim_cols[1:]:
-        mask = mask | pl.col(c).is_not_null()
-
-    return df.filter(mask)
-
-
 def prepare_widget_data(
         df: pl.DataFrame,
-        subset_indices: Optional[List[int]],
+        subset_row_positions: Optional[List[int]],
         global_config: Dict,
         metric_base: Optional[str] = None
 ) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str], Optional[List[str]]]:
     """
     The main coordinator for widgets.
-    1. Slices the global `df` using `subset_indices`.
+    1. Slices the global `df` using `subset_row_positions` (fast positional indexing).
     2. Resolves the correct grouping column.
     3. If `metric_base` is provided, attempts to find the dimension-specific column (e.g. 'area_t0').
 
     Returns:
         (df_filtered, group_col, resolved_column_name, warning_message, group_order)
     """
-    # 1. Filter Rows
-    if subset_indices is not None:
-        df_filtered = df.filter(pl.col("unique_id").is_in(subset_indices))
+    # 1. Filter Rows using fast positional indexing
+    if subset_row_positions is not None:
+        if len(subset_row_positions) == 0:
+            # Empty filter result
+            df_filtered = df.head(0)
+        else:
+            # Fast positional indexing
+            df_filtered = df[subset_row_positions]
     else:
         df_filtered = df
 
@@ -564,7 +592,15 @@ def prepare_widget_data(
             df_filtered = df_filtered.head(0)
 
         else:
-            df_filtered = df_filtered.filter(pl.col(resolved_col).is_not_null())
+            # Filter by metric column being non-null
+            # Use the same optimized approach: compute mask on narrow df, then apply
+            mask_series = df_filtered.select(pl.col(resolved_col).is_not_null()).to_series()
+            keep_positions = mask_series.arg_true().to_list()
+            if keep_positions:
+                df_filtered = df_filtered[keep_positions]
+            else:
+                df_filtered = df_filtered.head(0)
+
             if df_filtered.is_empty():
                 warning_msg = (
                     "No data matches the selected dimensions for "
@@ -575,11 +611,14 @@ def prepare_widget_data(
 
 
 def apply_global_row_filters_and_grouping(
-    df: pl.DataFrame,
-    global_config: Optional[Dict],
-    default_group_col: str = DEFAULT_REPORT_GROUP_COL,
+        df: pl.DataFrame,
+        global_config: Optional[Dict],
+        default_group_col: str = DEFAULT_REPORT_GROUP_COL,
 ) -> Tuple[pl.DataFrame, str]:
-
+    """
+    Apply global filters and return filtered df with group column.
+    Used for exports (CSV, project).
+    """
     global_config = global_config or {}
 
     group_col = global_config.get(GC_GROUP_COL) or default_group_col
@@ -591,24 +630,29 @@ def apply_global_row_filters_and_grouping(
         # as a last resort pick the first column
         group_col = df.columns[0]
 
-    # filters: {column -> [allowed_values]}
-    filters = global_config.get(GC_FILTER) or {}
+    # Use the optimized filter function
+    row_positions = compute_filtered_row_positions(df, global_config)
 
-    for col, allowed_vals in filters.items():
-        if col in df.columns and allowed_vals:
-            df = df.filter(pl.col(col).is_in(allowed_vals))
+    if row_positions is None:
+        # No filters, use full df
+        return df, group_col
+    elif len(row_positions) == 0:
+        # Empty result
+        return df.head(0), group_col
+    else:
+        return df[row_positions], group_col
 
-    # no extra column; widgets will group directly by `group_col`
-    return df, group_col
 
 def _parse_list(raw: str) -> List[str]:
     return [v.strip() for v in raw.split(",") if v.strip()]
+
 
 def _try_float(raw: str) -> Optional[float]:
     try:
         return float(raw)
     except (TypeError, ValueError):
         return None
+
 
 def _filter_expr(col: str, spec: object) -> pl.Expr:
     # Back-compat: old format was list[str] meaning "in"

@@ -17,7 +17,7 @@ from pixel_patrol_base.report.widget import organize_widgets_by_tab
 from pixel_patrol_base.report.global_controls import (
     build_sidebar,
     apply_global_row_filters_and_grouping,
-    compute_filtered_indices,
+    compute_filtered_row_positions,
     prepare_widget_data,
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
@@ -41,9 +41,14 @@ from pixel_patrol_base.report.global_controls import (
     GC_FILTER,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 DEFAULT_WIDGET_WIDTH = 12
 
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
+
 
 def create_app(project: Project, initial_global_config: dict | None = None) -> Dash:
     return _create_app(
@@ -57,16 +62,15 @@ def create_app(project: Project, initial_global_config: dict | None = None) -> D
 
 
 def _create_app(
-    df: pl.DataFrame,
-    default_palette_name: str,
-    pixel_patrol_flavor: str,
-    project_name: str,
-    project: Project,
-    initial_global_config: dict | None = None,
+        df: pl.DataFrame,
+        default_palette_name: str,
+        pixel_patrol_flavor: str,
+        project_name: str,
+        project: Project,
+        initial_global_config: dict | None = None,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
 
-    df = df.with_row_index(name="unique_id")
     external_stylesheets = [dbc.themes.BOOTSTRAP,
                             "https://codepen.io/chriddyp/pen/bWLwgP.css",
                             "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
@@ -138,7 +142,7 @@ def _create_app(
 
         # --- Sidebar with global controls (built once, outside content container) ---
         sidebar_controls, global_control_stores, extra_components = build_sidebar(
-                    df, default_palette_name, initial_global_config=initial_global_config
+            df, default_palette_name, initial_global_config=initial_global_config
         )
 
         # --- Group Widget Layout Generation (content only) ---
@@ -233,10 +237,11 @@ def _create_app(
     )
     def update_filtered_indices(global_config: Dict) -> List[int]:
         """
-        Compute filtered row indices once per global-config change.
-        Widgets reuse this instead of re-applying filters on the full df.
+        Compute filtered row POSITIONS once per global-config change.
+        Widgets reuse these positions for fast positional indexing (df[positions]).
         """
-        return compute_filtered_indices(df, global_config)
+        return compute_filtered_row_positions(df, global_config)
+
 
     @app.callback(
         Output("color-map-store", "data"),
@@ -245,16 +250,16 @@ def _create_app(
         State(PALETTE_SELECTOR_ID, "value"),
     )
     def update_color_map(
-        subset_indices: List[int] | None,
-        global_config: Dict,
-        palette: str,
+            subset_positions: List[int] | None,
+            global_config: Dict,
+            palette: str,
     ) -> Dict[str, str]:
         """
         Build color map based on the *already filtered* subset and current grouping.
         """
         df_processed, group_col, _resolved, _warning, order = prepare_widget_data(
             df,
-            subset_indices,
+            subset_positions,
             global_config or {},
             metric_base=None,  # just need grouping, no metric resolution
         )
@@ -293,8 +298,8 @@ def _create_app(
         prevent_initial_call=False,
     )
     def update_global_config(
-            _apply_clicks: int,
-            _reset_clicks: int,
+            _apply_clicks,
+            _reset_clicks,
             group_col,
             filter_col,
             filter_op,
@@ -320,7 +325,7 @@ def _create_app(
 
         # Reconstruct dimensions dictionary from pattern-matched inputs
         dimensions = {}
-        for val, id_obj in zip(dim_values, dim_ids):
+        for val, id_obj in zip(dim_values or [], dim_ids or []):
             if val and val != "All":
                 dimensions[id_obj['index']] = val
 
@@ -428,14 +433,14 @@ def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence
     # 1) Exact column requirements
     missing = sorted(c for c in requires if c not in cols)
     if missing:
-        print(f"DEBUG: Hiding widget '{name}' — missing columns: {missing}")
+        logger.debug(f"Hiding widget '{name}' — missing columns: {missing}")
         return False
 
     # 2) Pattern requirements (accepts str or compiled regex)
     for pat in patterns:
         pattern_str = getattr(pat, "pattern", pat)  # support compiled or plain string
         if not any(re.search(pattern_str, c) for c in cols):
-            print(f"DEBUG: Hiding widget '{name}' — no column matches pattern: {pattern_str!r}")
+            logger.debug(f"Hiding widget '{name}' — no column matches pattern: {pattern_str!r}")
             return False
 
     return True
