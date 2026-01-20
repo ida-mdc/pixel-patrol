@@ -19,8 +19,9 @@ def main():
     # Load data using the 'bioio' loader plugin
     loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
 
-    # Set your preferred file extensions to process (alternatively set to `{"tif", "png"}`, etc.)
-    selected_file_extensions = {"jpeg",} # if loader is None all file types are processed, otherwise all file types supported by the loader
+    # Set your preferred file extensions to process (alternatively set to `{"tif", "png", "jpeg", ...}`, etc.)
+    # if loader is None all file types are processed, otherwise all file types supported by the loader
+    selected_file_extensions = "all" 
 
     # --- Step 2: create a project ---
     project = api.create_project("Quickstart Project", base_dir=base_path, loader=loader)
