@@ -18,6 +18,8 @@ from pixel_patrol_base.report.global_controls import (
     FILTERED_INDICES_STORE_ID,
 )
 
+MAX_RECORDS_IN_MENU = 500
+
 class DatasetHistogramWidget(BaseReportWidget):
     NAME: str = "Pixel Value Histograms"
     TAB: str = WidgetCategories.DATASET_STATS.value
@@ -158,10 +160,24 @@ class DatasetHistogramWidget(BaseReportWidget):
         if df_processed.is_empty():
             return [], None
 
-        # Limit to 500 files for performance in dropdown
-        names = df_processed["name"].unique().head(500).to_list()
-        names = sort_strings_alpha(names)
+        # Limit to MAX_RECORDS_IN_MENU files for performance in dropdown
+        names_all = df_processed["name"].unique().to_list()
+        limited = len(names_all) > MAX_RECORDS_IN_MENU
+
+        names = sort_strings_alpha(names_all[:MAX_RECORDS_IN_MENU])
+
         options = [{"label": n, "value": n} for n in names]
+
+        if limited:
+            options.insert(
+                0,
+                {
+                    "label": f"⚠ showing first {MAX_RECORDS_IN_MENU} files",
+                    "value": "__LIMIT_WARNING__",
+                    "disabled": True,
+                },
+            )
+
         return options, no_update
 
     def _update_plot(
