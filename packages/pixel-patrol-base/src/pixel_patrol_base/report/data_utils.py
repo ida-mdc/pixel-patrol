@@ -8,6 +8,13 @@ from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_r
 
 # --- Data Helpers ---
 
+def sort_strings_alpha(values: Sequence[str]) -> List[str]:
+    """
+    Alphabetical, case-insensitive sort. Keeps original strings.
+    """
+    return sorted(values, key=lambda x: x.lower())
+
+
 def get_sortable_columns(df: pl.DataFrame) -> List[str]:
     """
     Returns a list of sortable column names (numeric, excluding dimension slices).

@@ -10,6 +10,7 @@ from pixel_patrol_base.report.data_utils import (
     aggregate_histograms_by_group,
     compute_histogram_edges,
     format_selection_title,
+    sort_strings_alpha
 )
 from pixel_patrol_base.report.global_controls import (
     prepare_widget_data,
@@ -135,7 +136,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         if not group_col or df_processed.is_empty():
             return [], []
 
-        group_values = df_processed[group_col].unique().sort().to_list()
+        group_values = sort_strings_alpha(df_processed[group_col].unique().sort().to_list())
         group_options = [{"label": str(g), "value": g} for g in group_values]
 
         return group_options, []
@@ -159,6 +160,7 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         # Limit to 500 files for performance in dropdown
         names = df_processed["name"].unique().head(500).to_list()
+        names = sort_strings_alpha(names)
         options = [{"label": n, "value": n} for n in names]
         return options, no_update
 

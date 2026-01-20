@@ -6,7 +6,7 @@ from dash import html, dcc, Input, Output
 
 from PIL import Image
 
-from pixel_patrol_base.report.data_utils import get_sortable_columns
+from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strings_alpha
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import (
@@ -81,7 +81,8 @@ class ImageMosaikWidget(BaseReportWidget):
 
 
     def _set_control_options(self, _color_map: Dict[str, str]):
-        sortable = get_sortable_columns(self._df)
+        sortable = sort_strings_alpha(get_sortable_columns(self._df))
+
         options = [{"label": c, "value": c} for c in sortable]
 
         default = None
