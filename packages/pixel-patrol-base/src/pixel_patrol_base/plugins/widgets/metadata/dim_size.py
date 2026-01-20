@@ -63,7 +63,7 @@ class DimSizeWidget(BaseReportWidget):
         )
 
         # Identify size columns (fast string check)
-        dimension_size_cols = [col for col in df_filtered.columns if col.endswith("_size")]
+        dimension_size_cols = [col for col in df_filtered.columns if col.endswith("_size") and not col.startswith('__')]
 
         if df_filtered.height == 0 or not dimension_size_cols:
             return [show_no_data_message()]
