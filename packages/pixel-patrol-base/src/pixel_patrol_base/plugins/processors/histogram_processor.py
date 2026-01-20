@@ -77,7 +77,7 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
     else:
         # NumPy path: use numpy's histogram for in-memory arrays
         counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
-        counts_arr = np.asarray(counts_np, dtype=np.int64)  # TODO: FIXME: test expects a list instead array
+        counts_arr = np.asarray(counts_np, dtype=np.int64)
 
     return {"counts": counts_arr, "min": float(min_val), "max": float(max_val)}
 
@@ -92,6 +92,7 @@ class HistogramProcessor:
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
+    # TODO: Consider converting to smaller data types for counts and bounds to save memory
     OUTPUT_SCHEMA = {
         "histogram_counts": pl.List(pl.Int64),
         "histogram_min": pl.Float64,
@@ -114,7 +115,6 @@ class HistogramProcessor:
         # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
         if getattr(data, "size", 0) == 0:
             return {"histogram_counts": np.array([]), "histogram_min": 0.0, "histogram_max": 0.0}
-
 
         # Metric functions operate on 2D numpy planes provided by apply_gufunc.
         # To avoid calling _hist_func three times per plane, compute once and reuse
