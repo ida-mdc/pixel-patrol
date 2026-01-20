@@ -17,6 +17,7 @@ from pixel_patrol_base.report.global_controls import (
 from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
 SPRITE_SIZE = 32
+DEFAULT_COL = 'mean_intensity'
 
 
 class ImageMosaikWidget(BaseReportWidget):
@@ -86,8 +87,8 @@ class ImageMosaikWidget(BaseReportWidget):
         options = [{"label": c, "value": c} for c in sortable]
 
         default = None
-        if "name" in sortable:
-            default = "name"
+        if DEFAULT_COL in sortable:
+            default = DEFAULT_COL
         elif sortable:
             default = sortable[0]
 
