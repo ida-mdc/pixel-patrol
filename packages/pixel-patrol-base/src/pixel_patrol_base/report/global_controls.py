@@ -9,8 +9,10 @@ import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
 from textwrap import dedent
 
-from pixel_patrol_base.report.data_utils import get_all_available_dimensions, get_dim_aware_column, \
-    ensure_discrete_grouping
+from pixel_patrol_base.report.data_utils import (get_all_available_dimensions,
+                                                 get_dim_aware_column,
+                                                 ensure_discrete_grouping,
+                                                 sort_strings_alpha)
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -219,6 +221,9 @@ def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
             # Avoid duplicates if it was already added by the n_unique check above
             if c not in filter_cols:
                 filter_cols.append(c)
+
+        group_cols = sort_strings_alpha(group_cols)
+        filter_cols = sort_strings_alpha(filter_cols)
 
     return group_cols, filter_cols
 
