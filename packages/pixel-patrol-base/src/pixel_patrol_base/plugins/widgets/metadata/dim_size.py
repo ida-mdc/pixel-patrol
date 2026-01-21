@@ -8,7 +8,7 @@ from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 from pixel_patrol_base.report.data_utils import select_needed_columns
-from pixel_patrol_base.report.factory import plot_scatter, plot_strip, show_no_data_message
+from pixel_patrol_base.report.factory import plot_scatter, create_strip_plot_grid, show_no_data_message
 
 class DimSizeWidget(BaseReportWidget):
     NAME: str = "Dimension Size Distribution"
@@ -87,6 +87,7 @@ class DimSizeWidget(BaseReportWidget):
         # Return combined list
         return [ratio_div] + xy_plots + strip_plots
 
+
     @staticmethod
     def _get_availability_ratios(df_filtered: pl.DataFrame, total_files: int, cols: List[str]) -> List:
         """Generates the availability summary text for each dimension."""
@@ -104,6 +105,7 @@ class DimSizeWidget(BaseReportWidget):
             ratio_spans.extend([html.Span(text), html.Br()])
 
         return [html.P(html.B("Data Availability by Dimension:")), html.P(ratio_spans)]
+
 
     @staticmethod
     def _create_xy_scatter_plot(df: pl.DataFrame, group_col: Optional[str], color_map: Dict[str, str]) -> List:
@@ -136,10 +138,10 @@ class DimSizeWidget(BaseReportWidget):
         )
         return [dcc.Graph(figure=fig)]
 
+
     @staticmethod
     def _create_dim_strip_plots(df: pl.DataFrame, group_col: str, cols: List[str], color_map: Dict[str, str]) -> List:
-        """Creates the faceted strip plot for all dimensions."""
-        # Clean data for plotting: Replace "X_size" with "X Size" directly in the dataframe
+        """Creates a grid of strip plots, one per dimension."""
         melted_df = (
             df.unpivot(
                 index=[group_col, "name"],
@@ -158,21 +160,19 @@ class DimSizeWidget(BaseReportWidget):
         if melted_df.height == 0:
             return [show_no_data_message("No data to plot for individual dimension sizes.")]
 
-        # Calculate dynamic height based on number of facets (cols // 3 rows)
-        plot_height = 200 * ((len(cols) + 2) // 3)
-
-        fig = plot_strip(
+        grid = create_strip_plot_grid(
             df=melted_df,
             x=group_col,
             y="dimension_value",
-            color=group_col,
             facet_col="dimension_name",
-            facet_col_wrap=3,
+            color=group_col,
             color_map=color_map,
-            title="Individual Dimension Sizes per Dataset",
-            labels={"dimension_value": "Size", group_col: "Group", "dimension_name": "Dimension"},
+            labels={"dimension_value": "Size", group_col: "Group"},
             hover_data=["name"],
-            height=plot_height
+            n_cols=3,
+            plot_height=280,
+            title="Individual Dimension Sizes per Dataset",
         )
 
-        return [dcc.Graph(figure=fig)]
+        return [grid]
+    

@@ -8,24 +8,31 @@ from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 
 from pixel_patrol_base.report.data_utils import prettify_col_name
-
+from pixel_patrol_base.report.constants import NO_GROUPING_COL
 
 # =============================================================================
 #  SECTION 1: GLOBAL STYLES
 # =============================================================================
 
-STANDARD_LAYOUT_KWARGS = dict(
+_STANDARD_LAYOUT_KWARGS = dict(
     margin=dict(l=50, r=50, t=50, b=50),
     hovermode="closest",
     template="plotly_white",
     showlegend=False,
 )
 
-STANDARD_LEGEND_KWARGS = dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None)
+_STANDARD_LEGEND_KWARGS = dict(
+    orientation="v",
+    yanchor="top",
+    y=1,
+    xanchor="left",
+    x=1.02,
+    title=None,
+)
 
 def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
     """Applies global style rules and fixes bar chart gaps."""
-    fig.update_layout(**STANDARD_LAYOUT_KWARGS)
+    fig.update_layout(**_STANDARD_LAYOUT_KWARGS)
 
     # Aesthetic fix: Plotly bars are too thin if there are few categories
     if n_categories == 1:
@@ -198,8 +205,8 @@ def plot_bar(
 
     _apply_standard_styling(fig, n_categories)
 
-    if show_legend:
-        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    if show_legend and color!=NO_GROUPING_COL:
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
     else:
         fig.update_layout(showlegend=False, margin=dict(b=80))
 
@@ -234,8 +241,8 @@ def plot_scatter(
         hover_data=hover_data,
     )
     _apply_standard_styling(fig)
-    if show_legend:
-        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    if show_legend and color!=NO_GROUPING_COL:
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
     return fig
 
 
@@ -244,17 +251,13 @@ def plot_strip(
         x: str,
         y: str,
         color: Optional[str] = None,
-        facet_col: Optional[str] = None,
-        facet_col_wrap: int = 3,
-        facet_row_spacing: float = 0.2,
-        facet_col_spacing: float = 0.05,
         color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         hover_data: Optional[List[str]] = None,
         height: Optional[int] = None,
 ) -> go.Figure:
-
+    """Creates a single strip plot (no faceting)."""
     cat_orders = _get_category_orders(df, x, color)
 
     fig = px.strip(
@@ -262,10 +265,6 @@ def plot_strip(
         x=x,
         y=y,
         color=color,
-        facet_col=facet_col,
-        facet_col_wrap=facet_col_wrap,
-        facet_row_spacing=facet_row_spacing,
-        facet_col_spacing=facet_col_spacing,
         color_discrete_map=color_map or {},
         category_orders=cat_orders,
         title=title,
@@ -273,20 +272,74 @@ def plot_strip(
         hover_data=hover_data,
     )
 
-    fig.update_xaxes(matches=None, showline=True, showticklabels=True, title=None)
-    fig.update_yaxes(matches=None, showline=True, showticklabels=True)
-
-    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+    fig.update_xaxes(showline=True, showticklabels=True, title=None)
+    fig.update_yaxes(showline=True, showticklabels=True)
 
     _apply_standard_styling(fig)
+    fig.update_layout(showlegend=False)
 
-    fig.update_layout(margin=dict(t=90), showlegend=False)
-
-    # Allow height override (useful for multi-row facets)
     if height:
         fig.update_layout(height=height)
 
     return fig
+
+
+def create_strip_plot_grid(
+        df: pl.DataFrame,
+        x: str,
+        y: str,
+        facet_col: str,
+        color: Optional[str] = None,
+        color_map: Optional[Dict[str, str]] = None,
+        labels: Optional[Dict[str, str]] = None,
+        hover_data: Optional[List[str]] = None,
+        n_cols: int = 3,
+        plot_height: int = 250,
+        title: Optional[str] = None,
+) -> html.Div:
+    """
+    Creates a grid of individual strip plots, one per facet value.
+    Returns a Dash Div containing the grid layout.
+    """
+    facet_values = df[facet_col].unique().sort().to_list()
+
+    plots = []
+    for facet_val in facet_values:
+        facet_df = df.filter(pl.col(facet_col) == facet_val)
+
+        fig = plot_strip(
+            df=facet_df,
+            x=x,
+            y=y,
+            color=color,
+            color_map=color_map,
+            title=str(facet_val),
+            labels=labels,
+            hover_data=hover_data,
+            height=plot_height,
+        )
+
+        plots.append(
+            html.Div(
+                dcc.Graph(figure=fig),
+                style={"flex": f"1 1 {100 // n_cols}%", "minWidth": "300px"}
+            )
+        )
+
+    title_div = html.H5(title, style={"marginBottom": "10px"}) if title else None
+
+    grid = html.Div(
+        plots,
+        style={
+            "display": "flex",
+            "flexWrap": "wrap",
+            "gap": "10px",
+        }
+    )
+
+    if title_div:
+        return html.Div([title_div, grid])
+    return grid
 
 
 def plot_violin(
@@ -353,7 +406,7 @@ def plot_violin(
         box=dict(line_color="black"),
     )
 
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         dict(
             title_text=title,
@@ -408,7 +461,7 @@ def plot_grouped_scatter(
             )
         )
 
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         margin=dict(l=30, r=10, t=10, b=25),
         showlegend=show_legend,
@@ -582,7 +635,7 @@ def plot_grouped_histogram(
         )
 
     # 3. Styling
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         title_text=title,
         xaxis_title=xaxis_title,
@@ -590,7 +643,8 @@ def plot_grouped_histogram(
         bargap=0.0,
     )
     chart.update_layout(**layout)
-    chart.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    if len(group_data) > 1:
+        chart.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
 
     return chart
 
