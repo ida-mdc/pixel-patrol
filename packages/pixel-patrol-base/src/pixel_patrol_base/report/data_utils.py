@@ -5,9 +5,7 @@ import numpy as np
 from collections import defaultdict
 
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
-
-GROUPING_COL_PREFIX = "__grouping__"
-MISSING_LABEL = "missing"
+from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABEL
 
 # --- Data Helpers ---
 

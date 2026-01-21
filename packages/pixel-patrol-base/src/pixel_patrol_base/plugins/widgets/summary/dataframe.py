@@ -1,20 +1,15 @@
-from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
-from pixel_patrol_base.report.widget_categories import WidgetCategories
-from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
-from pixel_patrol_base.report.factory import show_no_data_message
-
-
 from typing import List, Dict, Set
 
 import dash_ag_grid as dag
 import polars as pl
 from dash import html, Input, Output
 
+from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
+from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.factory import show_no_data_message
 
 
 class DataFrameWidget(BaseReportWidget):

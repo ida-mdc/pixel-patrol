@@ -14,48 +14,38 @@ from pixel_patrol_base.report.data_utils import (get_all_available_dimensions,
                                                  ensure_discrete_grouping,
                                                  sort_strings_alpha)
 from pixel_patrol_base.report.factory import create_info_icon
+from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
+                                                GC_GROUP_COL,
+                                                GC_FILTER,
+                                                GC_DIMENSIONS,
+                                                DEFAULT_REPORT_GROUP_COL,
+                                                PALETTE_SELECTOR_ID,
+                                                GLOBAL_CONFIG_STORE_ID,
+                                                GLOBAL_GROUPBY_COLS_ID,
+                                                NO_GROUPING_LABEL,
+                                                NO_GROUPING_COL,
+                                                GLOBAL_FILTER_COLUMN_ID,
+                                                GLOBAL_FILTER_OP_ID,
+                                                GLOBAL_FILTER_TEXT_ID,
+                                                GLOBAL_DIM_FILTER_TYPE,
+                                                GLOBAL_APPLY_BUTTON_ID,
+                                                GLOBAL_RESET_BUTTON_ID,
+                                                EXPORT_CSV_BUTTON_ID,
+                                                EXPORT_CSV_DOWNLOAD_ID,
+                                                EXPORT_PROJECT_BUTTON_ID,
+                                                EXPORT_PROJECT_DOWNLOAD_ID,
+                                                SAVE_SNAPSHOT_DOWNLOAD_ID,
+                                                SAVE_SNAPSHOT_BUTTON_ID,
+                                                )
 
 import logging
-
 logger = logging.getLogger(__name__)
-
-# ---------- ID CONSTANTS ----------
-
-PALETTE_SELECTOR_ID = "palette-selector"
-GLOBAL_CONFIG_STORE_ID = "global-config-store"
-FILTERED_INDICES_STORE_ID = "global-filtered-indices-store"
-
-GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
-GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
-GLOBAL_FILTER_OP_ID = "global-filter-op"
-GLOBAL_FILTER_TEXT_ID = "global-filter-text"
-GLOBAL_DIM_FILTER_TYPE = "global-dim-filter"  # _TYPE refers to a dynamic group
-
-GLOBAL_APPLY_BUTTON_ID = "global-apply-button"
-GLOBAL_RESET_BUTTON_ID = "global-reset-button"
-
-EXPORT_CSV_BUTTON_ID = "export-csv-button"
-EXPORT_PROJECT_BUTTON_ID = "export-project-button"
-EXPORT_CSV_DOWNLOAD_ID = "export-csv-download"
-EXPORT_PROJECT_DOWNLOAD_ID = "export-project-download"
-SAVE_SNAPSHOT_BUTTON_ID = "save-snapshot-button"
-SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 
 # ---------- GLOBAL CONSTANTS ----------
 
-DEFAULT_REPORT_GROUP_COL = "imported_path_short"
-NO_GROUPING_COL = "common_base"
-NO_GROUPING_LABEL = "(NO GROUPING)"
-
-MAX_UNIQUE_GROUP = 12  # TODO: move to config
-
-GC_GROUP_COL = "group_col"
-GC_FILTER = "filter"
-GC_DIMENSIONS = "dimensions"
-
 _ALLOWED_FILTER_OPS = {"contains", "not_contains", "eq", "gt", "ge", "lt", "le", "in"}
 _NUMERIC_FILTER_OPS = {"gt", "ge", "lt", "le"}
-DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
+_DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
 
 
 # ---------- LAYOUT: SIDEBAR + STORES ----------
@@ -65,7 +55,7 @@ def is_group_col_accepted(df: pl.DataFrame, col: str) -> bool:
     try:
         if not col or col not in df.columns:
             return False
-        if DIMENSION_COL_PATTERN.search(col):
+        if _DIMENSION_COL_PATTERN.search(col):
             return False
 
         dtype = df.schema[col]
@@ -185,7 +175,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> tuple[list[str], list[str]]:
     # 1. candidate columns only
     candidates = [
         c for c in df.columns
-        if not DIMENSION_COL_PATTERN.search(c)
+        if not _DIMENSION_COL_PATTERN.search(c)
         and schema.get(c) not in (pl.List, pl.Struct, pl.Array, pl.Object)
     ]
 

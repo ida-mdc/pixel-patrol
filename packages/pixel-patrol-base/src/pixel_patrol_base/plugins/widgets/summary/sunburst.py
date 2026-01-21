@@ -7,14 +7,10 @@ from dash import dcc, Input, Output, html
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, MIXED_GROUPING_COLOR
 from pixel_patrol_base.report.factory import plot_sunburst, show_no_data_message
 
-MIXED_COLOR = "#cccccc"
 
 class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
@@ -213,7 +209,7 @@ class FileSunburstWidget(BaseReportWidget):
                 labels.append(data["label"])
                 parents.append("")
                 values.append(data["file_count"])
-                colors.append(MIXED_COLOR)
+                colors.append(MIXED_GROUPING_COLOR)
                 continue
 
             ids.append(node_id)
@@ -227,9 +223,9 @@ class FileSunburstWidget(BaseReportWidget):
 
             if len(unique_groups) == 1:
                 g_val = list(unique_groups)[0]
-                c = color_map.get(g_val, MIXED_COLOR)
+                c = color_map.get(g_val, MIXED_GROUPING_COLOR)
                 colors.append(c)
             else:
-                colors.append(MIXED_COLOR)
+                colors.append(MIXED_GROUPING_COLOR)
 
         return ids, labels, parents, values, colors

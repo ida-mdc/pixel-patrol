@@ -13,13 +13,11 @@ from pixel_patrol_base.report.data_utils import (
     sort_strings_alpha,
     select_needed_columns
 )
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import (FILTERED_INDICES_STORE_ID,
+                                                GLOBAL_CONFIG_STORE_ID,
+                                                MAX_RECORDS_IN_MENU)
 
-MAX_RECORDS_IN_MENU = 500
 
 class DatasetHistogramWidget(BaseReportWidget):
     NAME: str = "Pixel Value Histograms"

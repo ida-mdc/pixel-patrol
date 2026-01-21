@@ -4,11 +4,8 @@ import polars as pl
 from dash import Input, Output, html
 
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-    prepare_widget_data,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 from pixel_patrol_base.report.factory import build_violin_grid, show_no_data_message
 from pixel_patrol_base.report.data_utils import get_dim_aware_column, select_needed_columns
 
