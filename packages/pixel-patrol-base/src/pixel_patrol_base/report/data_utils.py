@@ -442,11 +442,16 @@ def aggregate_histograms_by_group(
 
     for group_val in groups:
         # Filter logic
-        # We drop nulls explicitly for the relevant columns to avoid iteration crashes
-        df_group = df.filter(
-            (pl.col(group_col) == group_val) &
-            pl.col(hist_col).is_not_null()
-        )
+        if group_val is None:
+            df_group = df.filter(
+                pl.col(group_col).is_null() &
+                pl.col(hist_col).is_not_null()
+            )
+        else:
+            df_group = df.filter(
+                (pl.col(group_col) == group_val) &
+                pl.col(hist_col).is_not_null()
+            )
 
         if df_group.height == 0:
             continue
