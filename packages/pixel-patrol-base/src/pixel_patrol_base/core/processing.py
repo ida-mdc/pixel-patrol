@@ -202,17 +202,20 @@ def _combine_batch_with_basic(
     return basic_batch.join(deep_df, on="row_index", how="left")
 
 
-def _cleanup_partial_chunks_dir(flush_dir: Path) -> None:
+def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parquet: bool = True) -> None:
     """Remove intermediate parquet chunk files (records_batch_*.parquet) from a flush directory.
 
-    Keeps other files (e.g., a combined "records_df.parquet") intact. Attempts to remove
-    the directory if it becomes empty. Errors are logged but not raised.
+    Optionally also remove the combined ``records_df.parquet`` file when
+    ``cleanup_combined_parquet`` is True. The function attempts to remove the
+    directory if it becomes empty. Errors are logged but not raised.
 
     Args:
-        flush_dir: Path to the directory containing partial chunk files.
+        flush_dir: Path to the directory containing partial chunk files. If ``None`` or
+            the path does not exist, the function returns silently.
+        cleanup_combined_parquet: If True, also attempt to remove ``records_df.parquet``.
     """
-    # If the directory doesn't exist, nothing to do.
-    if not flush_dir.exists():
+    # If the directory doesn't exist or no path provided, nothing to do.
+    if not flush_dir or not flush_dir.exists():
         return
 
     removed_any = False
@@ -226,7 +229,24 @@ def _cleanup_partial_chunks_dir(flush_dir: Path) -> None:
                 "Processing Core: Could not remove partial chunk %s: %s", p, exc
             )
 
-    if removed_any:
+    removed_combined = False
+    if cleanup_combined_parquet:
+        combined_candidate = flush_dir / "records_df.parquet"
+        try:
+            if combined_candidate.exists():
+                combined_candidate.unlink()
+                removed_combined = True
+                logger.info(
+                    "Processing Core: removed combined records parquet %s", combined_candidate
+                )
+        except OSError as exc:
+            logger.warning(
+                "Processing Core: Could not remove combined records parquet %s: %s",
+                combined_candidate,
+                exc,
+            )
+
+    if removed_any or removed_combined:
         logger.info(
             "Processing Core: Removed partial records batches under %s", flush_dir
         )
@@ -276,7 +296,7 @@ def _build_deep_record_df(
             processed_rows = accumulator.load_existing_chunks()
         else:
             # ensure fresh run
-            _cleanup_partial_chunks_dir(accumulator._flush_dir)
+            _cleanup_partial_chunks_dir(accumulator._flush_dir, cleanup_combined_parquet=False)
 
     remaining = basic
     if processed_rows:
@@ -720,8 +740,8 @@ class _RecordsAccumulator:
                     combined_path,
                 )
 
-                # tidy up
-                _cleanup_partial_chunks_dir(self._flush_dir)
+                # tidy up (leave combined parquet intact)
+                _cleanup_partial_chunks_dir(self._flush_dir, cleanup_combined_parquet=False)
                 # reset written files list
                 self._written_files = []
             except Exception:
