@@ -46,7 +46,6 @@ SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 DEFAULT_REPORT_GROUP_COL = "report_group"
 
 MAX_UNIQUE_GROUP = 12  # TODO: move to config
-MAX_UNIQUE_FILTER = 200  # TODO: once we allow for more complex filtering (eg. >x), this will not be needed
 
 GC_GROUP_COL = "group_col"
 GC_FILTER = "filter"
@@ -175,57 +174,46 @@ def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> 
     return cfg
 
 
-def _find_candidate_columns(df: pl.DataFrame) -> Tuple[List[str], List[str]]:
-    group_cols: List[str] = []
-    filter_cols: List[str] = []
+def _find_candidate_columns(df: pl.DataFrame) -> tuple[list[str], list[str]]:
+    if df.height == 0:
+        return [], []
 
     schema = df.schema
 
-    for c in df.columns:
-        # 1. Skip technical dimension columns (BIGGEST SPEEDUP)
-        if DIMENSION_COL_PATTERN.search(c):
+    # 1. candidate columns only
+    candidates = [
+        c for c in df.columns
+        if not DIMENSION_COL_PATTERN.search(c)
+        and schema.get(c) not in (pl.List, pl.Struct, pl.Array, pl.Object)
+    ]
+
+    if not candidates:
+        return [], []
+
+    # 2. compute n_unique in one shot
+    try:
+        nuniq = dict(
+            zip(
+                candidates,
+                df.select([pl.col(c).n_unique().alias(c) for c in candidates]).row(0),
+            )
+        )
+    except Exception:
+        return [], []
+
+    group_cols = []
+    filter_cols = []
+
+    for c, n_unique in nuniq.items():
+        if n_unique is None or n_unique < 2:
             continue
 
-        dtype = schema[c]
+        filter_cols.append(c)
 
-        # 2. Check if it's a numeric float
-        is_float = dtype in (pl.Float32, pl.Float64)
-        is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-                           pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64)
-
-        # 3. Handle Floats (No cardinality check)
-        if is_float:
-            # Floats are always valid for filtering (comparisons), never for grouping
-            filter_cols.append(c)
-            continue
-
-            # 4. Handle Categoricals/Ints/Bools (Slow path - needs cardinality)
-        # We only run n_unique() here because we need it to decide if
-        # a string/int is "categorical enough" to be a dropdown option.
-        try:
-            n_unique = df.select(pl.col(c).n_unique()).item()
-        except Exception:
-            continue
-
-        if is_group_col_accepted(df, c):
+        if n_unique <= MAX_UNIQUE_GROUP:
             group_cols.append(c)
 
-        # Strings/Bools/Ints with medium cardinality are good for Filtering
-        # (Ints are always added to filter_cols below, so this covers str/bool)
-        if n_unique <= MAX_UNIQUE_FILTER:
-            filter_cols.append(c)
-
-        # 5. Handle Integers specifically
-        # Integers are always valid filter candidates (like Floats), even if high cardinality
-        if is_int:
-            # Avoid duplicates if it was already added by the n_unique check above
-            if c not in filter_cols:
-                filter_cols.append(c)
-
-        group_cols = sort_strings_alpha(group_cols)
-        filter_cols = sort_strings_alpha(filter_cols)
-
-    return group_cols, filter_cols
+    return sort_strings_alpha(group_cols), sort_strings_alpha(filter_cols)
 
 
 def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
