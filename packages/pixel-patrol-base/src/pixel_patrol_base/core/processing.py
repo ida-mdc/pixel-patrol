@@ -26,6 +26,25 @@ from pixel_patrol_base.config import (
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 
+# Set spawn as the default start method for multiprocessing
+# This ensures compatibility with spawn context and works even when
+# freeze_support() isn't explicitly called in the main module
+# We use force=True to override any existing start method, but only if
+# no processes have been created yet
+try:
+    # Check if start method has been set and if we can change it
+    current_method = multiprocessing.get_start_method(allow_none=True)
+    if current_method != 'spawn':
+        try:
+            multiprocessing.set_start_method('spawn', force=True)
+        except RuntimeError:
+            # Start method already set or processes already created, that's okay
+            # We'll use get_context("spawn") explicitly when creating executors
+            pass
+except RuntimeError:
+    # Start method can't be determined or changed, that's okay
+    # We'll use get_context("spawn") explicitly when creating executors
+    pass
 
 logger = logging.getLogger(__name__)
 
