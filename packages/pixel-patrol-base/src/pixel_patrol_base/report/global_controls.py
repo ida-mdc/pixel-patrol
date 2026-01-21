@@ -43,7 +43,9 @@ SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 
 # ---------- GLOBAL CONSTANTS ----------
 
-DEFAULT_REPORT_GROUP_COL = "report_group"
+DEFAULT_REPORT_GROUP_COL = "imported_path_short"
+NO_GROUPING_COL = "common_base"
+NO_GROUPING_LABEL = "(NO GROUPING)"
 
 MAX_UNIQUE_GROUP = 12  # TODO: move to config
 
@@ -290,7 +292,8 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
                     html.Label("Group by column(s)", className="mt-1"),
                     dcc.Dropdown(
                         id=GLOBAL_GROUPBY_COLS_ID,
-                        options=[{"label": c, "value": c} for c in candidate_group_cols],
+                        options=[{"label": NO_GROUPING_LABEL, "value": NO_GROUPING_COL}] +
+                                [{"label": c, "value": c} for c in candidate_group_cols],
                         value=init_group,
                         multi=False,
                         clearable=True,
@@ -298,7 +301,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
                         style={"width": "100%"},
                     ),
                     html.Small(
-                        "If left empty, `report_group` is `imported_path_short` (if available).",
+                        f"Default is `imported_path_short` (if exists). Select '{NO_GROUPING_LABEL}' to disable grouping.",
                         className="text-muted",
                     ),
                     html.Hr(),
@@ -523,7 +526,13 @@ def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str
     group_col = global_config.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
 
     if group_col not in df.columns:
-        group_col = DEFAULT_REPORT_GROUP_COL if DEFAULT_REPORT_GROUP_COL in df.columns else df.columns[0]
+        # Fallback chain: DEFAULT_REPORT_GROUP_COL -> NO_GROUPING_COL -> first column
+        if DEFAULT_REPORT_GROUP_COL in df.columns:
+            group_col = DEFAULT_REPORT_GROUP_COL
+        elif NO_GROUPING_COL in df.columns:
+            group_col = NO_GROUPING_COL
+        else:
+            group_col = df.columns[0]
 
     return group_col
 
