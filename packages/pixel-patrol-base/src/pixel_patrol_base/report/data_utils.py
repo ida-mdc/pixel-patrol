@@ -175,24 +175,205 @@ def prettify_col_name(col: Optional[str]) -> Optional[str]:
 
 
 def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
+    """
+    Converts a column to discrete string labels suitable for grouping/display.
+    Applies smart shortening based on value content:
+    - Floats: minimum 2 decimal places, more if needed for uniqueness
+    - Paths: only distinguishing path suffixes (with ... prefix)
+    - Integers: just stringify
+    - Strings: shorten common prefix/suffix if long enough (with ... indicator)
+    Null values become MISSING_LABEL.
+    """
+    new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
 
+    # Get unique values, check for nulls
+    unique_vals = df.select(pl.col(group_col).unique().sort()).to_series().to_list()
+    has_nulls = None in unique_vals
+    unique_non_null = [v for v in unique_vals if v is not None]
+
+    if not unique_non_null:
+        # All nulls
+        df = df.with_columns(pl.lit(MISSING_LABEL).alias(new_group_col))
+        return df, new_group_col, [MISSING_LABEL]
+
+    # Build mapping from original value -> display label
+    if df[group_col].dtype.is_float():
+        label_map = _floats_to_categorical(unique_non_null)
+    elif df[group_col].dtype.is_integer():
+        label_map = {v: str(v) for v in unique_non_null}
+    elif _looks_like_paths(unique_non_null):
+        label_map = _paths_to_categorical(unique_non_null)
+    else:
+        # strings - try common prefix/suffix stripping
+        label_map = _strings_to_categorical(unique_non_null)
+
+    # Build sort order: numeric sort for numbers, alpha for strings
     if df[group_col].dtype.is_numeric():
-        new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
-        # numeric sort order, but labels are strings
-        unique_sorted = df.select(pl.col(group_col).unique().sort()).to_series().to_list()
-        order = [MISSING_LABEL if x is None else str(x) for x in unique_sorted]
+        sorted_orig = sorted(unique_non_null)
+    else:
+        sorted_orig = sorted(unique_non_null, key=lambda x: str(x).lower())
 
-        df = df.with_columns(
-            pl.col(group_col).cast(pl.Utf8).fill_null(MISSING_LABEL).alias(new_group_col)
-        )
-        return df, new_group_col, order
+    order = [label_map[v] for v in sorted_orig]
+    if has_nulls:
+        order.append(MISSING_LABEL)
 
-    if df.select(pl.col(group_col).null_count()).item() > 0:
-        df = df.with_columns(
-            pl.col(group_col).cast(pl.Utf8).fill_null(MISSING_LABEL).alias(group_col)
-        )
+    # Apply mapping via replace dict (convert keys to string for polars replace)
+    # We need to cast to string first, then replace, then handle nulls
+    str_map = {str(k): v for k, v in label_map.items()}
 
-    return df, group_col, None
+    df = df.with_columns(
+        pl.col(group_col)
+        .cast(pl.Utf8)
+        .replace(str_map)
+        .fill_null(MISSING_LABEL)
+        .alias(new_group_col)
+    )
+
+    return df, new_group_col, order
+
+
+def _floats_to_categorical(values: List[float]) -> Dict[float, str]:
+    """
+    Format floats for display:
+    - If all whole numbers: display as integers
+    - Otherwise: minimum 2 decimal places, more if needed for uniqueness
+    """
+    # Check if these are "integer floats" (e.g., 1.0, 2.0, 3.0)
+    all_whole = all(float(v) == int(v) for v in values)
+
+    if all_whole:
+        return {v: str(int(v)) for v in values}
+
+    # Start with 2 decimal places minimum, increase if needed for uniqueness
+    for decimals in range(2, 15):
+        formatted = {v: f"{v:.{decimals}f}" for v in values}
+        if len(set(formatted.values())) == len(values):
+            return formatted
+
+    # Fallback - full precision
+    return {v: repr(v) for v in values}
+
+
+def _looks_like_paths(values: List) -> bool:
+    """Check if all values appear to be file/directory paths."""
+    if not values:
+        return False
+    str_vals = [str(v) for v in values]
+    return all('/' in s or '\\' in s for s in str_vals)
+
+
+def _paths_to_categorical(values: List) -> Dict:
+    """
+    Keep only the distinguishing suffix of paths (full folder names).
+    Adds '...' prefix to indicate truncation.
+    """
+    from pathlib import PurePosixPath, PureWindowsPath
+
+    str_vals = [str(v) for v in values]
+
+    if len(str_vals) < 2:
+        return {v: str(v) for v in values}
+
+    # Detect separator
+    sep = '/' if any('/' in s for s in str_vals) else '\\'
+    PathClass = PurePosixPath if sep == '/' else PureWindowsPath
+
+    # Split into parts
+    parsed = [PathClass(s).parts for s in str_vals]
+
+    if not parsed or not parsed[0]:
+        return {v: str(v) for v in values}
+
+    # Find how many trailing parts we need for uniqueness
+    max_parts = max(len(p) for p in parsed)
+
+    for n_parts in range(1, max_parts + 1):
+        suffixes = [sep.join(p[-n_parts:]) if len(p) >= n_parts else sep.join(p) for p in parsed]
+        if len(set(suffixes)) == len(values):
+            # Check if we actually shortened anything
+            result = {}
+            for orig, suf, parts in zip(values, suffixes, parsed):
+                if len(parts) > n_parts:
+                    result[orig] = f"...{sep}{suf}"
+                else:
+                    result[orig] = suf
+            return result
+
+    # Fallback
+    return {v: str(v) for v in values}
+
+
+def _strings_to_categorical(values: List, min_strip_len: int = 10) -> Dict:
+    """
+    Strip common prefix/suffix from strings, but only if:
+    - The common part is long enough to be worth removing (>=10 chars)
+    - We indicate truncation with '...'
+    """
+    str_vals = [str(v) for v in values]
+
+    if len(str_vals) < 2:
+        return {v: str(v) for v in values}
+
+    # Find common prefix/suffix
+    prefix = _common_prefix(str_vals)
+    suffix = _common_suffix(str_vals)
+
+    # Only strip if the common part is substantial
+    strip_prefix = len(prefix) >= min_strip_len
+    strip_suffix = len(suffix) >= min_strip_len
+
+    if not strip_prefix and not strip_suffix:
+        return {v: str(v) for v in values}
+
+    shortened = []
+    for s in str_vals:
+        result = s
+        prefix_indicator = ""
+        suffix_indicator = ""
+
+        if strip_prefix:
+            result = result[len(prefix):]
+            prefix_indicator = "..."
+
+        if strip_suffix and len(result) > len(suffix):
+            result = result[:-len(suffix)]
+            suffix_indicator = "..."
+
+        final = f"{prefix_indicator}{result}{suffix_indicator}"
+        # Don't allow empty or just ellipsis
+        shortened.append(final if result else s)
+
+    # Only use shortened if all still unique
+    if len(set(shortened)) == len(values):
+        return {orig: short for orig, short in zip(values, shortened)}
+
+    return {v: str(v) for v in values}
+
+
+def _common_prefix(strings: List[str]) -> str:
+    """Find longest common prefix."""
+    if not strings:
+        return ""
+    prefix = strings[0]
+    for s in strings[1:]:
+        while not s.startswith(prefix):
+            prefix = prefix[:-1]
+            if not prefix:
+                return ""
+    return prefix
+
+
+def _common_suffix(strings: List[str]) -> str:
+    """Find longest common suffix."""
+    if not strings:
+        return ""
+    suffix = strings[0]
+    for s in strings[1:]:
+        while not s.endswith(suffix):
+            suffix = suffix[1:]
+            if not suffix:
+                return ""
+    return suffix
 
 
 # --- Histogram Math & Aggregation Helpers ---
