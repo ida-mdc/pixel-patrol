@@ -9,15 +9,12 @@ from PIL import Image
 from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strings_alpha, select_needed_columns
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
-SPRITE_SIZE = 32
-DEFAULT_COL = 'mean_intensity'
+_SPRITE_SIZE = 32
+_DEFAULT_COL = 'mean_intensity'
 
 
 class ImageMosaikWidget(BaseReportWidget):
@@ -87,8 +84,8 @@ class ImageMosaikWidget(BaseReportWidget):
         options = [{"label": c, "value": c} for c in sortable]
 
         default = None
-        if DEFAULT_COL in sortable:
-            default = DEFAULT_COL
+        if _DEFAULT_COL in sortable:
+            default = _DEFAULT_COL
         elif sortable:
             default = sortable[0]
 
@@ -158,7 +155,7 @@ def _create_sprite_image(
 ):
     """Builds a grid mosaic from df['thumbnail']."""
     if "thumbnail" not in df.columns or df.get_column("thumbnail").is_empty():
-        return Image.new("RGBA", (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
+        return Image.new("RGBA", (_SPRITE_SIZE, _SPRITE_SIZE), (0, 0, 0, 0))
 
     images = df.get_column("thumbnail").to_list()
     groups = df.get_column(group_col).to_list()
@@ -181,12 +178,12 @@ def _create_sprite_image(
                 arr = arr.astype(np.uint8)
             img = Image.fromarray(arr).convert("RGB")
 
-        resized = img.resize((SPRITE_SIZE, SPRITE_SIZE))
+        resized = img.resize((_SPRITE_SIZE, _SPRITE_SIZE))
 
         if border and border_size > 0:
             new_img = Image.new(
                 "RGB",
-                (SPRITE_SIZE + 2 * border_size, SPRITE_SIZE + 2 * border_size),
+                (_SPRITE_SIZE + 2 * border_size, _SPRITE_SIZE + 2 * border_size),
                 border_rgb,
             )
             new_img.paste(resized, (border_size, border_size))
@@ -195,11 +192,11 @@ def _create_sprite_image(
             processed.append(resized)
 
     if not processed:
-        return Image.new("RGBA", (SPRITE_SIZE, SPRITE_SIZE), (0, 0, 0, 0))
+        return Image.new("RGBA", (_SPRITE_SIZE, _SPRITE_SIZE), (0, 0, 0, 0))
 
     n = len(processed)
     per_row = int(np.ceil(np.sqrt(n)))
-    effective_dim = SPRITE_SIZE + (2 * border_size if border else 0)
+    effective_dim = _SPRITE_SIZE + (2 * border_size if border else 0)
 
     width = per_row * effective_dim
     height = int(np.ceil(n / per_row)) * effective_dim

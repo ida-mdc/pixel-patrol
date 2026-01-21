@@ -7,11 +7,8 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
 from pixel_patrol_base.report.factory import plot_grouped_scatter, show_no_data_message
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 
 
 class MetricsAcrossDimensionsWidget(BaseReportWidget):

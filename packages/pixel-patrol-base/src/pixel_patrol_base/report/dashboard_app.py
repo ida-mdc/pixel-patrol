@@ -14,11 +14,11 @@ from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
-from pixel_patrol_base.report.global_controls import (
-    build_sidebar,
-    apply_global_row_filters_and_grouping,
-    compute_filtered_row_positions,
-    prepare_widget_data,
+from pixel_patrol_base.report.global_controls import (build_sidebar,
+                                                      apply_global_row_filters_and_grouping,
+                                                      compute_filtered_row_positions,
+                                                      prepare_widget_data)
+from pixel_patrol_base.report.constants import (
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
     FILTERED_INDICES_STORE_ID,

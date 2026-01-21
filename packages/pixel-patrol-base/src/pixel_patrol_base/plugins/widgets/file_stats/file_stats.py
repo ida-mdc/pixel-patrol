@@ -7,13 +7,10 @@ import math
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 from pixel_patrol_base.report.data_utils import get_all_grouping_cols
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 
 MAX_DAYS = 20
 SIZE_LOG_THRESHOLD = 30
