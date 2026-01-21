@@ -1,9 +1,8 @@
 import polars as pl
-from polars import List as PolarsList
 from pixel_patrol_base.utils.path_utils import find_common_base
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
-import numpy as np
-from typing import List, Dict, Any
+from pathlib import PurePath
+
 
 
 def normalize_file_extension(df: pl.DataFrame) -> pl.DataFrame:
@@ -27,15 +26,17 @@ def postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
         return df
 
     common_base = find_common_base(df["imported_path"].unique().to_list())
+    common_base_name = PurePath(common_base).name or common_base
 
     df = df.with_columns([
         pl.col("modification_date").dt.month().alias("modification_month"),
-        pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
         pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
+        pl.lit(common_base_name).alias("common_base"),
     ])
 
-    df = df.with_columns([
-        pl.col("imported_path_short").alias("report_group"), # TODO: is this what we want the default to be?
-    ])
+    if df["imported_path"].n_unique() > 1:
+        df = df.with_columns(
+            pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short")
+        )
 
     return df
