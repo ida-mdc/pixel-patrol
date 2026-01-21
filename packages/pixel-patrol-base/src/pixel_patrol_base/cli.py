@@ -17,6 +17,7 @@ from pixel_patrol_base.api import (
 )
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
+from pixel_patrol_base.report.constants import NO_GROUPING_COL
 
 
 @click.group()
@@ -184,7 +185,7 @@ def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | N
         filters[filter_col] = {"op": filter_op, "value": filter_value}
 
     global_config = {
-        "group_col": [group_by] if group_by else ["report_group"],
+        "group_col": group_by or NO_GROUPING_COL,
         "filter": filters,
         "dimensions": dim_dict,
     }

@@ -69,7 +69,7 @@ def find_common_base(paths: List[str]) -> str:
     if not paths:
         return ""
     if len(paths) == 1:
-        return str(Path(paths[0]).parent) + "/"  # Ensure it ends with a slash if it's a directory
+        return str(Path(paths[0])) + "/"  # Ensure it ends with a slash if it's a directory
 
     # Convert to Path objects to use their methods
     path_objects = [Path(p) for p in paths]
