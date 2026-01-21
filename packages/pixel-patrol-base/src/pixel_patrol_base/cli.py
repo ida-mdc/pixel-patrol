@@ -100,7 +100,7 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     # If --resume is passed, resume from existing partial chunks and skip already-processed images.
     if chosen_chunk_dir.exists() and not resume:
         click.echo(f"No --resume passed: clearing previous partial chunk files in: '{chosen_chunk_dir}'")
-        _cleanup_partial_chunks_dir(chosen_chunk_dir)
+        _cleanup_partial_chunks_dir(chosen_chunk_dir, cleanup_combined_parquet=False)
     elif chosen_chunk_dir.exists() and resume:
         click.echo(f"--resume passed: resuming and skipping already-processed images in '{chosen_chunk_dir}'")
 
@@ -119,12 +119,11 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     process_files(my_project)
 
     click.echo(f"Exporting project to: '{output_zip}'")
-    export_project(my_project, Path(output_zip)) # Assuming export_project takes string path
+    # Export. Project IO will include either the combined parquet (if present) or
+    # any partial chunks and will perform final tidy-up by default.
+    export_project(my_project, Path(output_zip))
     click.echo("Export complete.")
 
-    # Remove intermediate partial chunk files once the archive is ready.
-    if chosen_chunk_dir.exists() and chunk_dir_was_inferred:
-        _cleanup_partial_chunks_dir(chosen_chunk_dir)
 
 
 @cli.command()

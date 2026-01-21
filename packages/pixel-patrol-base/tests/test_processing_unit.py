@@ -84,8 +84,8 @@ def test_resolve_batch_size_scales_with_flush_threshold():
     assert processing._resolve_batch_size(worker_count=1, flush_threshold=7, total_rows=100) == 7
 
 
-def test_cleanup_partial_chunks_dir_preserves_combined_file(tmp_path):
-    """Cleanup should remove only partial chunks and keep combined parquet."""
+def test_cleanup_partial_chunks_dir_removes_combined_by_default(tmp_path):
+    """Cleanup should remove partial chunks and combined parquet by default."""
     flush_dir = tmp_path / "batches"
     flush_dir.mkdir()
     combined = flush_dir / "records_df.parquet"
@@ -95,9 +95,9 @@ def test_cleanup_partial_chunks_dir_preserves_combined_file(tmp_path):
 
     processing._cleanup_partial_chunks_dir(flush_dir)
 
-    assert combined.exists()
+    assert not combined.exists()
     assert not partial.exists()
-    assert flush_dir.exists()
+    assert not flush_dir.exists()
 
 
 def test_records_accumulator_handles_mixed_schema_batches():

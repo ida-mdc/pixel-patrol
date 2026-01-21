@@ -21,13 +21,13 @@ def test_cleanup_partial_chunks_dir(tmp_path: Path):
 
     processing._cleanup_partial_chunks_dir(d)
 
-    # partial chunks removed, combined still present
+    # partial chunks removed, combined also removed by default
     assert not p1.exists()
     assert not p2.exists()
-    assert combined.exists()
+    assert not combined.exists()
 
     # calling again is a no-op (should not raise)
     processing._cleanup_partial_chunks_dir(d)
 
-    # After cleanup, directory may be removed if empty; in our case combined still exists
-    assert d.exists()
+    # After cleanup, directory should be removed (it is empty)
+    assert not d.exists()

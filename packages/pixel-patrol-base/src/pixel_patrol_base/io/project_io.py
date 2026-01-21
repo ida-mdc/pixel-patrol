@@ -122,12 +122,14 @@ def _add_files_to_zip(
         raise IOError(f"Could not create or write to zip archive at {zip_file_path}: {e}") from e
 
 
-def export_project(project: Project, dest: Path) -> None:
+def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool = True) -> None:
     """
     Exports the project state to a zip archive.
     Args:
         project: The Project object to export.
         dest: The destination path for the zip archive (e.g., 'my_project.zip').
+        cleanup_combined_parquet: If True, attempt to remove the combined 'records_df.parquet' in
+            the project's flush directory after exporting the archive. Defaults to False.
 
     Archive contains:
     - metadata.yml: Project name, paths (as strings), settings.
@@ -149,25 +151,22 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        # If processing created a combined records_df.parquet in the flush dir,
-        # prefer adding that file directly to the archive rather than
-        # re-serializing the in-memory DataFrame. This keeps the ZIP small
-        # and preserves the exact on-disk combined artifact produced during
-        # processing.
+        # If processing created any records parquet files in the flush dir (either
+        # combined 'records_df.parquet' or partial 'records_batch_*.parquet'), include
+        # all of them in the zip.
         flush_dir = getattr(project.settings, "records_flush_dir", None)
-        combined_on_disk = None
+        added_records = False
         if flush_dir:
             try:
-                candidate = Path(flush_dir) / RECORDS_DF_FILENAME
-                if candidate.exists():
-                    combined_on_disk = candidate
+                record_files = sorted(Path(flush_dir).glob("records_*.parquet"))
+                for rf in record_files:
+                    files_for_zip.append((rf, rf.name))
+                    added_records = True
             except Exception:
                 # ignore problems inspecting the flush dir and fall back to serializing
-                combined_on_disk = None
+                added_records = False
 
-        if combined_on_disk is not None:
-            files_for_zip.append((combined_on_disk, RECORDS_DF_FILENAME))
-        else:
+        if not added_records:
             records_df_tmp_path = write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
             if records_df_tmp_path:
                 files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
@@ -176,7 +175,7 @@ def export_project(project: Project, dest: Path) -> None:
         _add_files_to_zip(dest, files_for_zip)
 
     # tidy up using procssing function; keeps combioned parquet intact
-    _cleanup_partial_chunks_dir(getattr(project.settings, "records_flush_dir", None))
+    _cleanup_partial_chunks_dir(getattr(project.settings, "records_flush_dir", None), cleanup_combined_parquet=cleanup_combined_parquet)
 
 
 def _validate_source_archive(src: Path) -> None:

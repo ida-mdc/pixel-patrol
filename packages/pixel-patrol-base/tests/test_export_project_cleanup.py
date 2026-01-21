@@ -28,7 +28,7 @@ def test_export_project_cleans_partial_chunks(tmp_path: Path):
 
     export_project(project, out_zip)
 
-    # partial chunks should be removed, combined still exists
+    # partial chunks and combined parquet should be removed by default
     assert not p1.exists()
     assert not p2.exists()
-    assert combined.exists()
+    assert not combined.exists()

@@ -97,8 +97,6 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
         # Verify records_df content
         with zf.open(RECORDS_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
-            # FIXME: The test use pl.read_parquet directly instead the _read_dataframe_from_parquet() function implemented. This results in a lack of consistency and potential issues with object column handling.
-            # HOTFIX:
             loaded_df = _deserialize_ndarray_columns_dataframe(loaded_df)
 
             # TODO: this is a patch - need to handle thumbnail column (and future object columns) properly
