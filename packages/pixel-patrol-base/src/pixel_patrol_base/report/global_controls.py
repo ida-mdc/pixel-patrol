@@ -563,7 +563,7 @@ def prepare_widget_data(
     # 3. Resolve Dimension-Specific Column (if needed)
     resolved_col = None
     warning_msg = None
-    dims_selection = global_config.get("dimensions", {})
+    dims_selection = global_config.get(GC_DIMENSIONS, {})
 
     if metric_base:
         resolved_col = get_dim_aware_column(
