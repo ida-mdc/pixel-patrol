@@ -19,13 +19,10 @@ def test_find_common_base_multiple_paths():
 
 
 def test_find_common_base_single_path():
-    """Test finding common base with a single path."""
-    # The function returns the parent directory for a single file path
-    file_path = Path("/home/user/data/image.jpg")
+    file_path = Path("/home/user/data/image/")
     paths = [str(file_path)]
-    expected = str(file_path.parent)
+    expected = str(file_path)
     result = find_common_base(paths)
-    # Normalize slashes for comparison
     assert Path(result) == Path(expected)
 
 

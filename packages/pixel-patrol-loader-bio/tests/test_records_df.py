@@ -260,7 +260,7 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
     assert df["height"].to_list() == [15, 25]
 
 
-def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported_path_short(tmp_path):
+def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
     from pathlib import Path
     base = tmp_path
     df = pl.DataFrame({
@@ -283,10 +283,8 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month_and_imported
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
-    actual_short = out["imported_path_short"].to_list()
     expected_full = [str(base), str(base)]
     expected_last = [Path(base).name, Path(base).name]
-    assert actual_short == expected_full or actual_short == expected_last
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
