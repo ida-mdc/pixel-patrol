@@ -6,6 +6,7 @@ import polars as pl
 from numpy import ndarray
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
+import math
 
 from pixel_patrol_base.report.data_utils import prettify_col_name
 from pixel_patrol_base.report.constants import NO_GROUPING_COL
@@ -80,6 +81,16 @@ def _sanitize_labels(labels: Optional[Dict[str, str]], *cols: Optional[str]) -> 
             if pretty and c not in out:
                 out[c] = pretty
     return out
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert hex color to rgba string with given alpha."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 3:
+        hex_color = "".join(c * 2 for c in hex_color)
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 
 # =============================================================================
 #  SECTION 2: HTML CONTAINERS
@@ -423,41 +434,104 @@ def plot_violin(
     return chart
 
 
-def plot_grouped_scatter(
+
+def plot_aggregated_scatter(
         df: pl.DataFrame,
         x_col: str,
         y_col: str,
+        y_std_col: str,
+        n_col: str,
         group_col: str,
         *,
-        mode: str = "lines+markers",
-        color_map: Optional[Dict[str, str]] = None,
+        color_map: Dict[str, str] = None,
         show_legend: bool = False,
-        height: int = 120,
+        height: int = 140,
 ) -> go.Figure:
     """
-    Generic grouped XY plot. Expects df already in long/aggregated form.
+    grouped XY plot showing:
+    - Line for mean values
+    - Shaded band for ±1 std deviation
+    - Marker size proportional to log(n) to show sample count
+    - Rich hover info with n, mean, std
     """
     color_map = color_map or {}
     fig = go.Figure()
 
     groups = (
         df.get_column(group_col)
-          .unique()
-          .drop_nulls()
-          .sort()
-          .to_list()
+        .unique()
+        .drop_nulls()
+        .sort()
+        .to_list()
     )
 
     for g in groups:
-        dfg = df.filter(pl.col(group_col) == g)
+        dfg = df.filter(pl.col(group_col) == g).sort(x_col)
+
+        x_vals = dfg[x_col].to_list()
+        y_mean = dfg[y_col].to_list()
+        y_std = dfg[y_std_col].to_list()
+        n_vals = dfg[n_col].to_list()
+
+        color = color_map.get(str(g), "#333333")
+
+        # Calculate upper and lower bounds for the band
+        y_upper = [m + s for m, s in zip(y_mean, y_std)]
+        y_lower = [m - s for m, s in zip(y_mean, y_std)]
+
+        # Marker sizes: scale by log(n) for visibility, with min/max bounds
+        marker_sizes = [max(4, min(12, 3 + 3 * math.log10(max(n, 1)))) for n in n_vals]
+
+        # Add shaded std band (fill between upper and lower)
+        # Upper bound line (invisible)
         fig.add_trace(
             go.Scatter(
-                x=dfg[x_col].to_list(),
-                y=dfg[y_col].to_list(),
-                mode=mode,
+                x=x_vals,
+                y=y_upper,
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        # Lower bound with fill to previous trace
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_lower,
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor=_hex_to_rgba(color, 0.2),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+        # Main line with markers
+        hover_text = [
+            f"<b>{g}</b><br>"
+            f"Slice: {x}<br>"
+            f"Mean: {m:.3f}<br>"
+            f"Std: {s:.3f}<br>"
+            f"<b>n={n}</b>"
+            for x, m, s, n in zip(x_vals, y_mean, y_std, n_vals)
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_mean,
+                mode="lines+markers",
                 name=str(g),
-                line=dict(width=2, color=color_map.get(str(g))),
-                marker=dict(size=5),
+                line=dict(width=2, color=color),
+                marker=dict(
+                    size=marker_sizes,
+                    color=color,
+                    line=dict(width=1, color="white"),
+                ),
+                hovertemplate="%{text}<extra></extra>",
+                text=hover_text,
             )
         )
 
