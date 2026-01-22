@@ -10,6 +10,7 @@ import math
 
 from pixel_patrol_base.report.data_utils import prettify_col_name
 from pixel_patrol_base.report.constants import NO_GROUPING_COL
+from pixel_patrol_base.report.stats_annotations import annotate_plot_with_significance
 
 # =============================================================================
 #  SECTION 1: GLOBAL STYLES
@@ -363,10 +364,11 @@ def plot_violin(
         height: Optional[int] = None,
         show_legend: bool = False,
         group_order: Optional[List[str]] = None,
+        annotate_significance=False,
 ) -> go.Figure:
 
     color_map = color_map or {}
-    chart = go.Figure()
+    fig = go.Figure()
 
     if group_order:
         present = set(df.get_column(group_col).drop_nulls().unique().to_list())
@@ -399,7 +401,7 @@ def plot_violin(
 
         violin_kwargs["marker"] = dict(color=group_color)
 
-        chart.add_trace(
+        fig.add_trace(
             go.Violin(
                 **violin_kwargs,
                 hovertemplate=(
@@ -412,7 +414,7 @@ def plot_violin(
             )
         )
 
-    chart.update_traces(
+    fig.update_traces(
         marker=dict(line=dict(width=1, color="black")),
         box=dict(line_color="black"),
     )
@@ -428,10 +430,16 @@ def plot_violin(
     )
 
     if height is not None:
-        chart.update_layout(**layout, height=height)
+        fig.update_layout(**layout, height=height)
     else:
-        chart.update_layout(**layout)
-    return chart
+        fig.update_layout(**layout)
+
+    if annotate_significance:
+        fig = annotate_plot_with_significance(
+            fig=fig, df=df, value_col=y, group_col=group_col, group_order=groups
+        )
+
+    return fig
 
 
 
@@ -567,6 +575,7 @@ def build_violin_grid(
     numeric_cols: List[str],
     group_col: str,
     order_x: Optional[List[str]] = None,
+    annotate_significance=False,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
@@ -627,6 +636,7 @@ def build_violin_grid(
             custom_data_col = "name",
             show_legend = False,
             group_order=order_x,
+            annotate_significance=annotate_significance,
         )
         plot_divs.append(
             html.Div(
@@ -670,12 +680,12 @@ def plot_grouped_histogram(
     """
     Plots aggregated line histograms for groups, optionally overlaying a bar chart for a single item.
     """
-    chart = go.Figure()
+    fig = go.Figure()
 
     # 1. Plot the overlay bar chart first (so lines appear on top, or vice versa depending on pref)
     # Usually bars for single file, lines for group means.
     if overlay_data:
-        chart.add_trace(
+        fig.add_trace(
             go.Bar(
                 x=overlay_data["x"],
                 y=overlay_data["y"],
@@ -696,7 +706,7 @@ def plot_grouped_histogram(
     for group_name in keys:
         x_vals, y_vals = group_data[group_name]
         color = color_map.get(group_name, "#333333")
-        chart.add_trace(
+        fig.add_trace(
             go.Scatter(
                 x=x_vals,
                 y=y_vals,
@@ -716,11 +726,11 @@ def plot_grouped_histogram(
         yaxis_title=yaxis_title,
         bargap=0.0,
     )
-    chart.update_layout(**layout)
+    fig.update_layout(**layout)
     if len(group_data) > 1:
-        chart.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
 
-    return chart
+    return fig
 
 
 def plot_sunburst(

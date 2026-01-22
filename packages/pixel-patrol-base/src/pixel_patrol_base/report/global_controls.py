@@ -18,6 +18,7 @@ from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 GC_GROUP_COL,
                                                 GC_FILTER,
                                                 GC_DIMENSIONS,
+                                                GC_IS_SHOW_SIGNIFICANCE,
                                                 DEFAULT_REPORT_GROUP_COL,
                                                 PALETTE_SELECTOR_ID,
                                                 GLOBAL_CONFIG_STORE_ID,
@@ -28,6 +29,7 @@ from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 GLOBAL_FILTER_OP_ID,
                                                 GLOBAL_FILTER_TEXT_ID,
                                                 GLOBAL_DIM_FILTER_TYPE,
+                                                GLOBAL_SHOW_SIGNIFICANCE_ID,
                                                 GLOBAL_APPLY_BUTTON_ID,
                                                 GLOBAL_RESET_BUTTON_ID,
                                                 EXPORT_CSV_BUTTON_ID,
@@ -79,6 +81,7 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
         GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL,
         GC_FILTER: {},
         GC_DIMENSIONS: {},
+        GC_IS_SHOW_SIGNIFICANCE: False,
     }
 
     if initial:
@@ -358,6 +361,19 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
                             className="g-0 mb-2"
                         )
                     ]),
+                    html.Hr(),
+
+                    # Statistical significance toggle
+                    dbc.Checkbox(
+                        id=GLOBAL_SHOW_SIGNIFICANCE_ID,
+                        label="Show statistical significance",
+                        value=initial_global_config.get(GC_IS_SHOW_SIGNIFICANCE, False),
+                        className="mb-1",
+                    ),
+                    html.Small(
+                        "Pairwise comparisons on selected plots",
+                        className="text-muted d-block mb-3",
+                    ),
                     html.Hr(),
 
                     dbc.Row([

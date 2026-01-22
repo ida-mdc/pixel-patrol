@@ -16,6 +16,7 @@ from pixel_patrol_base.report.data_utils import (
 from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.constants import (FILTERED_INDICES_STORE_ID,
                                                 GLOBAL_CONFIG_STORE_ID,
+                                                GC_DIMENSIONS,
                                                 MAX_RECORDS_IN_MENU)
 
 
@@ -229,7 +230,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         # Optional single-file overlay (respecting global filters)
         overlay_data = get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
 
-        dims_selection = (global_config or {}).get("dimensions", {})
+        dims_selection = (global_config or {}).get(GC_DIMENSIONS, {})
 
         fig = plot_grouped_histogram(
             group_data=group_data,
