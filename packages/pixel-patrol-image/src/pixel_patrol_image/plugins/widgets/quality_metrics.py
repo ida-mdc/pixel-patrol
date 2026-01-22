@@ -4,7 +4,7 @@ from pixel_patrol_image.plugins.processors.quality_metrics_processor import Qual
 from pixel_patrol_base.core.feature_schema import patterns_from_processor
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.plugins.widgets.multi_metric_violin_abstract_widget import MultiMetricViolinGridWidget
-
+from pixel_patrol_base.report.constants import SIGNIFICANCE_HELP_TEXT
 
 class QualityMetricsWidget(MultiMetricViolinGridWidget):
     # ---- Declarative spec ----
@@ -37,4 +37,5 @@ class QualityMetricsWidget(MultiMetricViolinGridWidget):
             "- **Noise std** – Estimated pixel-level noise standard deviation; higher noise reduces clarity.\n"
             "- **Blocking records** – Strength of blocky compression artifacts (e.g. JPEG blocking).\n"
             "- **Ringing records** – Edge oscillation artifacts around sharp boundaries, often due to compression.\n\n"
+            + SIGNIFICANCE_HELP_TEXT
         )

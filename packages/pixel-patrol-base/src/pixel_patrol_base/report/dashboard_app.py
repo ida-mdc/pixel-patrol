@@ -27,6 +27,7 @@ from pixel_patrol_base.report.constants import (
     GLOBAL_FILTER_OP_ID,
     GLOBAL_FILTER_TEXT_ID,
     GLOBAL_DIM_FILTER_TYPE,
+    GLOBAL_SHOW_SIGNIFICANCE_ID,
     GLOBAL_APPLY_BUTTON_ID,
     GLOBAL_RESET_BUTTON_ID,
     EXPORT_CSV_BUTTON_ID,
@@ -39,6 +40,7 @@ from pixel_patrol_base.report.constants import (
     GC_GROUP_COL,
     GC_DIMENSIONS,
     GC_FILTER,
+    GC_IS_SHOW_SIGNIFICANCE,
 )
 
 import logging
@@ -289,6 +291,7 @@ def _create_app(
         Output(GLOBAL_CONFIG_STORE_ID, "data"),
         Input(GLOBAL_APPLY_BUTTON_ID, "n_clicks"),
         Input(GLOBAL_RESET_BUTTON_ID, "n_clicks"),
+        State(GLOBAL_SHOW_SIGNIFICANCE_ID, "value"),
         State(GLOBAL_GROUPBY_COLS_ID, "value"),
         State(GLOBAL_FILTER_COLUMN_ID, "value"),
         State(GLOBAL_FILTER_OP_ID, "value"),
@@ -300,6 +303,7 @@ def _create_app(
     def update_global_config(
             _apply_clicks,
             _reset_clicks,
+            show_significance,
             group_col,
             filter_col,
             filter_op,
@@ -329,7 +333,10 @@ def _create_app(
             if val and val != "All":
                 dimensions[id_obj['index']] = val
 
-        return {GC_GROUP_COL: group_col, GC_FILTER: filters, GC_DIMENSIONS: dimensions}
+        return {GC_GROUP_COL: group_col,
+                GC_FILTER: filters,
+                GC_DIMENSIONS: dimensions,
+                GC_IS_SHOW_SIGNIFICANCE: show_significance,}
 
     @app.callback(
         Output(GLOBAL_GROUPBY_COLS_ID, "value"),

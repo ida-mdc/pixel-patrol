@@ -8,7 +8,7 @@ from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
 from pixel_patrol_base.report.factory import show_no_data_message, plot_aggregated_scatter
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
-from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, GC_DIMENSIONS
 
 
 class MetricsAcrossDimensionsWidget(BaseReportWidget):
@@ -77,7 +77,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             return show_no_data_message()
 
         # --- Dimension filter (from global controls) ---
-        dims_selection_raw = global_config.get("dimensions") or {}
+        dims_selection_raw = global_config.get(GC_DIMENSIONS) or {}
 
         # Build dim_filter: {dim_name: index_value} for active filters
         dim_filter: Dict[str, str] = {}
