@@ -759,16 +759,36 @@ def plot_sunburst(
     return fig
 
 
+
 def plot_image_mosaic(
     sprite_np: ndarray,
     *,
     unique_groups: List[str],
     color_map: Dict[str, str],
     height: int,
+    hover_info: Optional[Dict] = None,
 ) -> go.Figure:
     fig = px.imshow(sprite_np)
-    fig.update_traces(hovertemplate=None, selector=dict(type="image"))
+    fig.update_traces(hoverinfo='skip', hovertemplate=None, selector=dict(type="image"))
 
+    # Add invisible scatter points for hover (if hover_info provided)
+    if hover_info and hover_info.get("names"):
+        fig.add_trace(
+            go.Scatter(
+                x=hover_info["x"],
+                y=hover_info["y"],
+                mode="markers",
+                marker=dict(
+                    size=hover_info.get("marker_size", 32),
+                    opacity=0,  # Invisible markers
+                ),
+                text=hover_info["names"],
+                hovertemplate="%{text}<extra></extra>",
+                showlegend=False,
+            )
+        )
+
+    # Add legend entries for groups
     for label in unique_groups:
         fig.add_trace(
             go.Scatter(
@@ -787,7 +807,7 @@ def plot_image_mosaic(
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         margin=dict(l=0, r=0, t=0, b=0),
-        hovermode=False,
+        hovermode="closest",  # CHANGED: Enable hover
         legend=dict(
             orientation="h",
             yanchor="top",
