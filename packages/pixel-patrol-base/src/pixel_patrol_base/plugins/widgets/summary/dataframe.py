@@ -63,14 +63,19 @@ class DataFrameWidget(BaseReportWidget):
         if df_filtered.is_empty():
             return show_no_data_message()
 
-        df_limited = df_filtered.limit(MAX_ROWS_DISPLAYED)
-        cols_to_display = df_limited.columns[:MAX_COLS_DISPLAYED]
-        df_limited = df_limited.select(cols_to_display)
+        cols_to_display = df_filtered.columns[:MAX_COLS_DISPLAYED]
+        df_limited = (
+            df_filtered
+            .select(cols_to_display)
+            .limit(MAX_ROWS_DISPLAYED)
+        )
+
+        if df_limited.n_chunks() > 1:
+            df_limited = df_limited.rechunk()
 
         grid = dag.AgGrid(
             id="dataframe-grid",
-            # Even though rechunk is expensive, it ensures that to_dicts works
-            rowData=df_limited.rechunk().to_dicts(),
+            rowData=df_limited.to_dicts(),
             columnDefs=[{"field": col} for col in cols_to_display],
             style={"maxHeight": "70vh"},
         )
