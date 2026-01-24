@@ -86,18 +86,27 @@ def compute_pairwise_significance(
         min_samples: int = 3,
 ) -> Optional[SignificanceResults]:
     """
-    Compute pairwise Mann-Whitney U tests with Bonferroni correction.
-
-    Returns None if fewer than 2 valid groups.
+    Optimized: Single partition call instead of N filter calls.
     """
     if groups is None:
         groups = df[group_col].unique().drop_nulls().sort().to_list()
 
-    valid_groups = []
+    # OPTIMIZATION: Single partition instead of N filters
+    # Extract only needed columns first
+    subset = df.select([group_col, value_col]).drop_nulls()
+
+    # Partition once, then extract arrays
     group_data: Dict[str, np.ndarray] = {}
+    valid_groups = []
+
+    # Use group_by to get all groups at once
+    grouped = subset.group_by(group_col).agg(pl.col(value_col).alias("values"))
+    group_dict = {row[group_col]: row["values"] for row in grouped.iter_rows(named=True)}
 
     for g in groups:
-        data = df.filter(pl.col(group_col) == g)[value_col].drop_nulls().to_numpy()
+        if g not in group_dict:
+            continue
+        data = np.array(group_dict[g])
         if len(data) >= min_samples:
             valid_groups.append(g)
             group_data[g] = data
@@ -105,6 +114,7 @@ def compute_pairwise_significance(
     if len(valid_groups) < 2:
         return None
 
+    # Rest remains the same...
     pairs = list(combinations(valid_groups, 2))
     raw_results: List[Tuple[str, str, float, float]] = []
 
