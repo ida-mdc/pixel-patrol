@@ -61,16 +61,14 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
         )
         n_total_rows = df_filtered.height
 
-        # 1. Select only the columns strictly needed for grouping and counting.
-        cols_needed = [self.CATEGORY_COLUMN]
-        extra = [group_col] if group_col else []
-        df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
-
-        # 2. Filter nulls from the category column
         df_filtered = df_filtered.filter(pl.col(self.CATEGORY_COLUMN).is_not_null())
 
         if df_filtered.is_empty():
             return show_no_data_message()
+
+        cols_needed = [self.CATEGORY_COLUMN]
+        extra = [group_col] if group_col else []
+        df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         n_filtered_rows = df_filtered.height
         ratio_text = (
