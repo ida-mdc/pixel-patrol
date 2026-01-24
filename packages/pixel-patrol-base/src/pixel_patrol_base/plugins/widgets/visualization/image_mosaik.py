@@ -1,4 +1,4 @@
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Tuple
 
 import numpy as np
 import polars as pl
@@ -29,6 +29,8 @@ class ImageMosaikWidget(BaseReportWidget):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._df: pl.DataFrame | None = None
+        # Cache sortable columns (computed once)
+        self._sortable_cols_cache: List[str] | None = None
 
     @property
     def help_text(self) -> str:
@@ -62,6 +64,8 @@ class ImageMosaikWidget(BaseReportWidget):
 
     def register(self, app, df: pl.DataFrame):
         self._df = df
+        # Cache sortable columns at registration time
+        self._sortable_cols_cache = sort_strings_alpha(get_sortable_columns(df))
 
         app.callback(
             Output(self.SORT_ID, "options"),
@@ -77,9 +81,9 @@ class ImageMosaikWidget(BaseReportWidget):
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
         )(self._update_plot)
 
-
     def _set_control_options(self, _color_map: Dict[str, str]):
-        sortable = sort_strings_alpha(get_sortable_columns(self._df))
+        # Use cached sortable columns
+        sortable = self._sortable_cols_cache or []
 
         options = [{"label": c, "value": c} for c in sortable]
 
@@ -90,7 +94,6 @@ class ImageMosaikWidget(BaseReportWidget):
             default = sortable[0]
 
         return options, default
-
 
     def _update_plot(
         self,
@@ -122,20 +125,15 @@ class ImageMosaikWidget(BaseReportWidget):
 
         sprite = _create_sprite_image(
             df,
-            color_map = color_map,
-            group_col = group_col,
-            border = True,
-            border_size = 2,
+            color_map=color_map,
+            group_col=group_col,
+            border=True,
+            border_size=2,
         )
 
         sprite_np = np.array(sprite)
 
-        unique_groups = (
-            df.select(group_col)
-            .unique()
-            .get_column(group_col)
-            .to_list()
-        )
+        unique_groups = df.get_column(group_col).unique().to_list()
 
         fig = plot_image_mosaic(
             sprite_np,
@@ -146,6 +144,11 @@ class ImageMosaikWidget(BaseReportWidget):
         return fig
 
 
+def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
+    """Convert hex color to RGB tuple. Cached results for repeated calls."""
+    return tuple(int(hex_color[i: i + 2], 16) for i in (1, 3, 5))
+
+
 def _create_sprite_image(
     df: pl.DataFrame,
     color_map: Dict[str, str],
@@ -153,21 +156,35 @@ def _create_sprite_image(
     border: bool = False,
     border_size: int = 0,
 ):
-    """Builds a grid mosaic from df['thumbnail']."""
+    """
+    Builds a grid mosaic from df['thumbnail'].
+    """
     if "thumbnail" not in df.columns or df.get_column("thumbnail").is_empty():
         return Image.new("RGBA", (_SPRITE_SIZE, _SPRITE_SIZE), (0, 0, 0, 0))
 
+    # Extract columns once as lists
     images = df.get_column("thumbnail").to_list()
     groups = df.get_column(group_col).to_list()
+
+    # Pre-compute RGB colors for all unique groups
+    color_map = color_map or {}
+    color_rgb_cache: Dict[str, Tuple[int, int, int]] = {}
+    for group_value in set(groups):
+        hex_color = color_map.get(group_value, "#FFFFFF")
+        color_rgb_cache[group_value] = _hex_to_rgb(hex_color)
+
+    # Pre-compute effective dimension once
+    effective_dim = _SPRITE_SIZE + (2 * border_size if border else 0)
 
     processed = []
     for img_data, group_value in zip(images, groups):
         if img_data is None:
             continue
 
-        color_hex = color_map.get(group_value, "#FFFFFF")
-        border_rgb = tuple(int(color_hex[i : i + 2], 16) for i in (1, 3, 5))
+        # Use cached RGB color
+        border_rgb = color_rgb_cache[group_value]
 
+        # Convert to PIL Image
         if isinstance(img_data, Image.Image):
             img = img_data.convert("RGB")
         else:
@@ -181,11 +198,7 @@ def _create_sprite_image(
         resized = img.resize((_SPRITE_SIZE, _SPRITE_SIZE))
 
         if border and border_size > 0:
-            new_img = Image.new(
-                "RGB",
-                (_SPRITE_SIZE + 2 * border_size, _SPRITE_SIZE + 2 * border_size),
-                border_rgb,
-            )
+            new_img = Image.new("RGB", (effective_dim, effective_dim), border_rgb)
             new_img.paste(resized, (border_size, border_size))
             processed.append(new_img)
         else:
@@ -196,15 +209,20 @@ def _create_sprite_image(
 
     n = len(processed)
     per_row = int(np.ceil(np.sqrt(n)))
-    effective_dim = _SPRITE_SIZE + (2 * border_size if border else 0)
 
     width = per_row * effective_dim
     height = int(np.ceil(n / per_row)) * effective_dim
 
-    sprite = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    # Create sprite using numpy array directly, then convert to PIL
+    sprite_arr = np.zeros((height, width, 4), dtype=np.uint8)
 
     for i, img in enumerate(processed):
         r, c = divmod(i, per_row)
-        sprite.paste(img.convert("RGBA"), (c * effective_dim, r * effective_dim))
+        y_start = r * effective_dim
+        x_start = c * effective_dim
 
-    return sprite
+        # Convert to RGBA numpy array and place in sprite
+        img_rgba = np.array(img.convert("RGBA"))
+        sprite_arr[y_start:y_start + effective_dim, x_start:x_start + effective_dim] = img_rgba
+
+    return Image.fromarray(sprite_arr, mode="RGBA")
