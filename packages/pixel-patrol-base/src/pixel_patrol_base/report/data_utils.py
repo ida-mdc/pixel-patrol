@@ -7,6 +7,7 @@ from collections import defaultdict
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
 from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABEL
 
+
 # --- Data Helpers ---
 
 def sort_strings_alpha(values: Sequence[str]) -> List[str]:
@@ -21,7 +22,6 @@ def select_needed_columns(
     cols_needed: Sequence[str],
     extra_cols: Sequence[str] | None = None,
 ) -> pl.DataFrame:
-
     cols = list(cols_needed)
     if extra_cols:
         cols.extend(extra_cols)
@@ -44,6 +44,7 @@ def get_sortable_columns(df: pl.DataFrame) -> List[str]:
                 df[col].dtype not in [pl.List, pl.Struct, pl.Array]
         )
     ]
+
 
 # --- Dim Filter Helpers ---
 
@@ -70,6 +71,7 @@ def get_all_available_dimensions(df: pl.DataFrame) -> Dict[str, List[str]]:
             sorted_dims[k] = sorted(list(v), key=int)
 
     return sorted_dims
+
 
 def find_best_matching_column(
         columns: List[str],
@@ -98,6 +100,7 @@ def find_best_matching_column(
     if candidates:
         return min(candidates, key=len)
     return None
+
 
 def get_dim_aware_column(
     all_columns: list[str],
@@ -438,41 +441,43 @@ def aggregate_histograms_by_group(
     Returns: { group_name: (x_centers, y_avg_counts) }
     """
     results = {}
+
+    # Get unique groups
     groups = df.select(pl.col(group_col).unique()).to_series().to_list()
 
-    for group_val in groups:
-        # Filter logic
-        if group_val is None:
-            df_group = df.filter(
-                pl.col(group_col).is_null() &
-                pl.col(hist_col).is_not_null()
-            )
-        else:
-            df_group = df.filter(
-                (pl.col(group_col) == group_val) &
-                pl.col(hist_col).is_not_null()
-            )
+    # Extract all needed columns once as lists
+    all_groups = df.get_column(group_col).to_list()
+    all_hists = df.get_column(hist_col).to_list()
+    all_mins = df.get_column(min_col).to_list() if min_col in df.columns else [None] * len(all_groups)
+    all_maxs = df.get_column(max_col).to_list() if max_col in df.columns else [None] * len(all_groups)
 
-        if df_group.height == 0:
+    # Pre-index data by group
+    group_indices: Dict[str, List[int]] = defaultdict(list)
+    for i, g in enumerate(all_groups):
+        if all_hists[i] is not None:  # Only include rows with valid histograms
+            group_indices[g].append(i)
+
+    for group_val in groups:
+        indices = group_indices.get(group_val, [])
+        if not indices:
             continue
 
-        # Prepare target edges
+        # Prepare target edges based on mode
         if mode == "shape":
-            # Fixed 0-255 bins
             target_edges = np.linspace(0, 255, 257)
             accumulated = np.zeros(256, dtype=float)
         else:
-            # Native range logic
-            # Calculate global min/max for this group to define common edges
-            gmin = df_group.select(pl.col(min_col).min()).item()
-            gmax = df_group.select(pl.col(max_col).max()).item()
+            # Native range: need to find global min/max for this group
+            group_mins = [all_mins[i] for i in indices if all_mins[i] is not None]
+            group_maxs = [all_maxs[i] for i in indices if all_maxs[i] is not None]
 
-            if gmin is None or gmax is None:
+            if not group_mins or not group_maxs:
                 continue
 
-            # Create edges for the group
+            gmin = min(group_mins)
+            gmax = max(group_maxs)
+
             n_bins = 256
-            # Re-use logic from compute_histogram_edges but just for edges
             smin, _, max_adj = safe_hist_range(np.array([gmin, gmax]))
             width = (float(max_adj) - float(smin)) / float(n_bins)
             target_edges = float(smin) + np.arange(n_bins + 1, dtype=float) * width
@@ -480,18 +485,20 @@ def aggregate_histograms_by_group(
 
         count_files = 0
 
-        # Iterate and rebin
-        # We select only needed columns to speed up iteration
-        subset = df_group.select([hist_col, min_col, max_col])
-        for row in subset.iter_rows():
-            c_list, minv, maxv = row
-            # Fix: Explicitly check None to avoid ValueError with numpy arrays
-            if c_list is None: continue
+        # Process histograms for this group
+        for idx in indices:
+            c_list = all_hists[idx]
+            minv = all_mins[idx]
+            maxv = all_maxs[idx]
+
+            if c_list is None:
+                continue
 
             c_arr = np.asarray(c_list, dtype=float)
-            if c_arr.size == 0 or c_arr.sum() == 0: continue
+            if c_arr.size == 0 or c_arr.sum() == 0:
+                continue
 
-            # Get source edges for this specific image
+            # Get source edges
             src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
 
             # Rebin to group common edges
