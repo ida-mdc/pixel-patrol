@@ -41,6 +41,7 @@ from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 )
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 # ---------- GLOBAL CONSTANTS ----------
@@ -48,6 +49,89 @@ logger = logging.getLogger(__name__)
 _ALLOWED_FILTER_OPS = {"contains", "not_contains", "eq", "gt", "ge", "lt", "le", "in"}
 _NUMERIC_FILTER_OPS = {"gt", "ge", "lt", "le"}
 _DIMENSION_COL_PATTERN = re.compile(r"(?:_[a-zA-Z]\d+)+$")
+
+
+# =============================================================================
+# Module-level cache for expensive computations
+# =============================================================================
+
+class _PrepareDataCache:
+    """
+    Module-level cache to avoid redundant computations across widgets.
+
+    When multiple widgets fire callbacks with the same inputs, we compute once
+    and return cached results for subsequent calls in the same "batch".
+
+    The cache is invalidated when inputs change (new subset_positions or global_config).
+    """
+
+    def __init__(self):
+        self._cache_key: Optional[tuple] = None
+        self._cached_df: Optional[pl.DataFrame] = None
+        self._cached_group_col: Optional[str] = None
+        self._cached_group_order: Optional[List[str]] = None
+
+    def get_or_compute(
+            self,
+            df: pl.DataFrame,
+            subset_row_positions: Optional[List[int]],
+            global_config: Dict,
+    ) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
+        """
+        Returns (df_filtered_with_grouping, group_col, group_order).
+
+        This is the expensive base computation that all widgets need.
+        Metric resolution happens separately per widget.
+        """
+        # Build cache key
+        cache_key = (
+            id(df),  # Same DataFrame object
+            tuple(subset_row_positions) if subset_row_positions else None,
+            tuple(sorted((global_config or {}).items())),
+        )
+
+        if self._cache_key == cache_key and self._cached_df is not None:
+            return self._cached_df, self._cached_group_col, self._cached_group_order
+
+        # Compute fresh
+        # 1. Filter rows
+        if subset_row_positions is not None:
+            if len(subset_row_positions) == 0:
+                df_filtered = df.head(0)
+            else:
+                df_filtered = df[subset_row_positions]
+        else:
+            df_filtered = df
+
+        if df_filtered.is_empty():
+            self._cache_key = cache_key
+            self._cached_df = df_filtered
+            self._cached_group_col = ""
+            self._cached_group_order = None
+            return df_filtered, "", None
+
+        # 2. Resolve and apply grouping
+        group_col = resolve_group_column(df_filtered, global_config)
+        df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
+
+        # Cache results
+        self._cache_key = cache_key
+        self._cached_df = df_filtered
+        self._cached_group_col = group_col
+        self._cached_group_order = group_order
+
+        return df_filtered, group_col, group_order
+
+    def invalidate(self):
+        """Clear the cache (called when global state changes)."""
+        self._cache_key = None
+        self._cached_df = None
+        self._cached_group_col = None
+        self._cached_group_order = None
+
+
+# Global cache instance
+_prepare_cache = _PrepareDataCache()
 
 
 # ---------- LAYOUT: SIDEBAR + STORES ----------
@@ -179,7 +263,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> tuple[list[str], list[str]]:
     candidates = [
         c for c in df.columns
         if not _DIMENSION_COL_PATTERN.search(c)
-        and schema.get(c) not in (pl.List, pl.Struct, pl.Array, pl.Object)
+           and schema.get(c) not in (pl.List, pl.Struct, pl.Array, pl.Object)
     ]
 
     if not candidates:
@@ -232,250 +316,211 @@ def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
 
 def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_config: Optional[Dict] = None):
     filter_help_md = dedent("""
-    Filter matches rows by one column.
+        **Operators:**
+        - `contains` / `not_contains`: text substring
+        - `eq`: exact match (number or string)
+        - `gt`, `ge`, `lt`, `le`: numeric comparisons
+        - `in`: comma-separated list
+        """)
 
-    **Text**  
-    - contains: substring match  
-    - doesn't contain: inverse substr match  
-    - equals (=): exact match  
-    - is in: comma-separated exact matches (text)  
+    # Available palettes
+    palettes = sorted(
+        [p for p in plt.colormaps() if not p.endswith("_r")], key=str.lower
+    )
+    palette_options = [{"label": p, "value": p} for p in palettes]
 
-    **Numbers**  
-    >, ≥, <, ≤, equals (=)
-    """).strip()
+    # 2. Find columns valid for grouping & filtering (single efficient pass)
+    group_col_options, filter_col_options = _find_candidate_columns(df)
 
-    initial_global_config = initial_global_config or {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {},
-                                                      GC_DIMENSIONS: {}}
+    # 3. Add "No grouping" option for group columns
+    group_col_options_with_none = [
+                                      {"label": NO_GROUPING_LABEL, "value": NO_GROUPING_COL}
+                                  ] + [{"label": c, "value": c} for c in group_col_options]
 
-    # defaults from initial config
-    init_group = initial_global_config.get(GC_GROUP_COL)
-    init_filters = initial_global_config.get(GC_FILTER) or {}
-    init_dims = initial_global_config.get(GC_DIMENSIONS) or {}
+    filter_col_options = [{"label": c, "value": c} for c in filter_col_options]
 
-    init_filter_col, init_filter_op, init_filter_text = None, "in", ""
-    if init_filters:
-        init_filter_col, spec = next(iter(init_filters.items()))
-        if isinstance(spec, dict):
-            init_filter_op = spec.get("op", "in")
-            init_filter_text = str(spec.get("value", "") or "")
+    # 4. DIMENSION SLIDERS - inline on same row
+    dim_info = get_all_available_dimensions(df)
+    dim_dropdowns = []
 
-    candidate_group_cols, candidate_filter_cols = _find_candidate_columns(df)
-    available_dims = get_all_available_dimensions(df)
+    for dim_name in sorted(dim_info.keys()):
+        indices = dim_info[dim_name]
+        options = [{"label": "All", "value": "All"}] + [
+            {"label": f"{dim_name}{idx}", "value": f"{dim_name}{idx}"} for idx in indices
+        ]
+        dim_dropdowns.append(
+            html.Div([
+                html.Label(f"{dim_name.upper()}:", style={"fontWeight": "500", "fontSize": "12px"}),
+                dcc.Dropdown(
+                    id={"type": GLOBAL_DIM_FILTER_TYPE, "index": dim_name},
+                    options=options,
+                    value="All",
+                    clearable=False,
+                )
+            ], style={"display": "inline-block", "width": "70px", "marginRight": "5px"})
+        )
 
-    sidebar_controls = dbc.Card(
-        [
-            dbc.CardHeader(html.H4("Global settings", className="mb-0")),
-            dbc.CardBody(
-                [
-                    # Color palette
-                    html.Label("Color palette", className="mt-1"),
-                    dcc.Dropdown(
-                        id=PALETTE_SELECTOR_ID,
-                        options=[
-                            {"label": name, "value": name}
-                            for name in sorted(plt.colormaps())
-                        ],
-                        value=default_palette_name,
-                        clearable=False,
-                        style={"width": "100%"},
-                    ),
-                    html.Hr(),
+    # 5. Build initial values from initial_global_config
+    init_cfg = init_global_config(df, initial_global_config)
+    init_group_col = init_cfg.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
+    init_dims = init_cfg.get(GC_DIMENSIONS) or {}
 
-                    # Global grouping
-                    html.Label("Group by column(s)", className="mt-1"),
-                    dcc.Dropdown(
-                        id=GLOBAL_GROUPBY_COLS_ID,
-                        options=[{"label": NO_GROUPING_LABEL, "value": NO_GROUPING_COL}] +
-                                [{"label": c, "value": c} for c in candidate_group_cols],
-                        value=init_group,
-                        multi=False,
-                        clearable=True,
-                        placeholder="Choose grouping column",
-                        style={"width": "100%"},
-                    ),
-                    html.Small(
-                        f"Default is `imported_path_short` (if exists). Select '{NO_GROUPING_LABEL}' to disable grouping.",
-                        className="text-muted",
-                    ),
-                    html.Hr(),
+    # pre-select dims in dropdowns
+    for dd in dim_dropdowns:
+        dd_id = dd.children[1].id
+        dim_name = dd_id["index"]
+        if dim_name in init_dims:
+            dd.children[1].value = init_dims[dim_name]
 
-                    # Simple global filter
-                    html.Div(
-                        [
-                            html.Label("Filter rows (optional)", className="mt-1 mb-0"),
-                            create_info_icon("global-filter", filter_help_md),
-                        ],
-                        className="d-flex align-items-center justify-content-between",
-                    ),
-                    dcc.Dropdown(
-                        id=GLOBAL_FILTER_COLUMN_ID,
-                        options=[{"label": c, "value": c} for c in candidate_filter_cols],
-                        value=init_filter_col,
-                        placeholder="Choose column to filter on",
-                        clearable=True,
-                        style={"width": "100%"},
-                    ),
-                    dcc.Dropdown(
-                        id=GLOBAL_FILTER_OP_ID,
-                        options=[
-                            {"label": "contains (text)", "value": "contains"},
-                            {"label": "doesn't contain (text)", "value": "not_contains"},
-                            {"label": "equals (=) (text/number)", "value": "eq"},
-                            {"label": "> (number)", "value": "gt"},
-                            {"label": "≥ (number)", "value": "ge"},
-                            {"label": "< (number)", "value": "lt"},
-                            {"label": "≤ (number)", "value": "le"},
-                            {"label": "is in (comma-separated) (text)", "value": "in"},
-                        ],
-                        value=init_filter_op,
-                        clearable=False,
-                        style={"width": "100%", "marginTop": "4px"},
-                    ),
-                    dcc.Input(
-                        id=GLOBAL_FILTER_TEXT_ID,
-                        type="text",
-                        placeholder="Value (or comma-separated list for 'in')",
-                        style={"width": "100%", "marginTop": "4px"},
-                        value=init_filter_text,
-                    ),
-                    html.Hr(),
-
-                    html.Label("Select Dimensions", className="mt-1"),
-                    html.Div([
-                        dbc.Row(
-                            [
-                                dbc.Col([
-                                    html.Small(dim.upper()),
-                                    dcc.Dropdown(
-                                        id={"type": GLOBAL_DIM_FILTER_TYPE, "index": dim},
-                                        options=[{"label": "All", "value": "All"}] + [{"label": x, "value": x} for x in
-                                                                                      vals],
-                                        value=init_dims.get(dim, "All"),
-                                        clearable=False,
-                                        className="mb-1"
-                                    )
-                                ], width=3, className="px-1")
-                                for dim, vals in sorted(available_dims.items())
-                                # Filter (>1) is now handled in get_all_available_dimensions
-                            ],
-                            className="g-0 mb-2"
-                        )
-                    ]),
-                    html.Hr(),
-
-                    # Statistical significance toggle
-                    dbc.Checkbox(
-                        id=GLOBAL_SHOW_SIGNIFICANCE_ID,
-                        label="Show statistical significance",
-                        value=initial_global_config.get(GC_IS_SHOW_SIGNIFICANCE, False),
-                        className="mb-1",
-                    ),
-                    html.Small(
-                        "Pairwise comparisons on selected plots",
-                        className="text-muted d-block mb-3",
-                    ),
-                    html.Hr(),
-
-                    dbc.Row([
-                        dbc.Col(
-                            html.Button(
-                                "Apply",
-                                id=GLOBAL_APPLY_BUTTON_ID,
-                                n_clicks=0,
-                                className="btn btn-primary w-100",
-                            ), width=6
-                        ),
-                        dbc.Col(
-                            html.Button(
-                                "Reset",
-                                id=GLOBAL_RESET_BUTTON_ID,
-                                n_clicks=0,
-                                className="btn btn-outline-danger w-100",
-                            ), width=6
-                        ),
-                    ], className="mt-3 g-2"),
-
-                    html.Div(
-                        # We concatenate the lists generated by the helper
-                        _create_export_btn(
-                            "Export current table (CSV)",
-                            EXPORT_CSV_BUTTON_ID,
-                            "Download a CSV file containing the data the currently displayed report is based on. Current filters applied.",
-                            mt="mt-3"  # Extra margin for the first button
-                        ) +
-                        _create_export_btn(
-                            "Export filtered project",
-                            EXPORT_PROJECT_BUTTON_ID,
-                            "Export a usable PixelPatrol project with current filters applied. It can be shared and opened as a fully interactive Dash app."
-                        ) +
-                        _create_export_btn(
-                            "Save HTML Snapshot",
-                            SAVE_SNAPSHOT_BUTTON_ID,
-                            "Save a static html of the current view (not interactive)."
-                        ),
-                        className="mb-3",
-                    ),
-                ]
+    sidebar = dbc.Card(
+        dbc.CardBody([
+            # --- Palette ---
+            html.Label("Color Palette", style={"fontWeight": "bold"}),
+            dcc.Dropdown(
+                id=PALETTE_SELECTOR_ID,
+                options=palette_options,
+                value=default_palette_name,
+                clearable=False,
+                style={"marginBottom": "8px"},
             ),
-        ],
-        className="mb-3",
-        style={"position": "sticky", "top": "20px"},
+            html.Hr(style={"margin": "8px 0"}),
+
+            # --- Grouping ---
+            html.Label("Group By Column", style={"fontWeight": "bold"}),
+            dcc.Dropdown(
+                id=GLOBAL_GROUPBY_COLS_ID,
+                options=group_col_options_with_none,
+                value=init_group_col,
+                clearable=False,
+                style={"marginBottom": "8px"},
+            ),
+            html.Hr(style={"margin": "8px 0"}),
+
+            # --- Dimensions ---
+            html.Label("Dimension Selection", style={"fontWeight": "bold", "marginBottom": "5px"}),
+            html.Div(dim_dropdowns if dim_dropdowns else [html.Small("No dimensions found.")],
+                     style={"marginBottom": "8px"}),
+            html.Hr(style={"margin": "8px 0"}),
+
+            # --- Row Filtering ---
+            html.Div([
+                html.Label("Filter Rows", style={"fontWeight": "bold"}),
+                create_info_icon("filter-help", filter_help_md),
+            ], className="d-flex align-items-center", style={"marginBottom": "5px"}),
+
+            dcc.Dropdown(
+                id=GLOBAL_FILTER_COLUMN_ID,
+                options=filter_col_options,
+                placeholder="Column...",
+                clearable=True,
+                style={"marginBottom": "5px"},
+            ),
+            dcc.Dropdown(
+                id=GLOBAL_FILTER_OP_ID,
+                options=[
+                    {"label": "contains", "value": "contains"},
+                    {"label": "not contains", "value": "not_contains"},
+                    {"label": "equals", "value": "eq"},
+                    {"label": ">", "value": "gt"},
+                    {"label": ">=", "value": "ge"},
+                    {"label": "<", "value": "lt"},
+                    {"label": "<=", "value": "le"},
+                    {"label": "in (comma-sep)", "value": "in"},
+                ],
+                placeholder="Operator...",
+                clearable=True,
+                style={"marginBottom": "5px"},
+            ),
+            dcc.Input(
+                id=GLOBAL_FILTER_TEXT_ID,
+                type="text",
+                placeholder="Value...",
+                debounce=True,
+                style={"width": "100%", "marginBottom": "8px"},
+            ),
+            html.Hr(style={"margin": "8px 0"}),
+
+            # --- Significance toggle ---
+            dcc.Checklist(
+                id=GLOBAL_SHOW_SIGNIFICANCE_ID,
+                options=[{"label": " Show significance", "value": True}],
+                value=[],
+                style={"marginBottom": "10px"},
+            ),
+
+            # --- Apply / Reset on same row ---
+            html.Div([
+                html.Button("Apply", id=GLOBAL_APPLY_BUTTON_ID, n_clicks=0,
+                            className="btn btn-primary", style={"flex": "1", "marginRight": "5px"}),
+                html.Button("Reset", id=GLOBAL_RESET_BUTTON_ID, n_clicks=0,
+                            className="btn btn-secondary", style={"flex": "1"}),
+            ], style={"display": "flex"}),
+            html.Hr(style={"margin": "10px 0"}),
+
+            # --- Export buttons ---
+            *_create_export_btn("📥 Export CSV", EXPORT_CSV_BUTTON_ID,
+                                "Download filtered data as CSV"),
+            *_create_export_btn("📦 Export Project", EXPORT_PROJECT_BUTTON_ID,
+                                "Download filtered project as .zip"),
+            *_create_export_btn("📸 Save Snapshot", SAVE_SNAPSHOT_BUTTON_ID,
+                                "Save current view as image"),
+        ]),
+        style={"position": "sticky", "top": "10px"},
     )
 
     stores = [
-        dcc.Store(
-            id=GLOBAL_CONFIG_STORE_ID,
-            data=initial_global_config,
-        ),
+        dcc.Store(id=GLOBAL_CONFIG_STORE_ID, data=init_cfg),
     ]
 
-    extra_components = [
+    extra = [
         dcc.Download(id=EXPORT_CSV_DOWNLOAD_ID),
         dcc.Download(id=EXPORT_PROJECT_DOWNLOAD_ID),
         dcc.Download(id=SAVE_SNAPSHOT_DOWNLOAD_ID),
     ]
 
-    return sidebar_controls, stores, extra_components
+    return sidebar, stores, extra
 
-
-# ---------- LOGIC: CENTRALIZED HELPERS ----------
 
 def _get_dimension_columns(df: pl.DataFrame, dimensions: Dict[str, str]) -> List[str]:
     """
-    Get the list of columns that match the selected dimension filters.
-    Returns empty list if no dimension filters are active.
+    Given dimension selections like {'t': '0', 'c': '1'},
+    find all columns that match ALL selected dimensions.
     """
     if not dimensions:
         return []
 
-    tokens: List[str] = []
-    for dim, val in dimensions.items():
-        if not val or val == "All":
-            continue
-        token = val if val.startswith(dim) else f"{dim}{val}"
-        tokens.append(f"_{token}")
+    matching_cols = []
+    for col in df.columns:
+        matches_all = True
+        for dim, val in dimensions.items():
+            if not val or val == "All":
+                continue
+            # Build the token (e.g., "_t0" or "_c1")
+            token = f"_{dim}{val}" if not val.startswith(dim) else f"_{val}"
+            if token not in col:
+                matches_all = False
+                break
+        if matches_all and any(f"_{dim}" in col for dim in dimensions.keys()):
+            matching_cols.append(col)
 
-    if not tokens:
-        return []
-
-    return [c for c in df.columns if all(tok in c for tok in tokens)]
+    return matching_cols
 
 
 def compute_filtered_row_positions(
         df: pl.DataFrame,
-        global_config: Optional[Dict]
+        global_config: Optional[Dict],
 ) -> Optional[List[int]]:
     """
-    Computes the ROW POSITIONS of rows that match
-    the global row filters AND dimension filters.
+    Returns row POSITIONS (indices) after applying global filters.
+    Returns None if no filtering needed (use full df).
+    Returns [] if filter results in empty set.
 
-    This is optimized to:
-    1. Work on a narrow subset of columns (fast)
-    2. Return positions so widgets can use fast positional indexing
-
-    Returns None if no filters are active (meaning use full df).
-    Returns empty list if filters result in no matches.
+    Invalidate the prepare cache when this is called,
+    since it means global config has changed.
     """
+    # Invalidate cache when filters change
+    _prepare_cache.invalidate()
+
     global_config = global_config or {}
     filters = global_config.get(GC_FILTER) or {}
     dimensions = global_config.get(GC_DIMENSIONS) or {}
@@ -551,32 +596,22 @@ def prepare_widget_data(
 ) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str], Optional[List[str]]]:
     """
     The main coordinator for widgets.
-    1. Slices the global `df` using `subset_row_positions` (fast positional indexing).
-    2. Resolves the correct grouping column.
-    3. If `metric_base` is provided, attempts to find the dimension-specific column (e.g. 'area_t0').
+
+    OPTIMIZED: Uses module-level cache for the base computation (filtering + grouping).
+    Metric resolution still happens per widget since it varies.
 
     Returns:
         (df_filtered, group_col, resolved_column_name, warning_message, group_order)
     """
-    # 1. Filter Rows using fast positional indexing
-    if subset_row_positions is not None:
-        if len(subset_row_positions) == 0:
-            # Empty filter result
-            df_filtered = df.head(0)
-        else:
-            # Fast positional indexing
-            df_filtered = df[subset_row_positions]
-    else:
-        df_filtered = df
+    # Use cached base computation
+    df_filtered, group_col, group_order = _prepare_cache.get_or_compute(
+        df, subset_row_positions, global_config
+    )
 
     if df_filtered.is_empty():
-        return df_filtered, "", None, "No data matches the current filters.", None
+        return df_filtered, group_col or "", None, "No data matches the current filters.", group_order
 
-    # 2. Resolve Grouping
-    group_col = resolve_group_column(df_filtered, global_config)
-    df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
-
-    # 3. Resolve Dimension-Specific Column (if needed)
+    # Metric resolution (per widget, not cached)
     resolved_col = None
     warning_msg = None
     dims_selection = global_config.get(GC_DIMENSIONS, {})
@@ -601,13 +636,7 @@ def prepare_widget_data(
 
         else:
             # Filter by metric column being non-null
-            # Use the same optimized approach: compute mask on narrow df, then apply
-            mask_series = df_filtered.select(pl.col(resolved_col).is_not_null()).to_series()
-            keep_positions = mask_series.arg_true().to_list()
-            if keep_positions:
-                df_filtered = df_filtered[keep_positions]
-            else:
-                df_filtered = df_filtered.head(0)
+            df_filtered = df_filtered.filter(pl.col(resolved_col).is_not_null())
 
             if df_filtered.is_empty():
                 warning_msg = (
