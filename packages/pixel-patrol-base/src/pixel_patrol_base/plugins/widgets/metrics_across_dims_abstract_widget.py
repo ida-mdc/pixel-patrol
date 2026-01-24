@@ -28,6 +28,8 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         super().__init__(*args, **kwargs)
         self.widget_id = widget_id
         self._df: pl.DataFrame | None = None
+        self._parsed_cols_cache: List[Dict] | None = None
+        self._cached_df_columns: tuple | None = None
 
     def get_content_layout(self) -> List:
         """Defines the generic layout with unique IDs derived from widget_id."""
@@ -37,6 +39,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
     def register(self, app, df: pl.DataFrame) -> None:
         self._df = df
+        self._cache_parsed_columns(df.columns)
 
         app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
@@ -53,6 +56,10 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     ):
         """Render the table of metrics vs. dimensions with distribution-aware sparklines."""
 
+        parsed_cols = self._parsed_cols_cache
+        if not parsed_cols:
+            return show_no_data_message()
+
         df_filtered, group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
@@ -61,19 +68,6 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         )
 
         if df_filtered.is_empty():
-            return show_no_data_message()
-
-        # Parse metric/dimension columns from the filtered dataframe
-        supported_metrics = self.get_supported_metrics()
-        parsed_cols = []
-        for col in df_filtered.columns:
-            parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
-            if parsed is None:
-                continue
-            metric, dims = parsed
-            parsed_cols.append({"col": col, "metric": metric, "dims": dims})
-
-        if not parsed_cols:
             return show_no_data_message()
 
         # --- Dimension filter (from global controls) ---
@@ -236,6 +230,25 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")
 
 
+    def _cache_parsed_columns(self, columns: List[str]) -> None:
+        """Parse columns once and cache the result."""
+        col_tuple = tuple(columns)
+        if self._cached_df_columns == col_tuple:
+            return
+
+        supported_metrics = self.get_supported_metrics()
+        self._parsed_cols_cache = []
+        for col in columns:
+            parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
+            if parsed is not None:
+                metric, dims = parsed
+                self._parsed_cols_cache.append({"col": col, "metric": metric, "dims": dims})
+        self._cached_df_columns = col_tuple
+
+
+# ============================================================
+# 5. OPTIMIZED aggregation in metrics_across_dims
+# ============================================================
 
 def _aggregate_cell_series_with_distribution(
         df: pl.DataFrame,
@@ -245,43 +258,34 @@ def _aggregate_cell_series_with_distribution(
         dim_name: str,
         parsed_cols_info: List[Dict],
 ) -> pl.DataFrame:
-    """
-    Aggregate values across groups for a set of columns that vary along dim_name.
+    """Optimized: Build mapping with set lookup, avoid repeated iteration."""
 
-    For each column in `cols`, extracts the dim_name index value as the x-coordinate,
-    then computes mean, std, and count per group.
-    """
-    # Build mapping: col_name -> x_val (the index along dim_name)
-    col_to_x = {}
-    cols_set = set(cols)
-    for pc in parsed_cols_info:
-        if pc["col"] not in cols_set:
-            continue
-        if dim_name not in pc["dims"]:
-            continue
-        col_to_x[pc["col"]] = str(pc["dims"][dim_name])
+    # OPTIMIZATION: Use set for O(1) lookup
+    cols_set = frozenset(cols)
+
+    # Build mapping in single pass
+    col_to_x = {
+        pc["col"]: str(pc["dims"][dim_name])
+        for pc in parsed_cols_info
+        if pc["col"] in cols_set and dim_name in pc["dims"]
+    }
 
     if not col_to_x:
         return pl.DataFrame()
 
     valid_cols = list(col_to_x.keys())
 
-    # Single unpivot
-    long = df.select([group_col, *valid_cols]).unpivot(
-        index=[group_col],
-        on=valid_cols,
-        variable_name="var",
-        value_name="val",
-    )
-
-    # Map column name to x value
-    long = long.with_columns(
-        pl.col("var").replace(col_to_x).alias("x")
-    ).drop_nulls(["val"])
-
-    # Single group_by
+    # OPTIMIZATION: Combine operations into single chain
     return (
-        long
+        df.select([group_col, *valid_cols])
+        .unpivot(
+            index=[group_col],
+            on=valid_cols,
+            variable_name="var",
+            value_name="val",
+        )
+        .with_columns(pl.col("var").replace(col_to_x).alias("x"))
+        .drop_nulls(["val"])
         .group_by([group_col, "x"])
         .agg([
             pl.mean("val").alias("y_mean"),
