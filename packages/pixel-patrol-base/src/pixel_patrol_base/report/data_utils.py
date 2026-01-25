@@ -279,10 +279,10 @@ def _paths_to_categorical(values: List) -> Dict:
 
     # Detect separator
     sep = '/' if any('/' in s for s in str_vals) else '\\'
-    PathClass = PurePosixPath if sep == '/' else PureWindowsPath
+    path_class = PurePosixPath if sep == '/' else PureWindowsPath
 
     # Split into parts
-    parsed = [PathClass(s).parts for s in str_vals]
+    parsed = [path_class(s).parts for s in str_vals]
 
     if not parsed or not parsed[0]:
         return {v: str(v) for v in values}
