@@ -67,6 +67,7 @@ class _PrepareDataCache:
 
     def __init__(self):
         self._cache_key: Optional[tuple] = None
+        self._cached_source_df: Optional[pl.DataFrame] = None
         self._cached_df: Optional[pl.DataFrame] = None
         self._cached_group_col: Optional[str] = None
         self._cached_group_order: Optional[List[str]] = None
@@ -85,12 +86,13 @@ class _PrepareDataCache:
         """
         # Build cache key
         cache_key = (
-            id(df),  # Same DataFrame object
             tuple(subset_row_positions) if subset_row_positions else None,
             tuple(sorted((global_config or {}).items())),
         )
 
-        if self._cache_key == cache_key and self._cached_df is not None:
+        if (self._cached_source_df is df and
+                self._cache_key == cache_key and
+                self._cached_df is not None):
             return self._cached_df, self._cached_group_col, self._cached_group_order
 
         # Compute fresh
@@ -106,6 +108,7 @@ class _PrepareDataCache:
         if df_filtered.is_empty():
             self._cache_key = cache_key
             self._cached_df = df_filtered
+            self._cached_source_df = df
             self._cached_group_col = ""
             self._cached_group_order = None
             return df_filtered, "", None
@@ -117,6 +120,7 @@ class _PrepareDataCache:
         # Cache results
         self._cache_key = cache_key
         self._cached_df = df_filtered
+        self._cached_source_df = df
         self._cached_group_col = group_col
         self._cached_group_order = group_order
 
@@ -126,6 +130,7 @@ class _PrepareDataCache:
         """Clear the cache (called when global state changes)."""
         self._cache_key = None
         self._cached_df = None
+        self._cached_source_df = None
         self._cached_group_col = None
         self._cached_group_order = None
 
