@@ -155,7 +155,7 @@ def is_group_col_accepted(df: pl.DataFrame, col: str) -> bool:
 
         n_unique = df.select(pl.col(col).n_unique()).item()
         return n_unique <= MAX_UNIQUE_GROUP
-    except Exception:
+    except (KeyError, pl.exceptions.ComputeError, pl.exceptions.SchemaError):
         return False
 
 
@@ -281,7 +281,7 @@ def _find_candidate_columns(df: pl.DataFrame) -> tuple[list[str], list[str]]:
                 df.select([pl.col(c).n_unique().alias(c) for c in candidates]).row(0),
             )
         )
-    except Exception:
+    except (pl.exceptions.ComputeError, pl.exceptions.SchemaError):
         return [], []
 
     group_cols = []
