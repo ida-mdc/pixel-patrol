@@ -214,23 +214,17 @@ def test_compute_filtered_row_positions_none_when_no_filters_or_dims():
     assert gc.compute_filtered_row_positions(df, None) is None
 
 
-def test_compute_filtered_row_positions_with_all_dimension_returns_empty():
-    """
-    Test that {"t": "All"} returns empty list (not None).
+def test_compute_filtered_row_positions_with_invalid_dimension_returns_none():
 
-    This is the current implementation behavior: when dimensions dict is non-empty
-    but all values are "All", the dimension tokens are empty, so no columns match,
-    resulting in an empty result rather than None.
-
-    Note: This might be arguable behavior - one could expect {"t": "All"} to be
-    equivalent to no dimension filter. But this test documents the current behavior.
-    """
     df = _base_df_for_global_controls()
 
-    # "All" dimension value results in empty list (dimensions dict is non-empty but
-    # no actual dimension filter is applied, so no columns match)
-    result = gc.compute_filtered_row_positions(df, {"filter": {}, "dimensions": {"t": "All"}})
-    assert result == []
+    # "one" is not a valid dimension value - init_global_config should strip it out
+    raw_config = {"filter": {}, "dimensions": {"t": "one"}}
+    validated_config = gc.init_global_config(df, raw_config)
+
+    result = gc.compute_filtered_row_positions(df, validated_config)
+    print(result)
+    assert result is None
 
 
 def test_compute_filtered_row_positions_with_value_filter_only():
@@ -461,7 +455,7 @@ def test_prepare_widget_data_empty_subset_returns_empty_df():
 
 
 def test_prepare_widget_data_no_metric_base_skips_column_resolution():
-    """Test prepare_widget_data without metric_base doesn't try to resolve columns."""
+    """Test prepare_widget_data without metric_base doesn't filter rows based on metric nulls."""
     df = _base_df_for_global_controls()
 
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(

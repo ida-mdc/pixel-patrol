@@ -238,16 +238,15 @@ def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> 
         if not val or val == "All":
             continue
 
-        # accept "0" as well as "c0"
+        # accept "0" NOT "c0"
         vals_set = set(available_dims[dim])
         if val in vals_set or f"{dim}{val}" in vals_set:
             clean_dims[dim] = val
         else:
             logger.warning(
-                "Global dimension selection '%s=%s' not found (known: %s); keeping it anyway (may yield empty data).",
+                "Global dimension selection '%s=%s' not found (known: %s); skipping.",
                 dim, val, ", ".join(list(available_dims[dim])[:10]) + ("..." if len(available_dims[dim]) > 10 else "")
             )
-            clean_dims[dim] = val
 
     cfg[GC_DIMENSIONS] = clean_dims
     return cfg
@@ -346,7 +345,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
     for dim_name in sorted(dim_info.keys()):
         indices = dim_info[dim_name]
         options = [{"label": "All", "value": "All"}] + [
-            {"label": f"{dim_name}{idx}", "value": f"{dim_name}{idx}"} for idx in indices
+            {"label": idx, "value": idx} for idx in indices
         ]
         dim_dropdowns.append(
             html.Div([
