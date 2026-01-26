@@ -41,7 +41,6 @@ def main():
 
     settings = Settings(
         selected_file_extensions=selected_file_extensions,
-        records_flush_every_n=5, # small value for quick intermediate result files during demo
         processing_max_workers=4, # adjust how many cpu cores to use for parallel processing
         records_flush_dir=records_flush_dir, # where do you want to store the intermediate result files
         resume=True, # when aborting a run, resume from existing intermediate result files
