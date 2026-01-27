@@ -6,6 +6,9 @@ import multiprocessing
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
+from yaspin import yaspin
+import gc
+
 
 import polars as pl
 
@@ -21,16 +24,13 @@ from pixel_patrol_base.utils.df_utils import (
 )
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import (
-    DEFAULT_RECORDS_FLUSH_EVERY_N,
+    DEFAULT_RECORDS_FLUSH_EVERY_N, COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
 )
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 
 
 logger = logging.getLogger(__name__)
-
-# When combining multiple parquet chunks into a single one in memory, we might need more RAM than the raw size of the files.
-COMBINE_HEADROOM_RATIO = 1.25
 
 # Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
@@ -174,10 +174,11 @@ def _combine_batch_with_basic(
     if not batch:
         return pl.DataFrame([])
 
-    row_indices = [int(item.row_index) for item in batch]
-    basic_batch = basic.filter(
-        pl.col("row_index").is_in(pl.Series(row_indices, dtype=pl.Int64))
+    indices = pl.Series(
+        (item.row_index for item in batch),
+        dtype=pl.UInt32,
     )
+    basic_batch = basic.select(pl.all().gather(indices))
 
     if not deep_rows:
         # Nothing deep to merge for this batch; return the basic rows as-is
@@ -300,9 +301,13 @@ def _build_deep_record_df(
 
     remaining = basic
     if processed_rows:
-        remaining = basic.filter(
-            ~pl.col("row_index").is_in(pl.Series(list(processed_rows), dtype=pl.Int64))
-        )
+        # Select unprocessed rows by gathering their indices — avoids creating an intermediate Polars filter
+        total = basic.height
+        unprocessed_indices = [i for i in range(total) if i not in processed_rows]
+        if not unprocessed_indices:
+            return pl.DataFrame([])
+        indices = pl.Series(unprocessed_indices, dtype=pl.UInt32)
+        remaining = basic.select(pl.all().gather(indices))
     if remaining.is_empty():
         return pl.DataFrame([])
 
@@ -324,6 +329,7 @@ def _build_deep_record_df(
                 remaining_count,
             )
 
+        # Single core processing shortcut
         if worker_count == 1:
             for batch in _iter_indexed_batches(remaining, batch_size):
                 deep_rows = _process_batch_locally(
@@ -345,10 +351,11 @@ def _build_deep_record_df(
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
-                for batch in _iter_indexed_batches(remaining, batch_size):
-                    fut = executor.submit(_process_batch_in_worker, batch)
-                    future_map[fut] = batch
-
+                with yaspin (text="Planning the processing tasks ...", timer=True).yellow as spinner:
+                    spinner._interval = 0.3
+                    for batch in _iter_indexed_batches(remaining, batch_size):
+                        fut = executor.submit(_process_batch_in_worker, batch)
+                        future_map[fut] = batch
                 for future in as_completed(future_map):
                     batch = future_map[future]
                     try:
@@ -495,7 +502,16 @@ def build_records_df(
     return deep
 
 
-def _build_basic_file_df(bases, loader, accepted_extensions):
+def _build_basic_file_df(
+    bases, loader, accepted_extensions
+):
+    """Build the basic file DataFrame by scanning the filesystem.
+
+    Args:
+        bases: list of base paths to scan
+        loader: optional loader instance
+        accepted_extensions: set or 'all'
+    """
     basic = walk_filesystem(
         bases, loader=loader, accepted_extensions=accepted_extensions
     )
@@ -608,8 +624,24 @@ def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> i
     # Preserve the ability to disable flushing when a non-positive value is configured.
     if value is None or value <= 0:
         return 0
+
     # Ensure at least one flush can occur for small datasets while capping at roughly half the dataset size.
     upper_bound = max(1, total_rows // 2)
+
+    # Enforce a maximum count of intermediate flushes (e.g. <= MAX_INTERMEDIATE_FLUSHES).
+    # If the user configured a very small flush threshold that would cause too many flushes,
+    # we adjust it upward to keep the number of flushes reasonable and log a warning.
+    min_allowed = max(1, math.ceil(total_rows / MAX_INTERMEDIATE_FLUSHES))
+    if value < min_allowed:
+        requested_flushes = math.ceil(total_rows / value) if value > 0 else float('inf')
+        logger.warning(
+            "Processing Core: Flushing this often on your dataset would result in %d flushes. "
+            "This slows processing down. Your settings are being changed to result in %d flushes only.",
+            requested_flushes,
+            MAX_INTERMEDIATE_FLUSHES,
+        )
+        value = min_allowed
+
     return max(1, min(value, upper_bound))
 
 
@@ -761,11 +793,10 @@ class _RecordsAccumulator:
         if self._active_df.is_empty():
             return
         if self._flush_dir is None:
-            print("Flush directory is not set. Skipping flush to disk.")
+            logger.warning("Flush directory is not set. Skipping flush to disk.")
             return
         if not force and self._active_df.height < self._flush_every_n:
             return
-        print(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
         chunk_path = write_dataframe_to_parquet(
             self._active_df,
@@ -779,9 +810,17 @@ class _RecordsAccumulator:
             )
             return
 
-        logger.info("Processing Core: writing partial records chunk to %s", chunk_path)
+        logger.info("Processing Core: Writing partial records chunk to %s", chunk_path)
         self._written_files.append(chunk_path)
-        self._active_df = pl.DataFrame([])
+
+        # Release reference to active dataframe and GC to free memory
+        try:
+            self._active_df = pl.DataFrame([])
+            gc.collect()
+        except Exception:
+            # Memory freeing is best-effort; don't raise on GC failures
+            logger.debug("Processing Core: gc.collect() failed or not available")
+
         self._chunk_index += 1
 
     def load_existing_chunks(self) -> Set[int]:
