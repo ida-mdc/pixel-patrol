@@ -196,6 +196,13 @@ pixel-patrol report --help
 
 * The CLI validates loader names at runtime; if you see `Unknown loader`, ensure the corresponding plug-in package is installed and available in the active environment.
 
+### Processing notes (flush directories, workers, resuming) 🔧
+
+* **Flush / chunk directory:** During processing PixelPatrol may write intermediate Parquet chunk files (e.g. `records_batch_*.parquet`) to a flush directory (inferred next to the output ZIP or set with `--chunk-dir`). These chunks reduce peak RAM use and allow interrupted runs to be resumed.
+* **API inference:** When using the API (for example, `process_files`) and no `records_flush_dir` is set, PixelPatrol will infer a flush directory inside the project's base directory named `<project_name>_batches`. This ensures chunking works even when an export ZIP path is not provided.
+* **Resuming:** When you pass `--resume` PixelPatrol will adopt any existing partial chunks and skip already-processed files. If you do not pass `--resume`, the CLI will clear the flush directory to ensure a fresh run. Please only pass this parameter when you are sure the existing chunks are valid for the current run (same project, loaders, settings, and input file order).
+* **Workers and memory:** By default PixelPatrol uses the number of CPU cores available (or the user-specified `processing_max_workers` setting). For very small datasets the number of workers is capped to the number of files (e.g., 1 file → 1 worker). Note that increasing the number of workers typically increases RAM usage (more worker processes and in-memory combining of chunks).
+
 ## API Use
 
 The `examples/` directory demonstrates how to use pixel-patrol API and for advanced users also how to extend pixel-patrol (loaders, processors, and widgets) by creating a package.
