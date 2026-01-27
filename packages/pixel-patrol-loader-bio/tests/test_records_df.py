@@ -58,7 +58,7 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
     monkeypatch.setattr("pixel_patrol_base.core.processing.get_all_record_properties",
                         fake_get_all_record_properties)
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda settings: 1)
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
 
     # Build a basic DataFrame expected by the processing core
     basic_df = pl.DataFrame({"path": paths}).with_row_index("row_index").with_columns(
@@ -159,7 +159,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         fake_get_all_image_properties
     )
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda settings: 1)
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
 
     basic_df = (
         pl.DataFrame({"path": [str(p_valid), str(p_invalid)]})
