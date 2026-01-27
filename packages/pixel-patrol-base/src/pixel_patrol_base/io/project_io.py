@@ -11,6 +11,11 @@ import dataclasses
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core import validation
+from pixel_patrol_base.io.parquet_utils import (
+    write_dataframe_to_parquet,
+    read_dataframe_from_parquet,
+)
+from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,9 @@ def _settings_to_dict(settings: Settings) -> dict:
     # CONVERT SET TO SORTED LIST FOR YAML READABILITY
     if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], set):
         s_dict['selected_file_extensions'] = sorted(list(s_dict['selected_file_extensions']))
+    flush_dir = s_dict.get('records_flush_dir')
+    if isinstance(flush_dir, Path):
+        s_dict['records_flush_dir'] = str(flush_dir)
     return s_dict
 
 
@@ -35,10 +43,11 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
     Converts a dictionary from YAML import back into a Settings dataclass instance.
     Handles cases where the input is not a dictionary or has malformed parts.
     """
-    # Ensure settings_dict is actually a dictionary before attempting to copy or access
+    # If the metadata contains unexpectedly typed 'settings' (e.g., a string), fall back to defaults
     if not isinstance(settings_dict, dict):
         logger.warning(
-            f"Project IO: _dict_to_settings received non-dictionary input: {type(settings_dict).__name__}. Using default settings."
+            "Settings IO: Expected a dict for settings but got %s; using default Settings.",
+            type(settings_dict).__name__,
         )
         return Settings()
 
@@ -48,6 +57,9 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
     try:
         if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], list):
             s_dict['selected_file_extensions'] = set(s_dict['selected_file_extensions'])
+        flush_dir = s_dict.get('records_flush_dir')
+        if isinstance(flush_dir, str) and flush_dir:
+            s_dict['records_flush_dir'] = Path(flush_dir)
     except Exception as e:
         logger.warning(
             f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}.")
@@ -64,100 +76,6 @@ def _dict_to_settings(settings_dict: dict) -> Settings:
         logger.warning(
             f"Project IO: Could not fully reconstruct Settings from filtered dictionary. Using default settings. Error: {e}")
         return Settings()
-
-
-def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Serializes columns containing numpy ndarrays to lists of int64 for compatibility with Parquet.
-    This is necessary because Polars does not support direct serialization of numpy ndarrays.
-    Args:
-        df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with ndarray columns serialized to lists.
-    """
-    for col in polars_df.columns:
-        if polars_df[col].dtype == pl.Object:
-            try:
-                # Attempt to convert ndarray columns to lists
-                polars_df = polars_df.with_columns(
-                    pl.col(col).map_elements(lambda x: x.tolist() if isinstance(x, np.ndarray) else x, return_dtype=pl.List(pl.Int64))
-                )
-                # logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
-            except Exception as e:
-                logger.warning(f"Project IO: Failed to serialize column '{col}' to list. Error: {e}. This column will be excluded from the Parquet export.")
-                polars_df = polars_df.drop(col)
-    return polars_df
-
-
-def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Deserializes columns containing lists of int64 back to numpy ndarrays.
-    Args:
-        polars_df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with list columns deserialized to ndarrays.
-    """
-    # 1. Identify columns that need conversion
-    target_cols = [
-        col for col in polars_df.columns
-        if polars_df[col].dtype == pl.List(pl.Int64)
-    ]
-
-    if not target_cols:
-        return polars_df
-
-    # 2. Build a list of expressions to apply all at once
-    expressions = []
-    for col in target_cols:
-        expressions.append(
-            pl.col(col)
-            .map_elements(
-                lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x,
-                return_dtype=pl.Object
-            )
-            .alias(col)  # Ensure we overwrite the existing column
-        )
-
-    # 3. Apply all transformations in a single pass
-    try:
-        polars_df = polars_df.with_columns(expressions)
-        # logger.info(f"Project IO: Deserialized {len(target_cols)} columns to ndarray.")
-    except Exception as e:
-        # If the batch fails, you might need to fall back to the loop
-        # to identify exactly which column failed, or log the generic error.
-        logger.warning(f"Project IO: Batch deserialization failed. Error: {e}")
-
-    return polars_df
-
-def _write_dataframe_to_parquet(
-        df: Optional[pl.DataFrame],
-        base_filename: str,
-        tmp_path: Path,
-) -> Optional[Path]:
-    """Helper to write an optional Polars DataFrame to a Parquet file in a temporary path."""
-    if df is None:
-        return None
-
-    df = _serialize_ndarray_columns_dataframe(df)
-
-    # Identify columns with empty Struct types
-    empty_struct_cols = [
-        name for name, dtype in df.schema.items()
-        if isinstance(dtype, pl.Struct) and not dtype.fields
-    ]
-
-    # Add a dummy field to each problematic column
-    for col in empty_struct_cols:
-        df = df.with_columns(pl.lit(None).alias(col))
-
-    file_path = tmp_path / base_filename
-    data_name = file_path.stem
-    try:
-        df.write_parquet(file_path)
-        return file_path
-    except Exception as e:
-        logger.warning(f"Project IO: Could not write {data_name} data ({base_filename}) to temporary file: {e}")
-        return None
 
 
 def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
@@ -204,12 +122,14 @@ def _add_files_to_zip(
         raise IOError(f"Could not create or write to zip archive at {zip_file_path}: {e}") from e
 
 
-def export_project(project: Project, dest: Path) -> None:
+def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool = True) -> None:
     """
     Exports the project state to a zip archive.
     Args:
         project: The Project object to export.
         dest: The destination path for the zip archive (e.g., 'my_project.zip').
+        cleanup_combined_parquet: If True, attempt to remove the combined 'records_df.parquet' in
+            the project's flush directory after exporting the archive. Defaults to False.
 
     Archive contains:
     - metadata.yml: Project name, paths (as strings), settings.
@@ -231,30 +151,31 @@ def export_project(project: Project, dest: Path) -> None:
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        records_df_tmp_path = _write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
-        if records_df_tmp_path:
-            files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
+        # If processing created any records parquet files in the flush dir (either
+        # combined 'records_df.parquet' or partial 'records_batch_*.parquet'), include
+        # all of them in the zip.
+        flush_dir = getattr(project.settings, "records_flush_dir", None)
+        added_records = False
+        if flush_dir:
+            try:
+                record_files = sorted(Path(flush_dir).glob("records_*.parquet"))
+                for rf in record_files:
+                    files_for_zip.append((rf, rf.name))
+                    added_records = True
+            except Exception:
+                # ignore problems inspecting the flush dir and fall back to serializing
+                added_records = False
+
+        if not added_records:
+            records_df_tmp_path = write_dataframe_to_parquet(project.records_df, RECORDS_DF_FILENAME, tmp_path)
+            if records_df_tmp_path:
+                files_for_zip.append((records_df_tmp_path, RECORDS_DF_FILENAME))
 
         # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
 
-
-def _read_dataframe_from_parquet(
-        file_path: Path,
-        src_archive: Path
-) -> Optional[pl.DataFrame]:
-    """Helper to read an optional Polars DataFrame from a Parquet file."""
-    if not file_path.exists():
-        return None
-    data_name = file_path.stem
-    try:
-        df = pl.read_parquet(file_path)
-        df = _deserialize_ndarray_columns_dataframe(df)
-        return df
-    except Exception as e:
-        logger.warning(f"Project IO: Could not read {data_name} data from '{file_path.name}' "
-                       f"in archive '{src_archive.name}'. Data not loaded. Error: {e}")
-        return None
+    # tidy up using procssing function; keeps combioned parquet intact
+    _cleanup_partial_chunks_dir(getattr(project.settings, "records_flush_dir", None), cleanup_combined_parquet=cleanup_combined_parquet)
 
 
 def _validate_source_archive(src: Path) -> None:
@@ -414,7 +335,7 @@ def import_project(src: Path) -> Project:
         metadata_content = _read_and_validate_metadata(tmp_path, src)
 
         # First, try to read records_df to determine validation behavior
-        imported_records_df = _read_dataframe_from_parquet(
+        imported_records_df = read_dataframe_from_parquet(
             tmp_path / RECORDS_DF_FILENAME,
             src
         )

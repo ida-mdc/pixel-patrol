@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # Use the same assets folder as the report dashboard
 ASSETS_DIR = (Path(__file__).parent / "report" / "assets").resolve()
 
+# Update progress every 500 ms
+PROGRESS_UPDATE_INTERVAL_MS = 500  
+
 # Global state for processing progress
 # Note: Only JSON-serializable types should be stored here
 _processing_state = {
@@ -207,7 +210,7 @@ def _create_layout(app: Dash) -> html.Div:
             dcc.Store(id="processing-state-store", data=get_processing_state()),
             dcc.Interval(
                 id="progress-interval",
-                interval=500,  # Update every 500ms
+                interval=PROGRESS_UPDATE_INTERVAL_MS,  # When / how often to update progress
                 n_intervals=0,
                 disabled=True,
             ),
@@ -221,9 +224,14 @@ def _create_layout(app: Dash) -> html.Div:
                                     [
                                         html.Img(
                                             src=app.get_asset_url("prevalidation.png"),
-                                            style={"height": "110px", "marginRight": "15px"},
+                                            style={
+                                                "height": "110px",
+                                                "marginRight": "15px",
+                                            },
                                         ),
-                                        html.H1("Pixel Patrol Processing", className="m-0"),
+                                        html.H1(
+                                            "Pixel Patrol Processing", className="m-0"
+                                        ),
                                     ],
                                     className="d-flex align-items-center justify-content-center",
                                 ),
@@ -240,9 +248,14 @@ def _create_layout(app: Dash) -> html.Div:
                                     dbc.Card(
                                         [
                                             dbc.CardHeader(
-                                                dbc.Row([
-                                                    dbc.Col("Processing Configuration", width="auto"),
-                                                    dbc.Col(create_info_icon(
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(
+                                                            "Processing Configuration",
+                                                            width="auto",
+                                                        ),
+                                                        dbc.Col(
+                                                            create_info_icon(
                                                                 widget_id="processing-config-info",
                                                                 help_text=(
                                                                     "**What happens when you start processing:**\n\n"
@@ -257,9 +270,15 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     "You can open the report later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
                                                                     "`pixel-patrol report /path/to/project.zip`\n\n"
                                                                     "Or launch the report directly from this page once processing completes."
-                                                                )
-                                                            ), width="auto")
-                                                ], align="center", justify="start", className="g-2"),
+                                                                ),
+                                                            ),
+                                                            width="auto",
+                                                        ),
+                                                    ],
+                                                    align="center",
+                                                    justify="start",
+                                                    className="g-2",
+                                                ),
                                             ),
                                             dbc.CardBody(
                                                 [
@@ -269,7 +288,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                 [
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Base Directory *", html_for="base-directory"),
+                                                                            dbc.Label(
+                                                                                "Base Directory *",
+                                                                                html_for="base-directory",
+                                                                            ),
                                                                             dbc.Input(
                                                                                 id="base-directory",
                                                                                 type="text",
@@ -285,7 +307,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     ),
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Output ZIP Path *", html_for="output-zip"),
+                                                                            dbc.Label(
+                                                                                "Output ZIP Path *",
+                                                                                html_for="output-zip",
+                                                                            ),
                                                                             dbc.Input(
                                                                                 id="output-zip",
                                                                                 type="text",
@@ -306,7 +331,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                 [
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Project Name", html_for="project-name"),
+                                                                            dbc.Label(
+                                                                                "Project Name",
+                                                                                html_for="project-name",
+                                                                            ),
                                                                             dbc.Input(
                                                                                 id="project-name",
                                                                                 type="text",
@@ -317,14 +345,35 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     ),
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Loader", html_for="loader"),
+                                                                            dbc.Label(
+                                                                                "Loader",
+                                                                                html_for="loader",
+                                                                            ),
                                                                             dbc.Select(
                                                                                 id="loader",
                                                                                 options=[
-                                                                                    {"label": loader["label"], "value": loader["value"]}
+                                                                                    {
+                                                                                        "label": loader[
+                                                                                            "label"
+                                                                                        ],
+                                                                                        "value": loader[
+                                                                                            "value"
+                                                                                        ],
+                                                                                    }
                                                                                     for loader in _get_available_loaders()
                                                                                 ],
-                                                                                value=_get_available_loaders()[1]["value"] if len(_get_available_loaders()) > 1 else "",
+                                                                                value=(
+                                                                                    _get_available_loaders()[
+                                                                                        1
+                                                                                    ][
+                                                                                        "value"
+                                                                                    ]
+                                                                                    if len(
+                                                                                        _get_available_loaders()
+                                                                                    )
+                                                                                    > 1
+                                                                                    else ""
+                                                                                ),
                                                                             ),
                                                                         ],
                                                                         md=6,
@@ -336,12 +385,17 @@ def _create_layout(app: Dash) -> html.Div:
                                                                 [
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Paths (experimental conditions)", html_for="paths"),
+                                                                            dbc.Label(
+                                                                                "Paths (experimental conditions)",
+                                                                                html_for="paths",
+                                                                            ),
                                                                             dbc.Textarea(
                                                                                 id="paths",
                                                                                 placeholder="path1, path2...",
                                                                                 rows=3,
-                                                                                style={"resize": "vertical"},
+                                                                                style={
+                                                                                    "resize": "vertical"
+                                                                                },
                                                                             ),
                                                                             dbc.FormText(
                                                                                 "Comma-separated. Subdirectories of Base Directory ((absolute or relative).",
@@ -352,7 +406,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     ),
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("File Extensions", html_for="file-extensions"),
+                                                                            dbc.Label(
+                                                                                "File Extensions",
+                                                                                html_for="file-extensions",
+                                                                            ),
                                                                             dbc.Input(
                                                                                 id="file-extensions",
                                                                                 type="text",
@@ -373,7 +430,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                 [
                                                                     dbc.Col(
                                                                         [
-                                                                            dbc.Label("Flavor", html_for="flavor"),
+                                                                            dbc.Label(
+                                                                                "Flavor",
+                                                                                html_for="flavor",
+                                                                            ),
                                                                             dbc.Input(
                                                                                 id="flavor",
                                                                                 type="text",
@@ -417,12 +477,30 @@ def _create_layout(app: Dash) -> html.Div:
                                             dbc.CardHeader("Processing Progress"),
                                             dbc.CardBody(
                                                 [
-                                                    html.Div(id="progress-status", children="Ready to start processing"),
-                                                    html.Div(id="progress-bar-container", className="mt-3"),
-                                                    html.Div(id="progress-details", className="mt-3"),
-                                                    html.Div(id="error-message", className="mt-2"),
-                                                    html.Div(id="warnings-display", className="mt-1"),
-                                                    html.Div(id="action-buttons", className="mt-4"),
+                                                    html.Div(
+                                                        id="progress-status",
+                                                        children="Ready to start processing",
+                                                    ),
+                                                    html.Div(
+                                                        id="progress-bar-container",
+                                                        className="mt-3",
+                                                    ),
+                                                    html.Div(
+                                                        id="progress-details",
+                                                        className="mt-3",
+                                                    ),
+                                                    html.Div(
+                                                        id="error-message",
+                                                        className="mt-2",
+                                                    ),
+                                                    html.Div(
+                                                        id="warnings-display",
+                                                        className="mt-1",
+                                                    ),
+                                                    html.Div(
+                                                        id="action-buttons",
+                                                        className="mt-4",
+                                                    ),
                                                 ]
                                             ),
                                         ],
@@ -992,4 +1070,3 @@ def _launch_report_app(output_zip: str):
             status="error",
             error=f"Failed to launch report: {str(e)}",
         )
-

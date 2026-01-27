@@ -76,6 +76,17 @@ def show_report(
 
 def export_project(project: Project, dest: Path) -> None: # TODO: think about when project can be saved
     logger.info(f"API Call: Exporting project '{project.name}' to '{dest}'.")
+    # If a records_flush_dir was not set explicitly, default to a batches directory
+    # next to the destination ZIP. This matches CLI behavior and ensures
+    # intermediate chunks (for large runs) are placed where the final ZIP will live.
+    if getattr(project.settings, "records_flush_dir", None) is None:
+        inferred = dest.parent / f"{project.name}_batches"
+        try:
+            project.settings.records_flush_dir = inferred
+            logger.info("API Call: inferred records_flush_dir=%s", inferred)
+        except Exception:
+            logger.debug("API Call: could not set inferred records_flush_dir=%s", inferred)
+
     _io_export_project(project, dest)
     logger.info(f"API Call: Project '{project.name}' exported successfully.")
 

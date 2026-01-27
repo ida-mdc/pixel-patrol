@@ -1,4 +1,5 @@
 import os
+import shutil
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -15,6 +16,7 @@ from pixel_patrol_base.api import (
     show_report,
 )
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
 
 
 @click.group()
@@ -51,8 +53,14 @@ def cli():
                    'If not specified, all supported extensions will be used.')
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
+@click.option('--resume', 'resume', is_flag=True, default=False,
+              help='If set, resume from previous partial chunk files and skip already-processed images. Default: perform a fresh run (clear previous chunks).')
+@click.option('--chunk-dir', type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=Path),
+                  default=None,
+                  help='Optional: Directory to store intermediate parquet chunk files. Defaults to <output_zip_parent>/<project_name>_batches.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
-           loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str):
+              loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str,
+              resume: bool, chunk_dir: Path | None):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -77,11 +85,32 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
         add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extension) if file_extension else "all"
+
+    # Determine chunk dir: CLI option overrides default inferred location next to ZIP
+    if chunk_dir is not None:
+        chosen_chunk_dir = Path(chunk_dir).resolve()
+    else:
+        # Support implementations of create_project that return simple mappings (e.g. tests use a dict)
+        # Prefer project name attribute, fallback to CLI 'name' that was already derived from the base directory.
+        project_name_or_name = getattr(my_project, "name", None) or name
+        chosen_chunk_dir = (output_zip.parent / f"{project_name_or_name}_batches").resolve()
+    chunk_dir_was_inferred = chunk_dir is None
+
+    # By default clear existing chunk dir to ensure a fresh run.
+    # If --resume is passed, resume from existing partial chunks and skip already-processed images.
+    if chosen_chunk_dir.exists() and not resume:
+        click.echo(f"No --resume passed: clearing previous partial chunk files in: '{chosen_chunk_dir}'")
+        _cleanup_partial_chunks_dir(chosen_chunk_dir, cleanup_combined_parquet=False)
+    elif chosen_chunk_dir.exists() and resume:
+        click.echo(f"--resume passed: resuming and skipping already-processed images in '{chosen_chunk_dir}'")
+
     initial_settings = Settings(
         cmap=cmap,
         n_example_files=n_example_files,
         selected_file_extensions=selected_extensions,
-        pixel_patrol_flavor=flavor
+        pixel_patrol_flavor=flavor,
+        records_flush_dir=chosen_chunk_dir,
+        resume=resume,
     )
     click.echo(f"Setting project settings: {initial_settings}")
     set_settings(my_project, initial_settings)
@@ -90,8 +119,11 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     process_files(my_project)
 
     click.echo(f"Exporting project to: '{output_zip}'")
-    export_project(my_project, Path(output_zip)) # Assuming export_project takes string path
+    # Export. Project IO will include either the combined parquet (if present) or
+    # any partial chunks and will perform final tidy-up by default.
+    export_project(my_project, Path(output_zip))
     click.echo("Export complete.")
+
 
 
 @cli.command()
