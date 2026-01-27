@@ -130,3 +130,22 @@ def test_records_accumulator_handles_mixed_schema_batches():
 def test_resolve_batch_size_handles_zero_worker_count():
     """Batch sizing should still produce a valid size with zero workers."""
     assert processing._resolve_batch_size(worker_count=0, flush_threshold=4, total_rows=10) == 4
+
+
+def test_resolve_worker_count_single_file_and_caps(monkeypatch):
+    """Worker count should be 1 when only 1 file; and capped by total rows."""
+    monkeypatch.setattr(processing.os, "cpu_count", lambda: 8)
+    # No settings: should not exceed total rows
+    assert processing._resolve_worker_count(None, total_rows=1) == 1
+    assert processing._resolve_worker_count(None, total_rows=3) == 3
+    # Without total_rows provided, should default to CPU count
+    assert processing._resolve_worker_count(None) == 8
+
+
+def test_resolve_worker_count_respects_settings_and_total(monkeypatch):
+    """Requested workers are capped by CPU count and by total rows."""
+    monkeypatch.setattr(processing.os, "cpu_count", lambda: 8)
+    settings = Settings(processing_max_workers=10)
+    assert processing._resolve_worker_count(settings, total_rows=6) == 6
+    settings2 = Settings(processing_max_workers=4)
+    assert processing._resolve_worker_count(settings2, total_rows=6) == 4

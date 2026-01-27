@@ -278,11 +278,12 @@ def _build_deep_record_df(
     if basic.is_empty():
         return pl.DataFrame([])
 
+    total = basic.height
     processors = discover_processor_plugins()
     processor_classes = [proc.__class__ for proc in processors]
-    worker_count = _resolve_worker_count(settings)
-    flush_threshold = _resolve_flush_threshold(basic.height, settings)
-    batch_size = _resolve_batch_size(worker_count, flush_threshold, basic.height)
+    worker_count = _resolve_worker_count(settings, total)
+    flush_threshold = _resolve_flush_threshold(total, settings)
+    batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
     show_processor_progress = worker_count == 1
 
     accumulator = _RecordsAccumulator(
@@ -302,7 +303,6 @@ def _build_deep_record_df(
     remaining = basic
     if processed_rows:
         # Select unprocessed rows by gathering their indices — avoids creating an intermediate Polars filter
-        total = basic.height
         unprocessed_indices = [i for i in range(total) if i not in processed_rows]
         if not unprocessed_indices:
             return pl.DataFrame([])
@@ -313,6 +313,7 @@ def _build_deep_record_df(
 
     remaining_count = remaining.height
 
+    processed_count = 0
     with tqdm(
         total=remaining_count,
         desc="Processing files",
@@ -338,8 +339,9 @@ def _build_deep_record_df(
                 batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                 accumulator.add_batch(batch_df)
                 progress.update(len(batch))
+                processed_count += len(batch)
                 if progress_callback:
-                    progress_callback(len(batch), remaining_count, Path(batch[-1].path))
+                    progress_callback(processed_count, remaining_count, Path(batch[-1].path))
             return accumulator.finalize()
 
         loader_name = getattr(loader_instance, "NAME", None)
@@ -351,7 +353,7 @@ def _build_deep_record_df(
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
-                with yaspin (text="Planning the processing tasks ...", timer=True).yellow as spinner:
+                with yaspin(text="Planning the processing tasks ...", timer=True).yellow as spinner:
                     spinner._interval = 0.3
                     for batch in _iter_indexed_batches(remaining, batch_size):
                         fut = executor.submit(_process_batch_in_worker, batch)
@@ -567,23 +569,38 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     return result
 
 
-def _resolve_worker_count(settings: Optional[Settings]) -> int:
+def _resolve_worker_count(settings: Optional[Settings], total_rows: Optional[int] = None) -> int:
     """
-    Determine the number of parallel workers to use for processing with a minimum of 1.
-    If settings specify a value, use that within bounds of available workers; otherwise, default to CPU count.
+    Determine the number of parallel workers to use (minimum 1).
+
+    Behavior:
+    - If `processing_max_workers` is specified in `settings`, use that value but cap it
+      at the number of available CPUs.
+    - If `total_rows` is provided, never allocate more workers than there are rows to
+      process (so 1 file -> 1 worker). This avoids oversubscribing workers for tiny
+      datasets.
 
     Args:
         settings: Optional Settings object that may specify `processing_max_workers`.
+        total_rows: Optional total number of rows/files that will be processed.
     Returns:
         An integer representing the number of parallel workers to use.
     """
+    cpu_count = os.cpu_count() or 1
+
     if settings and settings.processing_max_workers is not None:
-        return (
-            max(1, settings.processing_max_workers)
-            if settings.processing_max_workers <= os.cpu_count()
-            else os.cpu_count() or 1
-        )
-    return max(1, os.cpu_count())
+        requested = max(1, settings.processing_max_workers)
+        max_workers = min(requested, cpu_count)
+    else:
+        max_workers = max(1, cpu_count)
+
+    # If we know how many rows will be processed, don't use more workers than rows.
+    if total_rows is not None:
+        if total_rows <= 1:
+            return 1
+        return min(max_workers, max(1, total_rows))
+
+    return max_workers
 
 
 def _resolve_batch_size(
@@ -813,13 +830,16 @@ class _RecordsAccumulator:
         logger.info("Processing Core: Writing partial records chunk to %s", chunk_path)
         self._written_files.append(chunk_path)
 
-        # Release reference to active dataframe and GC to free memory
+        # Release reference to active dataframe and GC to free memory.
+        self._active_df = pl.DataFrame([])
         try:
-            self._active_df = pl.DataFrame([])
             gc.collect()
-        except Exception:
-            # Memory freeing is best-effort; don't raise on GC failures
-            logger.debug("Processing Core: gc.collect() failed or not available")
+        except Exception as e:
+            logger.warning(
+                "Processing Core: unexpected gc.collect() error: %s",
+                e,
+                exc_info=True,
+            )
 
         self._chunk_index += 1
 
