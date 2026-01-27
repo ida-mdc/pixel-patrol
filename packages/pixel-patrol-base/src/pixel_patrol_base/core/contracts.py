@@ -1,4 +1,4 @@
-from typing import Protocol, Iterable, Set, Any, Dict, List, Optional
+from typing import Protocol, Iterable, Set, Any, Dict, List, Optional, Tuple
 
 import polars as pl
 from pathlib import Path
@@ -23,6 +23,8 @@ class PixelPatrolProcessor(Protocol):
     NAME: str
     INPUT: RecordSpec
     OUTPUT: ProcessorOutput            # "features" or "record"
+    OUTPUT_SCHEMA: Dict[str, Any]
+    OUTPUT_SCHEMA_PATTERNS: List[Tuple[str, Any]]
     def run(self, art: Record) -> ProcessResult: ...
 
 
