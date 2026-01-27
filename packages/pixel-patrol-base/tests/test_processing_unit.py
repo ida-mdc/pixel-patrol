@@ -72,6 +72,19 @@ def test_resolve_flush_threshold_caps_to_half_dataset():
     assert processing._resolve_flush_threshold(10, settings) == 5
 
 
+def test_resolve_flush_threshold_enforces_max_intermediate_flushes(caplog):
+    """Very low flush thresholds that would cause > MAX_INTERMEDIATE_FLUSHES are adjusted."""
+    # Very large dataset with tiny requested flush => would result in many flushes
+    settings = Settings(records_flush_every_n=1)
+
+    with caplog.at_level("WARNING"):
+        threshold = processing._resolve_flush_threshold(1_000_000, settings)
+
+    # Should be adjusted to ceil(total_rows / MAX_INTERMEDIATE_FLUSHES) => 1000
+    assert threshold == 1000
+    assert "Flushing this often on your dataset would result in" in caplog.text
+
+
 def test_resolve_batch_size_uses_total_rows_when_flush_disabled():
     """Batch size should be derived from total rows when flush is disabled."""
     assert processing._resolve_batch_size(worker_count=2, flush_threshold=0, total_rows=9) == 5
