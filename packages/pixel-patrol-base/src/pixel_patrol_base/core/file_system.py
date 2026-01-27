@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import polars as pl
+from yaspin import yaspin
 
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
@@ -62,26 +63,29 @@ def walk_filesystem(
                        not accepted_extensions.isdisjoint(getattr(loader, "FOLDER_EXTENSIONS", set())))
     folder_support_fn = loader.is_folder_supported if is_folder_check else None
 
-    for base in bases:
-        for root, dirnames, filenames in os.walk(base, topdown=True):
-            dirpath = Path(root)
 
-            keep: List[str] = []
+    with yaspin(text="Scanning for files to process ...", timer=True).cyan.shark as spinner:
+        spinner._interval = .3
+        for base in bases:
+            for root, dirnames, filenames in os.walk(base, topdown=True):
+                dirpath = Path(root)
 
-            if is_folder_check:
-                for d in dirnames:
-                    sub = dirpath / d
-                    if folder_support_fn(sub):
-                        records.append(make_basic_record(sub, base, is_folder=False))
-                    else:
-                        keep.append(d)
-                dirnames[:] = keep
+                keep: List[str] = []
 
-            # Files
-            for name in filenames:
-                p = dirpath / name
-                if include_all or p.suffix.lower().lstrip(".") in accepted_extensions:
-                    records.append(make_basic_record(p, base, is_folder=False))
+                if is_folder_check:
+                    for d in dirnames:
+                        sub = dirpath / d
+                        if folder_support_fn(sub):
+                            records.append(make_basic_record(sub, base, is_folder=False))
+                        else:
+                            keep.append(d)
+                    dirnames[:] = keep
+
+                # Files
+                for name in filenames:
+                    p = dirpath / name
+                    if include_all or p.suffix.lower().lstrip(".") in accepted_extensions:
+                        records.append(make_basic_record(p, base, is_folder=False))
 
     return pl.DataFrame(records) if records else pl.DataFrame()
 

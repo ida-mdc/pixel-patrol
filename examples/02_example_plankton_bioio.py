@@ -15,24 +15,29 @@ from pixel_patrol_base.core.project_settings import Settings
 import logging
 logging.basicConfig(level=logging.INFO)
 
-base_path = get_or_download_example_plankton(target_dir=Path("datasets")).resolve()
+def main():
+    base_path = get_or_download_example_plankton(target_dir=Path("datasets")).resolve()
 
-paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
+    paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
 
-settings = Settings(selected_file_extensions={"png","tif","tiff","jpg","jpeg"})
+    settings = Settings(selected_file_extensions={"png","tif","tiff","jpg","jpeg"}, records_flush_every_n=10, records_flush_dir=Path("out/plankton_project_batches"))
 
-my_project = create_project("Plankton Project", base_path, loader="bioio")
-my_project = add_paths(my_project, paths)
-my_project = set_settings(my_project, settings)
-my_project = process_files(my_project)
+    my_project = create_project("Plankton Project", base_path, loader="bioio")
+    my_project = add_paths(my_project, paths)
+    my_project = set_settings(my_project, settings)
+    my_project = process_files(my_project)
 
-# export project to /out
-zip_path = Path("out/plankton_project.zip")
-zip_path.parent.mkdir(parents=True, exist_ok=True)
-export_project(my_project, zip_path)
+    # export project to /out
+    zip_path = Path("out/plankton_project.zip")
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    export_project(my_project, zip_path)
 
-# Open http://127.0.0.1:8050/ in your browser
-show_report(my_project)
+    # Open http://127.0.0.1:8050/ in your browser
+    show_report(my_project)
 
-# Optional: Import project from /out
-imported = import_project(zip_path)
+    # Optional: Import project from /out
+    imported = import_project(zip_path)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,14 +1,17 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 from itertools import chain, combinations
 
+import dask.array as da
 import numpy as np
 import polars as pl
 import dask.array as da
+import threading
 
-from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.contracts import ProcessResult
+from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     Ensures the maximum is included in the last bin while having a right-bound that is strictly greater than the maximum.
     Args:
         x: Input image as array (Dask or NumPy)
-    Returns (min, max, max_adj) with correct right-edge handling for histograms. 
+    Returns (min, max, max_adj) with correct right-edge handling for histograms.
     """
     # compute min/max without pulling full arrays where possible
     if isinstance(x, da.Array):
@@ -31,16 +34,12 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     # use the full 0..255 bin range for display/processing. This ensures
     # bin-width=1 and use of all bins while remaining
     # flexible for other integer types (e.g., int16).
-    # Why would I do this?
-    # If an image has values in e.g. 33..255, the bin holding value 255 would 
-    # fall into 254.x. The last bin would then start at 255.y and miss the max value.
     try:
         dtype = x.dtype
     except Exception:
         dtype = None
 
     if dtype is not None and np.dtype(dtype) == np.dtype('uint8'):
-        # TODO: why do we assume 0 as min?
         min_val, max_val, max_adj = 0.0, 255.0, 256.0
         return min_val, max_val, max_adj
 
@@ -57,25 +56,29 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     return min_val, max_val, max_adj
 
 
-def _dask_hist_func(dask_array: da.Array, bins: int) -> Dict[str, List]:
+def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
     """
-    Calculates a histogram on a Dask array without pulling the full chunk into memory.
-    Returns both counts and bin edges in a dictionary.
+    Calculates a histogram on a Dask or NumPy array.
+    For Dask arrays this uses Dask's histogram to avoid pulling the full chunk into memory.
+    Returns a dict with:
+      - "counts": numpy.ndarray (dtype=np.int64)
+      - "min": Python float
+      - "max": Python float
     """
-    # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
-    if dask_array.size == 0:
-        zero_counts = np.zeros(bins, dtype=int).tolist()
-        return {"counts": zero_counts, "min": 0.0, "max": 255.0}
+    # Compute min/max and adjusted upper bound with shared helper
+    min_val, max_val, max_adj_val = safe_hist_range(arr)
 
-    # Compute min/max efficiently with Dask
-    # TODO: Why does the function return two values
-    min_val, max_val, max_adj_val = safe_hist_range(dask_array)
+    if isinstance(arr, da.Array):
+        # Use Dask's histogram function and compute the counts (we don't need edges to be stored)
+        counts, edges = da.histogram(arr, bins=bins, range=(min_val, max_adj_val))
+        computed_counts, _ = da.compute(counts, edges)
+        counts_arr = np.asarray(computed_counts, dtype=np.int64)
+    else:
+        # NumPy path: use numpy's histogram for in-memory arrays
+        counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
+        counts_arr = np.asarray(counts_np, dtype=np.int64)
 
-    # Use Dask's histogram function and compute the counts (we don't need edges to be stored)
-    counts, edges = da.histogram(dask_array, bins=bins, range=(min_val, max_adj_val))
-    computed_counts, _ = da.compute(counts, edges)
-
-    return {"counts": computed_counts.tolist(), "min": min_val, "max": max_val}
+    return {"counts": counts_arr, "min": float(min_val), "max": float(max_val)}
 
 
 class HistogramProcessor:
@@ -88,8 +91,7 @@ class HistogramProcessor:
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
-    # Updated schema to include the full image histogram and patterns for all slice hierarchies
-    # TODO: Consider smaller data types for counts and bounds to save memory
+    # TODO: Consider converting to smaller data types for counts and bounds to save memory
     OUTPUT_SCHEMA = {
         "histogram_counts": pl.List(pl.Int64),
         "histogram_min": pl.Float64,
@@ -103,54 +105,47 @@ class HistogramProcessor:
 
     def run(self, art: Record) -> ProcessResult:
         """
-        Calculates histograms for all levels of the dimensional hierarchy by iterating
-        through the power set of non-spatial dimensions.
+        Calculates histograms for all levels of the dimensional hierarchy by using
+        calculate_sliced_stats to vectorize per-slice computations instead of manual loops.
         """
-        final_features = {}
         data = art.data
         dim_order = art.dim_order
 
-        non_spatial_dims = [d for d in dim_order if d not in ("Y", "X")]
-        dim_map = {dim: i for i, dim in enumerate(dim_order)}
+        # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
+        if getattr(data, "size", 0) == 0:
+            return {"histogram_counts": np.array([]), "histogram_min": 0.0, "histogram_max": 0.0}
 
-        # Generate all hierarchy levels from the power set of dimensions
-        # e.g., for ['T', 'C'], generates [(), ('T',), ('C',), ('T', 'C')]
-        dim_subsets = chain.from_iterable(
-            combinations(non_spatial_dims, r) for r in range(len(non_spatial_dims) + 1)
-        )
+        # Metric functions operate on 2D numpy planes provided by apply_gufunc.
+        # To avoid calling _hist_func three times per plane, compute once and reuse
+        # results. Use thread-local storage to remain safe when Dask runs in threads.
+        _thread_local = threading.local()
+        def _compute_once(plane: np.ndarray):
+            pid = id(plane)
+            if getattr(_thread_local, "last_id", None) != pid:
+                _thread_local.last_id = pid
+                _thread_local.last_result = _hist_func(plane, bins=256)
+            return _thread_local.last_result
 
-        for subset in dim_subsets:
-            # The empty subset represents the full image histogram
-            if not subset:
-                hist_dict = _dask_hist_func(data, bins=256)
-                final_features["histogram_counts"] = hist_dict["counts"]
-                final_features["histogram_min"] = hist_dict.get("min")
-                final_features["histogram_max"] = hist_dict.get("max")
-                continue
+        def _counts_fn(plane: np.ndarray):
+            return _compute_once(plane)["counts"]
 
-            # Get the shape of the dimensions for the current hierarchy level
-            subset_shape = tuple(data.shape[dim_map[d]] for d in subset)
+        def _min_fn(plane: np.ndarray):
+            return _compute_once(plane)["min"]
 
-            # Iterate through every slice in the current hierarchy level
-            # e.g., for ('T', 'C'), this iterates through (t0,c0), (t0,c1), ...
-            for indices in np.ndindex(subset_shape):
-                slicer = [slice(None)] * data.ndim
-                name_parts = []
+        def _max_fn(plane: np.ndarray):
+            return _compute_once(plane)["max"]
 
-                for dim_name, index_val in zip(subset, indices):
-                    slicer[dim_map[dim_name]] = index_val
-                    name_parts.append(f"{dim_name.lower()}{index_val}")
+        metrics = {
+            "histogram_counts": _counts_fn,
+            "histogram_min": _min_fn,
+            "histogram_max": _max_fn,
+        }
 
-                # Extract the data chunk (as a Dask array)
-                data_chunk = data[tuple(slicer)]
+        # Aggregators: sum counts per-bin, and take min/max for boundaries
+        aggregators = {
+            "histogram_counts": np.sum,
+            "histogram_min": np.min,
+            "histogram_max": np.max,
+        }
 
-                # Recalculate the histogram for this specific chunk
-                hist_dict = _dask_hist_func(data_chunk, bins=256)
-
-                # Construct the final column names
-                slice_suffix = "_".join(name_parts)
-                final_features[f"histogram_counts_{slice_suffix}"] = hist_dict["counts"]
-                final_features[f"histogram_min_{slice_suffix}"] = hist_dict.get("min")
-                final_features[f"histogram_max_{slice_suffix}"] = hist_dict.get("max")
-
-        return final_features
+        return calculate_sliced_stats(data, dim_order, metrics, aggregators)

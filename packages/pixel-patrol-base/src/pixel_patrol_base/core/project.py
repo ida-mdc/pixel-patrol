@@ -154,15 +154,26 @@ class Project:
         if settings is not None:
             logger.info("Project Core: Applying provided settings before processing files.")
             self.set_settings(settings)
+        # Ensure we have a chunk directory set so processing will use on-disk
+        # partial flushes to avoid building an ever-growing in-memory DataFrame.
+        if getattr(self.settings, "records_flush_dir", None) is None and self.base_dir is not None:
+            inferred = Path(self.base_dir) / f"{self.name}_batches"
+            # Do not overwrite if explicitly set to None; only set when unset.
+            self.settings.records_flush_dir = inferred
+            logger.info(
+                "Project Core: No records_flush_dir specified; inferring chunk directory: %s",
+                inferred,
+            )
         if not self.settings.selected_file_extensions:
             raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
         exts = self.settings.selected_file_extensions
 
         self.records_df = processing.build_records_df(
-            self.paths, 
-            exts, 
+            self.paths,
+            exts,
             loader=self.loader,
-            progress_callback=progress_callback
+            settings=self.settings,
+            progress_callback=progress_callback,
         )
 
         if self.records_df is None or self.records_df.is_empty():

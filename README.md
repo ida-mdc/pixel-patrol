@@ -98,7 +98,7 @@ See `examples/minimal-extension` for a minimal template.
 2. Have all the files you would like to inspect under a common base directory.
 3. You can also specify subdirectory within the base directory - only those directories will be processed.
 4. Process your data - choose your way:  
-   * Visual Interface: Run `pixel-patrol dashboard` to configure and process your data using a web interface.
+   * Visual Interface: Run `pixel-patrol launch` to configure and process your data using a web interface.
    * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
    * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
@@ -163,6 +163,36 @@ Example (BioIO loader, two conditions to compare - by specifying the path to the
 pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
   --loader bioio --name "test_project" -p tifs -p pngs \
   -e tif -e png --cmap viridis
+```
+
+### Intermediate chunk files and resuming
+
+When processing very large datasets, PixelPatrol can write intermediate Polars/Parquet chunk files so long runs can be resumed and do not have to be re-run from scratch. Behavior:
+
+- By default the CLI `export` command will create an adjacent chunk directory next to the requested ZIP output: `<output_parent>/<output_stem>_batches/` and write `records_batch_*.parquet` files there as processing progresses.
+- By default any existing partial chunk files will be cleared before a run to ensure a fresh processing; if you want to resume from existing partial chunks and skip already-processed images, pass `--resume` to `export`.
+- You can also explicitly select a chunk directory with `--chunk-dir <DIR>` to override the default location.
+
+API users: `process_files()` (i.e. `Project.process_records`) will automatically infer a default `records_flush_dir` inside the project's `base_dir` when none is provided, so you do not need to set it explicitly to get intermediate chunk files. If you prefer a specific location, set `project.settings.records_flush_dir` and `project.settings.flush_every_n` before calling `process_files()`. To resume from existing partial chunks via the API, set `project.settings.resume = True` before calling `process_files()`. The `export_project()` helper will still infer a default chunk directory next to the destination ZIP if that path is used.
+
+Examples:
+
+- Resume run (skip already-processed):
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip --resume
+```
+
+- Force fresh run (clear partials first — default behavior):
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip
+```
+
+- Explicit chunk directory:
+
+```bash
+pixel-patrol export <BASE_DIR> -o out/my_project.zip --chunk-dir /data/pp_chunks
 ```
 
 ### `pixel-patrol report`

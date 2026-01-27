@@ -13,7 +13,6 @@ from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
-    _scan_dirs_for_extensions,
     _build_deep_record_df,
     PATHS_DF_EXPECTED_SCHEMA,
 )
@@ -46,42 +45,30 @@ def test_build_records_df_from_file_system_no_images(tmp_path):
         mock_get_deep_records_df.assert_not_called()
 
 
-def test_scan_dirs_for_extensions_filters_correct_extensions(tmp_path):
-    dir1 = tmp_path / "dir1"; dir1.mkdir()
-    dir2 = tmp_path / "dir2"; dir2.mkdir()
-    (dir1 / "a.jpg").write_bytes(b"")
-    (dir1 / "b.png").write_bytes(b"")
-    (dir1 / "c.txt").write_bytes(b"")
-    (dir2 / "d.JPG").write_bytes(b"")
-    result = _scan_dirs_for_extensions([dir1, dir2], {"jpg", "png"})
-    expected = {
-        (dir1 / "a.jpg", dir1),
-        (dir1 / "b.png", dir1),
-        (dir2 / "d.JPG", dir2),
-    }
-    assert set(result) == expected
-
-def test_scan_dirs_for_extensions_handles_empty_directory_list():
-    result = _scan_dirs_for_extensions([], {"jpg", "png"})
-    assert result == []
-
-
 def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
     p1 = tmp_path / "img1.jpg"; p1.write_bytes(b"")
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
 
-    def fake_get_all_record_properties(_path, loader, processors):
+    def fake_get_all_record_properties(_path, loader, processors=None, show_processor_progress=True):
+        # Signature matches production `get_all_record_properties` so it can be used in single-process tests
         assert loader.NAME == "bioio"
         return {"width": 100, "height": 200}
 
     monkeypatch.setattr("pixel_patrol_base.core.processing.get_all_record_properties",
                         fake_get_all_record_properties)
+    # Force single-worker mode so the monkeypatched function is executed in-process
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
 
-    df = _build_deep_record_df(paths, loader)
+    # Build a basic DataFrame expected by the processing core
+    basic_df = pl.DataFrame({"path": paths}).with_row_index("row_index").with_columns(
+        pl.col("row_index").cast(pl.Int64)
+    )
+
+    df = _build_deep_record_df(basic_df, loader)
 
     assert isinstance(df, pl.DataFrame)
-    assert set(df.columns) == {"path", "width", "height"}
+    assert set(df.columns) == {"row_index", "path", "width", "height"}
     assert df.height == 2
     assert df["width"].to_list() == [100, 100]
     assert df["height"].to_list() == [200, 200]
@@ -164,21 +151,29 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_valid = tmp_path / "valid.jpg"; p_valid.write_bytes(b"")
     p_invalid = tmp_path / "invalid.png"; p_invalid.write_bytes(b"")
 
-    def fake_get_all_image_properties(path, _loader, _processors):
+    def fake_get_all_image_properties(path, _loader, _processors=None, show_processor_progress=True):
         return {"width": 10, "height": 20} if path == p_valid else {}
 
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing.get_all_record_properties",
         fake_get_all_image_properties
     )
+    # Force single-worker mode so the monkeypatched function is executed in-process
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
 
-    df = _build_deep_record_df([p_valid, p_invalid], loader_instance=loader)
+    basic_df = (
+        pl.DataFrame({"path": [str(p_valid), str(p_invalid)]})
+        .with_row_index("row_index")
+        .with_columns(pl.col("row_index").cast(pl.Int64))
+    )
+
+    df = _build_deep_record_df(basic_df, loader_instance=loader)
 
     assert isinstance(df, pl.DataFrame)
-    assert df.height == 1
-    assert df["path"].to_list() == [str(p_valid)]
-    assert df["width"].to_list() == [10]
-    assert df["height"].to_list() == [20]
+    assert df.height == 2
+    assert df["path"].to_list() == [str(p_valid), str(p_invalid)]
+    assert df["width"].to_list() == [10, None]
+    assert df["height"].to_list() == [20, None]
 
 
 def test_build_records_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):
@@ -191,14 +186,20 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
 
     expected_paths = [str(img1), str(img2)]
 
-    deep_df = pl.DataFrame({
-        "path": expected_paths,
-        "width": [64, 128],
-        "height": [48, 256],
-    })
+    def fake_build_deep_record_df(basic, loader_instance, settings=None, progress_callback=None):
+        width_map = {str(img1): 64, str(img2): 128}
+        height_map = {str(img1): 48, str(img2): 256}
+        return basic.with_columns(
+            pl.col("path")
+            .map_elements(lambda p: width_map.get(str(p)), return_dtype=pl.Int64)
+            .alias("width"),
+            pl.col("path")
+            .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
+            .alias("height"),
+        )
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
-        lambda paths, loader_instance, progress_callback: deep_df
+        fake_build_deep_record_df
     )
 
     result = build_records_df(
@@ -227,14 +228,20 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
     img1 = base / "one.jpg";  img1.write_text("x")
     img2 = base / "two.png";  img2.write_text("y")
 
-    deep_df = pl.DataFrame({
-        "path": [str(img1), str(img2)],
-        "width": [10, 20],
-        "height": [15, 25],
-    })
+    def fake_build_deep_record_df(basic, loader, settings=None, progress_callback=None):
+        width_map = {str(img1): 10, str(img2): 20}
+        height_map = {str(img1): 15, str(img2): 25}
+        return basic.with_columns(
+            pl.col("path")
+            .map_elements(lambda p: width_map.get(str(p)), return_dtype=pl.Int64)
+            .alias("width"),
+            pl.col("path")
+            .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
+            .alias("height"),
+        )
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
-        lambda paths, loader, progress_callback: deep_df
+        fake_build_deep_record_df
     )
 
     result = build_records_df(
