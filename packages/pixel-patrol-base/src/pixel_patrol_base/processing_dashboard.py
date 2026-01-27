@@ -207,7 +207,7 @@ def _create_layout(app: Dash) -> html.Div:
             dcc.Store(id="processing-state-store", data=get_processing_state()),
             dcc.Interval(
                 id="progress-interval",
-                interval=500,  # Update every 500ms
+                interval=2000,  # Update every 2000ms
                 n_intervals=0,
                 disabled=True,
             ),
