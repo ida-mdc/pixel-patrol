@@ -15,8 +15,6 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     """
     Reusable base for widgets that display stats across dimensions in a table.
     Inherits from BaseReportWidget to provide standard Card layout.
-
-    IMPROVED: Now shows distribution info (std bands, sample counts) not just means.
     """
     # Subclasses set these:
     NAME: str = "Metrics Across Dimensions"
@@ -247,7 +245,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
 
 # ============================================================
-# 5. OPTIMIZED aggregation in metrics_across_dims
+# 5. aggregation in metrics_across_dims
 # ============================================================
 
 def _aggregate_cell_series_with_distribution(
@@ -258,9 +256,7 @@ def _aggregate_cell_series_with_distribution(
         dim_name: str,
         parsed_cols_info: List[Dict],
 ) -> pl.DataFrame:
-    """Optimized: Build mapping with set lookup, avoid repeated iteration."""
 
-    # OPTIMIZATION: Use set for O(1) lookup
     cols_set = frozenset(cols)
 
     # Build mapping in single pass
@@ -275,7 +271,6 @@ def _aggregate_cell_series_with_distribution(
 
     valid_cols = list(col_to_x.keys())
 
-    # OPTIMIZATION: Combine operations into single chain
     return (
         df.select([group_col, *valid_cols])
         .unpivot(
