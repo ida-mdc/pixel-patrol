@@ -436,30 +436,26 @@ def aggregate_histograms_by_group(
     max_col: str,
     mode: str = "shape"
 ) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-    """
-    Aggregates histograms per group.
-    Returns: { group_name: (x_centers, y_avg_counts) }
-    """
+
     results = {}
 
-    # Get unique groups
-    groups = df.select(pl.col(group_col).unique()).to_series().to_list()
+    # Build column list for selection
+    cols_to_select = [group_col, hist_col]
+    has_min = min_col in df.columns
+    has_max = max_col in df.columns
+    if has_min:
+        cols_to_select.append(min_col)
+    if has_max:
+        cols_to_select.append(max_col)
 
-    # Extract all needed columns once as lists
-    all_groups = df.get_column(group_col).to_list()
-    all_hists = df.get_column(hist_col).to_list()
-    all_mins = df.get_column(min_col).to_list() if min_col in df.columns else [None] * len(all_groups)
-    all_maxs = df.get_column(max_col).to_list() if max_col in df.columns else [None] * len(all_groups)
+    # iterate rows once, index by group
+    group_rows: Dict[str, List[Dict]] = defaultdict(list)
+    for row in df.select(cols_to_select).iter_rows(named=True):
+        if row[hist_col] is not None:
+            group_rows[row[group_col]].append(row)
 
-    # Pre-index data by group
-    group_indices: Dict[str, List[int]] = defaultdict(list)
-    for i, g in enumerate(all_groups):
-        if all_hists[i] is not None:  # Only include rows with valid histograms
-            group_indices[g].append(i)
-
-    for group_val in groups:
-        indices = group_indices.get(group_val, [])
-        if not indices:
+    for group_val, rows in group_rows.items():
+        if not rows:
             continue
 
         # Prepare target edges based on mode
@@ -468,8 +464,8 @@ def aggregate_histograms_by_group(
             accumulated = np.zeros(256, dtype=float)
         else:
             # Native range: need to find global min/max for this group
-            group_mins = [all_mins[i] for i in indices if all_mins[i] is not None]
-            group_maxs = [all_maxs[i] for i in indices if all_maxs[i] is not None]
+            group_mins = [r[min_col] for r in rows if has_min and r[min_col] is not None]
+            group_maxs = [r[max_col] for r in rows if has_max and r[max_col] is not None]
 
             if not group_mins or not group_maxs:
                 continue
@@ -486,10 +482,10 @@ def aggregate_histograms_by_group(
         count_files = 0
 
         # Process histograms for this group
-        for idx in indices:
-            c_list = all_hists[idx]
-            minv = all_mins[idx]
-            maxv = all_maxs[idx]
+        for row in rows:
+            c_list = row[hist_col]
+            minv = row[min_col] if has_min else None
+            maxv = row[max_col] if has_max else None
 
             if c_list is None:
                 continue
