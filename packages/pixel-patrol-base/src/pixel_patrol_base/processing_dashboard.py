@@ -912,15 +912,18 @@ def _run_processing(
         # Define progress callback that updates our processing state
         def progress_callback(current: int, total: int, current_file: Path) -> None:
             """Callback function to update processing state during file processing."""
-            # File-level progress (20-85% range)
-            progress_pct = 20 + int((current / total) * 65) if total > 0 else 20
-            
+
+            display_total = total_files if total_files > 0 else total
+            display_current = min(current, display_total)
+
+            progress_pct = 20 + int((display_current / display_total) * 65) if display_total > 0 else 20
+
             update_processing_state(
                 status="running",
                 progress=progress_pct,
-                message=f"Processing file {current}/{total}...",
-                processed_files=current,
-                total_files=total,
+                message=f"Processing file {display_current}/{display_total}...",
+                processed_files=display_current,
+                total_files=display_total,
                 current_file=current_file.name if current_file else "",
             )
         
@@ -1064,7 +1067,7 @@ def _launch_report_app(output_zip: str):
         
         logger.info(f"Report process started with PID {process.pid} for ZIP: {output_path}")
 
-        time.sleep(1.5)  # Give the server time to start
+        time.sleep(2)  # Give the server time to start
         webbrowser.open(f"http://127.0.0.1:{report_port}/")
         
         update_processing_state(
