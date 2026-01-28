@@ -570,12 +570,12 @@ def plot_aggregated_scatter(
 
 
 def build_violin_grid(
-    df: pl.DataFrame,
-    color_map: Dict[str, str],
-    numeric_cols: List[str],
-    group_col: str,
-    order_x: Optional[List[str]] = None,
-    annotate_significance=False,
+        df: pl.DataFrame,
+        color_map: Dict[str, str],
+        numeric_cols: List[str],
+        group_col: str,
+        order_x: Optional[List[str]] = None,
+        annotate_significance=False,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
@@ -599,7 +599,7 @@ def build_violin_grid(
             className="text-warning",
         )
 
-    # Decide which metrics get a plot vs. go into the “no variance” table
+    # Decide which metrics get a plot vs. go into the "no variance" table
     cols_to_plot: List[str] = []
     no_variance_data: List[Dict[str, str]] = []
 
@@ -615,38 +615,55 @@ def build_violin_grid(
         elif series.n_unique() > 1:
             cols_to_plot.append(col)
 
-    # Layout width based on number of groups
+    # Determine number of plots per row based on number of groups
+    # (wider violins need more horizontal space)
     num_groups = len(groups)
     if num_groups <= 2:
-        col_class = "four columns"      # 3 plots per row
+        plots_per_row = 3
     elif num_groups == 3:
-        col_class = "six columns"       # 2 plots per row
+        plots_per_row = 2
     else:
-        col_class = "twelve columns"    # 1 plot per row
+        plots_per_row = 1
+
+    # Calculate flex basis percentage with gap allowance
+    flex_basis_pct = max(30, 100 // plots_per_row - 2)
 
     plot_divs: List[html.Div] = []
     for col_name in cols_to_plot:
         nice_name = col_name.replace("_", " ").title()
         fig = plot_violin(
-            df = df_filtered,
-            y = col_name,
-            group_col = group_col,
-            color_map = color_map,
-            title = f"Distribution of {nice_name}",
-            custom_data_col = "name",
-            show_legend = False,
+            df=df_filtered,
+            y=col_name,
+            group_col=group_col,
+            color_map=color_map,
+            title=f"Distribution of {nice_name}",
+            custom_data_col="name",
+            show_legend=False,
             group_order=order_x,
             annotate_significance=annotate_significance,
         )
         plot_divs.append(
             html.Div(
-                dcc.Graph(figure=fig),
-                className=col_class,
-                style={"marginBottom": "20px", "margin-left": "0px"},
+                dcc.Graph(figure=fig, style={"width": "100%", "height": "100%"}),
+                style={
+                    "flex": f"0 0 {flex_basis_pct}%",
+                    "minWidth": "300px",
+                    "marginBottom": "20px",
+                    "boxSizing": "border-box",
+                },
             )
         )
 
-    plots_container = html.Div(plot_divs, className="row")
+    # Use flexbox container with wrap for responsive grid
+    plots_container = html.Div(
+        plot_divs,
+        style={
+            "display": "flex",
+            "flexWrap": "wrap",
+            "gap": "15px",
+            "width": "100%",
+        }
+    )
 
     table_component: List = []
     if no_variance_data:
