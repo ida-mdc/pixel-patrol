@@ -16,6 +16,9 @@ import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc, Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
 
+import webbrowser
+import time
+
 from pixel_patrol_base import api
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.report.factory import create_info_icon
@@ -1060,6 +1063,9 @@ def _launch_report_app(output_zip: str):
         )
         
         logger.info(f"Report process started with PID {process.pid} for ZIP: {output_path}")
+
+        time.sleep(1.5)  # Give the server time to start
+        webbrowser.open(f"http://127.0.0.1:{report_port}/")
         
         update_processing_state(
             message=f"Report dashboard launching on http://127.0.0.1:{report_port}/ from {output_path.name}",
