@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 import polars as pl
+
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 import matplotlib.pyplot as plt
@@ -264,30 +265,33 @@ def _find_candidate_columns(df: pl.DataFrame) -> tuple[list[str], list[str]]:
     schema = df.schema
 
     # 1. candidate columns only
-    candidates = [
-        c for c in df.columns
-        if not _DIMENSION_COL_PATTERN.search(c)
-           and schema.get(c) not in (pl.List, pl.Struct, pl.Array, pl.Object)
-    ]
+    candidates = []
+    for c in df.columns:
+        if _DIMENSION_COL_PATTERN.search(c):
+            continue
+
+        dtype = schema.get(c)
+        if dtype is None:
+            continue
+
+        if dtype.base_type() in (pl.List, pl.Struct, pl.Array, pl.Object):
+            continue
+
+        candidates.append(c)
 
     if not candidates:
         return [], []
 
     # 2. compute n_unique in one shot
     try:
-        nuniq = dict(
-            zip(
-                candidates,
-                df.select([pl.col(c).n_unique().alias(c) for c in candidates]).row(0),
-            )
-        )
+        n_uniq = dict(zip(candidates, df.select([pl.col(c).n_unique().alias(c) for c in candidates]).row(0),))
     except (pl.exceptions.ComputeError, pl.exceptions.SchemaError):
         return [], []
 
     group_cols = []
     filter_cols = []
 
-    for c, n_unique in nuniq.items():
+    for c, n_unique in n_uniq.items():
         if n_unique is None or n_unique < 2:
             continue
 
@@ -601,7 +605,7 @@ def prepare_widget_data(
     """
     The main coordinator for widgets.
 
-    OPTIMIZED: Uses module-level cache for the base computation (filtering + grouping).
+    Uses module-level cache for the base computation (filtering + grouping).
     Metric resolution still happens per widget since it varies.
 
     Returns:
