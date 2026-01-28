@@ -245,7 +245,7 @@ class DatasetHistogramWidget(BaseReportWidget):
             return show_no_data_message()
 
         # Optional single-file overlay (cheap operation, always recompute)
-        overlay_data = get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
+        overlay_data = get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
 
         dims_selection = (global_config or {}).get(GC_DIMENSIONS, {})
 
@@ -293,7 +293,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         return result
 
 
-def get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file):
+def get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file):
     overlay_data = None
     if selected_file:
         row = df_filtered.filter(pl.col("name") == selected_file)
