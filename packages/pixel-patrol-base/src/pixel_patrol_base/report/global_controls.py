@@ -332,9 +332,8 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
         """)
 
     # Available palettes
-    palettes = sorted(
-        [p for p in plt.colormaps() if not p.endswith("_r")], key=str.lower
-    )
+    palettes = sorted([p for p in plt.colormaps() if not p.endswith("_r")], key=lambda s: s.lower(),)
+
     palette_options = [{"label": p, "value": p} for p in palettes]
 
     # 2. Find columns valid for grouping & filtering (single efficient pass)
@@ -675,7 +674,6 @@ def apply_global_row_filters_and_grouping(
         # as a last resort pick the first column
         group_col = df.columns[0]
 
-    # Use the optimized filter function
     row_positions = compute_filtered_row_positions(df, global_config)
 
     if row_positions is None:

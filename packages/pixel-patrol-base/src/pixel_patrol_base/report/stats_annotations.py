@@ -85,13 +85,10 @@ def compute_pairwise_significance(
         alpha: float = 0.05,
         min_samples: int = 3,
 ) -> Optional[SignificanceResults]:
-    """
-    Optimized: Single partition call instead of N filter calls.
-    """
+
     if groups is None:
         groups = df[group_col].unique().drop_nulls().sort().to_list()
 
-    # OPTIMIZATION: Single partition instead of N filters
     # Extract only needed columns first
     subset = df.select([group_col, value_col]).drop_nulls()
 
