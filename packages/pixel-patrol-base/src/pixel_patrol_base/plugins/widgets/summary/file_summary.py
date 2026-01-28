@@ -5,15 +5,11 @@ from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
-from pixel_patrol_base.report.factory import (
-    plot_bar,
-    show_no_data_message,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.data_utils import prettify_col_name
+from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
+
 
 class FileSummaryWidget(BaseReportWidget):
     NAME: str = "File Data Summary"
@@ -83,9 +79,12 @@ class FileSummaryWidget(BaseReportWidget):
         if summary.height == 0:
             return show_no_data_message()
 
-        intro = self._build_intro(summary, group_col)
+        # Convert to dicts once, reuse for intro and table
+        summary_rows = summary.to_dicts()
+
+        intro = self._build_intro(summary_rows, group_col)
         graphs = self._build_plots(summary, group_col, color_map, group_order)
-        table = self._build_table(summary, group_col)
+        table = self._build_table(summary_rows, group_col)
 
         return [
             html.Div(intro, style={"marginBottom": "20px"}),
@@ -95,15 +94,16 @@ class FileSummaryWidget(BaseReportWidget):
 
 
     @staticmethod
-    def _build_intro(summary: pl.DataFrame, group_col: str) -> List:
+    def _build_intro(summary_rows: List[Dict], group_col: str) -> List:
+        """Build intro text from pre-converted row dicts."""
         intro_md: List = [
             html.P(
                 f"This summary focuses on file properties across "
-                f"{summary.height} group(s) (by '{group_col}')."
+                f"{len(summary_rows)} group(s) (by '{prettify_col_name(group_col)}')."
             )
         ]
 
-        for row in summary.iter_rows(named=True):
+        for row in summary_rows:
             ft_str = ", ".join(row["file_types"])
             intro_md.append(
                 html.P(
@@ -154,7 +154,8 @@ class FileSummaryWidget(BaseReportWidget):
         return figs
 
     @staticmethod
-    def _build_table(summary: pl.DataFrame, group_col: str) -> html.Table:
+    def _build_table(summary_rows: List[Dict], group_col: str) -> html.Table:
+        """Build table from pre-converted row dicts."""
         header = html.Thead(
             html.Tr(
                 [
@@ -166,18 +167,17 @@ class FileSummaryWidget(BaseReportWidget):
             )
         )
 
-        body_rows: List[html.Tr] = []
-        for row in summary.iter_rows(named=True):
-            body_rows.append(
-                html.Tr(
-                    [
-                        html.Td(row[group_col]),
-                        html.Td(row["file_count"]),
-                        html.Td(f"{row['total_size_mb']:.3f}"),
-                        html.Td(", ".join(row["file_types"])),
-                    ]
-                )
+        body_rows: List[html.Tr] = [
+            html.Tr(
+                [
+                    html.Td(row[group_col]),
+                    html.Td(row["file_count"]),
+                    html.Td(f"{row['total_size_mb']:.3f}"),
+                    html.Td(", ".join(row["file_types"])),
+                ]
             )
+            for row in summary_rows
+        ]
 
         return html.Table(
             [header, html.Tbody(body_rows)],

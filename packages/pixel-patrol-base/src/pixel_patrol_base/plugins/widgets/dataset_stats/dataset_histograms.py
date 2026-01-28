@@ -10,12 +10,15 @@ from pixel_patrol_base.report.data_utils import (
     aggregate_histograms_by_group,
     compute_histogram_edges,
     format_selection_title,
+    sort_strings_alpha,
+    select_needed_columns
 )
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import (FILTERED_INDICES_STORE_ID,
+                                                GLOBAL_CONFIG_STORE_ID,
+                                                GC_DIMENSIONS,
+                                                MAX_RECORDS_IN_MENU)
+
 
 class DatasetHistogramWidget(BaseReportWidget):
     NAME: str = "Pixel Value Histograms"
@@ -27,6 +30,14 @@ class DatasetHistogramWidget(BaseReportWidget):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._df: pl.DataFrame | None = None
+
+        # Avoids re-filtering the same DataFrame when multiple callbacks fire
+        self._prepare_cache_key: tuple | None = None
+        self._prepare_cache_result: tuple | None = None
+
+        # Avoids re-aggregating when only the overlay file changes
+        self._agg_cache_key: tuple | None = None
+        self._agg_cache_result: dict | None = None
 
     @property
     def help_text(self) -> str:
@@ -124,31 +135,27 @@ class DatasetHistogramWidget(BaseReportWidget):
 
 
     def _set_control_options(self, subset_indices, global_config):
-        df = self._df
 
-        df_processed, group_col, _resolved, _warning, _order = prepare_widget_data(
-            df,
+        df_processed, group_col, _resolved, _warning, _order = self._get_prepared_data(
             subset_indices,
-            global_config or {},
-            metric_base=None,
+            global_config,
+            metric_base="histogram_counts",  # Consistent with other callbacks for cache hits
         )
+
         if not group_col or df_processed.is_empty():
             return [], []
 
-        group_values = df_processed[group_col].unique().sort().to_list()
+        group_values = sort_strings_alpha(df_processed[group_col].unique().sort().to_list())
         group_options = [{"label": str(g), "value": g} for g in group_values]
 
         return group_options, []
 
-
     def _update_file_options(self, selected_groups, global_config, subset_indices):
-        df = self._df
 
-        df_processed, group_col, _resolved, _warning, _order = prepare_widget_data(
-            df,
+        df_processed, group_col, _resolved, _warning, _order = self._get_prepared_data(
             subset_indices,
-            global_config or {},
-            metric_base=None,
+            global_config,
+            metric_base="histogram_counts",  # Consistent with other callbacks for cache hits
         )
 
         if selected_groups:
@@ -157,67 +164,90 @@ class DatasetHistogramWidget(BaseReportWidget):
         if df_processed.is_empty():
             return [], None
 
-        # Limit to 500 files for performance in dropdown
-        names = df_processed["name"].unique().head(500).to_list()
+        # Limit to MAX_RECORDS_IN_MENU files for performance in dropdown
+        names_all = df_processed["name"].unique().to_list()
+        limited = len(names_all) > MAX_RECORDS_IN_MENU
+
+        names = sort_strings_alpha(names_all[:MAX_RECORDS_IN_MENU])
+
         options = [{"label": n, "value": n} for n in names]
+
+        if limited:
+            options.insert(
+                0,
+                {
+                    "label": f"⚠ showing first {MAX_RECORDS_IN_MENU} files",
+                    "value": "__LIMIT_WARNING__",
+                    "disabled": True,
+                },
+            )
+
         return options, no_update
 
     def _update_plot(
-        self,
-        color_map: Dict[str, str],
-        remap_mode: str | None,
-        selected_groups: List[str] | None,
-        selected_file: str | None,
-        subset_indices: List[int] | None,
-        global_config: Dict,
+            self,
+            color_map: Dict[str, str],
+            remap_mode: str | None,
+            selected_groups: List[str] | None,
+            selected_file: str | None,
+            subset_indices: List[int] | None,
+            global_config: Dict,
     ):
-
         metric_base = "histogram_counts"
-        df_filtered, group_col, resolved_col, warning_msg, group_order = prepare_widget_data(
-            self._df,
+
+        df_filtered, group_col, resolved_col, warning_msg, group_order = self._get_prepared_data(
             subset_indices,
-            global_config or {},
+            global_config,
             metric_base=metric_base,
         )
 
         if resolved_col is None or df_filtered.is_empty():
             return show_no_data_message()
 
-        # Construct matching min/max keys from the same suffix
         suffix = resolved_col.replace(metric_base, "")
         min_key = f"histogram_min{suffix}"
         max_key = f"histogram_max{suffix}"
 
-        # Select only histogram columns + metadata
-        cols_needed = {resolved_col, min_key, max_key, "name"}
-        if group_col:
-            cols_needed.add(group_col)
-
-        # Only select columns that actually exist
-        valid_cols = [c for c in cols_needed if c in df_filtered.columns]
-        df_filtered = df_filtered.select(valid_cols)
+        cols_needed = [resolved_col, min_key, max_key, "name"]
+        extra = [group_col] if group_col else []
+        df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         # Apply optional (within widget) group selection
         if selected_groups:
             df_filtered = df_filtered.filter(pl.col(group_col).is_in(selected_groups))
 
-        # Aggregate per-group histograms on the *already filtered* subset
-        group_data = aggregate_histograms_by_group(
-            df=df_filtered,
-            group_col=group_col,
-            hist_col=resolved_col,
-            min_col=min_key,
-            max_col=max_key,
-            mode=remap_mode,
+        # Excludes selected_file because overlay is computed separately and is cheap
+        # This way, changing only the overlay file won't re-aggregate all histograms
+        agg_cache_key = (
+            tuple(subset_indices) if subset_indices else None,
+            tuple(sorted((global_config or {}).items())),
+            remap_mode,
+            tuple(sorted(selected_groups)) if selected_groups else None,
         )
+
+        # Use cached aggregation if available, otherwise compute and cache
+        if self._agg_cache_key == agg_cache_key and self._agg_cache_result is not None:
+            group_data = self._agg_cache_result
+        else:
+            # This is the expensive operation - aggregate per-group histograms
+            group_data = aggregate_histograms_by_group(
+                df=df_filtered,
+                group_col=group_col,
+                hist_col=resolved_col,
+                min_col=min_key,
+                max_col=max_key,
+                mode=remap_mode,
+            )
+            self._agg_cache_key = agg_cache_key
+            self._agg_cache_result = group_data
 
         if not group_data:
             return show_no_data_message()
 
-        # Optional single-file overlay (respecting global filters)
-        overlay_data = get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
+        # Optional single-file overlay (cheap operation, always recompute)
+        overlay_data = get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
 
-        dims_selection = (global_config or {}).get("dimensions", {})
+        dims_selection = (global_config or {}).get(GC_DIMENSIONS, {})
 
         fig = plot_grouped_histogram(
             group_data=group_data,
@@ -229,7 +259,41 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         return dcc.Graph(figure=fig, style={"height": "600px"})
 
-def get_overly_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file):
+
+    def _get_prepared_data(self, subset_indices, global_config, metric_base="histogram_counts"):
+        """
+        Cached wrapper around prepare_widget_data.
+
+        When user changes a global control, multiple callbacks fire with the same
+        inputs. This cache ensures we only filter the DataFrame once.
+
+        Cache is invalidated automatically when any input changes.
+        """
+        # Build a hashable cache key from all inputs
+        cache_key = (
+            tuple(subset_indices) if subset_indices else None,
+            tuple(sorted((global_config or {}).items())),
+            metric_base,
+        )
+
+        # Return cached result if inputs haven't changed
+        if self._prepare_cache_key == cache_key and self._prepare_cache_result is not None:
+            return self._prepare_cache_result
+
+        # Compute fresh result and cache it
+        result = prepare_widget_data(
+            self._df,
+            subset_indices,
+            global_config or {},
+            metric_base=metric_base,
+        )
+
+        self._prepare_cache_key = cache_key
+        self._prepare_cache_result = result
+        return result
+
+
+def get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file):
     overlay_data = None
     if selected_file:
         row = df_filtered.filter(pl.col("name") == selected_file)

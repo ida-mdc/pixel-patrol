@@ -1,20 +1,15 @@
-from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
-from pixel_patrol_base.report.widget_categories import WidgetCategories
-from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    prepare_widget_data,
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-)
-from pixel_patrol_base.report.factory import show_no_data_message
-
-
 from typing import List, Dict, Set
 
 import dash_ag_grid as dag
 import polars as pl
 from dash import html, Input, Output
 
+from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
+from pixel_patrol_base.report.widget_categories import WidgetCategories
+from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.factory import show_no_data_message
 
 
 class DataFrameWidget(BaseReportWidget):
@@ -68,14 +63,19 @@ class DataFrameWidget(BaseReportWidget):
         if df_filtered.is_empty():
             return show_no_data_message()
 
-        df_limited = df_filtered.limit(MAX_ROWS_DISPLAYED)
-        cols_to_display = df_limited.columns[:MAX_COLS_DISPLAYED]
-        df_limited = df_limited.select(cols_to_display)
+        cols_to_display = df_filtered.columns[:MAX_COLS_DISPLAYED]
+        df_limited = (
+            df_filtered
+            .select(cols_to_display)
+            .limit(MAX_ROWS_DISPLAYED)
+        )
+
+        if df_limited.n_chunks() > 1:
+            df_limited = df_limited.rechunk()
 
         grid = dag.AgGrid(
             id="dataframe-grid",
-            # Even though rechunk is expensive, it ensures that to_dicts works
-            rowData=df_limited.rechunk().to_dicts(),
+            rowData=df_limited.to_dicts(),
             columnDefs=[{"field": col} for col in cols_to_display],
             style={"maxHeight": "70vh"},
         )

@@ -3,6 +3,7 @@ from typing import List, Set
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.plugins.widgets.multi_metric_violin_abstract_widget import MultiMetricViolinGridWidget
+from pixel_patrol_base.report.constants import SIGNIFICANCE_HELP_TEXT
 
 
 class DatasetStatsWidget(MultiMetricViolinGridWidget):
@@ -19,8 +20,5 @@ class DatasetStatsWidget(MultiMetricViolinGridWidget):
             "Shows **per-image intensity statistics** across groups.\n\n"
             "You can choose which statistic to plot and filter by image dimensions.\n\n"
             "In the plot each point is one image; the box shows the distribution per group.\n\n"
-            "**Statistics**\n"
-            "Pairwise group comparisons use a Mann–Whitney U test with Bonferroni correction:\n"
-            "- `ns`: not significant\n"
-            "- `*: p < 0.05`, `**: p < 0.01`, `***: p < 0.001`"
+            + SIGNIFICANCE_HELP_TEXT
         )
