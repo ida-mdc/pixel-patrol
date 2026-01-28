@@ -36,7 +36,7 @@ def main():
     show_report(my_project)
 
     # Optional: Import project from /out
-    imported = import_project(zip_path)
+    # imported = import_project(zip_path)
 
 
 if __name__ == "__main__":
