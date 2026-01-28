@@ -5,8 +5,31 @@ import numpy as np
 from collections import defaultdict
 
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
+from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABEL
+
 
 # --- Data Helpers ---
+
+def sort_strings_alpha(values: Sequence[str]) -> List[str]:
+    """
+    Alphabetical, case-insensitive sort. Keeps original strings.
+    """
+    return sorted([v for v in values if v is not None], key=lambda x: x.lower())
+
+
+def select_needed_columns(
+    df: pl.DataFrame,
+    cols_needed: Sequence[str],
+    extra_cols: Sequence[str] | None = None,
+) -> pl.DataFrame:
+    cols = list(cols_needed)
+    if extra_cols:
+        cols.extend(extra_cols)
+    cols = list(dict.fromkeys(cols))
+    # keep only existing
+    cols = [c for c in cols if c in df.columns]
+    return df.select(cols)
+
 
 def get_sortable_columns(df: pl.DataFrame) -> List[str]:
     """
@@ -21,6 +44,7 @@ def get_sortable_columns(df: pl.DataFrame) -> List[str]:
                 df[col].dtype not in [pl.List, pl.Struct, pl.Array]
         )
     ]
+
 
 # --- Dim Filter Helpers ---
 
@@ -47,6 +71,7 @@ def get_all_available_dimensions(df: pl.DataFrame) -> Dict[str, List[str]]:
             sorted_dims[k] = sorted(list(v), key=int)
 
     return sorted_dims
+
 
 def find_best_matching_column(
         columns: List[str],
@@ -75,6 +100,7 @@ def find_best_matching_column(
     if candidates:
         return min(candidates, key=len)
     return None
+
 
 def get_dim_aware_column(
     all_columns: list[str],
@@ -145,23 +171,212 @@ def parse_metric_dimension_column(
     return matched_metric, dims
 
 
-def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, Optional[List[str]]]:
-    """
-    Checks if the grouping column is numeric. If so:
-    1. Captures the sort order (so "1, 2, 10" doesn't become "1, 10, 2").
-    2. Casts the column to Utf8 (String) to force Plotly to use a discrete legend instead of a colorbar.
-    """
+def prettify_col_name(col: Optional[str]) -> Optional[str]:
+    if col and col.startswith(GROUPING_COL_PREFIX):
+        return col[len(GROUPING_COL_PREFIX):]
+    return col
 
-    # Check if the column is numeric
+
+def ensure_discrete_grouping(df: pl.DataFrame, group_col: str) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
+    """
+    Converts a column to discrete string labels suitable for grouping/display.
+    Applies smart shortening based on value content:
+    - Floats: minimum 2 decimal places, more if needed for uniqueness
+    - Paths: only distinguishing path suffixes (with ... prefix)
+    - Integers: just stringify
+    - Strings: shorten common prefix/suffix if long enough (with ... indicator)
+    Null values become MISSING_LABEL.
+    """
+    new_group_col = f'{GROUPING_COL_PREFIX}{group_col}'
+
+    # Get unique values, check for nulls
+    unique_vals = df.select(pl.col(group_col).unique().sort()).to_series().to_list()
+    has_nulls = None in unique_vals
+    unique_non_null = [v for v in unique_vals if v is not None]
+
+    if not unique_non_null:
+        # All nulls
+        df = df.with_columns(pl.lit(MISSING_LABEL).alias(new_group_col))
+        return df, new_group_col, [MISSING_LABEL]
+
+    # Build mapping from original value -> display label
+    if df[group_col].dtype.is_float():
+        label_map = _floats_to_categorical(unique_non_null)
+    elif df[group_col].dtype.is_integer():
+        label_map = {v: str(v) for v in unique_non_null}
+    elif _looks_like_paths(unique_non_null):
+        label_map = _paths_to_categorical(unique_non_null)
+    else:
+        # strings - try common prefix/suffix stripping
+        label_map = _strings_to_categorical(unique_non_null)
+
+    # Build sort order: numeric sort for numbers, alpha for strings
     if df[group_col].dtype.is_numeric():
-        # Get unique values in correct numeric order
-        order = [str(x) for x in df.select(pl.col(group_col).unique().sort()).to_series().to_list()]
+        sorted_orig = sorted(unique_non_null)
+    else:
+        sorted_orig = sorted(unique_non_null, key=lambda x: str(x).lower())
 
-        # Cast to String so Plotly treats it as a discrete category
-        df = df.with_columns(pl.col(group_col).cast(pl.Utf8))
-        return df, order
+    order = [label_map[v] for v in sorted_orig]
+    if has_nulls:
+        order.append(MISSING_LABEL)
 
-    return df, None
+    # Apply mapping via replace dict (convert keys to string for polars replace)
+    # We need to cast to string first, then replace, then handle nulls
+    str_map = {str(k): v for k, v in label_map.items()}
+
+    df = df.with_columns(
+        pl.col(group_col)
+        .cast(pl.Utf8)
+        .replace(str_map)
+        .fill_null(MISSING_LABEL)
+        .alias(new_group_col)
+    )
+
+    return df, new_group_col, order
+
+
+def _floats_to_categorical(values: List[float]) -> Dict[float, str]:
+    """
+    Format floats for display:
+    - If all whole numbers: display as integers
+    - Otherwise: minimum 2 decimal places, more if needed for uniqueness
+    """
+    # Check if these are "integer floats" (e.g., 1.0, 2.0, 3.0)
+    all_whole = all(float(v) == int(v) for v in values)
+
+    if all_whole:
+        return {v: str(int(v)) for v in values}
+
+    # Start with 2 decimal places minimum, increase if needed for uniqueness
+    for decimals in range(2, 15):
+        formatted = {v: f"{v:.{decimals}f}" for v in values}
+        if len(set(formatted.values())) == len(values):
+            return formatted
+
+    # Fallback - full precision
+    return {v: repr(v) for v in values}
+
+
+def _looks_like_paths(values: List) -> bool:
+    """Check if all values appear to be file/directory paths."""
+    if not values:
+        return False
+    str_vals = [str(v) for v in values]
+    return all('/' in s or '\\' in s for s in str_vals)
+
+
+def _paths_to_categorical(values: List) -> Dict:
+    """
+    Keep only the distinguishing suffix of paths (full folder names).
+    Adds '...' prefix to indicate truncation.
+    """
+    from pathlib import PurePosixPath, PureWindowsPath
+
+    str_vals = [str(v) for v in values]
+
+    if len(str_vals) < 2:
+        return {v: str(v) for v in values}
+
+    # Detect separator
+    sep = '/' if any('/' in s for s in str_vals) else '\\'
+    path_class = PurePosixPath if sep == '/' else PureWindowsPath
+
+    # Split into parts
+    parsed = [path_class(s).parts for s in str_vals]
+
+    if not parsed or not parsed[0]:
+        return {v: str(v) for v in values}
+
+    # Find how many trailing parts we need for uniqueness
+    max_parts = max(len(p) for p in parsed)
+
+    for n_parts in range(1, max_parts + 1):
+        suffixes = [sep.join(p[-n_parts:]) if len(p) >= n_parts else sep.join(p) for p in parsed]
+        if len(set(suffixes)) == len(values):
+            # Check if we actually shortened anything
+            result = {}
+            for orig, suf, parts in zip(values, suffixes, parsed):
+                if len(parts) > n_parts:
+                    result[orig] = f"...{sep}{suf}"
+                else:
+                    result[orig] = suf
+            return result
+
+    # Fallback
+    return {v: str(v) for v in values}
+
+
+def _strings_to_categorical(values: List, min_strip_len: int = 10) -> Dict:
+    """
+    Strip common prefix/suffix from strings, but only if:
+    - The common part is long enough to be worth removing (>=10 chars)
+    - We indicate truncation with '...'
+    """
+    str_vals = [str(v) for v in values]
+
+    if len(str_vals) < 2:
+        return {v: str(v) for v in values}
+
+    # Find common prefix/suffix
+    prefix = _common_prefix(str_vals)
+    suffix = _common_suffix(str_vals)
+
+    # Only strip if the common part is substantial
+    strip_prefix = len(prefix) >= min_strip_len
+    strip_suffix = len(suffix) >= min_strip_len
+
+    if not strip_prefix and not strip_suffix:
+        return {v: str(v) for v in values}
+
+    shortened = []
+    for s in str_vals:
+        result = s
+        prefix_indicator = ""
+        suffix_indicator = ""
+
+        if strip_prefix:
+            result = result[len(prefix):]
+            prefix_indicator = "..."
+
+        if strip_suffix and len(result) > len(suffix):
+            result = result[:-len(suffix)]
+            suffix_indicator = "..."
+
+        final = f"{prefix_indicator}{result}{suffix_indicator}"
+        # Don't allow empty or just ellipsis
+        shortened.append(final if result else s)
+
+    # Only use shortened if all still unique
+    if len(set(shortened)) == len(values):
+        return {orig: short for orig, short in zip(values, shortened)}
+
+    return {v: str(v) for v in values}
+
+
+def _common_prefix(strings: List[str]) -> str:
+    """Find longest common prefix."""
+    if not strings:
+        return ""
+    prefix = strings[0]
+    for s in strings[1:]:
+        while not s.startswith(prefix):
+            prefix = prefix[:-1]
+            if not prefix:
+                return ""
+    return prefix
+
+
+def _common_suffix(strings: List[str]) -> str:
+    """Find longest common suffix."""
+    if not strings:
+        return ""
+    suffix = strings[0]
+    for s in strings[1:]:
+        while not s.endswith(suffix):
+            suffix = suffix[1:]
+            if not suffix:
+                return ""
+    return suffix
 
 
 # --- Histogram Math & Aggregation Helpers ---
@@ -221,41 +436,44 @@ def aggregate_histograms_by_group(
     max_col: str,
     mode: str = "shape"
 ) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-    """
-    Aggregates histograms per group.
-    Returns: { group_name: (x_centers, y_avg_counts) }
-    """
+
     results = {}
-    groups = df.select(pl.col(group_col).unique()).to_series().to_list()
 
-    for group_val in groups:
-        # Filter logic
-        # We drop nulls explicitly for the relevant columns to avoid iteration crashes
-        df_group = df.filter(
-            (pl.col(group_col) == group_val) &
-            pl.col(hist_col).is_not_null()
-        )
+    # Build column list for selection
+    cols_to_select = [group_col, hist_col]
+    has_min = min_col in df.columns
+    has_max = max_col in df.columns
+    if has_min:
+        cols_to_select.append(min_col)
+    if has_max:
+        cols_to_select.append(max_col)
 
-        if df_group.height == 0:
+    # iterate rows once, index by group
+    group_rows: Dict[str, List[Dict]] = defaultdict(list)
+    for row in df.select(cols_to_select).iter_rows(named=True):
+        if row[hist_col] is not None:
+            group_rows[row[group_col]].append(row)
+
+    for group_val, rows in group_rows.items():
+        if not rows:
             continue
 
-        # Prepare target edges
+        # Prepare target edges based on mode
         if mode == "shape":
-            # Fixed 0-255 bins
             target_edges = np.linspace(0, 255, 257)
             accumulated = np.zeros(256, dtype=float)
         else:
-            # Native range logic
-            # Calculate global min/max for this group to define common edges
-            gmin = df_group.select(pl.col(min_col).min()).item()
-            gmax = df_group.select(pl.col(max_col).max()).item()
+            # Native range: need to find global min/max for this group
+            group_mins = [r[min_col] for r in rows if has_min and r[min_col] is not None]
+            group_maxs = [r[max_col] for r in rows if has_max and r[max_col] is not None]
 
-            if gmin is None or gmax is None:
+            if not group_mins or not group_maxs:
                 continue
 
-            # Create edges for the group
+            gmin = min(group_mins)
+            gmax = max(group_maxs)
+
             n_bins = 256
-            # Re-use logic from compute_histogram_edges but just for edges
             smin, _, max_adj = safe_hist_range(np.array([gmin, gmax]))
             width = (float(max_adj) - float(smin)) / float(n_bins)
             target_edges = float(smin) + np.arange(n_bins + 1, dtype=float) * width
@@ -263,18 +481,20 @@ def aggregate_histograms_by_group(
 
         count_files = 0
 
-        # Iterate and rebin
-        # We select only needed columns to speed up iteration
-        subset = df_group.select([hist_col, min_col, max_col])
-        for row in subset.iter_rows():
-            c_list, minv, maxv = row
-            # Fix: Explicitly check None to avoid ValueError with numpy arrays
-            if c_list is None: continue
+        # Process histograms for this group
+        for row in rows:
+            c_list = row[hist_col]
+            minv = row[min_col] if has_min else None
+            maxv = row[max_col] if has_max else None
+
+            if c_list is None:
+                continue
 
             c_arr = np.asarray(c_list, dtype=float)
-            if c_arr.size == 0 or c_arr.sum() == 0: continue
+            if c_arr.size == 0 or c_arr.sum() == 0:
+                continue
 
-            # Get source edges for this specific image
+            # Get source edges
             src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
 
             # Rebin to group common edges

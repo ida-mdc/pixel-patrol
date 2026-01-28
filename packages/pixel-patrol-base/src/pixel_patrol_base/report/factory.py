@@ -6,23 +6,35 @@ import polars as pl
 from numpy import ndarray
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
+import math
+
+from pixel_patrol_base.report.data_utils import prettify_col_name
+from pixel_patrol_base.report.constants import NO_GROUPING_COL
+from pixel_patrol_base.report.stats_annotations import annotate_plot_with_significance
 
 # =============================================================================
 #  SECTION 1: GLOBAL STYLES
 # =============================================================================
 
-STANDARD_LAYOUT_KWARGS = dict(
+_STANDARD_LAYOUT_KWARGS = dict(
     margin=dict(l=50, r=50, t=50, b=50),
     hovermode="closest",
     template="plotly_white",
     showlegend=False,
 )
 
-STANDARD_LEGEND_KWARGS = dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=None)
+_STANDARD_LEGEND_KWARGS = dict(
+    orientation="v",
+    yanchor="top",
+    y=1,
+    xanchor="left",
+    x=1.02,
+    title=None,
+)
 
 def _apply_standard_styling(fig: go.Figure, n_categories: int = 0):
     """Applies global style rules and fixes bar chart gaps."""
-    fig.update_layout(**STANDARD_LAYOUT_KWARGS)
+    fig.update_layout(**_STANDARD_LAYOUT_KWARGS)
 
     # Aesthetic fix: Plotly bars are too thin if there are few categories
     if n_categories == 1:
@@ -60,6 +72,26 @@ def _get_category_orders(
             orders[color] = df[color].unique().drop_nulls().sort().to_list()
 
     return orders
+
+
+def _sanitize_labels(labels: Optional[Dict[str, str]], *cols: Optional[str]) -> Dict[str, str]:
+    out = dict(labels or {})
+    for c in cols:
+        if c:
+            pretty = prettify_col_name(c)
+            if pretty and c not in out:
+                out[c] = pretty
+    return out
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert hex color to rgba string with given alpha."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 3:
+        hex_color = "".join(c * 2 for c in hex_color)
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 
 # =============================================================================
 #  SECTION 2: HTML CONTAINERS
@@ -154,6 +186,8 @@ def plot_bar(
 
     cat_orders = _get_category_orders(df, x, color, order_x)
 
+    labels = _sanitize_labels(labels, x, color)
+
     fig = px.bar(
         df,
         x=x,
@@ -179,10 +213,12 @@ def plot_bar(
     except (KeyError, AttributeError):
         n_categories = 0
 
+    fig.update_xaxes(title_text=prettify_col_name(x))
+
     _apply_standard_styling(fig, n_categories)
 
-    if show_legend:
-        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    if show_legend and color!=NO_GROUPING_COL:
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
     else:
         fig.update_layout(showlegend=False, margin=dict(b=80))
 
@@ -217,8 +253,8 @@ def plot_scatter(
         hover_data=hover_data,
     )
     _apply_standard_styling(fig)
-    if show_legend:
-        fig.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    if show_legend and color!=NO_GROUPING_COL:
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
     return fig
 
 
@@ -227,17 +263,13 @@ def plot_strip(
         x: str,
         y: str,
         color: Optional[str] = None,
-        facet_col: Optional[str] = None,
-        facet_col_wrap: int = 3,
-        facet_row_spacing: float = 0.2,
-        facet_col_spacing: float = 0.05,
         color_map: Optional[Dict[str, str]] = None,
         title: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         hover_data: Optional[List[str]] = None,
         height: Optional[int] = None,
 ) -> go.Figure:
-
+    """Creates a single strip plot (no faceting)."""
     cat_orders = _get_category_orders(df, x, color)
 
     fig = px.strip(
@@ -245,10 +277,6 @@ def plot_strip(
         x=x,
         y=y,
         color=color,
-        facet_col=facet_col,
-        facet_col_wrap=facet_col_wrap,
-        facet_row_spacing=facet_row_spacing,
-        facet_col_spacing=facet_col_spacing,
         color_discrete_map=color_map or {},
         category_orders=cat_orders,
         title=title,
@@ -256,20 +284,74 @@ def plot_strip(
         hover_data=hover_data,
     )
 
-    fig.update_xaxes(matches=None, showline=True, showticklabels=True, title=None)
-    fig.update_yaxes(matches=None, showline=True, showticklabels=True)
-
-    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+    fig.update_xaxes(showline=True, showticklabels=True, title=None)
+    fig.update_yaxes(showline=True, showticklabels=True)
 
     _apply_standard_styling(fig)
+    fig.update_layout(showlegend=False)
 
-    fig.update_layout(margin=dict(t=90), showlegend=False)
-
-    # Allow height override (useful for multi-row facets)
     if height:
         fig.update_layout(height=height)
 
     return fig
+
+
+def create_strip_plot_grid(
+        df: pl.DataFrame,
+        x: str,
+        y: str,
+        facet_col: str,
+        color: Optional[str] = None,
+        color_map: Optional[Dict[str, str]] = None,
+        labels: Optional[Dict[str, str]] = None,
+        hover_data: Optional[List[str]] = None,
+        n_cols: int = 3,
+        plot_height: int = 250,
+        title: Optional[str] = None,
+) -> html.Div:
+    """
+    Creates a grid of individual strip plots, one per facet value.
+    Returns a Dash Div containing the grid layout.
+    """
+    facet_values = df[facet_col].unique().sort().to_list()
+
+    plots = []
+    for facet_val in facet_values:
+        facet_df = df.filter(pl.col(facet_col) == facet_val)
+
+        fig = plot_strip(
+            df=facet_df,
+            x=x,
+            y=y,
+            color=color,
+            color_map=color_map,
+            title=str(facet_val),
+            labels=labels,
+            hover_data=hover_data,
+            height=plot_height,
+        )
+
+        plots.append(
+            html.Div(
+                dcc.Graph(figure=fig),
+                style={"flex": f"1 1 {100 // n_cols}%", "minWidth": "300px"}
+            )
+        )
+
+    title_div = html.H5(title, style={"marginBottom": "10px"}) if title else None
+
+    grid = html.Div(
+        plots,
+        style={
+            "display": "flex",
+            "flexWrap": "wrap",
+            "gap": "10px",
+        }
+    )
+
+    if title_div:
+        return html.Div([title_div, grid])
+    return grid
 
 
 def plot_violin(
@@ -282,10 +364,11 @@ def plot_violin(
         height: Optional[int] = None,
         show_legend: bool = False,
         group_order: Optional[List[str]] = None,
+        annotate_significance=False,
 ) -> go.Figure:
 
     color_map = color_map or {}
-    chart = go.Figure()
+    fig = go.Figure()
 
     if group_order:
         present = set(df.get_column(group_col).drop_nulls().unique().to_list())
@@ -318,7 +401,7 @@ def plot_violin(
 
         violin_kwargs["marker"] = dict(color=group_color)
 
-        chart.add_trace(
+        fig.add_trace(
             go.Violin(
                 **violin_kwargs,
                 hovertemplate=(
@@ -331,67 +414,136 @@ def plot_violin(
             )
         )
 
-    chart.update_traces(
+    fig.update_traces(
         marker=dict(line=dict(width=1, color="black")),
         box=dict(line_color="black"),
     )
 
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         dict(
             title_text=title,
             yaxis_title=y.replace("_", " ").title(),
-            xaxis_title="Group",
+            xaxis_title=prettify_col_name(group_col),
             showlegend=show_legend,
         )
     )
 
     if height is not None:
-        chart.update_layout(**layout, height=height)
+        fig.update_layout(**layout, height=height)
     else:
-        chart.update_layout(**layout)
-    return chart
+        fig.update_layout(**layout)
+
+    if annotate_significance:
+        fig = annotate_plot_with_significance(
+            fig=fig, df=df, value_col=y, group_col=group_col, group_order=groups
+        )
+
+    return fig
 
 
-def plot_grouped_scatter(
+
+def plot_aggregated_scatter(
         df: pl.DataFrame,
         x_col: str,
         y_col: str,
+        y_std_col: str,
+        n_col: str,
         group_col: str,
         *,
-        mode: str = "lines+markers",
-        color_map: Optional[Dict[str, str]] = None,
+        color_map: Dict[str, str] = None,
         show_legend: bool = False,
-        height: int = 120,
+        height: int = 140,
 ) -> go.Figure:
     """
-    Generic grouped XY plot. Expects df already in long/aggregated form.
+    grouped XY plot showing:
+    - Line for mean values
+    - Shaded band for ±1 std deviation
+    - Marker size proportional to log(n) to show sample count
+    - Rich hover info with n, mean, std
     """
     color_map = color_map or {}
     fig = go.Figure()
 
     groups = (
         df.get_column(group_col)
-          .unique()
-          .drop_nulls()
-          .sort()
-          .to_list()
+        .unique()
+        .drop_nulls()
+        .sort()
+        .to_list()
     )
 
     for g in groups:
-        dfg = df.filter(pl.col(group_col) == g)
+        dfg = df.filter(pl.col(group_col) == g).sort(x_col)
+
+        x_vals = dfg[x_col].to_list()
+        y_mean = dfg[y_col].to_list()
+        y_std = dfg[y_std_col].to_list()
+        n_vals = dfg[n_col].to_list()
+
+        color = color_map.get(str(g), "#333333")
+
+        # Calculate upper and lower bounds for the band
+        y_upper = [m + s for m, s in zip(y_mean, y_std)]
+        y_lower = [m - s for m, s in zip(y_mean, y_std)]
+
+        # Marker sizes: scale by log(n) for visibility, with min/max bounds
+        marker_sizes = [max(4, min(12, 3 + 3 * math.log10(max(n, 1)))) for n in n_vals]
+
+        # Add shaded std band (fill between upper and lower)
+        # Upper bound line (invisible)
         fig.add_trace(
             go.Scatter(
-                x=dfg[x_col].to_list(),
-                y=dfg[y_col].to_list(),
-                mode=mode,
-                name=str(g),
-                line=dict(width=2, color=color_map.get(str(g))),
-                marker=dict(size=5),
+                x=x_vals,
+                y=y_upper,
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        # Lower bound with fill to previous trace
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_lower,
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor=_hex_to_rgba(color, 0.2),
+                showlegend=False,
+                hoverinfo="skip",
             )
         )
 
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+        # Main line with markers
+        hover_text = [
+            f"<b>{g}</b><br>"
+            f"Slice: {x}<br>"
+            f"Mean: {m:.3f}<br>"
+            f"Std: {s:.3f}<br>"
+            f"<b>n={n}</b>"
+            for x, m, s, n in zip(x_vals, y_mean, y_std, n_vals)
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_mean,
+                mode="lines+markers",
+                name=str(g),
+                line=dict(width=2, color=color),
+                marker=dict(
+                    size=marker_sizes,
+                    color=color,
+                    line=dict(width=1, color="white"),
+                ),
+                hovertemplate="%{text}<extra></extra>",
+                text=hover_text,
+            )
+        )
+
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         margin=dict(l=30, r=10, t=10, b=25),
         showlegend=show_legend,
@@ -423,6 +575,7 @@ def build_violin_grid(
     numeric_cols: List[str],
     group_col: str,
     order_x: Optional[List[str]] = None,
+    annotate_significance=False,
 ):
     """
     Build a grid of violin plots (one per metric column) grouped by folder,
@@ -483,6 +636,7 @@ def build_violin_grid(
             custom_data_col = "name",
             show_legend = False,
             group_order=order_x,
+            annotate_significance=annotate_significance,
         )
         plot_divs.append(
             html.Div(
@@ -526,12 +680,12 @@ def plot_grouped_histogram(
     """
     Plots aggregated line histograms for groups, optionally overlaying a bar chart for a single item.
     """
-    chart = go.Figure()
+    fig = go.Figure()
 
     # 1. Plot the overlay bar chart first (so lines appear on top, or vice versa depending on pref)
     # Usually bars for single file, lines for group means.
     if overlay_data:
-        chart.add_trace(
+        fig.add_trace(
             go.Bar(
                 x=overlay_data["x"],
                 y=overlay_data["y"],
@@ -552,7 +706,7 @@ def plot_grouped_histogram(
     for group_name in keys:
         x_vals, y_vals = group_data[group_name]
         color = color_map.get(group_name, "#333333")
-        chart.add_trace(
+        fig.add_trace(
             go.Scatter(
                 x=x_vals,
                 y=y_vals,
@@ -565,17 +719,18 @@ def plot_grouped_histogram(
         )
 
     # 3. Styling
-    layout = STANDARD_LAYOUT_KWARGS.copy()
+    layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         title_text=title,
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
         bargap=0.0,
     )
-    chart.update_layout(**layout)
-    chart.update_layout(showlegend=True, legend=STANDARD_LEGEND_KWARGS)
+    fig.update_layout(**layout)
+    if len(group_data) > 1:
+        fig.update_layout(showlegend=True, legend=_STANDARD_LEGEND_KWARGS)
 
-    return chart
+    return fig
 
 
 def plot_sunburst(
@@ -604,16 +759,36 @@ def plot_sunburst(
     return fig
 
 
+
 def plot_image_mosaic(
     sprite_np: ndarray,
     *,
     unique_groups: List[str],
     color_map: Dict[str, str],
     height: int,
+    hover_info: Optional[Dict] = None,
 ) -> go.Figure:
     fig = px.imshow(sprite_np)
-    fig.update_traces(hovertemplate=None, selector=dict(type="image"))
+    fig.update_traces(hoverinfo='skip', hovertemplate=None, selector=dict(type="image"))
 
+    # Add invisible scatter points for hover (if hover_info provided)
+    if hover_info and hover_info.get("names"):
+        fig.add_trace(
+            go.Scatter(
+                x=hover_info["x"],
+                y=hover_info["y"],
+                mode="markers",
+                marker=dict(
+                    size=hover_info.get("marker_size", 32),
+                    opacity=0,  # Invisible markers
+                ),
+                text=hover_info["names"],
+                hovertemplate="%{text}<extra></extra>",
+                showlegend=False,
+            )
+        )
+
+    # Add legend entries for groups
     for label in unique_groups:
         fig.add_trace(
             go.Scatter(
@@ -632,7 +807,7 @@ def plot_image_mosaic(
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         margin=dict(l=0, r=0, t=0, b=0),
-        hovermode=False,
+        hovermode="closest",  # CHANGED: Enable hover
         legend=dict(
             orientation="h",
             yanchor="top",

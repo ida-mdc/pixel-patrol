@@ -4,13 +4,13 @@ import polars as pl
 from dash import Input, Output, html
 
 from pixel_patrol_base.report.base_widget import BaseReportWidget
-from pixel_patrol_base.report.global_controls import (
-    GLOBAL_CONFIG_STORE_ID,
-    FILTERED_INDICES_STORE_ID,
-    prepare_widget_data,
-)
+from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.report.constants import (GLOBAL_CONFIG_STORE_ID,
+                                                FILTERED_INDICES_STORE_ID,
+                                                GC_IS_SHOW_SIGNIFICANCE,
+                                                GC_DIMENSIONS)
 from pixel_patrol_base.report.factory import build_violin_grid, show_no_data_message
-from pixel_patrol_base.report.data_utils import get_dim_aware_column
+from pixel_patrol_base.report.data_utils import get_dim_aware_column, select_needed_columns
 
 
 class MultiMetricViolinGridWidget(BaseReportWidget):
@@ -63,7 +63,7 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
             return show_no_data_message()
 
         global_config = global_config or {}
-        dims_selection = global_config.get("dimensions", {})
+        dims_selection = global_config.get(GC_DIMENSIONS, {})
 
         resolved_metric_cols: List[str] = []
         for base in self.BASE_METRIC_NAMES:
@@ -74,9 +74,9 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
         if not resolved_metric_cols:
             return show_no_data_message()
 
-        cols_needed = resolved_metric_cols + [group_col, "name"]
-        final_cols = [c for c in cols_needed if c in df_filtered.columns]
-        df_plot = df_filtered.select(final_cols)
+        cols_needed = resolved_metric_cols + ["name"]
+        extra = [group_col] if group_col else []
+        df_plot = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
         return build_violin_grid(
             df_plot,
@@ -84,4 +84,5 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
             resolved_metric_cols,
             group_col=group_col,
             order_x=group_order,
+            annotate_significance=global_config.get(GC_IS_SHOW_SIGNIFICANCE, False),
         )
