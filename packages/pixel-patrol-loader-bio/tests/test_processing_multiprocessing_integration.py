@@ -110,7 +110,8 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
 
     assert df is not None
     assert df.height == len(copied)
-    assert sum(call[0] for call in progress_calls) == len(copied)
+    assert progress_calls, "progress_callback was not called"
+    assert progress_calls[-1][0] == len(copied)
 
 
 def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
