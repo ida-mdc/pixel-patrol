@@ -372,9 +372,10 @@ def _build_deep_record_df(
                     batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
                     accumulator.add_batch(batch_df)
                     progress.update(len(batch))
+                    processed_count += len(batch)
                     if progress_callback:
                         progress_callback(
-                            len(batch), remaining_count, Path(batch[-1].path)
+                            processed_count, remaining_count, Path(batch[-1].path)
                         )
         except Exception as exc:
             logger.warning(
