@@ -11,6 +11,7 @@ from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, MIXED_GROUPING_COLOR
 from pixel_patrol_base.report.factory import plot_sunburst, show_no_data_message
 
+MAX_FILES_FOR_SUNBURST = 500  # Maximum number of files before switching to folders-only view
 
 class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
@@ -88,6 +89,7 @@ class FileSunburstWidget(BaseReportWidget):
     ) -> Tuple[List[str], List[str], List[str], List[int], List[str]]:
         """
         Constructs the node lists required for Plotly Sunburst, aggregating by file count.
+        If the number of files exceeds MAX_FILES_FOR_SUNBURST, only folders are shown.
         """
 
         # --- 1. Identify Common Root ---
@@ -95,7 +97,11 @@ class FileSunburstWidget(BaseReportWidget):
         if path_series.is_empty():
             return [], [], [], [], []
 
+
         all_paths = path_series.to_list()
+
+        num_files = len(all_paths)
+        folders_only = num_files > MAX_FILES_FOR_SUNBURST
 
         try:
             common_root = os.path.commonpath(all_paths)
@@ -157,62 +163,42 @@ class FileSunburstWidget(BaseReportWidget):
             node_label[vis_root_name] = vis_root_name
 
         # --- 5. Build Tree ---
-        # Cache for parent path computation
-        parent_cache: Dict[str, str] = {}
-
-        def get_parent(path: str) -> str:
-            """Get parent path with caching."""
-            if path in parent_cache:
-                return parent_cache[path]
-
-            if path_sep in path:
-                parent = path.rsplit(path_sep, 1)[0]  # Faster than os.path.dirname for simple cases
-            else:
-                parent = ""
-
-            parent_cache[path] = parent
-            return parent
-
-        def get_label(path: str) -> str:
-            """Get label (filename/foldername) from path."""
-            if not path:
-                return display_root_label
-            if path_sep in path:
-                return path.rsplit(path_sep, 1)[1]  # Faster than os.path.basename
-            return path
-
-        # Process all files
         for rel_path, group_val in file_data:
-            # --- Process Leaf (File) ---
-            parent_id = get_parent(rel_path)
+            # For files, always compute parent (files aren't in node_parent)
+            parent_id = _get_parent(rel_path, path_sep)
 
-            # Add leaf node
-            node_file_count[rel_path] = 1
-            node_groups[rel_path] = {group_val}
-            node_parent[rel_path] = parent_id
-            node_label[rel_path] = get_label(rel_path)
+            if folders_only:
+                current_path = parent_id
+            else:
+                # --- Process Leaf (File) ---
+                node_file_count[rel_path] = 1
+                node_groups[rel_path] = {group_val}
+                node_parent[rel_path] = parent_id
+                node_label[rel_path] = _get_label(rel_path, path_sep, display_root_label)
+                current_path = parent_id
 
             # --- Process Ancestors (Folders) ---
-            current_path = parent_id
-
             while True:
                 if current_path in node_file_count:
-                    # Existing folder: update stats
-                    node_file_count[current_path] += 1
-                    node_groups[current_path].add(group_val)
+                    # Existing folder: propagate counts up using stored parents
+                    while True:
+                        node_file_count[current_path] += 1
+                        node_groups[current_path].add(group_val)
+                        if current_path == "":
+                            break
+                        current_path = node_parent[current_path]
+                    break
                 else:
-                    # New folder node
-                    parent_of_folder = get_parent(current_path)
-
+                    # New folder: compute parent, store everything
+                    parent_of_folder = _get_parent(current_path, path_sep)
                     node_file_count[current_path] = 1
                     node_groups[current_path] = {group_val}
                     node_parent[current_path] = parent_of_folder
-                    node_label[current_path] = get_label(current_path)
+                    node_label[current_path] = _get_label(current_path, path_sep, display_root_label)
 
-                if current_path == "":
-                    break
-
-                current_path = get_parent(current_path)
+                    if current_path == "":
+                        break
+                    current_path = parent_of_folder
 
         # --- 6. Generate Final Lists and Colors ---
         ids = []
@@ -237,6 +223,7 @@ class FileSunburstWidget(BaseReportWidget):
                 colors.append(MIXED_GROUPING_COLOR)
                 continue
 
+            # When folders_only is True, we never created file nodes, so all nodes are folders
             ids.append(node_id)
             labels.append(node_label[node_id])
             parents.append(node_parent[node_id])
@@ -251,3 +238,15 @@ class FileSunburstWidget(BaseReportWidget):
                 colors.append(MIXED_GROUPING_COLOR)
 
         return ids, labels, parents, values, colors
+
+def _get_parent(path: str, sep: str) -> str:
+    """Get parent path from a path string."""
+    idx = path.rfind(sep)
+    return path[:idx] if idx != -1 else ""
+
+def _get_label(path: str, sep: str, default: str) -> str:
+    """Get the last component (label) from a path string."""
+    if not path:
+        return default
+    idx = path.rfind(sep)
+    return path[idx + 1:] if idx != -1 else path
