@@ -16,7 +16,7 @@ PixelPatrol is an early-version tool designed for the systematic validation of s
 
 ### Coming soon:
 
-* **Big data support**: Efficiently handle large datasets with optimized data processing.
+* **Big(ger) data support**: While processing already runs in parallel, we're working on handling bigger and bigger datasets and GPU support.
 * **Support for more file formats**
 
 ## Installation
@@ -165,35 +165,17 @@ pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
   -e tif -e png --cmap viridis
 ```
 
-### Intermediate chunk files and resuming
+#### Intermediate chunk files
 
-When processing very large datasets, PixelPatrol can write intermediate Polars/Parquet chunk files so long runs can be resumed and do not have to be re-run from scratch. Behavior:
+PixelPatrol writes intermediate Parquet "chunk" files.
 
-- By default the CLI `export` command will create an adjacent chunk directory next to the requested ZIP output: `<output_parent>/<output_stem>_batches/` and write `records_batch_*.parquet` files there as processing progresses.
-- By default any existing partial chunk files will be cleared before a run to ensure a fresh processing; if you want to resume from existing partial chunks and skip already-processed images, pass `--resume` to `export`.
-- You can also explicitly select a chunk directory with `--chunk-dir <DIR>` to override the default location.
-
-API users: `process_files()` (i.e. `Project.process_records`) will automatically infer a default `records_flush_dir` inside the project's `base_dir` when none is provided, so you do not need to set it explicitly to get intermediate chunk files. If you prefer a specific location, set `project.settings.records_flush_dir` and `project.settings.flush_every_n` before calling `process_files()`. To resume from existing partial chunks via the API, set `project.settings.resume = True` before calling `process_files()`. The `export_project()` helper will still infer a default chunk directory next to the destination ZIP if that path is used.
-
-Examples:
-
-- Resume run (skip already-processed):
-
-```bash
-pixel-patrol export <BASE_DIR> -o out/my_project.zip --resume
-```
-
-- Force fresh run (clear partials first — default behavior):
-
-```bash
-pixel-patrol export <BASE_DIR> -o out/my_project.zip
-```
-
-- Explicit chunk directory:
-
-```bash
-pixel-patrol export <BASE_DIR> -o out/my_project.zip --chunk-dir /data/pp_chunks
-```
+Behavior (CLI):
+- Default chunk dir: adjacent to the requested ZIP: `<output_parent>/<project_name>_batches/`.
+- To override: pass `--chunk-dir /path/to/dir`.
+- 
+**Important (resume is experimental / limited):**
+Resume only works safely if you rerun on the *same* dataset layout and use the *same* chunk directory.  
+Use by setting `project.settings.resume = True`
 
 ### `pixel-patrol report`
 
@@ -221,6 +203,18 @@ pixel-patrol report examples/out/quickstart_project.zip \
 ```bash
 pixel-patrol report --help
 ```
+
+#### Export report as static HTML
+
+CLI:
+- Use `pixel-patrol report <REPORT_ZIP> --export-html report.html [--port PORT]` to render and save a static HTML snapshot of the dashboard.   
+- This calls the same exporter the API exposes and writes a self-contained HTML file.
+
+```bash
+pixel-patrol report examples/out/my_project.zip --export-html out/report.html
+```
+
+Note: the exporter requires `Playwright` dependency, without it an ImportError is raised.
 
 ### Troubleshooting
 
