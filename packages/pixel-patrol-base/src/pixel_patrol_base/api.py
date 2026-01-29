@@ -10,6 +10,7 @@ from pixel_patrol_base.io.project_io import export_project as _io_export_project
 from pixel_patrol_base.io.project_io import import_project as _io_import_project
 from pixel_patrol_base.report.dashboard_app import create_app
 from pixel_patrol_base.report.global_controls import init_global_config
+from pixel_patrol_base.report.html_export import export_html_from_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,52 @@ def show_report(
     sanitized = init_global_config(project.records_df, global_config)
     app = create_app(project, initial_global_config=sanitized)
     app.run(debug=debug, host=host, port=port, use_reloader=False)
+
+def export_html_report(
+    project: Project,
+    output_path: Union[str, Path],
+    host: str = "127.0.0.1",
+    port: int = None,
+    timeout: int = 120,
+    global_config: dict | None = None,
+) -> None:
+    """
+    Export the report dashboard as a static HTML file using headless browser automation.
+    
+    This function creates a Dash app from the project, launches it in a background server,
+    uses Playwright to render the page, and saves the result as a static HTML file.
+    
+    Args:
+        project: The Project instance to export
+        output_path: Path where the HTML file should be saved (str or Path)
+        host: Host address for the server (default: "127.0.0.1")
+        port: Port number for the server (default: None, auto-assigned)
+        timeout: Maximum time to wait for the export in seconds (default: 120)
+        global_config: Optional global configuration dict with filters, grouping, etc.
+                     Same format as show_report's global_config parameter.
+    
+    Raises:
+        ImportError: If Playwright is not installed
+        RuntimeError: If the export fails
+    
+    Example:
+        >>> from pixel_patrol_base import api
+        >>> project = api.import_project("my_project.zip")
+        >>> api.export_html_report(
+        ...     project,
+        ...     "report.html",
+        ...     global_config={
+        ...         "group_col": ["size_readable"],
+        ...         "filter": {"file_extension": {"op": "in", "value": "tif, png"}},
+        ...     }
+        ... )
+    """
+    output_path = Path(output_path)
+    logger.info(f"API Call: Exporting HTML report for project '{project.name}' to '{output_path}'.")
+    sanitized = init_global_config(project.records_df, global_config)
+    app = create_app(project, initial_global_config=sanitized)
+    export_html_from_dashboard(app, output_path, host=host, port=port, timeout=timeout)
+    logger.info(f"API Call: HTML export completed successfully: '{output_path}'.")
 
 def export_project(project: Project, dest: Path) -> None: # TODO: think about when project can be saved
     logger.info(f"API Call: Exporting project '{project.name}' to '{dest}'.")

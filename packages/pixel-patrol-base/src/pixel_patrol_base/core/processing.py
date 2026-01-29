@@ -82,18 +82,7 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
         )
         return []
 
-    deep_rows: List[Dict[str, object]] = []
-    for item in batch:
-        record_dict = get_all_record_properties(
-            Path(item.path),
-            loader,
-            processors,
-            show_processor_progress=False,
-        )
-        if record_dict:
-            deep_rows.append({"row_index": item.row_index, **record_dict})
-
-    return deep_rows
+    return _process_batch_locally(batch, loader, processors, False)
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -198,7 +187,8 @@ def _combine_batch_with_basic(
         c for c in deep_df.columns if c in basic_batch.columns and c != "row_index"
     ]
     if overlap:
-        deep_df = deep_df.drop(overlap)
+        # Drop overlapping columns from basic_batch so loader metadata takes precedence
+        basic_batch = basic_batch.drop(overlap)
 
     return basic_batch.join(deep_df, on="row_index", how="left")
 
@@ -461,12 +451,19 @@ def get_all_record_properties(
     for P in processor_iter:
         if not is_record_matching_processor(art, P.INPUT):
             continue
-        out = P.run(art)
-        if isinstance(out, dict):
-            extracted_properties.update(out)
-        else:
-            art = out  # chainable: processors may transform the record
-            extracted_properties.update(art.meta)
+        try:
+            out = P.run(art)
+            if isinstance(out, dict):
+                extracted_properties.update(out)
+            else:
+                art = out
+                extracted_properties.update(art.meta)
+        except (RuntimeError, ValueError, TypeError) as e:
+            logger.exception(
+                "Processor %s failed for record %s",
+                getattr(P, "NAME", P.__class__.__name__),
+                getattr(art, "source_path", "unknown"),
+            )
 
     return extracted_properties
 
@@ -811,11 +808,14 @@ class _RecordsAccumulator:
         if self._active_df.is_empty():
             return
         if self._flush_dir is None:
-            logger.warning("Flush directory is not set. Skipping flush to disk.")
+            logger.info("Flush directory is not set. Skipping flush to disk.")
             return
         if not force and self._active_df.height < self._flush_every_n:
             return
+
+        logger.debug(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
+
         chunk_path = write_dataframe_to_parquet(
             self._active_df,
             chunk_filename,
@@ -828,7 +828,8 @@ class _RecordsAccumulator:
             )
             return
 
-        logger.info("Processing Core: Writing partial records chunk to %s", chunk_path)
+        logger.debug("Processing Core: Writing partial records chunk to %s", chunk_path)
+
         self._written_files.append(chunk_path)
 
         # Release reference to active dataframe and GC to free memory.
