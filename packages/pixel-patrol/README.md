@@ -2,8 +2,6 @@
 
 PixelPatrol is an early-version tool designed for the systematic validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
 
-![Overview of the PixelPatrol dashboard, showing interactive data exploration.](readme_assets/overview.png)
-*PixelPatrol's main dashboard provides an interface for dataset exploration.*
 
 ## Features
 
@@ -16,7 +14,7 @@ PixelPatrol is an early-version tool designed for the systematic validation of s
 
 ### Coming soon:
 
-* **Big data support**: Efficiently handle large datasets with optimized data processing.
+* **Big(ger) data support**: While processing already runs in parallel, we're working on handling bigger and bigger datasets and GPU support.
 * **Support for more file formats**
 
 ## Installation
@@ -98,20 +96,10 @@ See `examples/minimal-extension` for a minimal template.
 2. Have all the files you would like to inspect under a common base directory.
 3. You can also specify subdirectory within the base directory - only those directories will be processed.
 4. Process your data - choose your way:  
-   * Visual Interface: Run `pixel-patrol dashboard` to configure and process your data using a web interface.
+   * Visual Interface: Run `pixel-patrol launch` to configure and process your data using a web interface.
    * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
    * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
-
-## Example visualizations
-
-* Visualize the distribution of image sizes within your dataset.*
-        ![Plot showing the distribution of image sizes.](readme_assets/size_plot.png)
-* A mosaic view can quickly highlight inconsistencies across images.*
-        ![Mosaic view of images, highlighting potential discrepancies.](readme_assets/mosiac.png)
-* Many additional plots and distributions are available.*
-        ![Statistical plots showing image dimensions and distributions.](readme_assets/example_stats_plot.png)
-
 
 ## Interactive Processing Dashboard
 
@@ -165,6 +153,17 @@ pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
   -e tif -e png --cmap viridis
 ```
 
+#### Intermediate chunk files
+
+PixelPatrol writes intermediate Parquet "chunk" files.
+
+- Default chunk dir: adjacent to the requested ZIP: `<output_parent>/<project_name>_batches/`.
+- To override: pass `--chunk-dir /path/to/dir`.
+
+**Important (resume is experimental / limited):**
+Resume only works safely if you rerun on the *same* dataset layout and use the *same* chunk directory.  
+Use by setting `project.settings.resume = True`
+
 ### `pixel-patrol report`
 
 Launches the Dash dashboard from a previously exported project ZIP file. The command prints the URL and attempts to open the browser automatically.
@@ -192,32 +191,33 @@ pixel-patrol report examples/out/quickstart_project.zip \
 pixel-patrol report --help
 ```
 
+#### Export report as static HTML
+
+*CLI:*
+- Use `pixel-patrol report <REPORT_ZIP> --export-html report.html [--port PORT]` to render and save a static HTML snapshot of the dashboard.   
+- This calls the same exporter the API exposes and writes a self-contained HTML file.
+
+```bash
+pixel-patrol report examples/out/my_project.zip --export-html out/report.html
+```
+
+Note: the exporter requires `Playwright` dependency, without it an ImportError is raised.
+
 ### Troubleshooting
 
 * The CLI validates loader names at runtime; if you see `Unknown loader`, ensure the corresponding plug-in package is installed and available in the active environment.
-
-### Processing notes (flush directories, workers, resuming) 🔧
-
-* **Flush / chunk directory:** During processing PixelPatrol may write intermediate Parquet chunk files (e.g. `records_batch_*.parquet`) to a flush directory (inferred next to the output ZIP or set with `--chunk-dir`). These chunks reduce peak RAM use and allow interrupted runs to be resumed.
-* **API inference:** When using the API (for example, `process_files`) and no `records_flush_dir` is set, PixelPatrol will infer a flush directory inside the project's base directory named `<project_name>_batches`. This ensures chunking works even when an export ZIP path is not provided.
-* **Resuming:** When you pass `--resume` PixelPatrol will adopt any existing partial chunks and skip already-processed files. If you do not pass `--resume`, the CLI will clear the flush directory to ensure a fresh run. Please only pass this parameter when you are sure the existing chunks are valid for the current run (same project, loaders, settings, and input file order).
-* **Workers and memory:** By default PixelPatrol uses the number of CPU cores available (or the user-specified `processing_max_workers` setting). For very small datasets the number of workers is capped to the number of files (e.g., 1 file → 1 worker). Note that increasing the number of workers typically increases RAM usage (more worker processes and in-memory combining of chunks).
 
 ## API Use
 
 The `examples/` directory demonstrates how to use pixel-patrol API and for advanced users also how to extend pixel-patrol (loaders, processors, and widgets) by creating a package.
 
-* `examples/01_quickstart.py` – end-to-end walkthrough using the base API. Process the bundled sample data and launch the dashboard:
+* `examples/01_quickstart.py` or `examples/01_quickstart_extended.py` – end-to-end walkthrough using the base API. Process the bundled sample data and launch the dashboard:
   ```bash
   uv run examples/01_quickstart.py
   ```
-  The script highlights each API step (create project → add paths → configure settings → process → show → export/import).
+  The scripts highlight each API step (create project → add paths → configure settings → process → show → export/import).
   Feel free to adapt the scripts to your datasets and needed settings.  
 
-* `examples/02_example_plankton_bioio.py` – downloads an open plankton dataset (≈200MB), processes it with the BioIO loader, and exports a ready-to-share report. Run it with:
-  ```bash
-  uv run examples/02_example_plankton_bioio.py
-  ```
 
 * `examples/minimal-extension/` – For people who want to extend pixel-patrol, it offers an example minimal plug-in package that registers a custom loader (`markdown-diary`), processor, and widgets.   
 Use this as a starting point for your own plug-ins: update the `pyproject.toml` metadata (name, version, entry points) to match your project, replace the `MARKDOWN_DIARY` identifiers with your loader ID, and adjust the processor/widget code to emit the fields you care about. Entry points must be registered under `pixel_patrol.loader_plugins`, `pixel_patrol.processor_plugins`, or `pixel_patrol.widget_plugins` so Pixel Patrol can discover them automatically.

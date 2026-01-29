@@ -169,10 +169,9 @@ pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
 
 PixelPatrol writes intermediate Parquet "chunk" files.
 
-Behavior (CLI):
 - Default chunk dir: adjacent to the requested ZIP: `<output_parent>/<project_name>_batches/`.
 - To override: pass `--chunk-dir /path/to/dir`.
-- 
+
 **Important (resume is experimental / limited):**
 Resume only works safely if you rerun on the *same* dataset layout and use the *same* chunk directory.  
 Use by setting `project.settings.resume = True`
@@ -206,7 +205,7 @@ pixel-patrol report --help
 
 #### Export report as static HTML
 
-CLI:
+*CLI:*
 - Use `pixel-patrol report <REPORT_ZIP> --export-html report.html [--port PORT]` to render and save a static HTML snapshot of the dashboard.   
 - This calls the same exporter the API exposes and writes a self-contained HTML file.
 
@@ -224,17 +223,13 @@ Note: the exporter requires `Playwright` dependency, without it an ImportError i
 
 The `examples/` directory demonstrates how to use pixel-patrol API and for advanced users also how to extend pixel-patrol (loaders, processors, and widgets) by creating a package.
 
-* `examples/01_quickstart.py` – end-to-end walkthrough using the base API. Process the bundled sample data and launch the dashboard:
+* `examples/01_quickstart.py` or `examples/01_quickstart_extended.py` – end-to-end walkthrough using the base API. Process the bundled sample data and launch the dashboard:
   ```bash
   uv run examples/01_quickstart.py
   ```
-  The script highlights each API step (create project → add paths → configure settings → process → show → export/import).
+  The scripts highlight each API step (create project → add paths → configure settings → process → show → export/import).
   Feel free to adapt the scripts to your datasets and needed settings.  
 
-* `examples/02_example_plankton_bioio.py` – downloads an open plankton dataset (≈200MB), processes it with the BioIO loader, and exports a ready-to-share report. Run it with:
-  ```bash
-  uv run examples/02_example_plankton_bioio.py
-  ```
 
 * `examples/minimal-extension/` – For people who want to extend pixel-patrol, it offers an example minimal plug-in package that registers a custom loader (`markdown-diary`), processor, and widgets.   
 Use this as a starting point for your own plug-ins: update the `pyproject.toml` metadata (name, version, entry points) to match your project, replace the `MARKDOWN_DIARY` identifiers with your loader ID, and adjust the processor/widget code to emit the fields you care about. Entry points must be registered under `pixel_patrol.loader_plugins`, `pixel_patrol.processor_plugins`, or `pixel_patrol.widget_plugins` so Pixel Patrol can discover them automatically.
