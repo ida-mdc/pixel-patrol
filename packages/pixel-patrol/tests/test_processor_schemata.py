@@ -101,3 +101,43 @@ def test_processor_schemata():
                     f"Patterns: {[p.pattern if hasattr(p, 'pattern') else p for p, _ in processor.OUTPUT_SCHEMA_PATTERNS]}. "
                     f"Available columns: {sorted(df_columns)}"
                 )
+
+
+def test_all_processors_return_dict():
+    """Every processor's run() must return a dict so that ``extracted.update(out)``
+    in ``_extract_record_properties`` is always safe.
+
+    This creates a small synthetic image, loads it into a Record, and runs every
+    matching processor — verifying each returns a plain dict.
+    """
+    from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+
+    tmp_path = Path(tempfile.mkdtemp())
+
+    # Create a small 5-D TIFF that satisfies most processor input specs
+    t, c, z, y, x = 1, 2, 1, 10, 10
+    data = np.random.randint(0, 256, size=(t, c, z, y, x), dtype=np.uint8)
+    tif_path = tmp_path / "probe.tif"
+    tifffile.imwrite(str(tif_path), data, photometric='minisblack')
+
+    loader = BioIoLoader()
+    record = loader.load(str(tif_path))
+
+    processors = discover_processor_plugins()
+    for processor in processors:
+        if not is_record_matching_processor(record, processor.INPUT):
+            continue
+
+        result = processor.run(record)
+        assert isinstance(result, dict), (
+            f"Processor '{processor.NAME}' returned {type(result).__name__} "
+            f"instead of dict. This will break `extracted.update(out)` in "
+            f"_extract_record_properties."
+        )
+        # Also check that no values are themselves dicts (they must be
+        # scalar / list / array values suitable for a DataFrame column)
+        for key, value in result.items():
+            assert not isinstance(value, dict), (
+                f"Processor '{processor.NAME}' returned a nested dict under "
+                f"key '{key}'. DataFrame columns cannot hold nested dicts."
+            )
