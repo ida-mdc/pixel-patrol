@@ -4,11 +4,11 @@ import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Tuple, Iterable, Iterator, NamedTuple, Callable
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
-
+import numpy as np
 
 import polars as pl
 
@@ -32,6 +32,9 @@ from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 
 logger = logging.getLogger(__name__)
 
+FLOAT32_MAX = np.finfo(np.float32).max
+FLOAT16_MAX = np.finfo(np.float16).max
+
 # Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
 
@@ -40,7 +43,7 @@ class _IndexedPath(NamedTuple):
     """Represents a file path with its associated row index in the dataset.
 
     Args:
-        NamedTuple: row_index (int): The index of the row in the dataset.
+        row_index (int): The index of the row in the dataset.
                     path (str): The file system path to the file.
     """
     row_index: int
@@ -174,6 +177,7 @@ def _combine_batch_with_basic(
         # Nothing deep to merge for this batch; return the basic rows as-is
         return basic_batch
 
+    # polars will ignore our types here for all but lists/arrays
     deep_df = pl.DataFrame(
         deep_rows,
         nan_to_null=True,
@@ -800,6 +804,11 @@ class _RecordsAccumulator:
 
         final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
 
+        try:
+            final_df = optimize_dtypes(final_df)
+        except Exception:
+            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink.")
+
         # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
             try:
@@ -929,3 +938,28 @@ class _RecordsAccumulator:
             self._chunk_index,
         )
         return processed
+
+
+def optimize_dtypes(
+    df: pl.DataFrame,
+    shrink_floats: bool = True,
+) -> pl.DataFrame:
+    """
+    Shrink integer dtypes (via Series.shrink_dtype()) and downcast floats safely.
+    """
+    series_updates = []
+    for col_name in df.columns:
+        s = df[col_name]
+        dtype = s.dtype
+
+        if dtype.is_integer():
+            shrunk = s.shrink_dtype()
+            if shrunk.dtype != dtype:
+                series_updates.append(shrunk)
+            continue
+
+        if shrink_floats and dtype == pl.Float64:
+            series_updates.append(s.cast(pl.Float32))
+            continue
+
+    return df.with_columns(series_updates) if series_updates else df

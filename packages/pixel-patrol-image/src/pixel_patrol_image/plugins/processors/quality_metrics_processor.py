@@ -8,6 +8,7 @@ import numpy as np
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_np_array_stats
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
 
@@ -126,14 +127,19 @@ class QualityMetricsProcessor:
     OUTPUT = "features"
 
     # Table schema (static + dynamic)
-    OUTPUT_SCHEMA: Dict[str, Any] = {name: float for name in _column_fn_registry().keys()}
-    # e.g. tenengrad_C0_Z3, brenner_T5, etc.
+    OUTPUT_SCHEMA: Dict[str, Any] = {name: np.float32 for name in _column_fn_registry().keys()}
     OUTPUT_SCHEMA_PATTERNS: List[Tuple[str, Any]] = [
-        (rf"^(?:{name})_[a-zA-Z]\d+(_[a-zA-Z]\d+)*$", float)
+        (rf"^(?:{name})_[a-zA-Z]\d+(_[a-zA-Z]\d+)*$", np.float32)
         for name in _column_fn_registry().keys()
     ]
 
     def run(self, art: Record) -> Dict[str, float]:
         dim_order = art.dim_order
         registry = _column_fn_registry()
-        return calculate_np_array_stats(art.data, dim_order, registry)
+        result = calculate_np_array_stats(art.data, dim_order, registry)
+        return validate_processor_output(
+            result,
+            self.OUTPUT_SCHEMA,
+            self.OUTPUT_SCHEMA_PATTERNS,
+            processor_name=self.NAME
+        )
