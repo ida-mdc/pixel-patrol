@@ -102,7 +102,7 @@ def test_all_image_files_load_and_standardize(
         assert "dim_order" in properties, f"Missing dim_order for {record_label}"
         assert "thumbnail" in properties, f"Missing thumbnail for {record_label}"
         assert isinstance(properties["thumbnail"], np.ndarray), f"Thumbnail not a numpy array for {record_label}"
-        assert properties["thumbnail"].shape == (SPRITE_SIZE, SPRITE_SIZE), \
+        assert properties["thumbnail"].shape == (SPRITE_SIZE * SPRITE_SIZE,), \
             f"Thumbnail size mismatch for {record_label}: Expected ({SPRITE_SIZE}, {SPRITE_SIZE}), Got {properties['thumbnail'].shape}"
 
         assert "shape" in properties, f"Missing shape for {record_label}"

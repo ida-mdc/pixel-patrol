@@ -2,14 +2,16 @@ import logging
 
 import dask.array as da
 import numpy as np
-import polars as pl
 
 from pixel_patrol_base.config import SPRITE_SIZE
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
+
+THUMBNAIL_SIZE = SPRITE_SIZE * SPRITE_SIZE
 
 # TODO: decide how we create thumbnail for images with S (probably call to gray) and C
 def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
@@ -17,7 +19,7 @@ def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
     Generate a square, grayscale thumbnail as a NumPy array.
     """
     if da_array is None or da_array.size == 0:
-        return np.array([])
+        return None
 
     arr_to_process = da_array.copy()
 
@@ -66,19 +68,22 @@ def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
             normalized_array = da.squeeze(normalized_array, axis=0)
 
         img = normalized_array.compute()
-        h, w = img.shape[:2]
 
+        h, w = img.shape[:2]
         if h == 0 or w == 0:
-            return np.array([])
+            return None
+
         row_idx = (np.linspace(0, h - 1, SPRITE_SIZE)).astype(np.int64)
         col_idx = (np.linspace(0, w - 1, SPRITE_SIZE)).astype(np.int64)
-        return img[row_idx][:, col_idx]
+        thumbnail_2d = img[row_idx][:, col_idx]
+        return thumbnail_2d.flatten().astype(np.uint8)
+
     except TypeError as e:
         logger.error(
             f"Error resizing thumbnail: {e}. "
             f"Array shape: {normalized_array.shape}, dtype: {normalized_array.dtype}"
         )
-        return np.array([])
+        return None
 
 
 class ThumbnailProcessor:
@@ -87,9 +92,14 @@ class ThumbnailProcessor:
     OUTPUT = "features"
 
     OUTPUT_SCHEMA = {
-        "thumbnail": pl.Array
+        "thumbnail": (np.uint8, THUMBNAIL_SIZE),
     }
 
     def run(self, art: Record) -> ProcessResult:
         dim_order = art.dim_order
-        return {"thumbnail": _generate_thumbnail(art.data, dim_order)}
+        result = {"thumbnail": _generate_thumbnail(art.data, dim_order)}
+        return validate_processor_output(
+            result,
+            self.OUTPUT_SCHEMA,
+            processor_name=self.NAME
+        )

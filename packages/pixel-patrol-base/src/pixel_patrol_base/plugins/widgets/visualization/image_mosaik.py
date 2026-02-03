@@ -3,6 +3,7 @@ from typing import List, Dict, Set, Tuple
 import numpy as np
 import polars as pl
 from dash import html, dcc, Input, Output
+import logging
 
 from PIL import Image
 
@@ -16,6 +17,7 @@ from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mo
 _SPRITE_SIZE = 32
 _DEFAULT_COL = 'mean_intensity'
 
+logger = logging.getLogger(__name__)
 
 class ImageMosaikWidget(BaseReportWidget):
     NAME: str = "Image Mosaic"
@@ -196,11 +198,15 @@ def _create_sprite_image(
             img = img_data.convert("RGB")
         else:
             arr = np.asarray(img_data)
-            if arr.dtype in (np.float32, np.float64):
-                arr = (arr * 255).astype(np.uint8)
-            else:
-                arr = arr.astype(np.uint8)
-            img = Image.fromarray(arr).convert("RGB")
+            if arr.ndim == 1:
+                # Dynamically calculate side length (e.g., sqrt(1024) -> 32)
+                side = int(np.sqrt(arr.size))
+                if side * side != arr.size:
+                    logger.warning(f"Thumbnail size {arr.size} is not a perfect square.")
+                    continue
+                arr = arr.reshape((side, side))
+
+            img = Image.fromarray(arr.astype(np.uint8)).convert("RGB")
 
         resized = img.resize((_SPRITE_SIZE, _SPRITE_SIZE))
 

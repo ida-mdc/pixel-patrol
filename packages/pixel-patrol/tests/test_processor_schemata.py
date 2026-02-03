@@ -11,6 +11,7 @@ from pixel_patrol_base.core.specs import is_record_matching_processor
 
 from pixel_patrol_base import api
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 
 def generate_image_dataset(
@@ -141,3 +142,66 @@ def test_all_processors_return_dict():
                 f"Processor '{processor.NAME}' returned a nested dict under "
                 f"key '{key}'. DataFrame columns cannot hold nested dicts."
             )
+
+
+
+
+def _sample_for_type(t):
+    # produce a small, castable sample for simple types
+    if t is float:
+        return "1.23"
+    if t is int:
+        return "7"
+    if t is bool:
+        return "1"
+    if t is str:
+        return 123  # will be cast to str
+    # tuple specs like (type, length) -> return an array-like
+    if isinstance(t, tuple):
+        return [1] * (t[1] if isinstance(t[1], int) and t[1] > 0 else 1)
+    # fallback
+    return None
+
+def test_processor_schemata_return_declared_dtypes():
+    """Ensure processors' OUTPUT_SCHEMA keys are returned with the declared datatypes
+    (accepting numpy scalar/array variants)."""
+    procs = discover_processor_plugins()
+    for proc_cls in procs:
+        proc = proc_cls() if isinstance(proc_cls, type) else proc_cls
+        schema = getattr(proc, "OUTPUT_SCHEMA", {}) or {}
+        patterns = getattr(proc, "OUTPUT_SCHEMA_PATTERNS", []) or []
+
+        # build raw output with castable values
+        raw = {}
+        for key, type_spec in schema.items():
+            raw[key] = _sample_for_type(type_spec)
+
+        validated = validate_processor_output(
+            raw, schema, patterns, processor_name=getattr(proc, "NAME", proc.__class__.__name__)
+        )
+
+        for key, type_spec in schema.items():
+            val = validated.get(key)
+            if type_spec is float:
+                assert isinstance(val, (float, np.floating)), (
+                    f"{proc.NAME}:{key} expected float-like, got {type(val)}"
+                )
+            elif type_spec is int:
+                assert isinstance(val, (int, np.integer)), (
+                    f"{proc.NAME}:{key} expected int-like, got {type(val)}"
+                )
+            elif type_spec is bool:
+                assert isinstance(val, (bool, np.bool_, int, np.integer)), (
+                    f"{proc.NAME}:{key} expected bool-like, got {type(val)}"
+                )
+            elif type_spec is str:
+                assert isinstance(val, str), (
+                    f"{proc.NAME}:{key} expected str, got {type(val)}"
+                )
+            elif isinstance(type_spec, tuple):
+                # expect list/ndarray or None
+                assert (val is None) or isinstance(val, (list, np.ndarray)), (
+                    f"{proc.NAME}:{key} expected array-like for tuple spec, got {type(val)}"
+                )
+            else:
+                assert key in validated
