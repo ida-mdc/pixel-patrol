@@ -4,7 +4,7 @@ import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable, cast
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
@@ -85,7 +85,10 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
         )
         return []
 
-    return _process_batch_locally(batch, loader, processors, False)
+    return _process_batch_locally(batch,
+                                  cast(PixelPatrolLoader, loader),
+                                  cast(list[PixelPatrolProcessor], processors),
+                                  False)
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -249,7 +252,7 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
         try:
             # try removing the dir if empty
             flush_dir.rmdir()
-        except Exception:
+        except OSError:
             # If not empty or cannot remove, leave it in place.
             pass
 
@@ -287,13 +290,13 @@ def _build_deep_record_df(
     )
 
     processed_rows: Set[int] = set()
-    if accumulator._flush_dir:
+    if accumulator.flush_dir:
         if settings and getattr(settings, "resume", False):
             # Resume: adopt existing partial chunks and skip already-processed files
             processed_rows = accumulator.load_existing_chunks()
         else:
             # ensure fresh run
-            _cleanup_partial_chunks_dir(accumulator._flush_dir, cleanup_combined_parquet=False)
+            _cleanup_partial_chunks_dir(accumulator.flush_dir, cleanup_combined_parquet=False)
 
     remaining = basic
     if processed_rows:
@@ -698,22 +701,25 @@ def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> i
 
 
 def _estimate_available_memory_bytes() -> Optional[int]:
-    """Estimate of available system memory in bytes.
-
-    Returns:
-        An integer representing available memory in bytes, or None if it cannot be determined.
-    """
+    """Estimate available system memory in bytes."""
     try:
         import psutil  # type: ignore
-
         return int(psutil.virtual_memory().available)
-    except Exception:
-        try:
-            page_size = os.sysconf("SC_PAGE_SIZE")
-            avail_pages = os.sysconf("SC_AVPHYS_PAGES")
-            return int(page_size * avail_pages)
-        except Exception:
-            return None
+
+    except ImportError:
+        # psutil not installed
+        pass
+    except (OSError, RuntimeError) as exc:
+        logger.debug("psutil failed to read memory: %s", exc)
+
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+        return int(page_size * avail_pages)
+
+    except (AttributeError, ValueError, OSError) as exc:
+        logger.debug("sysconf failed to read memory: %s", exc)
+        return None
 
 
 class _RecordsAccumulator:
@@ -737,6 +743,11 @@ class _RecordsAccumulator:
                 self._flush_every_n,
                 self._flush_dir,
             )
+
+    @property
+    def flush_dir(self) -> Optional[Path]:
+        """Public accessor for the configured flush directory (avoids accessing protected attribute)."""
+        return self._flush_dir
 
     def add_batch(self, batch: pl.DataFrame) -> None:
         """
@@ -806,8 +817,9 @@ class _RecordsAccumulator:
 
         try:
             final_df = optimize_dtypes(final_df)
-        except Exception:
-            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink.")
+        except Exception as exc:
+            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
+
 
         # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
@@ -833,10 +845,15 @@ class _RecordsAccumulator:
                 _cleanup_partial_chunks_dir(self._flush_dir, cleanup_combined_parquet=False)
                 # reset written files list
                 self._written_files = []
-            except Exception:
+            except (OSError, IOError, MemoryError) as exc:
                 logger.exception(
-                    "Processing Core: failed to finalize combined records parquet in %s",
-                    self._flush_dir,
+                    "Processing Core: failed to finalize combined records parquet in %s: %s",
+                    self._flush_dir, exc
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Processing Core: unexpected error while finalizing combined records parquet in %s: %s",
+                    self._flush_dir, exc
                 )
 
         return final_df
@@ -911,7 +928,7 @@ class _RecordsAccumulator:
             stem = f.stem  # e.g. records_batch_00001
             try:
                 idx = int(stem.rsplit("_", 1)[1])
-            except Exception:
+            except (IndexError, ValueError):
                 # ignore files with unexpected names
                 continue
 
