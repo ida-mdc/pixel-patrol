@@ -488,7 +488,7 @@ def test_load_and_process_records_from_file_loader_returns_none(tmp_path):
 
 
 def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
-    """Invalid child keys (empty or non-string) are skipped."""
+    """Invalid child keys (empty) are skipped; ints are accepted and normalized to strings."""
     f = tmp_path / "keys.czi"
     f.write_bytes(b"\x00")
 
@@ -498,16 +498,17 @@ def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
         def load(self, source):
             return {
                 "": _StubRecord({"x": 1}),          # empty key — skip
-                123: _StubRecord({"x": 2}),          # non-string — skip
+                123: _StubRecord({"x": 2}),          # int key — accept
                 "valid": _StubRecord({"x": 3}),
             }
 
     result = processing.load_and_process_records_from_file(
         f, BadKeysLoader(), processors=[]
     )
-    assert len(result) == 1
-    assert result[0]["child_id"] == "valid"
-    assert result[0]["x"] == 3
+
+    assert len(result) == 2
+    child_ids = {r["child_id"] for r in result}
+    assert child_ids == {"valid", "123"}
 
 
 def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monkeypatch):
