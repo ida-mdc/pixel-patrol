@@ -209,7 +209,6 @@ def test_build_deep_record_df_resumes_from_partial_chunks(tmp_path, monkeypatch)
     df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
 
     assert processed == [p2.name]
-    df = df.sort("row_index")
     assert df["path"].to_list() == [str(p1), str(p2)]
     assert df["width"].to_list() == [11, 22]
 
@@ -312,7 +311,6 @@ def test_build_deep_record_df_ignores_corrupt_resume_chunk(tmp_path, monkeypatch
         resume=True,
     )
 
-
     monkeypatch.setattr(
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 22}),
@@ -322,7 +320,10 @@ def test_build_deep_record_df_ignores_corrupt_resume_chunk(tmp_path, monkeypatch
     basic_df = _basic_df_for_paths([p1, p2])
     df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
 
-    df = df.sort("row_index")
+    ## New:
+    # Sort by path instead of row_index since row_index is deleted in post_process_final_df
+    df = df.sort("path")
+    ##
     assert df["path"].to_list() == [str(p1), str(p2)]
     assert df["width"].to_list() == [11, 22]
 
