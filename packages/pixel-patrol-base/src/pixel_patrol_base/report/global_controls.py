@@ -171,6 +171,15 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
     - validates keys/columns/ops/types
     - returns a sanitized dict
     """
+
+    if df is None:
+        logger.error("Cannot generate report: no data available (records_df is None).")
+        raise ValueError("No data available. Check that files exist and match the loader's supported extensions.")
+
+    if df.is_empty():
+        logger.error("Cannot generate report: dataset is empty.")
+        raise ValueError("Dataset is empty. Files were found but contained no valid records.")
+
     cfg = {
         GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL,
         GC_FILTER: {},
