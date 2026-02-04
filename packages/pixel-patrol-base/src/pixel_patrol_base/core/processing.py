@@ -4,11 +4,10 @@ import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable, cast
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
-import numpy as np
 
 import polars as pl
 
@@ -31,9 +30,6 @@ from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 
 
 logger = logging.getLogger(__name__)
-
-FLOAT32_MAX = np.finfo(np.float32).max
-FLOAT16_MAX = np.finfo(np.float16).max
 
 # Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
@@ -76,8 +72,8 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
     Returns:
         A list of dictionaries containing the results from deep processing.
     """
-    loader = _PROCESS_WORKER_CONTEXT.get("loader")
-    processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
+    loader: Optional[PixelPatrolLoader] = _PROCESS_WORKER_CONTEXT.get("loader")
+    processors: List[PixelPatrolProcessor] = _PROCESS_WORKER_CONTEXT.get("processors", []) or []
     if loader is None:
         logger.warning(
             "Processing Core: worker lacks loader; skipping batch of size %s",
@@ -85,10 +81,7 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
         )
         return []
 
-    return _process_batch_locally(batch,
-                                  cast(PixelPatrolLoader, loader),
-                                  cast(list[PixelPatrolProcessor], processors),
-                                  False)
+    return _process_batch_locally(batch, loader, processors, False)
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -499,6 +492,8 @@ def load_and_process_records_from_file(
             position=1,
         )
         for child_id, rcd in items:
+            if isinstance(child_id, int):
+                child_id = str(child_id)
             if not isinstance(child_id, str) or not child_id:
                 logger.warning(
                     "Loader '%s' returned invalid child key %r for '%s'; skipping record.",
@@ -861,7 +856,8 @@ class _RecordsAccumulator:
 
         return final_df
 
-    def post_process_final_df(self, final_df):
+    @staticmethod
+    def post_process_final_df(final_df):
         if "row_index" in final_df.columns:
             final_df = final_df.drop("row_index")
         if "child_id" in final_df.columns:
