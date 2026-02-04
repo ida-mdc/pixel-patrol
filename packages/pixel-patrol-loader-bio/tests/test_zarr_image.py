@@ -8,7 +8,7 @@ import polars as pl
 
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
-from pixel_patrol_base.core.processing import get_all_record_properties, build_records_df
+from pixel_patrol_base.core.processing import load_and_process_records_from_file, build_records_df
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
@@ -82,7 +82,12 @@ def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path, loader):
     """
     Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
     """
-    metadata = get_all_record_properties(zarr_folder, loader=loader, processors=discover_processor_plugins())
+    processors = discover_processor_plugins()
+    result = load_and_process_records_from_file(zarr_folder, loader=loader, processors=processors)
+
+    assert isinstance(result, list)
+    assert len(result) >= 1, "Expected at least one record from zarr loading"
+    metadata = result[0]
 
     assert isinstance(metadata, dict)
 

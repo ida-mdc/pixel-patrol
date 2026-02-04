@@ -8,7 +8,8 @@ from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.report.constants import (GLOBAL_CONFIG_STORE_ID,
                                                 FILTERED_INDICES_STORE_ID,
                                                 GC_IS_SHOW_SIGNIFICANCE,
-                                                GC_DIMENSIONS)
+                                                GC_DIMENSIONS,
+                                                HOVER_LABEL_COL)
 from pixel_patrol_base.report.factory import build_violin_grid, show_no_data_message
 from pixel_patrol_base.report.data_utils import get_dim_aware_column, select_needed_columns
 
@@ -74,7 +75,7 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
         if not resolved_metric_cols:
             return show_no_data_message()
 
-        cols_needed = resolved_metric_cols + ["name"]
+        cols_needed = resolved_metric_cols + [HOVER_LABEL_COL]
         extra = [group_col] if group_col else []
         df_plot = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 

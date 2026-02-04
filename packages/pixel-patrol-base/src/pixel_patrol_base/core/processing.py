@@ -4,11 +4,10 @@ import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Tuple, Iterable, Iterator, NamedTuple, Callable
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
-
 
 import polars as pl
 
@@ -40,7 +39,7 @@ class _IndexedPath(NamedTuple):
     """Represents a file path with its associated row index in the dataset.
 
     Args:
-        NamedTuple: row_index (int): The index of the row in the dataset.
+        row_index (int): The index of the row in the dataset.
                     path (str): The file system path to the file.
     """
     row_index: int
@@ -73,8 +72,8 @@ def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object
     Returns:
         A list of dictionaries containing the results from deep processing.
     """
-    loader = _PROCESS_WORKER_CONTEXT.get("loader")
-    processors = _PROCESS_WORKER_CONTEXT.get("processors", [])
+    loader: Optional[PixelPatrolLoader] = _PROCESS_WORKER_CONTEXT.get("loader")
+    processors: List[PixelPatrolProcessor] = _PROCESS_WORKER_CONTEXT.get("processors", []) or []
     if loader is None:
         logger.warning(
             "Processing Core: worker lacks loader; skipping batch of size %s",
@@ -138,11 +137,12 @@ def _process_batch_locally(
     """
     deep_rows: List[Dict[str, object]] = []
     for item in batch:
-        record_dict = get_all_record_properties(
+        record_dicts = load_and_process_records_from_file(
             Path(item.path), loader_instance, processors, show_processor_progress
         )
-        if record_dict:
-            deep_rows.append({"row_index": item.row_index, **record_dict})
+        for record_dict in record_dicts:
+            if record_dict:
+                deep_rows.append({"row_index": item.row_index, **record_dict})
     return deep_rows
 
 
@@ -173,6 +173,7 @@ def _combine_batch_with_basic(
         # Nothing deep to merge for this batch; return the basic rows as-is
         return basic_batch
 
+    # polars will ignore our types here for all but lists/arrays
     deep_df = pl.DataFrame(
         deep_rows,
         nan_to_null=True,
@@ -244,7 +245,7 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
         try:
             # try removing the dir if empty
             flush_dir.rmdir()
-        except Exception:
+        except OSError:
             # If not empty or cannot remove, leave it in place.
             pass
 
@@ -282,13 +283,13 @@ def _build_deep_record_df(
     )
 
     processed_rows: Set[int] = set()
-    if accumulator._flush_dir:
+    if accumulator.flush_dir:
         if settings and getattr(settings, "resume", False):
             # Resume: adopt existing partial chunks and skip already-processed files
             processed_rows = accumulator.load_existing_chunks()
         else:
             # ensure fresh run
-            _cleanup_partial_chunks_dir(accumulator._flush_dir, cleanup_combined_parquet=False)
+            _cleanup_partial_chunks_dir(accumulator.flush_dir, cleanup_combined_parquet=False)
 
     remaining = basic
     if processed_rows:
@@ -405,38 +406,16 @@ def _build_deep_record_df(
         return accumulator.finalize()
 
 
-def get_all_record_properties(
-    file_path: Path,
-    loader: PixelPatrolLoader,
+def _extract_record_properties(
+    rcd,
     processors: List[PixelPatrolProcessor],
-    show_processor_progress: bool = True,
+    show_progress: bool,
 ) -> Dict:
-    """
-    Load a file with the given loader, run all matching processors, and return combined metadata.
+    """Run all matching processors on a single Record and return merged properties."""
+    extracted: Dict = dict(rcd.meta)
 
-    Args:
-        file_path: Path to the file to process.
-        loader: An instance of PixelPatrolLoader to load the file.
-        processors: A list of PixelPatrolProcessor instances to run on the loaded record.
-    Returns:
-        A dictionary of combined data (metadata) from the loader and all applicable processors.
-    """
-    if not file_path.exists():
-        logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
-        return {}
-
-    extracted_properties = {}
-    try:
-        art = loader.load(str(file_path))
-        metadata = dict(art.meta)
-    except Exception as e:
-        logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
-        return {}
-
-    # Always process using Record; processors opt-in via INPUT spec
-    extracted_properties.update(metadata)
     processor_iter: Iterable[PixelPatrolProcessor]
-    if show_processor_progress:
+    if show_progress:
         processor_iter = tqdm(
             processors,
             desc="  Running processors for image: ",
@@ -449,24 +428,87 @@ def get_all_record_properties(
         processor_iter = processors
 
     for P in processor_iter:
-        if not is_record_matching_processor(art, P.INPUT):
+        if not is_record_matching_processor(rcd, P.INPUT):
             continue
         try:
-            out = P.run(art)
-            if isinstance(out, dict):
-                extracted_properties.update(out)
-            else:
-                art = out
-                extracted_properties.update(art.meta)
-        except (RuntimeError, ValueError, TypeError) as e:
+            out = P.run(rcd)
+            extracted.update(out)
+        except (RuntimeError, ValueError, TypeError):
             logger.exception(
                 "Processor %s failed for record %s",
                 getattr(P, "NAME", P.__class__.__name__),
-                getattr(art, "source_path", "unknown"),
+                getattr(rcd, "source_path", "unknown"),
             )
 
-    return extracted_properties
+    return extracted
 
+
+def load_and_process_records_from_file(
+    file_path: Path,
+    loader: PixelPatrolLoader,
+    processors: List[PixelPatrolProcessor],
+    show_processor_progress: bool = True,
+) -> List[Dict]:
+    """
+    Load a file with the given loader, run all matching processors, and return
+    combined metadata for each record in the file.
+
+    Loaders may return:
+    - A single Record (single-image files)
+    - A Dict[str, Record] where keys are child identifiers for multi-image files - becomes `child_id` column
+
+    Args:
+        file_path: Path to the file to process.
+        loader: An instance of PixelPatrolLoader to load the file.
+        processors: A list of PixelPatrolProcessor instances to run on the loaded record(s).
+        show_processor_progress: Is show progress bar in e.g. Cli
+    Returns:
+        A list of dicts with combined metadata from the loader and all applicable
+        processors.  Empty list if the file cannot be loaded.
+    """
+    if not file_path.exists():
+        logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
+        return []
+
+    try:
+        result = loader.load(str(file_path))
+        if result is None:
+            return []
+    except Exception as e:
+        logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
+        return []
+
+    result_list: List[Dict] = []
+
+    if isinstance(result, dict):
+        # Multi-image file: show progress over sub-images
+        items = result.items()
+        items = tqdm(
+            items,
+            desc="  Processing sub-images",
+            unit="img",
+            leave=False,
+            colour="blue",
+            position=1,
+        )
+        for child_id, rcd in items:
+            if isinstance(child_id, int):
+                child_id = str(child_id)
+            if not isinstance(child_id, str) or not child_id:
+                logger.warning(
+                    "Loader '%s' returned invalid child key %r for '%s'; skipping record.",
+                    loader.NAME, child_id, file_path,
+                )
+                continue
+            props = _extract_record_properties(rcd, processors, False)
+            props["child_id"] = child_id
+            result_list.append(props)
+    else:
+        result_list.append(
+            _extract_record_properties(result, processors, show_processor_progress)
+        )
+
+    return result_list
 
 def build_records_df(
     bases: List[Path],
@@ -661,22 +703,25 @@ def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> i
 
 
 def _estimate_available_memory_bytes() -> Optional[int]:
-    """Estimate of available system memory in bytes.
-
-    Returns:
-        An integer representing available memory in bytes, or None if it cannot be determined.
-    """
+    """Estimate available system memory in bytes."""
     try:
         import psutil  # type: ignore
-
         return int(psutil.virtual_memory().available)
-    except Exception:
-        try:
-            page_size = os.sysconf("SC_PAGE_SIZE")
-            avail_pages = os.sysconf("SC_AVPHYS_PAGES")
-            return int(page_size * avail_pages)
-        except Exception:
-            return None
+
+    except ImportError:
+        # psutil not installed
+        pass
+    except (OSError, RuntimeError) as exc:
+        logger.debug("psutil failed to read memory: %s", exc)
+
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+        return int(page_size * avail_pages)
+
+    except (AttributeError, ValueError, OSError) as exc:
+        logger.debug("sysconf failed to read memory: %s", exc)
+        return None
 
 
 class _RecordsAccumulator:
@@ -700,6 +745,11 @@ class _RecordsAccumulator:
                 self._flush_every_n,
                 self._flush_dir,
             )
+
+    @property
+    def flush_dir(self) -> Optional[Path]:
+        """Public accessor for the configured flush directory (avoids accessing protected attribute)."""
+        return self._flush_dir
 
     def add_batch(self, batch: pl.DataFrame) -> None:
         """
@@ -767,6 +817,8 @@ class _RecordsAccumulator:
 
         final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
 
+        final_df = self.post_process_final_df(final_df)
+
         # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
             try:
@@ -791,12 +843,34 @@ class _RecordsAccumulator:
                 _cleanup_partial_chunks_dir(self._flush_dir, cleanup_combined_parquet=False)
                 # reset written files list
                 self._written_files = []
-            except Exception:
+            except (OSError, IOError, MemoryError) as exc:
                 logger.exception(
-                    "Processing Core: failed to finalize combined records parquet in %s",
-                    self._flush_dir,
+                    "Processing Core: failed to finalize combined records parquet in %s: %s",
+                    self._flush_dir, exc
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Processing Core: unexpected error while finalizing combined records parquet in %s: %s",
+                    self._flush_dir, exc
                 )
 
+        return final_df
+
+    @staticmethod
+    def post_process_final_df(final_df):
+        if "row_index" in final_df.columns:
+            final_df = final_df.drop("row_index")
+        if "child_id" in final_df.columns:
+            final_df = final_df.with_columns(
+                pl.when(pl.col("child_id").is_not_null())
+                .then(pl.lit("sub_file"))
+                .otherwise(pl.col("type"))
+                .alias("type")
+            )
+        try:
+            final_df = optimize_dtypes(final_df)
+        except Exception as exc:
+            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
         return final_df
 
     def _flush_active_to_disk(self, force: bool) -> None:
@@ -869,7 +943,7 @@ class _RecordsAccumulator:
             stem = f.stem  # e.g. records_batch_00001
             try:
                 idx = int(stem.rsplit("_", 1)[1])
-            except Exception:
+            except (IndexError, ValueError):
                 # ignore files with unexpected names
                 continue
 
@@ -896,3 +970,28 @@ class _RecordsAccumulator:
             self._chunk_index,
         )
         return processed
+
+
+def optimize_dtypes(
+    df: pl.DataFrame,
+    shrink_floats: bool = True,
+) -> pl.DataFrame:
+    """
+    Shrink integer dtypes (via Series.shrink_dtype()) and downcast floats safely.
+    """
+    series_updates = []
+    for col_name in df.columns:
+        s = df[col_name]
+        dtype = s.dtype
+
+        if dtype.is_integer():
+            shrunk = s.shrink_dtype()
+            if shrunk.dtype != dtype:
+                series_updates.append(shrunk)
+            continue
+
+        if shrink_floats and dtype == pl.Float64:
+            series_updates.append(s.cast(pl.Float32))
+            continue
+
+    return df.with_columns(series_updates) if series_updates else df

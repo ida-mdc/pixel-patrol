@@ -6,7 +6,7 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
-from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL
 from pixel_patrol_base.report.data_utils import select_needed_columns
 from pixel_patrol_base.report.factory import plot_scatter, create_strip_plot_grid, show_no_data_message
 
@@ -65,7 +65,7 @@ class DimSizeWidget(BaseReportWidget):
         if df_filtered.height == 0 or not dimension_size_cols:
             return [show_no_data_message()]
 
-        cols_needed = dimension_size_cols + ["name"]
+        cols_needed = dimension_size_cols + [HOVER_LABEL_COL]
         extra = [group_col] if group_col else []
         df_slim = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
@@ -144,7 +144,7 @@ class DimSizeWidget(BaseReportWidget):
         """Creates a grid of strip plots, one per dimension."""
         melted_df = (
             df.unpivot(
-                index=[group_col, "name"],
+                index=[group_col, HOVER_LABEL_COL],
                 on=cols,
                 variable_name="dimension_name",
                 value_name="dimension_value",
@@ -167,8 +167,8 @@ class DimSizeWidget(BaseReportWidget):
             facet_col="dimension_name",
             color=group_col,
             color_map=color_map,
-            labels={"dimension_value": "Size", group_col: "Group"},
-            hover_data=["name"],
+            labels={"dimension_value": "Size", group_col: "Group", HOVER_LABEL_COL: "Label"},
+            hover_data=[HOVER_LABEL_COL],
             n_cols=3,
             plot_height=280,
             title="Individual Dimension Sizes per Dataset",

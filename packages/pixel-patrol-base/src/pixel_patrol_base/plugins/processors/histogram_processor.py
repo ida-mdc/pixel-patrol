@@ -1,10 +1,7 @@
 import logging
-from typing import Dict, List, Tuple, Any
-from itertools import chain, combinations
+from typing import Dict, Tuple, Any
 
-import dask.array as da
 import numpy as np
-import polars as pl
 import dask.array as da
 import threading
 
@@ -12,8 +9,11 @@ from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
+
+HISTOGRAM_BINS = 256
 
 
 def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
@@ -36,7 +36,7 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     # flexible for other integer types (e.g., int16).
     try:
         dtype = x.dtype
-    except Exception:
+    except AttributeError:
         dtype = None
 
     if dtype is not None and np.dtype(dtype) == np.dtype('uint8'):
@@ -78,7 +78,7 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
         counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
         counts_arr = np.asarray(counts_np, dtype=np.int64)
 
-    return {"counts": counts_arr, "min": float(min_val), "max": float(max_val)}
+    return {"counts": counts_arr, "min": min_val, "max": max_val}
 
 
 class HistogramProcessor:
@@ -91,16 +91,15 @@ class HistogramProcessor:
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
-    # TODO: Consider converting to smaller data types for counts and bounds to save memory
     OUTPUT_SCHEMA = {
-        "histogram_counts": pl.List(pl.Int64),
-        "histogram_min": pl.Float64,
-        "histogram_max": pl.Float64,
+        "histogram_counts": (np.int32, HISTOGRAM_BINS),
+        "histogram_min": np.float32,
+        "histogram_max": np.float32,
     }
     OUTPUT_SCHEMA_PATTERNS = [
-        (r"^(?:histogram)_counts_.*$", pl.List(pl.Int64)),
-        (r"^(?:histogram)_min_.*$", pl.Float64),
-        (r"^(?:histogram)_max_.*$", pl.Float64),
+        (r"^histogram_counts_.*$", (np.int32, HISTOGRAM_BINS)),
+        (r"^histogram_min_.*$", np.float32),
+        (r"^histogram_max_.*$", np.float32),
     ]
 
     def run(self, art: Record) -> ProcessResult:
@@ -148,4 +147,10 @@ class HistogramProcessor:
             "histogram_max": np.max,
         }
 
-        return calculate_sliced_stats(data, dim_order, metrics, aggregators)
+        result = calculate_sliced_stats(data, dim_order, metrics, aggregators)
+        return validate_processor_output(
+            result,
+            self.OUTPUT_SCHEMA,
+            self.OUTPUT_SCHEMA_PATTERNS,
+            processor_name=self.NAME
+        )

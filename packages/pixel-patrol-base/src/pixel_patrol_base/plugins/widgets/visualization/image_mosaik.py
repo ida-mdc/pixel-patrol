@@ -3,6 +3,7 @@ from typing import List, Dict, Set, Tuple
 import numpy as np
 import polars as pl
 from dash import html, dcc, Input, Output
+import logging
 
 from PIL import Image
 
@@ -10,12 +11,13 @@ from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strin
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
-from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL
 from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
 _SPRITE_SIZE = 32
 _DEFAULT_COL = 'mean_intensity'
 
+logger = logging.getLogger(__name__)
 
 class ImageMosaikWidget(BaseReportWidget):
     NAME: str = "Image Mosaic"
@@ -107,7 +109,7 @@ class ImageMosaikWidget(BaseReportWidget):
         )
 
         # Added "name" to cols_needed for hover support
-        cols_needed = ["thumbnail", "name"]
+        cols_needed = ["thumbnail", HOVER_LABEL_COL]
         extra = [group_col] if group_col else []
         if sort_column:
             extra.append(sort_column)
@@ -172,7 +174,7 @@ def _create_sprite_image(
     # Extract columns once as lists
     images = df.get_column("thumbnail").to_list()
     groups = df.get_column(group_col).to_list()
-    names = df.get_column("name").to_list()
+    hover_labels = df.get_column(HOVER_LABEL_COL).to_list()
 
     # Pre-compute RGB colors for all unique groups
     color_map = color_map or {}
@@ -183,9 +185,9 @@ def _create_sprite_image(
 
     # Process images and collect hover data
     processed = []
-    hover_names = []
+    processed_hover_labels = []
 
-    for img_data, group_value, name in zip(images, groups, names):
+    for img_data, group_value, hover_label in zip(images, groups, hover_labels):
         if img_data is None:
             continue
 
@@ -196,11 +198,15 @@ def _create_sprite_image(
             img = img_data.convert("RGB")
         else:
             arr = np.asarray(img_data)
-            if arr.dtype in (np.float32, np.float64):
-                arr = (arr * 255).astype(np.uint8)
-            else:
-                arr = arr.astype(np.uint8)
-            img = Image.fromarray(arr).convert("RGB")
+            if arr.ndim == 1:
+                # Dynamically calculate side length (e.g., sqrt(1024) -> 32)
+                side = int(np.sqrt(arr.size))
+                if side * side != arr.size:
+                    logger.warning(f"Thumbnail size {arr.size} is not a perfect square.")
+                    continue
+                arr = arr.reshape((side, side))
+
+            img = Image.fromarray(arr.astype(np.uint8)).convert("RGB")
 
         resized = img.resize((_SPRITE_SIZE, _SPRITE_SIZE))
 
@@ -211,7 +217,8 @@ def _create_sprite_image(
         else:
             processed.append(resized)
 
-        hover_names.append(name)
+        processed_hover_labels.append(hover_label)
+
 
     if not processed:
         return Image.new("RGBA", (_SPRITE_SIZE, _SPRITE_SIZE), (0, 0, 0, 0)), {}
@@ -246,7 +253,7 @@ def _create_sprite_image(
     hover_info = {
         "x": hover_x,
         "y": hover_y,
-        "names": hover_names,
+        "names": hover_labels,
         "marker_size": effective_dim,
     }
 

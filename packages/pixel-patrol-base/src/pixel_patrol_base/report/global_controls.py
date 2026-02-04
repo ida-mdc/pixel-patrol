@@ -13,7 +13,8 @@ from textwrap import dedent
 from pixel_patrol_base.report.data_utils import (get_all_available_dimensions,
                                                  get_dim_aware_column,
                                                  ensure_discrete_grouping,
-                                                 sort_strings_alpha)
+                                                 sort_strings_alpha,
+                                                 add_hover_label_column)
 from pixel_patrol_base.report.factory import create_info_icon
 from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 GC_GROUP_COL,
@@ -39,6 +40,7 @@ from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 EXPORT_PROJECT_DOWNLOAD_ID,
                                                 SAVE_SNAPSHOT_DOWNLOAD_ID,
                                                 SAVE_SNAPSHOT_BUTTON_ID,
+                                                HOVER_LABEL_COL,
                                                 )
 
 import logging
@@ -118,6 +120,8 @@ class _PrepareDataCache:
         group_col = resolve_group_column(df_filtered, global_config)
         df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
 
+        df_filtered = add_hover_label_column(df_filtered, HOVER_LABEL_COL)
+
         # Cache results
         self._cache_key = cache_key
         self._cached_df = df_filtered
@@ -167,6 +171,15 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
     - validates keys/columns/ops/types
     - returns a sanitized dict
     """
+
+    if df is None:
+        logger.error("Cannot generate report: no data available (records_df is None).")
+        raise ValueError("No data available. Check that files exist and match the loader's supported extensions.")
+
+    if df.is_empty():
+        logger.error("Cannot generate report: dataset is empty.")
+        raise ValueError("Dataset is empty. Files were found but contained no valid records.")
+
     cfg = {
         GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL,
         GC_FILTER: {},

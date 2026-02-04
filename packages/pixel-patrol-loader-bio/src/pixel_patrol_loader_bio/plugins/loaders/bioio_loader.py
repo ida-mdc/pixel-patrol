@@ -55,6 +55,21 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     return metadata
 
 
+def normalize_metadata(metadata):
+    dim_order = metadata["dim_order"]
+    keep = [i for i, s in enumerate(metadata["shape"]) if s != 1]
+    metadata["shape"] = [metadata["shape"][i] for i in keep]
+    metadata["ndim"] = len(metadata["shape"])
+    metadata["dim_order"] = "".join(dim_order[i] for i in keep)
+    if "dim_names" in metadata:
+        metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
+    for ax in list(dim_order):
+        if metadata.get(f"{ax}_size", None) == 1:
+            metadata.pop(f"{ax}_size", None)
+
+    return metadata
+
+
 def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
     """
     Try BioImage, then fall back to imageio reader; return None if both fail.
@@ -107,23 +122,26 @@ class BioIoLoader:
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=source)
 
-        meta = _extract_metadata(img)
+        scenes = list(img.scenes) if hasattr(img, "scenes") else []
 
+        if len(scenes) <= 1:
+            return self._build_record(img)
+
+        records: Dict[str, Any] = {}
+        for scene in scenes:
+            img.set_scene(scene)
+            records[str(scene)] = self._build_record(img)
+        return records
+
+    @staticmethod
+    def _build_record(img: BioImage):
+        """Extract metadata, squeeze singleton dims, and build a Record."""
+
+        if hasattr(img, "set_resolution_level"):
+            img.set_resolution_level(0)
+
+        meta = _extract_metadata(img)
+        meta = normalize_metadata(meta)
         data = da.squeeze(img.dask_data)
 
-        dim_order = meta["dim_order"]
-        keep = [i for i, s in enumerate(meta["shape"]) if s != 1]
-
-        meta["shape"] = [meta["shape"][i] for i in keep]
-        meta["ndim"] = len(meta["shape"])
-        meta["dim_order"] = "".join(dim_order[i] for i in keep)
-
-        if "dim_names" in meta:
-            meta["dim_names"] = [meta["dim_names"][i] for i in keep]
-
-        for ax in list(dim_order):
-            if meta.get(f"{ax}_size", None) == 1:
-                meta.pop(f"{ax}_size", None)
-
-        # dask-backed array; Record encapsulates axes/capabilities from meta["dim_order"]
         return record_from(data, meta, kind="intensity")
