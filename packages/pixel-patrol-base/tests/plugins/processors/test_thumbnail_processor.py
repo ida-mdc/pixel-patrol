@@ -28,7 +28,7 @@ class TestThumbnailProcessor:
         assert isinstance(thumbnail, np.ndarray)
         
         # Verify thumbnail dimensions (should be SPRITE_SIZE x SPRITE_SIZE)
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         
         # Verify thumbnail is uint8
         assert thumbnail.dtype == np.uint8
@@ -51,7 +51,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should be resized to SPRITE_SIZE x SPRITE_SIZE
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_constant_image(self):
@@ -67,7 +67,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should be SPRITE_SIZE x SPRITE_SIZE
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         # For constant images, should be normalized to 255 (since value > 0)
         assert np.all(thumbnail == 255)
 
@@ -84,7 +84,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should be SPRITE_SIZE x SPRITE_SIZE
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         # For zero images, should remain 0
         assert np.all(thumbnail == 0)
 
@@ -102,7 +102,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should reduce to 2D and resize
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_with_channel_dimension(self):
@@ -119,7 +119,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should reduce channels by taking mean and resize
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_with_z_dimension(self):
@@ -136,7 +136,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should take center z-slice and resize
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_with_multiple_dimensions(self):
@@ -153,7 +153,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should reduce all non-spatial dims and resize
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_boolean_image(self):
@@ -170,7 +170,7 @@ class TestThumbnailProcessor:
         
         # Should be converted to uint8
         assert thumbnail.dtype == np.uint8
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
 
     def test_thumbnail_float_image(self):
         """Test thumbnail on float image (should be normalized)."""
@@ -187,7 +187,7 @@ class TestThumbnailProcessor:
         
         # Should be normalized to 0-255 uint8
         assert thumbnail.dtype == np.uint8
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape == (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.min() >= 0
         assert thumbnail.max() <= 255
 
@@ -202,10 +202,9 @@ class TestThumbnailProcessor:
         result = processor.run(record)
         
         thumbnail = result["thumbnail"]
-        
+
         # Should return empty array
-        assert isinstance(thumbnail, np.ndarray)
-        assert thumbnail.size == 0
+        assert thumbnail is None
 
     def test_thumbnail_single_pixel(self):
         """Test thumbnail on single pixel image."""
@@ -220,7 +219,7 @@ class TestThumbnailProcessor:
         thumbnail = result["thumbnail"]
         
         # Should be resized to SPRITE_SIZE x SPRITE_SIZE
-        assert thumbnail.shape == (SPRITE_SIZE, SPRITE_SIZE)
+        assert thumbnail.shape ==  (SPRITE_SIZE * SPRITE_SIZE,)
         assert thumbnail.dtype == np.uint8
 
     def test_thumbnail_normalization(self):

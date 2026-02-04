@@ -133,7 +133,7 @@ class FileSummaryWidget(BaseReportWidget):
             color=group_col,
             color_map=color_map,
             title="File Count per Group",
-            labels={group_col: group_col, "file_count": "Number of files"},
+            labels={group_col: "Group", "file_count": "Number of files"},
             force_category_x=True,
             show_legend=False,
         )
@@ -147,7 +147,7 @@ class FileSummaryWidget(BaseReportWidget):
             color=group_col,
             color_map=color_map,
             title="Total Size per Group (MB)",
-            labels={group_col: group_col, "total_size_mb": "Size (MB)"},
+            labels={group_col: "Group", "total_size_mb": "Size (MB)"},
         )
         figs.append(dcc.Graph(figure=fig_size))
 

@@ -1,4 +1,4 @@
-from typing import Protocol, Iterable, Set, Any, Dict, List, Optional, Tuple
+from typing import Protocol, Iterable, Set, Any, Dict, List, Optional, Tuple, Union
 
 import polars as pl
 from pathlib import Path
@@ -16,7 +16,7 @@ class PixelPatrolLoader(Protocol):
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]]
     FOLDER_EXTENSIONS: Set[str]
     def is_folder_supported(self, path: Path) -> bool: ...
-    def load(self, source: str) -> Record: ...
+    def load(self, source: str) -> Union[Record, Dict[str, Record]]: ...
 
 
 class PixelPatrolProcessor(Protocol):

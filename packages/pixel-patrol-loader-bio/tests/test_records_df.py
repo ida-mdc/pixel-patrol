@@ -14,6 +14,7 @@ from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
     _build_deep_record_df,
+    load_and_process_records_from_file,
     PATHS_DF_EXPECTED_SCHEMA,
 )
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
@@ -50,13 +51,12 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
     p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
     paths = [p1, p2]
 
-    def fake_get_all_record_properties(_path, loader, processors=None, show_processor_progress=True):
-        # Signature matches production `get_all_record_properties` so it can be used in single-process tests
-        assert loader.NAME == "bioio"
-        return {"width": 100, "height": 200}
+    def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True):
+        assert loader_inst.NAME == "bioio"
+        return [{"width": 100, "height": 200}]
 
-    monkeypatch.setattr("pixel_patrol_base.core.processing.get_all_record_properties",
-                        fake_get_all_record_properties)
+    monkeypatch.setattr("pixel_patrol_base.core.processing.load_and_process_records_from_file",
+                        fake_load_and_process)
     # Force single-worker mode so the monkeypatched function is executed in-process
     monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
 
@@ -74,16 +74,17 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
     assert df["height"].to_list() == [200, 200]
 
 
-def test_get_all_image_properties_returns_empty_for_nonexistent_file(tmp_path, loader, processors):
+def test_load_and_process_returns_empty_for_nonexistent_file(tmp_path, loader):
     missing = tmp_path / "no.png"
-    assert processing.get_all_record_properties(missing, loader=loader, processors=processors) == {}
+    assert load_and_process_records_from_file(missing, loader=loader, processors=[]) == []
 
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image")
     monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert processing.get_all_record_properties(img_file, loader=loader, processors=processors) == {}
+    assert load_and_process_records_from_file(img_file, loader=loader, processors=[]) == []
+
 
 class DummyImg:
     # Mocks the 'dims' object required by bioio_loader
@@ -134,9 +135,12 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
-    props = processing.get_all_record_properties(
+    result = load_and_process_records_from_file(
         img_file, loader=loader, processors=[]
     )
+    assert isinstance(result, list)
+    assert len(result) == 1
+    props = result[0]
     expected_shape = [2, 2]
 
     assert props["shape"] == expected_shape
@@ -151,12 +155,14 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_valid = tmp_path / "valid.jpg"; p_valid.write_bytes(b"")
     p_invalid = tmp_path / "invalid.png"; p_invalid.write_bytes(b"")
 
-    def fake_get_all_image_properties(path, _loader, _processors=None, show_processor_progress=True):
-        return {"width": 10, "height": 20} if path == p_valid else {}
+    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
+        if Path(file_path) == p_valid:
+            return [{"width": 10, "height": 20}]
+        return []
 
     monkeypatch.setattr(
-        "pixel_patrol_base.core.processing.get_all_record_properties",
-        fake_get_all_image_properties
+        "pixel_patrol_base.core.processing.load_and_process_records_from_file",
+        fake_load_and_process
     )
     # Force single-worker mode so the monkeypatched function is executed in-process
     monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)

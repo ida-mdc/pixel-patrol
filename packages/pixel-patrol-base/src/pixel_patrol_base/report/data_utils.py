@@ -5,7 +5,7 @@ import numpy as np
 from collections import defaultdict
 
 from pixel_patrol_base.plugins.processors.histogram_processor import safe_hist_range
-from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABEL
+from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABEL, HOVER_LABEL_COL
 
 
 # --- Data Helpers ---
@@ -495,7 +495,10 @@ def aggregate_histograms_by_group(
                 continue
 
             # Get source edges
-            src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
+            if mode == "shape":
+                src_edges, _, _ = compute_histogram_edges(c_arr, None, None)
+            else:
+                src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
 
             # Rebin to group common edges
             rebinned = rebin_histogram(c_arr, src_edges, target_edges)
@@ -511,3 +514,21 @@ def aggregate_histograms_by_group(
             results[str(group_val)] = (centers, avg_hist)
 
     return results
+
+
+def add_hover_label_column(df: pl.DataFrame, col_name: str = HOVER_LABEL_COL) -> pl.DataFrame:
+    """
+    Add a hover label column combining 'name' and 'child_id' (if present).
+    Used for consistent hover tooltips across widgets.
+    """
+    if "name" not in df.columns:
+        return df
+
+    if "child_id" in df.columns:
+        return df.with_columns(
+            pl.when(pl.col("child_id").is_not_null())
+            .then(pl.col("name") + " : " + pl.col("child_id").cast(pl.Utf8))
+            .otherwise(pl.col("name"))
+            .alias(col_name)
+        )
+    return df.with_columns(pl.col("name").alias(col_name))

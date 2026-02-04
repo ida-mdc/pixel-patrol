@@ -39,6 +39,8 @@ MAX_UNIQUE_GROUP = 12
 GROUPING_COL_PREFIX = "__grouping__"
 MISSING_LABEL = "missing"
 
+HOVER_LABEL_COL = "__hover_label__"
+
 MAX_RECORDS_IN_MENU = 500
 
 MIXED_GROUPING_COLOR = "#cccccc"

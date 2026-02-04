@@ -12,6 +12,7 @@ from pixel_patrol_image.plugins.processors.quality_metrics_processor import (
     _check_blocking_records_2d,
     _check_ringing_records_2d,
 )
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 
 class TestQualityMetricsProcessor:
@@ -199,3 +200,22 @@ class TestQualityMetricsProcessor:
         assert any("laplacian_variance_c" in key for key in result.keys())
         assert any("laplacian_variance_z" in key for key in result.keys())
 
+def test_schema_validation_and_casting():
+    """validate_processor_output should cast types and pass-through unknown keys."""
+    processor = QualityMetricsProcessor()
+
+    raw = {
+        "laplacian_variance": "3.14",   # string that should be cast to float
+        "some_unexpected_key": "abc",   # key not in schema should be passed through
+    }
+
+    validated = validate_processor_output(
+        raw,
+        processor.OUTPUT_SCHEMA,
+        processor.OUTPUT_SCHEMA_PATTERNS,
+        processor_name=processor.NAME
+    )
+
+    assert isinstance(validated["laplacian_variance"], (float, np.floating))
+    assert validated["laplacian_variance"] == pytest.approx(3.14)
+    assert validated["some_unexpected_key"] == "abc"
