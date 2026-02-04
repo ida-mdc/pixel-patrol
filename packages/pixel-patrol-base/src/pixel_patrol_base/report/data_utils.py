@@ -495,7 +495,10 @@ def aggregate_histograms_by_group(
                 continue
 
             # Get source edges
-            src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
+            if mode == "shape":
+                src_edges, _, _ = compute_histogram_edges(c_arr, None, None)
+            else:
+                src_edges, _, _ = compute_histogram_edges(c_arr, minv, maxv)
 
             # Rebin to group common edges
             rebinned = rebin_histogram(c_arr, src_edges, target_edges)
