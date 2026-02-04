@@ -477,7 +477,6 @@ def load_and_process_records_from_file(
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return []
 
-    # 1. Load:
     try:
         result = loader.load(str(file_path))
         if result is None:
@@ -486,19 +485,27 @@ def load_and_process_records_from_file(
         logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
         return []
 
-    # 2. Process each record:
-    
     result_list: List[Dict] = []
 
     if isinstance(result, dict):
-        for child_id, rcd in result.items():
+        # Multi-image file: show progress over sub-images
+        items = result.items()
+        items = tqdm(
+            items,
+            desc="  Processing sub-images",
+            unit="img",
+            leave=False,
+            colour="blue",
+            position=1,
+        )
+        for child_id, rcd in items:
             if not isinstance(child_id, str) or not child_id:
                 logger.warning(
                     "Loader '%s' returned invalid child key %r for '%s'; skipping record.",
                     loader.NAME, child_id, file_path,
                 )
                 continue
-            props = _extract_record_properties(rcd, processors, show_processor_progress)
+            props = _extract_record_properties(rcd, processors, False)
             props["child_id"] = child_id
             result_list.append(props)
     else:
@@ -815,11 +822,7 @@ class _RecordsAccumulator:
 
         final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
 
-        try:
-            final_df = optimize_dtypes(final_df)
-        except Exception as exc:
-            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
-
+        final_df = self.post_process_final_df(final_df)
 
         # write combined parquet file and tidy up partial chunks
         if self._flush_dir:
@@ -856,6 +859,22 @@ class _RecordsAccumulator:
                     self._flush_dir, exc
                 )
 
+        return final_df
+
+    def post_process_final_df(self, final_df):
+        if "row_index" in final_df.columns:
+            final_df = final_df.drop("row_index")
+        if "child_id" in final_df.columns:
+            final_df = final_df.with_columns(
+                pl.when(pl.col("child_id").is_not_null())
+                .then(pl.lit("sub_file"))
+                .otherwise(pl.col("type"))
+                .alias("type")
+            )
+        try:
+            final_df = optimize_dtypes(final_df)
+        except Exception as exc:
+            logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
         return final_df
 
     def _flush_active_to_disk(self, force: bool) -> None:

@@ -9,7 +9,7 @@ import dash_bootstrap_components as dbc
 import math
 
 from pixel_patrol_base.report.data_utils import prettify_col_name
-from pixel_patrol_base.report.constants import NO_GROUPING_COL
+from pixel_patrol_base.report.constants import NO_GROUPING_COL, HOVER_LABEL_COL
 from pixel_patrol_base.report.stats_annotations import annotate_plot_with_significance
 
 # =============================================================================
@@ -407,8 +407,7 @@ def plot_violin(
                 hovertemplate=(
                         "<b>Group:</b> %{x}<br>"
                         "<b>Value:</b> %{y:.2f}"
-                        + (f"<br><b>{'Name' if custom_data_col == 'name' else (custom_data_col or 'Info')}:</b> %{{customdata}}"
-                        if custom_data is not None else "")
+                        + ("<br>%{customdata}" if custom_data is not None else "")
                         + "<extra></extra>"
                 ),
             )
@@ -582,7 +581,7 @@ def build_violin_grid(
     plus an optional table listing metrics that have no variance.
     """
     df_filtered = df.select(
-        pl.col("name"),
+        pl.col(HOVER_LABEL_COL),
         pl.col(group_col),
         pl.col(numeric_cols),
     )
@@ -637,7 +636,7 @@ def build_violin_grid(
             group_col=group_col,
             color_map=color_map,
             title=f"Distribution of {nice_name}",
-            custom_data_col="name",
+            custom_data_col=HOVER_LABEL_COL,
             show_legend=False,
             group_order=order_x,
             annotate_significance=annotate_significance,

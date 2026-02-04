@@ -13,7 +13,8 @@ from textwrap import dedent
 from pixel_patrol_base.report.data_utils import (get_all_available_dimensions,
                                                  get_dim_aware_column,
                                                  ensure_discrete_grouping,
-                                                 sort_strings_alpha)
+                                                 sort_strings_alpha,
+                                                 add_hover_label_column)
 from pixel_patrol_base.report.factory import create_info_icon
 from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 GC_GROUP_COL,
@@ -39,6 +40,7 @@ from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 EXPORT_PROJECT_DOWNLOAD_ID,
                                                 SAVE_SNAPSHOT_DOWNLOAD_ID,
                                                 SAVE_SNAPSHOT_BUTTON_ID,
+                                                HOVER_LABEL_COL,
                                                 )
 
 import logging
@@ -117,6 +119,8 @@ class _PrepareDataCache:
         # 2. Resolve and apply grouping
         group_col = resolve_group_column(df_filtered, global_config)
         df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
+
+        df_filtered = add_hover_label_column(df_filtered, HOVER_LABEL_COL)
 
         # Cache results
         self._cache_key = cache_key
