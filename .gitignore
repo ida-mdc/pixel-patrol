@@ -10,3 +10,5 @@ build
 .idea
 uv.lock
 packages/pixel-patrol/tests/benchmarks/results/
+packages/*/dist/
+
