@@ -4,7 +4,7 @@ import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable, Any
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
@@ -26,7 +26,9 @@ from pixel_patrol_base.config import (
     DEFAULT_RECORDS_FLUSH_EVERY_N, COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
 )
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
+from pixel_patrol_base.utils.array_utils import set_slicing_config
 
 
 logger = logging.getLogger(__name__)
@@ -47,17 +49,29 @@ class _IndexedPath(NamedTuple):
 
 
 def _process_worker_initializer(
-    loader_id: Optional[str], processor_classes: List[type]
+    loader_id: Optional[str], processor_classes: List[type], processing_config: Optional[Any] = None
 ) -> None:
     """Initialize per-process loader and processor instances.
     
     Args:
         loader_id: Optional string identifier for the loader to use.
         processor_classes: List of PixelPatrolProcessor classes to instantiate.
+        processing_config: Optional ProcessingConfig object to set in thread-local storage.
     """
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
     processors = [cls() for cls in processor_classes]
+    
+    # Set slicing configuration for this worker thread/process
+    if processing_config is not None:
+        # Create a temporary object with slicing attributes for thread-local storage
+        class _TempSlicingConfig:
+            def __init__(self, config):
+                self.slicing_enabled = config.slicing_enabled
+                self.slicing_dimensions_included = config.slicing_dimensions_included
+                self.slicing_dimensions_excluded = config.slicing_dimensions_excluded
+        set_slicing_config(_TempSlicingConfig(processing_config))
+    
     _PROCESS_WORKER_CONTEXT = {
         "loader": loader_instance,
         "processors": processors,
@@ -255,6 +269,7 @@ def _build_deep_record_df(
     loader_instance: PixelPatrolLoader,
     settings: Optional[Settings] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    processing_config: Optional[ProcessingConfig] = None,
 ) -> pl.DataFrame:
     """Process each path (optionally in parallel) and build a Polars DataFrame.
 
@@ -263,6 +278,7 @@ def _build_deep_record_df(
         loader_instance: An instance of PixelPatrolLoader to load files.
         settings: Optional Settings object for processing configuration.
         progress_callback: Optional GUI callback for progress updates.
+        processing_config: Optional ProcessingConfig for slicing and processor selection.
     Returns:
         A Polars DataFrame containing deep processed records, aka the results.
     """
@@ -271,7 +287,24 @@ def _build_deep_record_df(
 
     total = basic.height
     processors = discover_processor_plugins()
+    
+    if processing_config:
+        if processing_config.processors_included:
+            processors = [p for p in processors if p.__class__.__name__ in processing_config.processors_included]
+        elif processing_config.processors_excluded:
+            processors = [p for p in processors if p.__class__.__name__ not in processing_config.processors_excluded]
+    
     processor_classes = [proc.__class__ for proc in processors]
+    
+    # Set slicing configuration for this thread (create a temporary Settings-like object for thread-local storage)
+    if processing_config:
+        # Create a temporary object with slicing attributes for thread-local storage
+        class _TempSlicingConfig:
+            def __init__(self, config):
+                self.slicing_enabled = config.slicing_enabled
+                self.slicing_dimensions_included = config.slicing_dimensions_included
+                self.slicing_dimensions_excluded = config.slicing_dimensions_excluded
+        set_slicing_config(_TempSlicingConfig(processing_config))
     worker_count = _resolve_worker_count(settings, total)
     flush_threshold = _resolve_flush_threshold(total, settings)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
@@ -340,7 +373,7 @@ def _build_deep_record_df(
             with ProcessPoolExecutor(
                 max_workers=worker_count,
                 initializer=_process_worker_initializer,
-                initargs=(loader_name, processor_classes),
+                initargs=(loader_name, processor_classes, processing_config),
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
@@ -516,6 +549,7 @@ def build_records_df(
     loader: Optional[PixelPatrolLoader],
     settings: Optional[Settings] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    processing_config: Optional[ProcessingConfig] = None,
 ) -> Optional[pl.DataFrame]:
     """Build the full records DataFrame by scanning files and processing them.
 
@@ -526,6 +560,7 @@ def build_records_df(
         settings: Optional Settings object for processing configuration.
         progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
                             Called for each file processed during deep processing.
+        processing_config: Optional ProcessingConfig for slicing and processor selection.
     Returns:
         A Polars DataFrame containing the full records, or None if no files were found.
     """
@@ -539,7 +574,7 @@ def build_records_df(
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
-    deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback)
+    deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback, processing_config=processing_config)
 
     return deep
 

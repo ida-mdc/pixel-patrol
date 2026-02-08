@@ -17,6 +17,8 @@ from pixel_patrol_base.api import (
     export_html_report,
 )
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
 from pixel_patrol_base.report.constants import NO_GROUPING_COL
 
@@ -60,9 +62,21 @@ def cli():
 @click.option('--chunk-dir', type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=Path),
                   default=None,
                   help='Optional: Directory to store intermediate parquet chunk files. Defaults to <output_zip_parent>/<project_name>_batches.')
+@click.option('--no-slicing', is_flag=True, default=False,
+              help='Disable dimension slicing (only compute full-image statistics).')
+@click.option('--slice-dimensions-include', multiple=True, type=str,
+              help='Only slice these dimensions (e.g., T, C). Can be specified multiple times. If specified, --slice-dimensions-exclude is ignored.')
+@click.option('--slice-dimensions-exclude', multiple=True, type=str,
+              help='Exclude these dimensions from slicing (e.g., Z). Can be specified multiple times. Default: X, Y are never sliced.')
+@click.option('--processors-include', multiple=True, type=str,
+              help='Only use these processors (e.g., basic-stats). Can be specified multiple times. If specified, --processors-exclude is ignored.')
+@click.option('--processors-exclude', multiple=True, type=str,
+              help='Exclude these processors (e.g., histogram). Can be specified multiple times.')
 def export(base_directory: Path, output_zip: Path, name: str | None, paths: tuple[str, ...],
               loader: str, cmap: str, n_example_files: int, file_extension: tuple[str, ...], flavor: str,
-              resume: bool, chunk_dir: Path | None):
+              resume: bool, chunk_dir: Path | None, no_slicing: bool,
+              slice_dimensions_include: tuple[str, ...], slice_dimensions_exclude: tuple[str, ...],
+              processors_include: tuple[str, ...], processors_exclude: tuple[str, ...]):
     """
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
@@ -117,8 +131,20 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     click.echo(f"Setting project settings: {initial_settings}")
     set_settings(my_project, initial_settings)
 
+    # Build ProcessingConfig from CLI options
+    processing_config = None
+    if no_slicing or slice_dimensions_include or slice_dimensions_exclude or processors_include or processors_exclude:
+        processing_config = ProcessingConfig(
+            slicing_enabled=not no_slicing,
+            slicing_dimensions_included=set(slice_dimensions_include) if slice_dimensions_include else set(),
+            slicing_dimensions_excluded=set(slice_dimensions_exclude) if slice_dimensions_exclude else {"X", "Y"},
+            processors_included=set(processors_include) if processors_include else set(),
+            processors_excluded=set(processors_exclude) if processors_exclude else set(),
+        )
+        click.echo(f"Processing configuration: {processing_config}")
+
     click.echo("Processing images...")
-    process_files(my_project)
+    process_files(my_project, processing_config=processing_config)
 
     click.echo(f"Exporting project to: '{output_zip}'")
     # Export. Project IO will include either the combined parquet (if present) or
@@ -155,15 +181,24 @@ def launch(port: int):
 @cli.command()
 @click.argument('input_zip', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
 @click.option('--port', type=int, default=8050, show_default=True)
-@click.option('--group-by', type=str, default=None)
-@click.option('--filter-col', 'filter_col', type=str, default=None)
-@click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None)
-@click.option('--filter', 'filter_value', type=str, default=None)
+@click.option('--group-by', type=str, default=None,
+              help='Column name to group by in the report.')
+@click.option('--filter-col', 'filter_col', type=str, default=None,
+              help='Column name to filter on.')
+@click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None,
+              help='Filter operation.')
+@click.option('--filter', 'filter_value', type=str, default=None,
+              help='Filter value.')
 @click.option('--dim', 'dims', multiple=True, help="Repeatable, format like: t=0  z=1  c=0")
 @click.option('--export-html', type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
               help='Export the report as a static HTML file instead of launching the interactive dashboard.')
+@click.option('--widgets-include', multiple=True, type=str,
+              help='Only show these widgets in the report. Can be specified multiple times. If specified, --widgets-exclude is ignored.')
+@click.option('--widgets-exclude', multiple=True, type=str,
+              help='Exclude these widgets from the report (e.g., "TensorBoard Embedding Projector"). Can be specified multiple times.')
 def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | None,
-           filter_op: str | None, filter_value: str | None, dims: tuple[str, ...], export_html: Path | None):
+           filter_op: str | None, filter_value: str | None, dims: tuple[str, ...], export_html: Path | None,
+           widgets_include: tuple[str, ...], widgets_exclude: tuple[str, ...]):
 
     my_project = import_project(Path(input_zip))
 
@@ -187,20 +222,26 @@ def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | N
     if filter_col and filter_op and filter_value:
         filters[filter_col] = {"op": filter_op, "value": filter_value}
 
-    global_config = {
-        "group_col": group_by or NO_GROUPING_COL,
-        "filter": filters,
-        "dimensions": dim_dict,
-    }
+    # Build ReportConfig from CLI options (combines widgets and global config)
+    report_config = None
+    if widgets_include or widgets_exclude or group_by or filter_col or dims:
+        report_config = ReportConfig(
+            widgets_included=set(widgets_include) if widgets_include else set(),
+            widgets_excluded=set(widgets_exclude) if widgets_exclude else set(),
+            group_col=group_by or NO_GROUPING_COL if group_by else None,
+            filter=filters if filters else None,
+            dimensions=dim_dict if dim_dict else None,
+        )
+        click.echo(f"Report configuration: widgets={len(report_config.widgets_included)} included, {len(report_config.widgets_excluded)} excluded")
 
     if export_html:
         # Export as static HTML
         click.echo(f"Exporting report to HTML: {export_html}")
-        export_html_report(my_project, export_html, port=port, global_config=global_config)
+        export_html_report(my_project, export_html, port=port, report_config=report_config)
         click.echo(f"HTML export complete: {export_html}")
     else:
         # Launch interactive dashboard
-        show_report(my_project, port=port, global_config=global_config)
+        show_report(my_project, port=port, report_config=report_config)
 
 
 if __name__ == '__main__':

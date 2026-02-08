@@ -1,6 +1,7 @@
 from pathlib import Path
 from pixel_patrol_base import api
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.report_config import ReportConfig
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -62,21 +63,19 @@ def main():
 
     # start report already with applied filters and which columns to group by
     # dimensions c=0 means all plots show the results for channel 0 (if available) by default
-    api.show_report(
-        project,
-        global_config={
-            "group_cols": ["size_readable"],
-            "filter": {
-                "file_extension": {
-                    "op": "in",
-                    "value": "tif, png",
-                }
-            },
-            "dimensions": {
-                "c":"0"
-            },
+    report_config = ReportConfig(
+        group_col="size_readable",
+        filter={
+            "file_extension": {
+                "op": "in",
+                "value": "tif, png",
+            }
+        },
+        dimensions={
+            "c": "0"
         },
     )
+    api.show_report(project, report_config=report_config)
 
     # --- Step 8: (optional) import project ---
     imported = api.import_project(zip_path)
