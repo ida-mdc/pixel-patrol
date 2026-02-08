@@ -5,10 +5,9 @@ from dash import Input, Output, html
 
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import (GLOBAL_CONFIG_STORE_ID,
                                                 FILTERED_INDICES_STORE_ID,
-                                                GC_IS_SHOW_SIGNIFICANCE,
-                                                GC_DIMENSIONS,
                                                 HOVER_LABEL_COL)
 from pixel_patrol_base.report.factory import build_violin_grid, show_no_data_message
 from pixel_patrol_base.report.data_utils import get_dim_aware_column, select_needed_columns
@@ -51,20 +50,20 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
         self,
         color_map: Dict[str, str] | None,
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
     ):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, group_col, _resolved, _warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config,
+            report_config,
             metric_base=None,
         )
 
         if df_filtered.is_empty() or not group_col:
             return show_no_data_message()
 
-        global_config = global_config or {}
-        dims_selection = global_config.get(GC_DIMENSIONS, {})
+        dims_selection = report_config.dimensions or {} if report_config else {}
 
         resolved_metric_cols: List[str] = []
         for base in self.BASE_METRIC_NAMES:
@@ -85,5 +84,5 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
             resolved_metric_cols,
             group_col=group_col,
             order_x=group_order,
-            annotate_significance=global_config.get(GC_IS_SHOW_SIGNIFICANCE, False),
+            annotate_significance=report_config.is_show_significance if report_config else False,
         )

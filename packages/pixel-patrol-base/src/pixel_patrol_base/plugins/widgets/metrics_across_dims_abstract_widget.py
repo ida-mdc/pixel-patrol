@@ -8,7 +8,8 @@ from pixel_patrol_base.report.data_utils import parse_metric_dimension_column
 from pixel_patrol_base.report.factory import show_no_data_message, plot_aggregated_scatter
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
-from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, GC_DIMENSIONS
+from pixel_patrol_base.core.report_config import ReportConfig
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 
 
 class MetricsAcrossDimensionsWidget(BaseReportWidget):
@@ -50,26 +51,25 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             self,
             color_map: Dict[str, str] | None,
             subset_indices: List[int] | None,
-            global_config: Dict | None,
+            global_config_dict: Dict | None,
     ):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         """Render the table of metrics vs. dimensions with distribution-aware sparklines."""
 
         parsed_cols = self._parsed_cols_cache
         if not parsed_cols:
             return show_no_data_message()
-
         df_filtered, group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config,
+            report_config,
             metric_base=None,
         )
 
         if df_filtered.is_empty():
             return show_no_data_message()
 
-        # --- Dimension filter (from global controls) ---
-        dims_selection_raw = global_config.get(GC_DIMENSIONS) or {}
+        dims_selection_raw = report_config.dimensions or {} if report_config else {}
 
         # Build dim_filter: {dim_name: index_value} for active filters
         dim_filter: Dict[str, str] = {}

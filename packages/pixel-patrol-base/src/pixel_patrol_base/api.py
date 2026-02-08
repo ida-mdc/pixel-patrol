@@ -6,6 +6,8 @@ import polars as pl
 
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.io.project_io import export_project as _io_export_project
 from pixel_patrol_base.io.project_io import import_project as _io_import_project
 from pixel_patrol_base.report.dashboard_app import create_app
@@ -39,7 +41,8 @@ def set_settings(project: Project, settings: Settings) -> Project:
 
 def process_files(
     project: Project, 
-    progress_callback: Optional[Callable[[int, int, Path], None]] = None
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    processing_config: Optional[ProcessingConfig] = None
 ) -> Project:
     """
     Process files in the project.
@@ -48,19 +51,21 @@ def process_files(
         project: The project to process
         progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
                           Called for each file processed. Useful for progress tracking in UI.
+        processing_config: Optional ProcessingConfig for slicing and processor selection.
+                          If None, uses default behavior (all processors, slice all dimensions except X, Y).
     
     Returns:
         The project with processed records_df
     """
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
-    return project.process_records(progress_callback=progress_callback)
+    return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
 def show_report(
     project: Project,
     host: str = "127.0.0.1",
     port: int = None,
     debug: bool = False,
-    global_config: dict | None = None,
+    report_config: Optional[ReportConfig] = None,
 ) -> None:
     """
     Run without the Flask debug reloader by default. The debug reloader
@@ -69,10 +74,19 @@ def show_report(
     developer needs the interactive debugger they can pass `debug=True`,
     but should also set `use_reloader=False` if they do not want the script
     re-executed.
+    
+    Args:
+        project: The project to show report for
+        host: Host address for the server
+        port: Port number for the server
+        debug: Enable debug mode
+        report_config: Optional ReportConfig for widget selection and global filters/grouping.
+                     If None, all widgets are shown and default filters/grouping are used.
     """
     logger.info(f"API Call: Showing report for project '{project.name}'.")
-    sanitized = init_global_config(project.records_df, global_config)
-    app = create_app(project, initial_global_config=sanitized)
+    global_config_dict = report_config.to_dict() if report_config else None
+    sanitized = init_global_config(project.records_df, global_config_dict)
+    app = create_app(project, initial_global_config=sanitized, report_config=report_config)
     app.run(debug=debug, host=host, port=port, use_reloader=False)
 
 def export_html_report(
@@ -81,7 +95,7 @@ def export_html_report(
     host: str = "127.0.0.1",
     port: int = None,
     timeout: int = 120,
-    global_config: dict | None = None,
+    report_config: Optional[ReportConfig] = None,
 ) -> None:
     """
     Export the report dashboard as a static HTML file using headless browser automation.
@@ -95,8 +109,8 @@ def export_html_report(
         host: Host address for the server (default: "127.0.0.1")
         port: Port number for the server (default: None, auto-assigned)
         timeout: Maximum time to wait for the export in seconds (default: 120)
-        global_config: Optional global configuration dict with filters, grouping, etc.
-                     Same format as show_report's global_config parameter.
+        report_config: Optional ReportConfig for widget selection and global filters/grouping.
+                     If None, all widgets are shown and default filters/grouping are used.
     
     Raises:
         ImportError: If Playwright is not installed
@@ -104,20 +118,23 @@ def export_html_report(
     
     Example:
         >>> from pixel_patrol_base import api
+        >>> from pixel_patrol_base.core.report_config import ReportConfig
         >>> project = api.import_project("my_project.zip")
         >>> api.export_html_report(
         ...     project,
         ...     "report.html",
-        ...     global_config={
-        ...         "group_col": ["size_readable"],
-        ...         "filter": {"file_extension": {"op": "in", "value": "tif, png"}},
-        ...     }
+        ...     report_config=ReportConfig(
+        ...         widgets_excluded={"EmbeddingProjectorWidget"},
+        ...         group_col="size_readable",
+        ...         filter={"file_extension": {"op": "in", "value": "tif, png"}},
+        ...     )
         ... )
     """
     output_path = Path(output_path)
     logger.info(f"API Call: Exporting HTML report for project '{project.name}' to '{output_path}'.")
-    sanitized = init_global_config(project.records_df, global_config)
-    app = create_app(project, initial_global_config=sanitized)
+    global_config_dict = report_config.to_dict() if report_config else None
+    sanitized = init_global_config(project.records_df, global_config_dict)
+    app = create_app(project, initial_global_config=sanitized, report_config=report_config)
     export_html_from_dashboard(app, output_path, host=host, port=port, timeout=timeout)
     logger.info(f"API Call: HTML export completed successfully: '{output_path}'.")
 
