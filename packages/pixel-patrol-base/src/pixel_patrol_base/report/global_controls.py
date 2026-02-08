@@ -16,6 +16,7 @@ from pixel_patrol_base.report.data_utils import (get_all_available_dimensions,
                                                  sort_strings_alpha,
                                                  add_hover_label_column)
 from pixel_patrol_base.report.factory import create_info_icon
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import (MAX_UNIQUE_GROUP,
                                                 GC_GROUP_COL,
                                                 GC_FILTER,
@@ -79,7 +80,7 @@ class _PrepareDataCache:
             self,
             df: pl.DataFrame,
             subset_row_positions: Optional[List[int]],
-            global_config: Dict,
+            report_config: Optional[ReportConfig],
     ) -> Tuple[pl.DataFrame, str, Optional[List[str]]]:
         """
         Returns (df_filtered_with_grouping, group_col, group_order).
@@ -88,9 +89,10 @@ class _PrepareDataCache:
         Metric resolution happens separately per widget.
         """
         # Build cache key
+        config_dict = report_config.to_dict() if report_config else {}
         cache_key = (
             tuple(subset_row_positions) if subset_row_positions else None,
-            tuple(sorted((global_config or {}).items())),
+            tuple(sorted(config_dict.items())),
         )
 
         if (self._cached_source_df is df and
@@ -117,7 +119,7 @@ class _PrepareDataCache:
             return df_filtered, "", None
 
         # 2. Resolve and apply grouping
-        group_col = resolve_group_column(df_filtered, global_config)
+        group_col = resolve_group_column(df_filtered, report_config)
         df_filtered, group_col, group_order = ensure_discrete_grouping(df_filtered, group_col)
 
         df_filtered = add_hover_label_column(df_filtered, HOVER_LABEL_COL)
@@ -335,7 +337,7 @@ def _create_export_btn(label, btn_id, popover_text, mt="mt-2"):
     ]
 
 
-def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_config: Optional[Dict] = None):
+def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_config: Optional[ReportConfig] = None):
     filter_help_md = dedent("""
         **Operators:**
         - `contains` / `not_contains`: text substring
@@ -380,8 +382,12 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_global_co
             ], style={"display": "inline-block", "width": "70px", "marginRight": "5px"})
         )
 
-    # 5. Build initial values from initial_global_config
-    init_cfg = init_global_config(df, initial_global_config)
+    # 5. Build initial values from initial_report_config
+    if initial_report_config:
+        init_dict = initial_report_config.to_dict()
+    else:
+        init_dict = None
+    init_cfg = init_global_config(df, init_dict)
     init_group_col = init_cfg.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
     init_dims = init_cfg.get(GC_DIMENSIONS) or {}
 
@@ -528,7 +534,7 @@ def _get_dimension_columns(df: pl.DataFrame, dimensions: Dict[str, str]) -> List
 
 def compute_filtered_row_positions(
         df: pl.DataFrame,
-        global_config: Optional[Dict],
+        report_config: Optional[ReportConfig],
 ) -> Optional[List[int]]:
     """
     Returns row POSITIONS (indices) after applying global filters.
@@ -541,9 +547,11 @@ def compute_filtered_row_positions(
     # Invalidate cache when filters change
     _prepare_cache.invalidate()
 
-    global_config = global_config or {}
-    filters = global_config.get(GC_FILTER) or {}
-    dimensions = global_config.get(GC_DIMENSIONS) or {}
+    if report_config is None:
+        return None
+    
+    filters = report_config.filter or {}
+    dimensions = report_config.dimensions or {}
 
     # If no filters and no dimension constraints, return None (use full df)
     if not filters and not dimensions:
@@ -590,11 +598,9 @@ def compute_filtered_row_positions(
     return row_positions
 
 
-def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str:
+def resolve_group_column(df: pl.DataFrame, report_config: Optional[ReportConfig]) -> str:
     """Helper to safely extract the active grouping column."""
-    global_config = global_config or {}
-
-    group_col = global_config.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
+    group_col = report_config.group_col if report_config and report_config.group_col else DEFAULT_REPORT_GROUP_COL
 
     if group_col not in df.columns:
         # Fallback chain: DEFAULT_REPORT_GROUP_COL -> NO_GROUPING_COL -> first column
@@ -611,7 +617,7 @@ def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str
 def prepare_widget_data(
         df: pl.DataFrame,
         subset_row_positions: Optional[List[int]],
-        global_config: Dict,
+        report_config: Optional[ReportConfig],
         metric_base: Optional[str] = None
 ) -> Tuple[pl.DataFrame, str, Optional[str], Optional[str], Optional[List[str]]]:
     """
@@ -625,7 +631,7 @@ def prepare_widget_data(
     """
     # Use cached base computation
     df_filtered, group_col, group_order = _prepare_cache.get_or_compute(
-        df, subset_row_positions, global_config
+        df, subset_row_positions, report_config
     )
 
     if df_filtered.is_empty():
@@ -634,7 +640,7 @@ def prepare_widget_data(
     # Metric resolution (per widget, not cached)
     resolved_col = None
     warning_msg = None
-    dims_selection = global_config.get(GC_DIMENSIONS, {})
+    dims_selection = report_config.dimensions or {} if report_config else {}
 
     if metric_base:
         resolved_col = get_dim_aware_column(
@@ -669,16 +675,14 @@ def prepare_widget_data(
 
 def apply_global_row_filters_and_grouping(
         df: pl.DataFrame,
-        global_config: Optional[Dict],
+        report_config: Optional[ReportConfig],
         default_group_col: str = DEFAULT_REPORT_GROUP_COL,
 ) -> Tuple[pl.DataFrame, str]:
     """
     Apply global filters and return filtered df with group column.
     Used for exports (CSV, project).
     """
-    global_config = global_config or {}
-
-    group_col = global_config.get(GC_GROUP_COL) or default_group_col
+    group_col = report_config.group_col if report_config and report_config.group_col else default_group_col
 
     # ensure the chosen group_col exists; otherwise fall back to DEFAULT_GROUP_COL
     if group_col not in df.columns:
@@ -687,7 +691,7 @@ def apply_global_row_filters_and_grouping(
         # as a last resort pick the first column
         group_col = df.columns[0]
 
-    row_positions = compute_filtered_row_positions(df, global_config)
+    row_positions = compute_filtered_row_positions(df, report_config)
 
     if row_positions is None:
         # No filters, use full df

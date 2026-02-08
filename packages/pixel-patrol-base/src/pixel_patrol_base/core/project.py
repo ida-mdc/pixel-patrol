@@ -8,6 +8,7 @@ from pixel_patrol_base.config import MIN_N_EXAMPLE_FILES, MAX_N_EXAMPLE_FILES
 from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_loader
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
 
@@ -139,7 +140,8 @@ class Project:
     def process_records(
         self, 
         settings: Optional[Settings] = None,
-        progress_callback: Optional[Callable[[int, int, Path], None]] = None
+        progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+        processing_config: Optional[ProcessingConfig] = None
     ) -> "Project":
         """
         Processes records (e.g. images) in the project, building `records_df`.
@@ -147,6 +149,8 @@ class Project:
             settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
             progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
                               Called for each file processed. Useful for progress tracking in UI.
+            processing_config: Optional ProcessingConfig for slicing and processor selection.
+                              If None, uses default behavior (all processors, slice all dimensions except X, Y).
 
         Returns:
             The Project instance with the `records_df` updated.
@@ -174,6 +178,7 @@ class Project:
             loader=self.loader,
             settings=self.settings,
             progress_callback=progress_callback,
+            processing_config=processing_config,
         )
 
         if self.records_df is None or self.records_df.is_empty():

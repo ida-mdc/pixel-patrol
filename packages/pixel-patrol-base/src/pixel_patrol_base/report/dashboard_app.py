@@ -12,6 +12,7 @@ import plotly.io as pio
 
 from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
 from pixel_patrol_base.report.global_controls import (build_sidebar,
@@ -52,7 +53,13 @@ DEFAULT_WIDGET_WIDTH = 12
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
 
 
-def create_app(project: Project, initial_global_config: dict | None = None) -> Dash:
+def create_app(project: Project, initial_global_config: dict | None = None, report_config: ReportConfig | None = None) -> Dash:
+    # Merge report_config with initial_global_config (initial takes precedence)
+    if report_config:
+        report_dict = report_config.to_dict()
+        if initial_global_config:
+            report_dict = {**report_dict, **initial_global_config}
+        initial_global_config = report_dict
     return _create_app(
         df=project.records_df,
         default_palette_name=project.get_settings().cmap,
@@ -60,6 +67,7 @@ def create_app(project: Project, initial_global_config: dict | None = None) -> D
         project_name=project.name,
         project=project,
         initial_global_config=initial_global_config,
+        report_config=report_config,
     )
 
 
@@ -70,6 +78,7 @@ def _create_app(
         project_name: str,
         project: Project,
         initial_global_config: dict | None = None,
+        report_config: ReportConfig | None = None,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
 
@@ -89,6 +98,36 @@ def _create_app(
 
     # Discover widget instances (new or legacy)
     group_widgets: List[PixelPatrolWidget] = discover_widget_plugins()
+    
+    # Filter widgets based on report_config (using class name)
+    if report_config:
+        if report_config.widgets_included:
+            original_count = len(group_widgets)
+            original_names = {w.__class__.__name__ for w in group_widgets}
+            group_widgets = [w for w in group_widgets if w.__class__.__name__ in report_config.widgets_included]
+            filtered_names = {w.__class__.__name__ for w in group_widgets}
+            logger.info(f"Widget filtering (include mode): {len(group_widgets)}/{original_count} widgets included")
+            logger.debug(f"Requested: {report_config.widgets_included}")
+            logger.debug(f"Available: {original_names}")
+            logger.debug(f"Filtered: {filtered_names}")
+            if report_config.widgets_included - original_names:
+                logger.warning(f"Requested widget names not found: {report_config.widgets_included - original_names}")
+        elif report_config.widgets_excluded:
+            # Exclude widgets in the excluded set (using class name)
+            original_count = len(group_widgets)
+            original_names = {w.__class__.__name__ for w in group_widgets}
+            group_widgets = [w for w in group_widgets if w.__class__.__name__ not in report_config.widgets_excluded]
+            filtered_names = {w.__class__.__name__ for w in group_widgets}
+            logger.info(f"Widget filtering (exclude mode): {len(group_widgets)}/{original_count} widgets remaining after exclusion")
+            logger.debug(f"Excluded: {report_config.widgets_excluded}")
+            logger.debug(f"Available before: {original_names}")
+            logger.debug(f"Remaining after: {filtered_names}")
+            if report_config.widgets_excluded - original_names:
+                logger.warning(f"Some excluded widget names were not found: {report_config.widgets_excluded - original_names}")
+            excluded_found = report_config.widgets_excluded & original_names
+            still_present = report_config.widgets_excluded & filtered_names
+            if still_present:
+                logger.error(f"Widgets that should be excluded are still present: {still_present}")
 
     for w in group_widgets:
         if hasattr(w, "register"):
@@ -143,8 +182,9 @@ def _create_app(
         )
 
         # --- Sidebar with global controls (built once, outside content container) ---
+        initial_report_config = ReportConfig.from_dict(initial_global_config) if initial_global_config else report_config
         sidebar_controls, global_control_stores, extra_components = build_sidebar(
-            df, default_palette_name, initial_global_config=initial_global_config
+            df, default_palette_name, initial_report_config=initial_report_config
         )
 
         # --- Group Widget Layout Generation (content only) ---
@@ -237,12 +277,13 @@ def _create_app(
         Output(FILTERED_INDICES_STORE_ID, "data"),
         Input(GLOBAL_CONFIG_STORE_ID, "data"),
     )
-    def update_filtered_indices(global_config: Dict) -> List[int]:
+    def update_filtered_indices(global_config_dict: Dict) -> List[int]:
         """
         Compute filtered row POSITIONS once per global-config change.
         Widgets reuse these positions for fast positional indexing (df[positions]).
         """
-        return compute_filtered_row_positions(df, global_config)
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        return compute_filtered_row_positions(df, report_config)
 
 
     @app.callback(
@@ -253,17 +294,18 @@ def _create_app(
     )
     def update_color_map(
             subset_positions: List[int] | None,
-            global_config: Dict,
+            global_config_dict: Dict,
             palette: str,
     ) -> Dict[str, str]:
         """
         Build color map based on the *already filtered* subset and current grouping.
         """
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_processed, group_col, _resolved, _warning, order = prepare_widget_data(
             df,
             subset_positions,
-            global_config or {},
-            metric_base=None,  # just need grouping, no metric resolution
+            report_config,
+            metric_base=None,
         )
 
         if not group_col or group_col not in df_processed.columns or df_processed.is_empty():
@@ -314,29 +356,34 @@ def _create_app(
         ctx = callback_context
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
 
-        # Reset logic: return to defaults
         if trigger_id == GLOBAL_RESET_BUTTON_ID:
-            return {GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL, GC_FILTER: {}, GC_DIMENSIONS: {}}
+            report_config = ReportConfig(
+                group_col=DEFAULT_REPORT_GROUP_COL,
+                filter={},
+                dimensions={}
+            )
+        else:
+            group_col = group_col or DEFAULT_REPORT_GROUP_COL
 
-        # Single grouping column; default to report_group if nothing chosen
-        group_col = group_col or DEFAULT_REPORT_GROUP_COL
+            filters: Dict[str, Dict[str, object]] = {}
+            if filter_col and filter_op and filter_text:
+                raw = filter_text.strip()
+                if raw:
+                    filters[filter_col] = {"op": filter_op, "value": raw}
 
-        filters: Dict[str, Dict[str, object]] = {}
-        if filter_col and filter_op and filter_text:
-            raw = filter_text.strip()
-            if raw:
-                filters[filter_col] = {"op": filter_op, "value": raw}
+            dimensions = {}
+            for val, id_obj in zip(dim_values or [], dim_ids or []):
+                if val and val != "All":
+                    dimensions[id_obj['index']] = val
 
-        # Reconstruct dimensions dictionary from pattern-matched inputs
-        dimensions = {}
-        for val, id_obj in zip(dim_values or [], dim_ids or []):
-            if val and val != "All":
-                dimensions[id_obj['index']] = val
-
-        return {GC_GROUP_COL: group_col,
-                GC_FILTER: filters,
-                GC_DIMENSIONS: dimensions,
-                GC_IS_SHOW_SIGNIFICANCE: show_significance,}
+            report_config = ReportConfig(
+                group_col=group_col,
+                filter=filters if filters else None,
+                dimensions=dimensions if dimensions else None,
+                is_show_significance=show_significance
+            )
+        
+        return report_config.to_dict()
 
     @app.callback(
         Output(GLOBAL_GROUPBY_COLS_ID, "value"),
@@ -357,11 +404,12 @@ def _create_app(
         State(GLOBAL_CONFIG_STORE_ID, "data"),
         prevent_initial_call=True,
     )
-    def export_current_table_as_csv(n_clicks: int, global_config: Dict):
+    def export_current_table_as_csv(n_clicks: int, global_config_dict: Dict):
         if not n_clicks:
             raise PreventUpdate
 
-        df_filtered, group_col = apply_global_row_filters_and_grouping(df, global_config)
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        df_filtered, group_col = apply_global_row_filters_and_grouping(df, report_config)
 
         # add a human-readable group label column for clarity
         df_export = df_filtered.with_columns(
@@ -379,7 +427,7 @@ def _create_app(
         State(GLOBAL_CONFIG_STORE_ID, "data"),
         prevent_initial_call=True,
     )
-    def export_filtered_project(n_clicks: int, global_config: Dict):
+    def export_filtered_project(n_clicks: int, global_config_dict: Dict):
         if not n_clicks:
             raise PreventUpdate
 
@@ -388,8 +436,8 @@ def _create_app(
         from pathlib import Path
         from pixel_patrol_base import api as pp_api
 
-        # 1. Apply filters
-        df_filtered, _ = apply_global_row_filters_and_grouping(df, global_config)
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        df_filtered, _ = apply_global_row_filters_and_grouping(df, report_config)
 
         # 2. Clone the project and override records_df
         new_project = copy.copy(project)
@@ -432,7 +480,7 @@ def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence
     - REQUIRES_PATTERNS: regex patterns; each must match at least one column
     """
     cols = set(available_columns)
-    name = getattr(widget, "NAME", widget.__class__.__name__)
+    name = widget.__class__.__name__
 
     requires = set(getattr(widget, "REQUIRES", set()) or set())
     patterns = list(getattr(widget, "REQUIRES_PATTERNS", []) or [])
