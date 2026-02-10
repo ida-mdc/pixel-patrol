@@ -1,8 +1,12 @@
-# PixelPatrol: Scientific Dataset Quality Control and Data Exploration Tool
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/prevalidation.png" width="80">  PixelPatrol 
+### Scientific Dataset Quality Control and Data Exploration Tool
+
+<img src="readme_assets/HI_logo.jpg" width="80"> 
 
 PixelPatrol is an early-version tool designed for the systematic validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
 
-![Overview of the PixelPatrol dashboard, showing interactive data exploration.](readme_assets/overview.png)
+<img src="readme_assets/overview.png" width="">   
+
 *PixelPatrol's main dashboard provides an interface for dataset exploration.*
 
 ## Features
