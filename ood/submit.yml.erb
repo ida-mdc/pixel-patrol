@@ -1,0 +1,21 @@
+---
+batch_connect:
+  template: "basic"
+  script_file: "template/script.sh"
+  set_host: "host=$(hostname -f)"
+  # Optional: set port range for multi-user
+  min_port: 8050
+  max_port: 9000
+script:
+  accounting_id: ""
+  queue_name: "<%= bc_queue %>"
+  wall_time: "<%= bc_num_hours.to_i * 3600 %>"
+  # Configure for your cluster. $HOME is bound automatically by the script.
+  job_environment:
+    PIXEL_PATROL_SIF_PATH: "/path/to/pixel-patrol.sif"
+    # Bind cluster filesystems. Format: host:container or host:container:ro (read-only).
+    # Examples: /scratch:/scratch:ro, /projects:/projects:ro, /gpfs:/gpfs:ro
+    PIXEL_PATROL_BIND_PATHS: ""
+  native:
+    - "-J"
+    - "pixel-patrol"

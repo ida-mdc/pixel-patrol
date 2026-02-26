@@ -1,0 +1,27 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+%labels
+  Author Pixel Patrol
+  Version 0.4.0
+
+%help
+  Pixel Patrol - Image prevalidation and quality control tool.
+
+  Run the processing dashboard:
+    apptainer run pixel-patrol.sif launch
+
+  Run the report viewer:
+    apptainer run pixel-patrol.sif report /path/to/project.zip
+
+  Paths: Apptainer binds $HOME by default. Use paths under your home
+  (e.g. $HOME/projects/imaging) for base directory and output ZIP.
+
+%environment
+  export PIXEL_PATROL_HOST=0.0.0.0
+
+%post
+  pip install --no-cache-dir pixel-patrol
+
+%runscript
+  exec pixel-patrol "$@"

@@ -1,0 +1,9 @@
+---
+name: Pixel Patrol
+description: |
+  Image prevalidation and quality control tool. Configure processing,
+  monitor progress, and launch reports for scientific image datasets.
+role: batch_connect
+submenu: false
+icon: fas://chart-line
+category: Interactive Apps

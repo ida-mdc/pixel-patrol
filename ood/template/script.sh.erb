@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Pixel Patrol launch script for OOD. Runs the processing dashboard inside
+# an Apptainer container. Configure PIXEL_PATROL_SIF_PATH for your site.
+#
+
+# Load Apptainer/Singularity if your site uses modules
+module load apptainer 2>/dev/null || module load singularity 2>/dev/null || true
+
+# Path to the Pixel Patrol SIF image. Set in cluster config or here.
+# Example: /apps/pixel-patrol/pixel-patrol.sif
+export PIXEL_PATROL_SIF_PATH="${PIXEL_PATROL_SIF_PATH:-/path/to/pixel-patrol.sif}"
+
+if [[ ! -f "$PIXEL_PATROL_SIF_PATH" ]]; then
+  echo "ERROR: Pixel Patrol image not found at $PIXEL_PATROL_SIF_PATH"
+  echo "Set PIXEL_PATROL_SIF_PATH in the cluster config or submit.yml.erb"
+  exit 1
+fi
+
+# Apptainer binds $HOME by default - paths under $HOME work for base dir and output ZIP
+export PIXEL_PATROL_DEFAULT_BASE_DIR="${HOME}"
+export PIXEL_PATROL_DEFAULT_OUTPUT_ZIP="${HOME}/pixel-patrol-project.zip"
+
+# Build -B args for cluster filesystems. Set PIXEL_PATROL_BIND_PATHS in submit.yml.erb.
+# Format: comma-separated "host:container" or "host:container:ro" (read-only).
+# Example: /scratch:/scratch:ro,/projects:/projects:ro
+BIND_ARGS="-B ${HOME}:${HOME}"
+if [[ -n "${PIXEL_PATROL_BIND_PATHS}" ]]; then
+  for spec in $(echo "$PIXEL_PATROL_BIND_PATHS" | tr ',' ' '); do
+    [[ -n "$spec" ]] && BIND_ARGS="$BIND_ARGS -B $spec"
+  done
+fi
+
+# Find an available port (OOD basic template provides this)
+port=$(find_port $min_port $max_port)
+
+# Write connection info for OOD
+export host
+export port
+(
+  echo "host: $host"
+  echo "port: $port"
+) > "$conn_file"
+
+# Run Pixel Patrol. BIND_ARGS mounts cluster filesystems (read-only for input is sufficient).
+exec apptainer exec $BIND_ARGS \
+  "$PIXEL_PATROL_SIF_PATH" \
+  launch --host 0.0.0.0 --port "$port"
