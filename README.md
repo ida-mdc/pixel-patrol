@@ -215,6 +215,10 @@ pixel-patrol report examples/out/my_project.zip --export-html out/report.html
 
 Note: the exporter requires `Playwright` dependency, without it an ImportError is raised.
 
+### Containers (Docker, Apptainer, Open OnDemand)
+
+See [CONTAINER.md](CONTAINER.md) for path mounting, building images, and OOD setup. **OOD admins**: [ood/README.md](ood/README.md).
+
 ### Troubleshooting
 
 * The CLI validates loader names at runtime; if you see `Unknown loader`, ensure the corresponding plug-in package is installed and available in the active environment.

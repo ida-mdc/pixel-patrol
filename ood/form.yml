@@ -1,0 +1,18 @@
+---
+cluster: "default"
+form:
+  - bc_queue
+  - bc_num_hours
+attributes:
+  bc_queue:
+    widget: select
+    label: "Partition"
+    options:
+      - ["default", "default"]
+  bc_num_hours:
+    widget: number_field
+    label: "Number of hours"
+    value: 1
+    min: 1
+    max: 24
+    step: 1

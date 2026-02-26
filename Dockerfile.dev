@@ -1,0 +1,25 @@
+# Dockerfile.dev - Build from local source for testing without publishing
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy package source (build context should be repo root)
+COPY packages/ /app/packages/
+
+# Install from local source in dependency order (so our unpublished changes are used)
+RUN pip install --no-cache-dir /app/packages/pixel-patrol-base \
+    && pip install --no-cache-dir /app/packages/pixel-patrol-image \
+    && pip install --no-cache-dir /app/packages/pixel-patrol-loader-bio \
+    && pip install --no-cache-dir /app/packages/pixel-patrol
+
+# Create a volume mount point for data
+VOLUME /data
+
+# Expose dashboard ports (8050=report, 8051=launch/processing)
+EXPOSE 8050 8051
+
+# Bind to 0.0.0.0 so the server is accessible from outside the container
+ENV PIXEL_PATROL_HOST=0.0.0.0
+
+ENTRYPOINT ["pixel-patrol"]
+CMD ["--help"]

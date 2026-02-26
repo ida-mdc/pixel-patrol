@@ -6,6 +6,7 @@ This app provides a web interface to:
 2. Monitor processing progress in real-time
 3. Launch the report dashboard after processing completes
 """
+import os
 import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -298,11 +299,12 @@ def _create_layout(app: Dash) -> html.Div:
                                                                             dbc.Input(
                                                                                 id="base-directory",
                                                                                 type="text",
-                                                                                placeholder="/path/to/dataset",
+                                                                                placeholder=os.environ.get("PIXEL_PATROL_DEFAULT_BASE_DIR", "/path/to/dataset"),
+                                                                                value=os.environ.get("PIXEL_PATROL_DEFAULT_BASE_DIR", ""),
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Path to root folder containing your dataset",
+                                                                                "Path to root folder containing your dataset. In containers (Docker/Apptainer), use mounted paths (e.g. $HOME or /data).",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -317,7 +319,8 @@ def _create_layout(app: Dash) -> html.Div:
                                                                             dbc.Input(
                                                                                 id="output-zip",
                                                                                 type="text",
-                                                                                placeholder="project.zip",
+                                                                                placeholder=os.environ.get("PIXEL_PATROL_DEFAULT_OUTPUT_ZIP", "project.zip"),
+                                                                                value=os.environ.get("PIXEL_PATROL_DEFAULT_OUTPUT_ZIP", ""),
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
