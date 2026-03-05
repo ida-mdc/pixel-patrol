@@ -23,25 +23,53 @@ logger = logging.getLogger(__name__)
 
 PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
+# Simple in-process caches so we don't repeatedly hit entry points or spam logs
+_CACHED_LOADER_PLUGINS: list[PixelPatrolLoader] | None = None
+_CACHED_PROCESSOR_PLUGINS: list[PixelPatrolProcessor] | None = None
+_CACHED_WIDGET_PLUGINS: list[PixelPatrolWidget] | None = None
+
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
-    plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
-    logger.info(f'Discovered loader plugins: {", ".join([plugin.NAME for plugin in plugins])}')
+    global _CACHED_LOADER_PLUGINS
+    if _CACHED_LOADER_PLUGINS is None:
+        plugin_classes = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
+        _CACHED_LOADER_PLUGINS = [plugin_class() for plugin_class in plugin_classes]
+        logger.info(
+            "Discovered loader plugins: %s",
+            ", ".join([plugin.NAME for plugin in _CACHED_LOADER_PLUGINS]),
+        )
+    plugins = _CACHED_LOADER_PLUGINS
     for loader_plugin in plugins:
         if loader_plugin.NAME == loader_id:
-            return loader_plugin()
-    raise RuntimeError(f'Could not find loader plugin "{loader_id}" in discovered loader plugins: {[plugin.NAME for plugin in plugins]}')
+            # loader_plugin is already an instantiated loader; just return it.
+            return loader_plugin
+    raise RuntimeError(
+        f'Could not find loader plugin "{loader_id}" in discovered loader plugins: '
+        f'{[plugin.NAME for plugin in plugins]}'
+    )
 
 def discover_processor_plugins() -> List[PixelPatrolProcessor]:
-    plugins = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
-    initialized_plugins = [plugin() for plugin in plugins]
-    logger.info(f'Discovered processor plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
-    return initialized_plugins
+    global _CACHED_PROCESSOR_PLUGINS
+    if _CACHED_PROCESSOR_PLUGINS is None:
+        plugin_classes = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
+        _CACHED_PROCESSOR_PLUGINS = [plugin_class() for plugin_class in plugin_classes]
+        logger.info(
+            "Discovered processor plugins: %s",
+            ", ".join([plugin.NAME for plugin in _CACHED_PROCESSOR_PLUGINS]),
+        )
+    # Return a shallow copy so callers can't mutate our cache
+    return list(_CACHED_PROCESSOR_PLUGINS)
 
 def discover_widget_plugins() -> List[PixelPatrolWidget]:
-    plugins = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
-    initialized_plugins = [plugin() for plugin in plugins]
-    logger.info(f'Discovered widget plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
-    return initialized_plugins
+    global _CACHED_WIDGET_PLUGINS
+    if _CACHED_WIDGET_PLUGINS is None:
+        plugin_classes = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
+        _CACHED_WIDGET_PLUGINS = [plugin_class() for plugin_class in plugin_classes]
+        logger.info(
+            "Discovered widget plugins: %s",
+            ", ".join([plugin.NAME for plugin in _CACHED_WIDGET_PLUGINS]),
+        )
+    # Return a shallow copy so callers can't mutate our cache
+    return list(_CACHED_WIDGET_PLUGINS)
 
 
 def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
