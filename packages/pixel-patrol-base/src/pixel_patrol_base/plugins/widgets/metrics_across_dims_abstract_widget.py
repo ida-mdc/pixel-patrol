@@ -35,9 +35,10 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             html.Div(id=f"{self.widget_id}-table-container"),
         ]
 
-    def register(self, app, df: pl.DataFrame) -> None:
+    def register(self, app, df: pl.DataFrame | None) -> None:
         self._df = df
-        self._cache_parsed_columns(df.columns)
+        if df is not None:
+            self._cache_parsed_columns(df.columns)
 
         app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
@@ -53,6 +54,13 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
             global_config: Dict | None,
     ):
         """Render the table of metrics vs. dimensions with distribution-aware sparklines."""
+
+        # Lazy-initialise column cache when pre-registered at startup without a df.
+        if self._parsed_cols_cache is None:
+            from pixel_patrol_base.report.context import get_report_context
+            ctx_df = get_report_context()[0]
+            if ctx_df is not None:
+                self._cache_parsed_columns(ctx_df.columns)
 
         parsed_cols = self._parsed_cols_cache
         if not parsed_cols:
