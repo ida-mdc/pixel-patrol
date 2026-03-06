@@ -7,6 +7,8 @@ import polars as pl
 import pytest
 from PIL import Image
 
+
+
 from pixel_patrol_base.core.file_system import _aggregate_folder_sizes
 from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol_base.core.project import Project
