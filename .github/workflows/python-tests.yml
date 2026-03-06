@@ -38,7 +38,19 @@ jobs:
           uv venv
 
       - name: Install package dependencies
-        run: uv pip install -e .
+        run: uv sync --group dev
+
+      - name: Install Chrome and ChromeDriver (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          CHROME_MAJOR_VERSION=$(google-chrome --version | cut -f 3 -d ' ' | cut -f 1 -d '.')
+          CHROMEDRIVER_VERSION=$(curl -sS "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_MAJOR_VERSION}")
+          wget -q -O /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip"
+          unzip -o /tmp/chromedriver.zip -d /tmp/
+          sudo mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          sudo chmod +x /usr/local/bin/chromedriver
 
       - name: Check key package versions
         run: |
@@ -46,4 +58,10 @@ jobs:
           uv pip freeze
 
       - name: Run tests
-        run: uv run pytest -vv
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.package }}" = "pixel-patrol-base" ]; then
+            EXTRA_ARGS="--headless"
+          fi
+          uv run pytest -vv $EXTRA_ARGS
+        shell: bash

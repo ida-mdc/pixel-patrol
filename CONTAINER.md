@@ -80,23 +80,27 @@ apptainer build pixel-patrol.sif pixel-patrol.def
 
 ## Running
 
+The launcher app runs on **one port** (8051). It uses `$HOME/pixel-patrol` to store reports and their index. You see a list of existing reports (paths, subpaths, file filters) and can add new ones with a minimal form. Reports open at `/report?zip=...` on the same server. Single-port setup works on clusters.
+
+Set `PIXEL_PATROL_REPORTS_DIR` to override the reports directory (default: `$HOME/pixel-patrol`).
+
 ### Docker
 
 ```bash
-# Processing dashboard (port 8051)
+# Launcher + reports (single port 8051, stores in $HOME/pixel-patrol)
 docker run -p 8051:8051 -v $HOME:$HOME pixel-patrol launch
 
-# Report viewer (port 8050)
+# Standalone report viewer (for viewing existing ZIPs without launcher)
 docker run -p 8050:8050 -v $HOME:$HOME pixel-patrol report /path/to/project.zip
 ```
 
 ### Apptainer
 
 ```bash
-# Processing dashboard
+# Processing + report (single port)
 apptainer run pixel-patrol.sif launch
 
-# Report viewer
+# Standalone report viewer
 apptainer run pixel-patrol.sif report /path/to/project.zip
 ```
 

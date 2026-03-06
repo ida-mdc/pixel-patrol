@@ -130,20 +130,24 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
 
 @cli.command()
 @click.option('--port', type=int, default=8051, show_default=True,
-              help='Port number for the Dash processing dashboard server.')
+              help='Port number for the Pixel Patrol launcher server.')
 @click.option('--host', type=str, default=lambda: os.environ.get("PIXEL_PATROL_HOST", "127.0.0.1"),
               help='Host to bind to. Use 0.0.0.0 for Docker/remote access. Default: 127.0.0.1 (or PIXEL_PATROL_HOST env var).')
 def launch(port: int, host: str):
     """
-    Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
+    Launch the Pixel Patrol web interface.
+
+    Lists existing reports, lets you add new ones (with background processing),
+    and opens them in a built-in report viewer — all on a single port.
+    Reports are stored in PIXEL_PATROL_REPORTS_DIR (default: ~/pixel-patrol-reports).
     """
     from pixel_patrol_base.processing_dashboard import create_processing_app
 
     app = create_processing_app()
     display_host = "localhost" if host == "0.0.0.0" else host
     dashboard_url = f"http://{display_host}:{port}"
-    click.echo(f"Processing dashboard will run on {dashboard_url}/")
-    click.echo("Attempting to open dashboard in your default browser...")
+    click.echo(f"Pixel Patrol will run on {dashboard_url}/")
+    click.echo("Attempting to open in your default browser...")
 
     def _open_browser():
         if not os.environ.get("WERKZEUG_RUN_MAIN"):
@@ -151,7 +155,7 @@ def launch(port: int, host: str):
 
     Timer(1, _open_browser).start()
 
-    click.echo("Starting processing dashboard...")
+    click.echo("Starting Pixel Patrol...")
     app.run(debug=False, host=host, port=port, use_reloader=False)
 
 

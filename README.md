@@ -97,9 +97,9 @@ See `examples/minimal-extension` for a minimal template.
 1. Install PixelPatrol (Instructions are in the previous section).
 2. Have all the files you would like to inspect under a common base directory.
 3. You can also specify subdirectory within the base directory - only those directories will be processed.
-4. Process your data - choose your way:  
-   * Visual Interface: Run `pixel-patrol launch` to configure and process your data using a web interface.
-   * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
+4. Process your data - choose your way:
+   * Visual Interface: Run `pixel-patrol launch` to open the web-based report manager, which lets you add datasets, run processing in the background, and explore reports — all in one place.
+   * OR use the Command Line: Run `pixel-patrol export` via the CLI for automated or batch processing.
    * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
 
@@ -113,10 +113,13 @@ See `examples/minimal-extension` for a minimal template.
         ![Statistical plots showing image dimensions and distributions.](readme_assets/example_stats_plot.png)
 
 
-## Interactive Processing Dashboard
+## Interactive Report Manager
 
-For users who prefer a visual interface over command-line arguments, PixelPatrol includes the Processing Dashboard.  
-This will open a web browser tab that allows you to quickly and interactively configure your project.
+For users who prefer a visual interface, PixelPatrol includes a web-based report manager.
+It lists all your existing reports, lets you add new datasets and run processing in the background,
+and opens any report in a built-in viewer — all on a single port with no extra setup.
+
+Reports are stored as ZIP files under `~/pixel-patrol` by default (override with `PIXEL_PATROL_REPORTS_DIR`).
 
 To launch it, open your terminal (activate the env) and run:
 
