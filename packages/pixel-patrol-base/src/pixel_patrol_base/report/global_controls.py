@@ -609,7 +609,7 @@ def resolve_group_column(df: pl.DataFrame, global_config: Optional[Dict]) -> str
 
 
 def prepare_widget_data(
-        df: pl.DataFrame,
+        df: Optional[pl.DataFrame],
         subset_row_positions: Optional[List[int]],
         global_config: Dict,
         metric_base: Optional[str] = None
@@ -620,9 +620,19 @@ def prepare_widget_data(
     Uses module-level cache for the base computation (filtering + grouping).
     Metric resolution still happens per widget since it varies.
 
+    When ``df`` is None (widgets pre-registered at startup before any project
+    is loaded), the current report project is fetched from the module-level
+    context set by ``build_report_layout``.
+
     Returns:
         (df_filtered, group_col, resolved_column_name, warning_message, group_order)
     """
+    if df is None:
+        from pixel_patrol_base.report.context import get_report_context
+        df = get_report_context()[0]
+    if df is None:
+        return pl.DataFrame(), "", None, "No data available.", None
+
     # Use cached base computation
     df_filtered, group_col, group_order = _prepare_cache.get_or_compute(
         df, subset_row_positions, global_config
