@@ -12,6 +12,8 @@ Covers:
 from __future__ import annotations
 
 import json
+import platform
+import stat
 import threading
 from pathlib import Path
 from unittest.mock import patch
@@ -316,19 +318,187 @@ def test_install_error_streams_error_msg_event(flask_client, tmp_path, monkeypat
     assert "uv not found" in body
 
 
+# ── _pp_cmd ────────────────────────────────────────────────────────────────────
+
+def test_pp_cmd_frozen_uses_venv_binary(tmp_path, monkeypatch):
+    fake_bin = tmp_path / "bin" / "pixel-patrol"
+    fake_bin.parent.mkdir(parents=True)
+    fake_bin.touch()
+    monkeypatch.setattr(launcher, "VENV_DIR", tmp_path)
+    with patch("launcher.sys") as mock_sys:
+        mock_sys.frozen = True
+        cmd = launcher._pp_cmd()
+    assert cmd == [str(fake_bin)]
+
+
+def test_pp_cmd_dev_mode_uses_current_interpreter():
+    with patch("launcher.sys") as mock_sys:
+        mock_sys.frozen = False
+        mock_sys.executable = "/fake/python"
+        cmd = launcher._pp_cmd()
+    assert cmd[0] == "/fake/python"
+    assert "-m" in cmd
+    assert "pixel_patrol_base.cli" in cmd
+
+
+def test_pp_cmd_dev_mode_does_not_reference_venv():
+    """In dev mode the venv binary must NOT appear in the command."""
+    with patch("launcher.sys") as mock_sys:
+        mock_sys.frozen = False
+        mock_sys.executable = "/fake/python"
+        cmd = launcher._pp_cmd()
+    assert not any(".pixel-patrol" in part for part in cmd)
+
+
+# ── _mimes_for_loader_pkgs ─────────────────────────────────────────────────────
+
+def test_mimes_for_bio_loader():
+    mimes = launcher._mimes_for_loader_pkgs(["pixel-patrol-loader-bio"])
+    assert "image/tiff" in mimes
+    assert "image/png" in mimes
+    assert "image/jpeg" in mimes
+    assert "image/x-zeiss-czi" in mimes
+    assert "image/x-nikon-nd2" in mimes
+
+
+def test_mimes_for_empty_loader_pkgs():
+    assert launcher._mimes_for_loader_pkgs([]) == []
+
+
+def test_mimes_for_unknown_package():
+    assert launcher._mimes_for_loader_pkgs(["pixel-patrol-nonexistent"]) == []
+
+
+def test_mimes_for_aqqua_loader():
+    mimes = launcher._mimes_for_loader_pkgs(["pixel-patrol-aqqua"])
+    assert "application/x-lmdb" in mimes
+    assert "application/x-mdb" in mimes
+
+
+def test_mimes_are_sorted():
+    mimes = launcher._mimes_for_loader_pkgs(["pixel-patrol-loader-bio"])
+    assert mimes == sorted(mimes)
+
+
+# ── install_desktop_entry ──────────────────────────────────────────────────────
+
+@pytest.fixture()
+def desktop_env(tmp_path, monkeypatch):
+    """Redirect all paths and stub subprocess for desktop-entry tests."""
+    monkeypatch.setattr(launcher, "APP_DIR", tmp_path / "app")
+    monkeypatch.setattr(launcher, "LAUNCHER_DIR", tmp_path / "app" / "launcher")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(launcher.subprocess, "run", lambda *a, **kw: None)
+    return tmp_path
+
+
+def _desktop_file(tmp_path: Path) -> Path:
+    return tmp_path / ".local" / "share" / "applications" / "pixel-patrol.desktop"
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_creates_file(desktop_env):
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    assert _desktop_file(desktop_env).exists()
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_exec_line(desktop_env):
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    content = _desktop_file(desktop_env).read_text()
+    assert "Exec=" in content
+    assert "%f" in content
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_mime_types(desktop_env):
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    content = _desktop_file(desktop_env).read_text()
+    assert "MimeType=" in content
+    assert "image/tiff" in content
+    assert "image/png" in content
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_empty_loader_pkgs(desktop_env):
+    """No loader packages → desktop file still created, MimeType is empty."""
+    launcher.install_desktop_entry([])
+    content = _desktop_file(desktop_env).read_text()
+    assert "MimeType=\n" in content
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_execute_bit(desktop_env):
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    f = _desktop_file(desktop_env)
+    assert f.stat().st_mode & stat.S_IEXEC, ".desktop file must have execute bit set"
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_required_fields(desktop_env):
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    content = _desktop_file(desktop_env).read_text()
+    for field in ("Type=Application", "Name=Pixel Patrol", "Categories="):
+        assert field in content, f"Missing field: {field!r}"
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_idempotent(desktop_env):
+    """Calling twice must not raise and must overwrite with the same content."""
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    content1 = _desktop_file(desktop_env).read_text()
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    content2 = _desktop_file(desktop_env).read_text()
+    assert content1 == content2
+
+
+def test_install_desktop_entry_noop_on_non_linux(desktop_env):
+    """On non-Linux platforms the function must return without creating any file."""
+    with patch("launcher.platform.system", return_value="Darwin"):
+        launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+    assert not _desktop_file(desktop_env).exists()
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_desktop_entry_survives_write_error(desktop_env, monkeypatch):
+    """Errors must be caught and not propagate."""
+    # Make mkdir raise to trigger the exception path
+    monkeypatch.setattr(Path, "mkdir", lambda *a, **kw: (_ for _ in ()).throw(PermissionError("no")))
+    # Should not raise
+    launcher.install_desktop_entry(["pixel-patrol-loader-bio"])
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux only")
+def test_install_route_installs_desktop_entry(flask_client, tmp_path, monkeypatch):
+    """/install SSE stream must call install_desktop_entry on Linux."""
+    called_with: list = []
+
+    def fake_install(pkgs, progress_cb=None):
+        called_with.append(pkgs)
+
+    _patch_install_deps(monkeypatch, tmp_path)
+    monkeypatch.setattr(launcher, "install_desktop_entry", fake_install)
+    flask_client.get("/install?loaders=bio")
+    assert called_with, "install_desktop_entry was not called during /install"
+    assert "pixel-patrol-loader-bio" in called_with[0]
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _patch_install_deps(monkeypatch, tmp_path, setup_fn=None):
     """Redirect every home-dir path to tmp_path and stub heavy operations."""
-    monkeypatch.setattr(launcher, "APP_DIR",     tmp_path)
-    monkeypatch.setattr(launcher, "VENV_DIR",    tmp_path / "venv")
-    monkeypatch.setattr(launcher, "CONFIG_FILE", tmp_path / "config.json")
-    monkeypatch.setattr(launcher, "UV_BIN_DIR",  tmp_path / "uv-bin")
+    monkeypatch.setattr(launcher, "APP_DIR",      tmp_path)
+    monkeypatch.setattr(launcher, "LAUNCHER_DIR", tmp_path / "launcher")
+    monkeypatch.setattr(launcher, "VENV_DIR",     tmp_path / "venv")
+    monkeypatch.setattr(launcher, "CONFIG_FILE",  tmp_path / "config.json")
+    monkeypatch.setattr(launcher, "UV_BIN_DIR",   tmp_path / "uv-bin")
     monkeypatch.setattr(launcher, "get_uv", lambda *a, **kw: Path("/fake/uv"))
     monkeypatch.setattr(
         launcher, "setup_environment",
         setup_fn if setup_fn is not None else (lambda uv, pkgs, line_cb=None: None),
     )
     monkeypatch.setattr(launcher, "launch_pixel_patrol", lambda: None)
+    # Stub desktop integration — dedicated tests cover it separately
+    monkeypatch.setattr(launcher, "install_desktop_entry", lambda *a, **kw: None)
 
 
