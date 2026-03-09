@@ -321,7 +321,11 @@ def test_install_error_streams_error_msg_event(flask_client, tmp_path, monkeypat
 # ── _pp_cmd ────────────────────────────────────────────────────────────────────
 
 def test_pp_cmd_frozen_uses_venv_binary(tmp_path, monkeypatch):
-    fake_bin = tmp_path / "bin" / "pixel-patrol"
+    import platform
+    if platform.system() == "Windows":
+        fake_bin = tmp_path / "Scripts" / "pixel-patrol.exe"
+    else:
+        fake_bin = tmp_path / "bin" / "pixel-patrol"
     fake_bin.parent.mkdir(parents=True)
     fake_bin.touch()
     monkeypatch.setattr(launcher, "VENV_DIR", tmp_path)

@@ -1,5 +1,7 @@
 import os
 import shutil
+import threading
+import time
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -13,12 +15,57 @@ from pixel_patrol_base.api import (
     process_files,
     export_project,
     import_project,
-    show_report,
     export_html_report,
 )
 from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
 from pixel_patrol_base.report.constants import NO_GROUPING_COL
+
+
+def _serve_in_window(
+    serve_fn,
+    url: str,
+    title: str = "Pixel Patrol",
+    width: int = 1440,
+    height: int = 900,
+) -> None:
+    """Start *serve_fn* in a background thread and open a native webview window.
+
+    Falls back to the system browser when pywebview is not installed or when
+    running in a headless / remote-host context (host != 127.0.0.1).
+    """
+    try:
+        import os as _os
+        _os.environ.setdefault("PYWEBVIEW_GUI", "qt")
+        _os.environ.setdefault("QT_API", "pyside6")
+        import webview  # type: ignore
+        _has_webview = True
+    except ImportError:
+        _has_webview = False
+
+    if _has_webview:
+        t = threading.Thread(target=serve_fn, daemon=True)
+        t.start()
+        time.sleep(0.8)  # Give Flask/Dash a moment to bind the port
+
+        _icon_path = Path(__file__).parent / "report" / "assets" / "icon.png"
+
+        def _set_icon():
+            try:
+                from PySide6.QtGui import QIcon
+                from PySide6.QtWidgets import QApplication
+                app = QApplication.instance()
+                if app and _icon_path.exists():
+                    app.setWindowIcon(QIcon(str(_icon_path)))
+            except Exception:
+                pass
+
+        window = webview.create_window(title, url, width=width, height=height)
+        webview.start(func=_set_icon)
+    else:
+        # Graceful degradation: open in system browser, block on server
+        Timer(1.0, lambda: webbrowser.open(url)).start()
+        serve_fn()
 
 
 @click.group()
@@ -146,17 +193,17 @@ def launch(port: int, host: str):
     app = create_processing_app()
     display_host = "localhost" if host == "0.0.0.0" else host
     dashboard_url = f"http://{display_host}:{port}"
-    click.echo(f"Pixel Patrol will run on {dashboard_url}/")
-    click.echo("Attempting to open in your default browser...")
+    click.echo(f"Starting Pixel Patrol at {dashboard_url}/")
 
-    def _open_browser():
-        if not os.environ.get("WERKZEUG_RUN_MAIN"):
-            webbrowser.open_new_tab(dashboard_url)
-
-    Timer(1, _open_browser).start()
-
-    click.echo("Starting Pixel Patrol...")
-    app.run(debug=False, host=host, port=port, use_reloader=False)
+    if host not in ("127.0.0.1", "localhost"):
+        # Remote / Docker mode — can't open a local window; use browser.
+        Timer(1, lambda: webbrowser.open_new_tab(dashboard_url)).start()
+        app.run(debug=False, host=host, port=port, use_reloader=False)
+    else:
+        _serve_in_window(
+            lambda: app.run(debug=False, host=host, port=port, use_reloader=False),
+            url=dashboard_url,
+        )
 
 
 @cli.command()
@@ -208,8 +255,79 @@ def report(input_zip: Path, port: int, host: str, group_by: str | None, filter_c
         export_html_report(my_project, export_html, host=host, port=port, global_config=global_config)
         click.echo(f"HTML export complete: {export_html}")
     else:
-        # Launch interactive dashboard
-        show_report(my_project, host=host, port=port, global_config=global_config)
+        from pixel_patrol_base.report.dashboard_app import create_app
+        from pixel_patrol_base.report.global_controls import init_global_config
+
+        sanitized = init_global_config(my_project.records_df, global_config)
+        app = create_app(my_project, initial_global_config=sanitized)
+        url = f"http://{'localhost' if host == '0.0.0.0' else host}:{port}/"
+
+        if host not in ("127.0.0.1", "localhost"):
+            Timer(1, lambda: webbrowser.open(url)).start()
+            app.run(debug=False, host=host, port=port, use_reloader=False)
+        else:
+            _serve_in_window(
+                lambda: app.run(debug=False, host=host, port=port, use_reloader=False),
+                url=url,
+                title=f"Pixel Patrol – {my_project.name}",
+            )
+
+
+@cli.command()
+@click.argument("path", type=click.Path(exists=True, file_okay=True, dir_okay=True, path_type=Path))
+@click.option("--loader", "loader_name", default=None,
+              help="Loader plugin name to use (auto-detected from extension if omitted).")
+@click.option("--port", type=int, default=0, show_default=True,
+              help="Port for the inspection report (0 = pick a free port automatically).")
+@click.option("--host", type=str, default=lambda: os.environ.get("PIXEL_PATROL_HOST", "127.0.0.1"),
+              help="Host to bind to. Default: 127.0.0.1 (or PIXEL_PATROL_HOST env var).")
+def inspect(path: Path, loader_name: str | None, port: int, host: str):
+    """Process a single file and open an interactive inspection report."""
+    from pixel_patrol_base.plugin_registry import (
+        detect_loaders_for_file,
+        discover_loader,
+        discover_processor_plugins,
+    )
+    from pixel_patrol_base.report.inspect_app import create_inspect_app
+
+    # ── Resolve loader ─────────────────────────────────────────────────────────
+    if loader_name:
+        loader = discover_loader(loader_name)
+    else:
+        candidates = detect_loaders_for_file(path)
+        if not candidates:
+            raise click.ClickException(
+                f"No installed loader supports '{path.suffix}'. "
+                "Try installing a compatible loader package (e.g. pixel-patrol-loader-bio)."
+            )
+        loader = candidates[0]
+        click.echo(f"Using loader: {loader.NAME}")
+
+    processors = discover_processor_plugins()
+
+    # ── Pick a free port if none given ─────────────────────────────────────────
+    if port == 0:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _s:
+            _s.bind((host, 0))
+            port = _s.getsockname()[1]
+
+    # ── Build app (processing happens in background inside the app) ────────────
+    app = create_inspect_app(path, loader, processors)
+    url = f"http://{host}:{port}/"
+    click.echo(f"Opening inspection report at {url}")
+
+    if host not in ("127.0.0.1", "localhost"):
+        Timer(1.0, lambda: webbrowser.open(url)).start()
+        app.run(debug=False, host=host, port=port, use_reloader=False)
+    else:
+        _serve_in_window(
+            lambda: app.run(debug=False, host=host, port=port, use_reloader=False),
+            url=url,
+            title=f"Pixel Patrol – {path.name}",
+            width=1100,
+            height=780,
+        )
 
 
 if __name__ == '__main__':
