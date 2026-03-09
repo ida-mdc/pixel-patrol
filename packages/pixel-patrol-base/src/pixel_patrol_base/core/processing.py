@@ -979,15 +979,20 @@ def optimize_dtypes(
     """
     Shrink integer dtypes (via Series.shrink_dtype()) and downcast floats safely.
     """
+    # Columns that must stay Int64 because their per-row values may fit in a
+    # smaller type but aggregates (sums across many files) would overflow.
+    _NO_SHRINK = {"size_bytes"}
+
     series_updates = []
     for col_name in df.columns:
         s = df[col_name]
         dtype = s.dtype
 
         if dtype.is_integer():
-            shrunk = s.shrink_dtype()
-            if shrunk.dtype != dtype:
-                series_updates.append(shrunk)
+            if col_name not in _NO_SHRINK:
+                shrunk = s.shrink_dtype()
+                if shrunk.dtype != dtype:
+                    series_updates.append(shrunk)
             continue
 
         if shrink_floats and dtype == pl.Float64:
