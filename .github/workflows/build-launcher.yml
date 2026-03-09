@@ -1,0 +1,93 @@
+name: Build Launcher
+
+on:
+  push:
+    tags:
+      - 'launcher-v*'
+    paths:
+      - 'deploy/launcher/**'
+      - 'packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/**'
+  pull_request:
+    paths:
+      - 'deploy/launcher/**'
+  workflow_dispatch:
+
+jobs:
+  test-launcher:
+    name: Test launcher (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: deploy/launcher
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install flask pytest
+
+      - name: Run launcher tests
+        run: pytest tests/ -vv
+
+  build-launcher:
+    name: Build binary (${{ matrix.os }})
+    needs: test-launcher
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: pip install pyinstaller flask
+
+      - name: Build binary (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: |
+          ASSETS="$(pwd)/packages/pixel-patrol-base/src/pixel_patrol_base/report/assets"
+          pyinstaller \
+            --onefile \
+            --name pixel-patrol-launcher \
+            --distpath deploy/launcher/dist \
+            --workpath deploy/launcher/build \
+            --specpath deploy/launcher \
+            --hidden-import flask \
+            --add-data "${ASSETS}/icon.png:." \
+            --add-data "${ASSETS}/Helmholtz-Imaging_Mark.png:." \
+            --clean \
+            deploy/launcher/launcher.py
+
+      - name: Build binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $assets = "$($PWD.Path)/packages/pixel-patrol-base/src/pixel_patrol_base/report/assets"
+          pyinstaller `
+            --onefile `
+            --name pixel-patrol-launcher `
+            --distpath deploy/launcher/dist `
+            --workpath deploy/launcher/build `
+            --specpath deploy/launcher `
+            --hidden-import flask `
+            --add-data "${assets}/icon.png;." `
+            --add-data "${assets}/Helmholtz-Imaging_Mark.png;." `
+            --clean `
+            deploy/launcher/launcher.py
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixel-patrol-launcher-${{ runner.os }}
+          path: deploy/launcher/dist/pixel-patrol-launcher*
+          if-no-files-found: error
