@@ -280,6 +280,7 @@ def _aggregate_cell_series_with_distribution(
             value_name="val",
         )
         .with_columns(pl.col("var").replace(col_to_x).alias("x"))
+        .with_columns(pl.col("x").cast(pl.Int64))
         .drop_nulls(["val"])
         .group_by([group_col, "x"])
         .agg([
