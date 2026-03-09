@@ -547,7 +547,7 @@ def plot_aggregated_scatter(
         margin=dict(l=30, r=10, t=10, b=25),
         showlegend=show_legend,
         xaxis=dict(
-            type="category",
+            type="linear",
             showgrid=False,
             zeroline=False,
             showline=True,
