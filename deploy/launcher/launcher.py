@@ -227,15 +227,148 @@ def save_config(loader_pkgs: list[str]) -> None:
     CONFIG_FILE.write_text(json.dumps({"loader_pkgs": loader_pkgs}, indent=2))
 
 
+# ── Linux desktop integration ──────────────────────────────────────────────────
+
+# Maps file extensions (without leading dot) to MIME types for the .desktop file.
+_EXT_TO_MIME: dict[str, str] = {
+    "tif":      "image/tiff",
+    "tiff":     "image/tiff",
+    "ome.tif":  "image/tiff",
+    "ome.tiff": "image/tiff",
+    "png":      "image/png",
+    "jpg":      "image/jpeg",
+    "jpeg":     "image/jpeg",
+    "bmp":      "image/bmp",
+    "zarr":     "application/x-zarr",
+    "ome.zarr": "application/x-zarr",
+    "czi":      "image/x-zeiss-czi",
+    "nd2":      "image/x-nikon-nd2",
+    "lif":      "image/x-leica-lif",
+    "lmdb":     "application/x-lmdb",
+    "mdb":      "application/x-mdb",
+}
+
+LAUNCHER_DIR = APP_DIR / "launcher"
+
+
+def _mimes_for_loader_pkgs(loader_pkgs: list[str]) -> list[str]:
+    installed_pkg_names = set(loader_pkgs)
+    mimes: set[str] = set()
+    for pkg in PACKAGES:
+        if pkg["package"] in installed_pkg_names:
+            for ext in pkg["extensions"]:
+                mime = _EXT_TO_MIME.get(ext.lstrip(".").lower())
+                if mime:
+                    mimes.add(mime)
+    return sorted(mimes)
+
+
+def install_desktop_entry(loader_pkgs: list[str], progress_cb: callable | None = None) -> None:
+    """Install a .desktop file so Linux file managers show Pixel Patrol in 'Open With'."""
+    if platform.system() != "Linux":
+        return
+
+    cb = progress_cb or (lambda _: None)
+
+    try:
+        LAUNCHER_DIR.mkdir(parents=True, exist_ok=True)
+
+        # ── Stable binary location ──────────────────────────────────────────
+        launcher_dest = LAUNCHER_DIR / "pixel-patrol"
+        if getattr(sys, "frozen", False):
+            # Running as a PyInstaller bundle — copy ourselves to the stable path.
+            import shutil
+            src = Path(sys.executable).resolve()
+            if src != launcher_dest.resolve():
+                cb("Installing launcher binary…")
+                shutil.copy2(src, launcher_dest)
+            launcher_dest.chmod(launcher_dest.stat().st_mode | stat.S_IEXEC)
+            exec_line = f"{launcher_dest} %f"
+        else:
+            # Dev mode: invoke via the same Python that is running now.
+            script = Path(sys.argv[0]).resolve()
+            exec_line = f"{sys.executable} {script} %f"
+
+        # ── Icon ────────────────────────────────────────────────────────────
+        icon_dest = LAUNCHER_DIR / "icon.png"
+        if _IMG_ICON and not icon_dest.exists():
+            _, b64 = _IMG_ICON.split(",", 1)
+            icon_dest.write_bytes(base64.b64decode(b64))
+
+        # ── .desktop file ───────────────────────────────────────────────────
+        mimes = _mimes_for_loader_pkgs(loader_pkgs)
+        mime_str = ";".join(mimes) + ";" if mimes else ""
+
+        desktop_content = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Pixel Patrol\n"
+            "Comment=Inspect image files with Pixel Patrol\n"
+            f"Exec={exec_line}\n"
+            f"Icon={icon_dest}\n"
+            f"MimeType={mime_str}\n"
+            "Categories=Graphics;Science;\n"
+            "StartupNotify=true\n"
+        )
+
+        desktop_dir = Path.home() / ".local" / "share" / "applications"
+        desktop_dir.mkdir(parents=True, exist_ok=True)
+        desktop_file = desktop_dir / "pixel-patrol.desktop"
+        cb("Installing desktop entry…")
+        desktop_file.write_text(desktop_content)
+        # Some file managers (Nemo, Nautilus) require the execute bit to trust
+        # and display .desktop files.
+        desktop_file.chmod(desktop_file.stat().st_mode | stat.S_IEXEC)
+
+        print(f"[Pixel Patrol] desktop entry written to {desktop_file}")
+        print(f"[Pixel Patrol] Exec={exec_line}")
+        print(f"[Pixel Patrol] MimeType={mime_str or '(none)'}")
+
+        # Update the MIME/desktop database so file managers pick it up.
+        for cmd in [
+            ["update-desktop-database", str(desktop_dir)],
+            ["gio", "update-desktop-database", str(desktop_dir)],
+        ]:
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=10)
+                break
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        cb("Desktop integration installed — Pixel Patrol now appears in 'Open With'.")
+
+    except Exception as exc:
+        print(f"[Pixel Patrol] warning: could not install desktop entry: {exc}")
+
+
 # ── Launch Pixel Patrol ────────────────────────────────────────────────────────
 
-def launch_pixel_patrol() -> None:
-    kwargs: dict = {}
+def _pp_cmd() -> list[str]:
+    """Return the base command to invoke pixel-patrol.
+
+    • Frozen binary  → use the managed venv's pixel-patrol binary.
+    • Dev mode       → use the current Python interpreter with -m so that
+                       local editable installs (including uncommitted CLI
+                       changes) are picked up automatically.
+    """
+    if getattr(sys, "frozen", False):
+        return [str(_venv_pp_bin())]
+    return [sys.executable, "-m", "pixel_patrol_base.cli"]
+
+
+def _detach_kwargs() -> dict:
     if platform.system() == "Windows":
-        kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        kwargs["start_new_session"] = True
-    subprocess.Popen([str(_venv_pp_bin()), "launch"], **kwargs)
+        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def inspect_file(path: Path) -> None:
+    """Launch `pixel-patrol inspect <path>` in a detached background process."""
+    subprocess.Popen([*_pp_cmd(), "inspect", str(path)], **_detach_kwargs())
+
+
+def launch_pixel_patrol() -> None:
+    subprocess.Popen([*_pp_cmd(), "launch"], **_detach_kwargs())
 
 
 # ── HTML ───────────────────────────────────────────────────────────────────────
@@ -642,7 +775,7 @@ SETUP_HTML = f"""<!DOCTYPE html>
 
 # ── Flask app ──────────────────────────────────────────────────────────────────
 
-def create_flask_app() -> Flask:
+def create_flask_app(file_to_inspect: Path | None = None) -> Flask:
     app = Flask(__name__)
     app.logger.disabled = True
 
@@ -687,8 +820,16 @@ def create_flask_app() -> Flask:
                     uv = get_uv(progress_cb=dl_cb)
                     setup_environment(uv, loader_pkgs, line_cb=cb)
                     save_config(loader_pkgs)
-                    q.put(("status", "Launching Pixel Patrol…"))
-                    launch_pixel_patrol()
+                    install_desktop_entry(
+                        loader_pkgs,
+                        progress_cb=lambda msg: q.put(("status", msg)),
+                    )
+                    if file_to_inspect is not None:
+                        q.put(("status", f"Inspecting {file_to_inspect.name}…"))
+                        inspect_file(file_to_inspect)
+                    else:
+                        q.put(("status", "Launching Pixel Patrol…"))
+                        launch_pixel_patrol()
                     q.put(("done", ""))
                 except Exception as exc:
                     q.put(("error_msg", str(exc)))
@@ -726,10 +867,21 @@ def create_flask_app() -> Flask:
 def main() -> None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
 
-    if env_is_ready() and load_config() is not None:
-        # Already set up — just launch.
-        print("Pixel Patrol: launching…")
-        launch_pixel_patrol()
+    # Detect a file dropped onto the binary (OS passes it as argv[1])
+    file_to_inspect: Path | None = None
+    if len(sys.argv) > 1:
+        candidate = Path(sys.argv[1])
+        if candidate.exists():
+            file_to_inspect = candidate
+
+    if env_is_ready() and (cfg := load_config()) is not None:
+        install_desktop_entry(cfg.get("loader_pkgs", []))
+        if file_to_inspect is not None:
+            print(f"Pixel Patrol: inspecting {file_to_inspect.name}…")
+            inspect_file(file_to_inspect)
+        else:
+            print("Pixel Patrol: launching…")
+            launch_pixel_patrol()
         return
 
     # First run: serve the setup wizard.
@@ -741,7 +893,7 @@ def main() -> None:
         port = s.getsockname()[1]
 
     url = f"http://127.0.0.1:{port}/"
-    app, shutdown_event = create_flask_app()
+    app, shutdown_event = create_flask_app(file_to_inspect=file_to_inspect)
 
     # Open the browser shortly after the server starts
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
