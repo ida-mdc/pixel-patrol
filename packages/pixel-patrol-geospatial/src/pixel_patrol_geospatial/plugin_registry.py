@@ -1,4 +1,4 @@
-from geo_extension.geoimageloader import GeoImageLoader
+from pixel_patrol_geospatial.geospatial_loader import GeoImageLoader
 
 def register_loader_plugins():
     return [

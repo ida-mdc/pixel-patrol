@@ -18,8 +18,6 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     
     metadata["bounds"] = str(img.bounds)
     metadata["band_count"] = img.count
-    metadata["height"] = img.height
-    metadata["width"] = img.width
 
     metadata["crs_epsg"] = img.crs.to_epsg(confidence_threshold=70)
     metadata["crs"] = img.crs.to_string()
@@ -39,14 +37,17 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
         metadata["nodatavals"] = img.nodatavals
     
     if img.count == 1:
-        metadata["dim_order"] = "XY"
-        metadata["dim_names"] = ["X", "Y"]
+        metadata["dim_order"] = "YX"
+        metadata["dim_names"] = ["Y", "X"]
         metadata["shape"] = img.height, img.width
     else:
-        metadata["dim_order"] = "CXY"
-        metadata["dim_names"] = ["C", "X", "Y"]
+        metadata["dim_order"] = "CYX"
+        metadata["dim_names"] = ["C", "Y", "X"]
         metadata["shape"] = img.count, img.height, img.width
     metadata["num_pixels"] = np.prod(metadata["shape"])
+    metadata["X_size"] = metadata["height"] = img.height
+    metadata["Y_size"] = metadata["width"] = img.width
+    
     
     lng, lat = img.lnglat()
     metadata["latitude"] = lat
@@ -54,12 +55,16 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     
     # TODO: pixel size in meters using img.res after (after converting to the local UTM grid)
     # TODO: scales if set
+    
+    # TODO: add bounding box coordinates
+    # TODO: valid data/pixels?
+    
 
     return metadata
 
 
 class GeoImageLoader:
-    NAME = "geoimage"
+    NAME = "geospatial"
 
     SUPPORTED_EXTENSIONS: Set[str] = {"tif"}
 
@@ -69,9 +74,10 @@ class GeoImageLoader:
         with rasterio.open(p) as ds:
             data = ds.read()            
             meta = _extract_metadata(img=ds)
+            # TODO: don't replace NaN with zero, but instead properly support 
+            #       missing data
+            data = np.nan_to_num(data, nan=0)
             data = da.squeeze(data)
-            #data = da.nan_to_num(data, nan=-1)  # TODO remove
-            print(f"{da.nanmin(data).compute()=}  {da.nanmax(data).compute()=}")
 
         record = record_from(data, meta, kind="intensity")
         return record
