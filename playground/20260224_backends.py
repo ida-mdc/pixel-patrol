@@ -415,6 +415,133 @@ class NumbaBackend:
         return _format_results(slice_results)
 
 
+class NumbaCudaBackend:
+    """Numba CUDA JIT backend: custom GPU kernels written in Python via @cuda.jit."""
+
+    name = "numba_cuda"
+
+    def __init__(self):
+        from numba import cuda
+        self._cuda = cuda
+        if not cuda.is_available():
+            raise RuntimeError("No CUDA device available for Numba")
+        dev = cuda.get_current_device()
+        print(f"    numba cuda device: {dev.name}")
+        self._metrics_kernel, self._hist_kernel = self._compile()
+
+    def _compile(self):
+        cuda = self._cuda
+        hist_bins = HIST_BINS
+        import math
+        from numba import float64
+
+        @cuda.jit
+        def _accumulate_kernel(stacked, out, pixels_per_slice, h, w):
+            """Parallel over pixels: 2D grid (blocks_per_slice, n_slices).
+
+            Each block processes a chunk of pixels for one slice.  Shared
+            memory is used for the per-block histogram; scalar accumulators
+            (pixel sum, lap sum/sq, min, max) use global atomics — the
+            number of atomic ops per slice equals blocks_per_slice which is
+            manageable.
+            """
+            shist = cuda.shared.array(shape=hist_bins, dtype=float64)
+
+            tx = cuda.threadIdx.x
+            slice_idx = cuda.blockIdx.y
+            pixel_idx = cuda.blockIdx.x * cuda.blockDim.x + tx
+
+            # Initialise shared histogram
+            if tx < hist_bins:
+                shist[tx] = 0.0
+            cuda.syncthreads()
+
+            if pixel_idx < pixels_per_slice:
+                r = pixel_idx // w
+                c = pixel_idx % w
+                v = float64(stacked[slice_idx, r, c])
+
+                # Scalar accumulators (global atomics)
+                cuda.atomic.add(out, (slice_idx, 2), v)           # pixel_sum
+                cuda.atomic.min(out, (slice_idx, 3), v)           # min
+                cuda.atomic.max(out, (slice_idx, 4), v)           # max
+
+                # Laplacian for interior pixels
+                if r >= 1 and r < h - 1 and c >= 1 and c < w - 1:
+                    lap = (4.0 * v
+                           - float64(stacked[slice_idx, r, c - 1])
+                           - float64(stacked[slice_idx, r, c + 1])
+                           - float64(stacked[slice_idx, r - 1, c])
+                           - float64(stacked[slice_idx, r + 1, c]))
+                    cuda.atomic.add(out, (slice_idx, 0), lap * lap)  # lap_sq_sum
+                    cuda.atomic.add(out, (slice_idx, 1), lap)        # lap_sum
+
+                # Histogram — shared memory, flushed once per block
+                bin_width = 256.0 / hist_bins
+                b = int(v / bin_width)
+                if b >= hist_bins:
+                    b = hist_bins - 1
+                cuda.atomic.add(shist, b, 1.0)
+
+            cuda.syncthreads()
+
+            # Flush shared histogram to global output
+            if tx < hist_bins:
+                if shist[tx] > 0.0:
+                    cuda.atomic.add(out, (slice_idx, 5 + tx), shist[tx])
+
+        @cuda.jit
+        def _finalize_kernel(out, h, w):
+            """One thread per slice: convert accumulated sums to final stats."""
+            slice_idx = cuda.grid(1)
+            if slice_idx >= out.shape[0]:
+                return
+            lap_sq_sum = out[slice_idx, 0]
+            lap_sum = out[slice_idx, 1]
+            pixel_sum = out[slice_idx, 2]
+
+            lap_count = (h - 2) * (w - 2)
+            lap_mean = lap_sum / lap_count
+            var = lap_sq_sum / lap_count - lap_mean * lap_mean
+
+            out[slice_idx, 0] = var
+            out[slice_idx, 1] = math.sqrt(var)
+            out[slice_idx, 2] = pixel_sum / (h * w)
+
+        return _accumulate_kernel, _finalize_kernel
+
+    def process(self, arr: np.ndarray) -> dict:
+        cuda = self._cuda
+        t, c, z, y, x = arr.shape
+        n_slices = t * c * z
+        if y < 3 or x < 3:
+            slice_results = np.full((t, c, z, OUTPUT_SIZE), np.nan)
+        else:
+            stacked = arr.reshape(n_slices, y, x).astype(np.float32)
+            d_stacked = cuda.to_device(stacked)
+
+            # Initialise output: sums=0, min=+inf, max=-inf, hist=0
+            init_out = np.zeros((n_slices, OUTPUT_SIZE), dtype=np.float64)
+            init_out[:, 3] = np.finfo(np.float64).max   # min accumulator
+            init_out[:, 4] = -np.finfo(np.float64).max  # max accumulator
+            d_out = cuda.to_device(init_out)
+
+            pixels_per_slice = y * x
+            threads_per_block = 256
+            blocks_x = (pixels_per_slice + threads_per_block - 1) // threads_per_block
+            blocks_y = n_slices
+            self._metrics_kernel[(blocks_x, blocks_y), threads_per_block](
+                d_stacked, d_out, pixels_per_slice, y, x)
+
+            # Finalise: convert accumulated sums to variance / std / mean
+            fin_blocks = (n_slices + 31) // 32
+            self._hist_kernel[fin_blocks, 32](d_out, y, x)
+
+            cuda.synchronize()
+            slice_results = d_out.copy_to_host().reshape(t, c, z, -1)
+        return _format_results(slice_results)
+
+
 class JaxBackend:
     """JAX GPU backend: XLA-compiled and vmap-vectorized over all slices.
 
@@ -576,6 +703,7 @@ BACKENDS = {
     "cupy": CuPyBackend,
     "cupy_batch": CuPyBatchBackend,
     "numba": NumbaBackend,
+    "numba_cuda": NumbaCudaBackend,
     "jax": JaxBackend,
     "jax_batch": JaxBatchBackend,
 }
@@ -662,6 +790,12 @@ def _system_info() -> dict:
     except ImportError:
         pass
     try:
+        from numba import cuda
+        if cuda.is_available():
+            info["numba_cuda_device"] = cuda.get_current_device().name
+    except (ImportError, RuntimeError):
+        pass
+    try:
         import pyclesperanto as cle
         info["pyclesperanto"] = cle.__version__
         info["opencl_device"] = str(cle.get_device())
@@ -672,7 +806,7 @@ def _system_info() -> dict:
         info["cupy"] = cp.__version__
         dev = cp.cuda.Device()
         info["cuda_device"] = cp.cuda.runtime.getDeviceProperties(dev.id)["name"].decode()
-    except (ImportError, RuntimeError):
+    except (ImportError, RuntimeError, AttributeError):
         pass
     try:
         import jax
@@ -805,7 +939,9 @@ def main():
                 return float(obj)
             if isinstance(obj, np.ndarray):
                 return obj.tolist()
-            return obj
+            if isinstance(obj, bytes):
+                return obj.decode("utf-8", errors="replace")
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
         with open(output_path, "w") as f:
             json.dump(all_results, f, indent=2, default=_convert)
