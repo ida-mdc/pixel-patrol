@@ -542,6 +542,114 @@ class NumbaCudaBackend:
         return _format_results(slice_results)
 
 
+class DpnpBackend:
+    """Intel dpnp backend: NumPy drop-in replacement running on Intel GPU via SYCL.
+
+    Uses dpnp (Data Parallel Extension for NumPy) which offloads array operations
+    to an Intel GPU through oneAPI/SYCL. API is nearly identical to NumPy.
+    """
+
+    name = "dpnp"
+
+    def __init__(self):
+        import dpnp
+        import dpctl
+        self._dpnp = dpnp
+        try:
+            dev = dpctl.select_default_device()
+        except dpctl.SyclDeviceCreationError:
+            raise RuntimeError("No SYCL GPU device available for dpnp")
+        print(f"    dpnp device: {dev.name}")
+
+    def process(self, arr: np.ndarray) -> dict:
+        dp = self._dpnp
+        t, c, z, y, x = arr.shape
+        n_slices = t * c * z
+        if y < 3 or x < 3:
+            slice_results = np.full((t, c, z, OUTPUT_SIZE), np.nan)
+        else:
+            stacked = arr.reshape(n_slices, y, x).astype(np.float32)
+            gpu_stacked = dp.asarray(stacked, device="gpu")
+            slice_results = np.empty((n_slices, OUTPUT_SIZE), dtype=float)
+
+            for i in range(n_slices):
+                gpu_img = gpu_stacked[i]
+
+                # Laplacian on GPU (same 5-point stencil)
+                gpu_lap = (
+                    4 * gpu_img[1:-1, 1:-1]
+                    - gpu_img[1:-1, :-2]
+                    - gpu_img[1:-1, 2:]
+                    - gpu_img[:-2, 1:-1]
+                    - gpu_img[2:, 1:-1]
+                )
+                var = float(dp.var(gpu_lap))
+
+                mean_val = float(dp.mean(gpu_img))
+                min_val = float(dp.min(gpu_img))
+                max_val = float(dp.max(gpu_img))
+
+                # Histogram — dpnp supports histogram
+                hist = dp.histogram(gpu_img, bins=HIST_BINS, range=(0, 256))[0]
+
+                slice_results[i] = np.concatenate([
+                    [var, np.sqrt(var), mean_val, min_val, max_val],
+                    np.asarray(hist, dtype=np.float64),
+                ])
+            slice_results = slice_results.reshape(t, c, z, -1)
+        return _format_results(slice_results)
+
+
+class DpnpBatchBackend:
+    """Intel dpnp backend: fully vectorized over all slices (no Python loop)."""
+
+    name = "dpnp_batch"
+
+    def __init__(self):
+        import dpnp
+        self._dpnp = dpnp
+
+    def process(self, arr: np.ndarray) -> dict:
+        dp = self._dpnp
+        t, c, z, y, x = arr.shape
+        n_slices = t * c * z
+        if y < 3 or x < 3:
+            slice_results = np.full((t, c, z, OUTPUT_SIZE), np.nan)
+        else:
+            gpu_all = dp.asarray(
+                arr.reshape(n_slices, y, x).astype(np.float32), device="gpu"
+            )
+
+            # Vectorized Laplacian over all slices
+            gpu_lap = (
+                4 * gpu_all[:, 1:-1, 1:-1]
+                - gpu_all[:, 1:-1, :-2]
+                - gpu_all[:, 1:-1, 2:]
+                - gpu_all[:, :-2, 1:-1]
+                - gpu_all[:, 2:, 1:-1]
+            )
+            var = dp.var(gpu_lap, axis=(1, 2))
+            std = dp.sqrt(var)
+            mean_arr = dp.mean(gpu_all, axis=(1, 2))
+            min_arr = dp.min(gpu_all, axis=(1, 2))
+            max_arr = dp.max(gpu_all, axis=(1, 2))
+
+            # Histogram per slice (must loop — dpnp.histogram doesn't batch)
+            hist_results = np.empty((n_slices, HIST_BINS), dtype=np.float64)
+            for i in range(n_slices):
+                hist_results[i] = np.asarray(
+                    dp.histogram(gpu_all[i], bins=HIST_BINS, range=(0, 256))[0],
+                    dtype=np.float64,
+                )
+
+            scalars = dp.stack([var, std, mean_arr, min_arr, max_arr], axis=-1)
+            gpu_result = np.concatenate(
+                [np.asarray(scalars, dtype=np.float64), hist_results], axis=-1
+            )
+            slice_results = gpu_result.reshape(t, c, z, -1)
+        return _format_results(slice_results)
+
+
 class JaxBackend:
     """JAX GPU backend: XLA-compiled and vmap-vectorized over all slices.
 
@@ -704,6 +812,8 @@ BACKENDS = {
     "cupy_batch": CuPyBatchBackend,
     "numba": NumbaBackend,
     "numba_cuda": NumbaCudaBackend,
+    "dpnp": DpnpBackend,
+    "dpnp_batch": DpnpBatchBackend,
     "jax": JaxBackend,
     "jax_batch": JaxBatchBackend,
 }
@@ -794,6 +904,14 @@ def _system_info() -> dict:
         if cuda.is_available():
             info["numba_cuda_device"] = cuda.get_current_device().name
     except (ImportError, RuntimeError):
+        pass
+    try:
+        import dpnp
+        import dpctl
+        info["dpnp"] = dpnp.__version__
+        dev = dpctl.select_default_device()
+        info["dpnp_device"] = dev.name
+    except (ImportError, RuntimeError, Exception):
         pass
     try:
         import pyclesperanto as cle
