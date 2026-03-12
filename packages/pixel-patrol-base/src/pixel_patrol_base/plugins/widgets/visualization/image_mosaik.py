@@ -171,10 +171,13 @@ def _create_sprite_image(
     if "thumbnail" not in df.columns or df.get_column("thumbnail").is_empty():
         return Image.new("RGBA", (_SPRITE_SIZE, _SPRITE_SIZE), (0, 0, 0, 0)), {}
 
-    # Extract columns once as lists
-    images = df.get_column("thumbnail").to_list()
-    groups = df.get_column(group_col).to_list()
-    hover_labels = df.get_column(HOVER_LABEL_COL).to_list()
+    # Extract (random selection of) columns once as lists
+    MAXIMUM_IMG_NUMBER = 2048 # TODO move somewhere else
+    selected_img_count = min(len(df), MAXIMUM_IMG_NUMBER)
+    df_selection = df.sample(selected_img_count)
+    images = df_selection.get_column("thumbnail").to_list()
+    groups = df_selection.get_column(group_col).to_list()
+    hover_labels = df_selection.get_column(HOVER_LABEL_COL).to_list()
 
     # Pre-compute RGB colors for all unique groups
     color_map = color_map or {}
