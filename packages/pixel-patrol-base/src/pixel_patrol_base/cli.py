@@ -1,25 +1,10 @@
+import logging
 import os
-import shutil
 import webbrowser
 from pathlib import Path
 from threading import Timer
 
 import click
-
-from pixel_patrol_base.api import (
-    create_project,
-    add_paths,
-    set_settings,
-    process_files,
-    export_project,
-    import_project,
-    show_report,
-    export_html_report,
-)
-from pixel_patrol_base.core.project_settings import Settings
-from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
-from pixel_patrol_base.report.constants import NO_GROUPING_COL
-
 
 @click.group()
 def cli():
@@ -67,6 +52,16 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
     Exports a Pixel Patrol project to a ZIP file.
     Processes images from the BASE_DIRECTORY and specified --paths.
     """
+    from pixel_patrol_base.api import (
+        create_project,
+        add_paths,
+        set_settings,
+        process_files,
+        export_project,
+    )
+    from pixel_patrol_base.core.project_settings import Settings
+    from pixel_patrol_base.core.processing import _cleanup_partial_chunks_dir
+
     # Always operate on an absolute base directory so downstream path resolution is stable.
     base_directory = base_directory.resolve()
 
@@ -164,6 +159,12 @@ def launch(port: int):
               help='Export the report as a static HTML file instead of launching the interactive dashboard.')
 def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | None,
            filter_op: str | None, filter_value: str | None, dims: tuple[str, ...], export_html: Path | None):
+    from pixel_patrol_base.api import (
+        import_project,
+        show_report,
+        export_html_report,
+    )
+    from pixel_patrol_base.report.constants import NO_GROUPING_COL
 
     my_project = import_project(Path(input_zip))
 
