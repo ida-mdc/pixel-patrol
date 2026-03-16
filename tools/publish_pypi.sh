@@ -26,9 +26,9 @@ PACKAGES=(
 [ -n "${PYPI_API_TOKEN:-}" ] || { echo "ERROR: PYPI_API_TOKEN is not set"; exit 1; }
 
 # read version from pixel-patrol-base as the canonical source
-VERSION=$(python - <<'EOF'
-import tomlkit, pathlib
-doc = tomlkit.parse(pathlib.Path("packages/pixel-patrol-base/pyproject.toml").read_text())
+VERSION=$(python - "$REPO_ROOT" <<'EOF'
+import sys, tomlkit, pathlib
+doc = tomlkit.parse((pathlib.Path(sys.argv[1]) / "packages/pixel-patrol-base/pyproject.toml").read_text())
 print(doc["project"]["version"])
 EOF
 )
