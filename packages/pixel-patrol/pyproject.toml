@@ -1,14 +1,14 @@
 [project]
 name = "pixel-patrol"
-version = "0.4.0"
+version = "0.5.0"
 description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
-    "pixel-patrol-base==0.4.0",
-    "pixel-patrol-image==0.4.0",
-    "pixel-patrol-loader-bio==0.4.0",
+    "pixel-patrol-base==0.5.0",
+    "pixel-patrol-image==0.5.0",
+    "pixel-patrol-loader-bio==0.5.0",
 ]
 
 [tool.uv]
