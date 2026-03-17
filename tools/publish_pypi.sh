@@ -71,3 +71,18 @@ git push origin "v$VERSION"
 
 echo ""
 echo "✓ Released v$VERSION"
+
+# ── github release tag bump ───────────────────────────────────────────────────
+
+## Currently we do so manually:
+
+# VERSION=0.5.0    ### change this
+#gh release create "v$VERSION" \
+#  --title "pixel-patrol $VERSION" \
+#  --notes "## v$VERSION
+#
+### Packages
+#* pixel-patrol: $VERSION — https://pypi.org/project/pixel-patrol/$VERSION/
+#* pixel-patrol-base: $VERSION — https://pypi.org/project/pixel-patrol-base/$VERSION/
+#* pixel-patrol-image: $VERSION — https://pypi.org/project/pixel-patrol-image/$VERSION/
+#* pixel-patrol-loader-bio: $VERSION — https://pypi.org/project/pixel-patrol-loader-bio/$VERSION/"
