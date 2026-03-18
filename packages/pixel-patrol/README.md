@@ -1,7 +1,13 @@
-# PixelPatrol: Scientific Dataset Quality Control and Data Exploration Tool
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/prevalidation.png" width="80">  PixelPatrol 
+### Scientific Dataset Quality Control and Data Exploration Tool
+
+<img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80"> 
 
 PixelPatrol is an early-version tool designed for the systematic validation of scientific image datasets. It helps researchers proactively assess their data before engaging in computationally intensive analysis, ensuring the quality and integrity of datasets for reliable downstream analysis.
 
+<img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/overview.png" width="">   
+
+*PixelPatrol's main dashboard provides an interface for dataset exploration.*
 
 ## Features
 
@@ -100,6 +106,16 @@ See `examples/minimal-extension` for a minimal template.
    * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
    * OR use the Pixel-Patrol API.
 5. Explore the interactive dashboard in your browser.
+
+## Example visualizations
+
+* Visualize the distribution of image sizes within your dataset.*
+        ![Plot showing the distribution of image sizes.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/size_plot.png)
+* A mosaic view can quickly highlight inconsistencies across images.*
+        ![Mosaic view of images, highlighting potential discrepancies.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/mosiac.png)
+* Many additional plots and distributions are available.*
+        ![Statistical plots showing image dimensions and distributions.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/example_stats_plot.png)
+
 
 ## Interactive Processing Dashboard
 
