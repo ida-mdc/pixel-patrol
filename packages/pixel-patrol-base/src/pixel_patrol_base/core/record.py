@@ -120,4 +120,43 @@ def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/inte
     if 'Z' in dim_order: capabilities.add('spatial-3d')
     if 'T' in dim_order: capabilities.add('temporal')
     if 'C' in dim_order: capabilities.add('multichannel')
+    rgb_cap = _infer_rgb_capability(dim_order, mm, getattr(array, 'dtype', None))
+    if rgb_cap:
+        capabilities.add(rgb_cap)
     return Record(data=array, dim_order=dim_order, dim_names=dim_names, kind=kind, meta=mm, capabilities=capabilities)
+
+
+def _infer_rgb_capability(dim_order: str, meta: Mapping[str, Any], dtype=None) -> str | None:
+    """
+    Returns an 'rgb:<dim>' capability string if the image represents an RGB or RGBA image,
+    otherwise None.
+
+    Only uint8 arrays can be RGB — non-uint8 values are not in the 0-255 range
+    expected for direct color display.
+
+    The S (samples) dimension unambiguously signals RGB/RGBA in OME-style formats.
+    A C dimension is treated as RGB only when the channel names explicitly identify
+    the channels as red, green, blue (and optionally alpha).
+    """
+    if dtype is not None and getattr(dtype, 'name', str(dtype)) != 'uint8':
+        return None
+
+    shape = meta.get('shape', [])
+    if not shape:
+        return None
+
+    if 'S' in dim_order:
+        s_size = shape[dim_order.index('S')]
+        if s_size in (3, 4):
+            return 'rgb:S'
+
+    if 'C' in dim_order:
+        c_size = shape[dim_order.index('C')]
+        channel_names = meta.get('channel_names', [])
+        _rgb_names = {'R', 'G', 'B', 'A', 'RED', 'GREEN', 'BLUE', 'ALPHA'}
+        if c_size in (3, 4) and channel_names and all(
+            str(n).upper() in _rgb_names for n in channel_names
+        ):
+            return 'rgb:C'
+
+    return None
