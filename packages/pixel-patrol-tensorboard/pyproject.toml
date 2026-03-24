@@ -1,0 +1,34 @@
+[project]
+name = "pixel-patrol-tensorboard"
+version = "0.5.0"
+description = "TensorBoard Embedding Projector CLI for Pixel Patrol"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.0",
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "polars>=1.31.0",
+    "requests>=2.0",
+    "tensorboard>=2.18.0",
+    "tensorboardx>=2.6.4",
+]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_tensorboard"]
+
+[project.scripts]
+pixel-patrol-tensorboard = "pixel_patrol_tensorboard.cli:cli"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]

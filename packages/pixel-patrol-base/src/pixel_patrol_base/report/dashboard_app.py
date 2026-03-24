@@ -192,10 +192,6 @@ def _create_app(
                 dcc.Store(id="color-map-store"),
                 *global_control_stores,
                 dcc.Store(id=FILTERED_INDICES_STORE_ID, data=None),
-                dcc.Store(
-                    id="tb-process-store-tensorboard-embedding-projector",
-                    data={},
-                ),
                 *extra_components,
             ]
         )
