@@ -45,12 +45,7 @@ def _setup_fake_cli(monkeypatch, dataset_root: Path):
 
         return project
 
-    ##
-
-    def fake_set_settings(project, settings):
-        return project
-
-    def fake_process_files(project, processing_config=None, **kwargs):
+    def fake_process_files(project, **kwargs):
         return project
 
     def fake_export_project(project, destination: Path):
@@ -58,7 +53,6 @@ def _setup_fake_cli(monkeypatch, dataset_root: Path):
 
     monkeypatch.setattr(cli_module, "create_project", fake_create_project)
     monkeypatch.setattr(cli_module, "add_paths", fake_add_paths)
-    monkeypatch.setattr(cli_module, "set_settings", fake_set_settings)
     monkeypatch.setattr(cli_module, "process_files", fake_process_files)
     monkeypatch.setattr(cli_module, "export_project", fake_export_project)
 

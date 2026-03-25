@@ -21,8 +21,8 @@ def test_export_project_cleans_partial_chunks(tmp_path: Path):
     pl.DataFrame({"a": [1]}).write_parquet(combined)
 
     project = create_project("myproj", str(base_dir))
-    project.settings.records_flush_dir = flush_dir
     project.records_df = None
+    project.records_flush_dir = flush_dir
 
     out_zip = tmp_path / "out.zip"
 

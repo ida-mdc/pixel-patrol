@@ -8,16 +8,13 @@ Tests for Settings configuration features:
 import pytest
 import numpy as np
 import dask.array as da
-from pixel_patrol_base.core.project_settings import Settings
 
 from pixel_patrol_base.core.record import record_from
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.utils.array_utils import (
-    calculate_sliced_stats,
     set_slicing_config,
-    get_slicing_config,
 )
 from pixel_patrol_base.plugin_registry import discover_processor_plugins, discover_widget_plugins
 

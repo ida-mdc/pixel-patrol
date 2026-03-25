@@ -1,15 +1,11 @@
 import zipfile
-import numpy as np
 import yaml
-import polars as pl
 import tempfile
 from pathlib import Path
-from typing import Optional, Any, List, Dict, Tuple
+from typing import Any, List, Dict, Tuple
 import logging
-import dataclasses
 
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core import validation
 from pixel_patrol_base.io.parquet_utils import (
     write_dataframe_to_parquet,
@@ -23,67 +19,12 @@ METADATA_FILENAME = 'metadata.yml'
 RECORDS_DF_FILENAME = 'records_df.parquet'
 
 
-def _settings_to_dict(settings: Settings) -> dict:
-    """
-    Converts a Settings dataclass instance to a dictionary for YAML export.
-    Converts 'selected_file_extensions' from a set to a sorted list for cleaner YAML output.
-    """
-    s_dict = settings.__dict__.copy()
-    # CONVERT SET TO SORTED LIST FOR YAML READABILITY
-    if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], set):
-        s_dict['selected_file_extensions'] = sorted(list(s_dict['selected_file_extensions']))
-    flush_dir = s_dict.get('records_flush_dir')
-    if isinstance(flush_dir, Path):
-        s_dict['records_flush_dir'] = str(flush_dir)
-    return s_dict
-
-
-def _dict_to_settings(settings_dict: dict) -> Settings:
-    """
-    Converts a dictionary from YAML import back into a Settings dataclass instance.
-    Handles cases where the input is not a dictionary or has malformed parts.
-    """
-    # If the metadata contains unexpectedly typed 'settings' (e.g., a string), fall back to defaults
-    if not isinstance(settings_dict, dict):
-        logger.warning(
-            "Settings IO: Expected a dict for settings but got %s; using default Settings.",
-            type(settings_dict).__name__,
-        )
-        return Settings()
-
-    s_dict = settings_dict.copy()
-
-    # Handle 'selected_file_extensions' conversion from list to set
-    try:
-        if 'selected_file_extensions' in s_dict and isinstance(s_dict['selected_file_extensions'], list):
-            s_dict['selected_file_extensions'] = set(s_dict['selected_file_extensions'])
-        flush_dir = s_dict.get('records_flush_dir')
-        if isinstance(flush_dir, str) and flush_dir:
-            s_dict['records_flush_dir'] = Path(flush_dir)
-    except Exception as e:
-        logger.warning(
-            f"Settings IO: Could not convert 'selected_file_extensions' back to set. Error: {e}.")
-
-    # Reconstruct the Settings object
-    # Filter out keys not present in Settings dataclass to avoid TypeError
-    # This ensures robustness against older metadata formats or unexpected keys
-    valid_settings_keys = {f.name for f in dataclasses.fields(Settings)}
-    filtered_s_dict = {k: v for k, v in s_dict.items() if k in valid_settings_keys}
-
-    try:
-        return Settings(**filtered_s_dict)
-    except Exception as e:
-        logger.warning(
-            f"Project IO: Could not fully reconstruct Settings from filtered dictionary. Using default settings. Error: {e}")
-        return Settings()
-
 
 def _prepare_project_metadata(project: Project) -> Dict[str, Any]:
     metadata_content = {
         'name': project.name,  # Ensure name is first
         'base_dir': str(project.base_dir) if project.base_dir else None,
         'paths': [str(p) for p in project.paths],
-        'settings': _settings_to_dict(project.settings),
         'loader': getattr(getattr(project, "loader", None), "NAME", None),
     }
     return metadata_content
@@ -122,7 +63,9 @@ def _add_files_to_zip(
         raise IOError(f"Could not create or write to zip archive at {zip_file_path}: {e}") from e
 
 
-def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool = True) -> None:
+def export_project(project: Project,
+                   dest: Path,
+                   cleanup_combined_parquet: bool = True) -> None:
     """
     Exports the project state to a zip archive.
     Args:
@@ -142,6 +85,8 @@ def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool 
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
+    flush_dir = project.records_flush_dir
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         files_for_zip: List[Tuple[Path, str]] = []
@@ -151,10 +96,6 @@ def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool 
         metadata_file_path = _write_metadata_to_tmp(metadata_content, tmp_path)
         files_for_zip.append((metadata_file_path, METADATA_FILENAME))
 
-        # If processing created any records parquet files in the flush dir (either
-        # combined 'records_df.parquet' or partial 'records_batch_*.parquet'), include
-        # all of them in the zip.
-        flush_dir = getattr(project.settings, "records_flush_dir", None)
         added_records = False
         if flush_dir:
             try:
@@ -174,8 +115,8 @@ def export_project(project: Project, dest: Path, cleanup_combined_parquet: bool 
         # 2. Create the zip archive with all prepared files
         _add_files_to_zip(dest, files_for_zip)
 
-    # tidy up using procssing function; keeps combioned parquet intact
-    _cleanup_partial_chunks_dir(getattr(project.settings, "records_flush_dir", None), cleanup_combined_parquet=cleanup_combined_parquet)
+    # tidy up using processing function; keeps combined parquet intact
+    _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=cleanup_combined_parquet)
 
 
 def _validate_source_archive(src: Path) -> None:
@@ -221,7 +162,6 @@ def _reconstruct_project_core_data(
     name = metadata_content.get('name', 'Imported Project')
     base_dir_str = metadata_content.get('base_dir')
     paths_str_list = metadata_content.get('paths', []) # This gets "not a list" from the malformed metadata
-    settings_dict = metadata_content.get('settings', {})
     loader_id = metadata_content.get('loader')
 
     if not isinstance(paths_str_list, list): # This condition is TRUE for the test case
@@ -310,10 +250,6 @@ def _reconstruct_project_core_data(
                     "Cannot load project without processed files (e.g. image data)."
                 ) from e
         project.paths = reconstructed_paths
-
-    # Call _dict_to_settings with the potentially malformed settings_dict
-    # _dict_to_settings is now robust to non-dictionary inputs.
-    project.settings = _dict_to_settings(settings_dict)
 
     return project
 

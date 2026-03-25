@@ -5,7 +5,6 @@ from typing import Union, Iterable, List, Optional, Callable
 import polars as pl
 
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.io.project_io import export_project as _io_export_project
@@ -27,17 +26,6 @@ def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path
 def delete_path(project: Project, path: str) -> Project:
     logger.info(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
-
-def set_settings(project: Project, settings: Settings) -> Project:
-    """
-    Sets the project-specific settings by replacing the entire Settings object.
-    Detailed validation for individual settings is performed within the Project class itself.
-    Args:
-        project: The Project instance to update.
-        settings: An instance of the Settings dataclass containing the desired settings.
-    """
-    logger.info(f"API Call: Attempting to set project settings for '{project.name}'.")
-    return project.set_settings(settings)
 
 def process_files(
     project: Project, 
@@ -119,9 +107,9 @@ def export_html_report(
     Example:
         >>> from pixel_patrol_base import api
         >>> from pixel_patrol_base.core.report_config import ReportConfig
-        >>> project = api.import_project("my_project.zip")
+        >>> my_project = api.import_project("my_project.zip")
         >>> api.export_html_report(
-        ...     project,
+        ...     my_project,
         ...     "report.html",
         ...     report_config=ReportConfig(
         ...         widgets_excluded={"EmbeddingProjectorWidget"},
@@ -140,17 +128,6 @@ def export_html_report(
 
 def export_project(project: Project, dest: Path) -> None: # TODO: think about when project can be saved
     logger.info(f"API Call: Exporting project '{project.name}' to '{dest}'.")
-    # If a records_flush_dir was not set explicitly, default to a batches directory
-    # next to the destination ZIP. This matches CLI behavior and ensures
-    # intermediate chunks (for large runs) are placed where the final ZIP will live.
-    if getattr(project.settings, "records_flush_dir", None) is None:
-        inferred = dest.parent / f"{project.name}_batches"
-        try:
-            project.settings.records_flush_dir = inferred
-            logger.info("API Call: inferred records_flush_dir=%s", inferred)
-        except Exception:
-            logger.debug("API Call: could not set inferred records_flush_dir=%s", inferred)
-
     _io_export_project(project, dest)
     logger.info(f"API Call: Project '{project.name}' exported successfully.")
 
@@ -168,9 +145,6 @@ def get_base_dir(project: Project) -> Optional[Path]:
 
 def get_paths(project: Project) -> List[Path]:
     return project.get_paths()
-
-def get_settings(project: Project) -> Settings:
-    return project.get_settings()
 
 def get_records_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_records_df()

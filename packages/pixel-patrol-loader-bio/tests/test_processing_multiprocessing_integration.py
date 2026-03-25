@@ -7,9 +7,8 @@ import shutil
 import pytest
 
 from pixel_patrol_base.core.processing import build_records_df
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
-
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 
 def _repo_root() -> Path:
     """Resolve the repository root directory from this test file."""
@@ -56,17 +55,19 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
     copied = _copy_sample_images(src_files[:2], sample_dir)
 
     loader = BioIoLoader()
-    settings = Settings(
+
+    config = ProcessingConfig(
         processing_max_workers=2,
         records_flush_every_n=1,
         records_flush_dir=tmp_path / "batches",
+        selected_file_extensions=loader.SUPPORTED_EXTENSIONS,
     )
+
 
     df = build_records_df(
         bases=[sample_dir],
-        selected_extensions=loader.SUPPORTED_EXTENSIONS,
         loader=loader,
-        settings=settings,
+        processing_config=config
     )
 
     assert df is not None
@@ -89,7 +90,8 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
     copied = _copy_sample_images(src_files[:3], sample_dir)
 
     loader = BioIoLoader()
-    settings = Settings(
+
+    config = ProcessingConfig(
         processing_max_workers=2,
         records_flush_every_n=1,
         records_flush_dir=tmp_path / "batches",
@@ -102,9 +104,8 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
 
     df = build_records_df(
         bases=[sample_dir],
-        selected_extensions=loader.SUPPORTED_EXTENSIONS,
         loader=loader,
-        settings=settings,
+        processing_config=config,
         progress_callback=progress_callback,
     )
 
@@ -128,7 +129,8 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
     copied = _copy_sample_images(src_files[:2], sample_dir)
 
     loader = BioIoLoader()
-    settings = Settings(
+
+    config = ProcessingConfig(
         processing_max_workers=2,
         records_flush_every_n=1,
         records_flush_dir=tmp_path / "batches",
@@ -136,9 +138,8 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
 
     df = build_records_df(
         bases=[sample_dir],
-        selected_extensions=loader.SUPPORTED_EXTENSIONS,
         loader=loader,
-        settings=settings,
+        processing_config=config,
     )
 
     assert df is not None

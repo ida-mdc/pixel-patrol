@@ -18,7 +18,7 @@ class SliceAxisSpec(NamedTuple):
 
 
 def set_slicing_config(settings: Optional[Any]) -> None:
-    """Set the slicing configuration from Settings object for the current thread."""
+    """Set the slicing configuration for the current thread."""
     _thread_local.slicing_config = settings
 
 
