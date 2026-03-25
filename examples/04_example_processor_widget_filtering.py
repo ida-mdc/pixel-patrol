@@ -4,7 +4,6 @@ Example demonstrating configuration options for processors and widgets.
 
 from pathlib import Path
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.report_config import ReportConfig
 
@@ -15,8 +14,6 @@ def main():
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     
     project = api.create_project("Configured Project", base_dir=base_path, loader=loader)
-    settings = Settings(selected_file_extensions="all")
-    api.set_settings(project, settings)
     api.add_paths(project, paths)
     
     # Processing configuration: include only specific processors
@@ -39,7 +36,8 @@ def main():
     #   filter={"file_extension": {"op": "in", "value": "tif, png"}}  # filter rows
     #   dimensions={"T": "0", "Z": "1"}  # filter by dimensions
     report_config = ReportConfig(
-        widgets_excluded={"EmbeddingProjectorWidget", "ImageMosaikWidget"}
+        cmap='viridis',
+        widgets_excluded={"ImageMosaikWidget"}
     )
     
     api.show_report(project, report_config=report_config)

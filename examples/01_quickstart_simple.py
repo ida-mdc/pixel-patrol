@@ -1,6 +1,5 @@
 from pathlib import Path
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project_settings import Settings
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -19,14 +18,9 @@ def main():
     # Load data using the 'bioio' loader plugin
     loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
 
-    # Set your preferred file extensions to process (alternatively set to `{"tif", "png", "jpeg", ...}`, etc.)
-    # if loader is None all file types are processed, otherwise all file types supported by the loader
-    selected_file_extensions = "all" 
-
     # --- Step 2: create a project ---
     project = api.create_project("Quickstart Project", base_dir=base_path, loader=loader)
     # Optional: set project settings and the distinguished file extensions and paths to process
-    api.set_settings(project, Settings(selected_file_extensions=selected_file_extensions))
     api.add_paths(project, paths)
 
     # --- Step 3: process files ---

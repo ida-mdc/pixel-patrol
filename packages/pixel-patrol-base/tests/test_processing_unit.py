@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import polars as pl
 
 from pixel_patrol_base.core import processing
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 
 
 def test_iter_indexed_batches_respects_batch_size():
@@ -68,18 +66,18 @@ def test_records_accumulator_skips_combine_on_low_memory(tmp_path, monkeypatch):
 
 def test_resolve_flush_threshold_caps_to_half_dataset():
     """Flush threshold should be capped to half the dataset size."""
-    settings = Settings(records_flush_every_n=100)
+    config = ProcessingConfig(records_flush_every_n=100)
 
-    assert processing._resolve_flush_threshold(10, settings) == 5
+    assert processing._resolve_flush_threshold(10, config) == 5
 
 
 def test_resolve_flush_threshold_enforces_max_intermediate_flushes(caplog):
     """Very low flush thresholds that would cause > MAX_INTERMEDIATE_FLUSHES are adjusted."""
     # Very large dataset with tiny requested flush => would result in many flushes
-    settings = Settings(records_flush_every_n=1)
+    config = ProcessingConfig(records_flush_every_n=1)
 
     with caplog.at_level("WARNING"):
-        threshold = processing._resolve_flush_threshold(1_000_000, settings)
+        threshold = processing._resolve_flush_threshold(1_000_000, config)
 
     # Should be adjusted to ceil(total_rows / MAX_INTERMEDIATE_FLUSHES) => 1000
     assert threshold == 1000
@@ -137,16 +135,16 @@ def test_resolve_worker_count_single_file_and_caps(monkeypatch):
     """Worker count should be 1 when only 1 file; and capped by total rows."""
     monkeypatch.setattr(processing.os, "cpu_count", lambda: 8)
     # No settings: should not exceed total rows
-    assert processing._resolve_worker_count(None, total_rows=1) == 1
-    assert processing._resolve_worker_count(None, total_rows=3) == 3
+    assert processing._resolve_worker_count(ProcessingConfig(), total_rows=1) == 1
+    assert processing._resolve_worker_count(ProcessingConfig(), total_rows=3) == 3
     # Without total_rows provided, should default to CPU count
-    assert processing._resolve_worker_count(None) == 8
+    assert processing._resolve_worker_count(ProcessingConfig()) == 8
 
 
 def test_resolve_worker_count_respects_settings_and_total(monkeypatch):
     """Requested workers are capped by CPU count and by total rows."""
     monkeypatch.setattr(processing.os, "cpu_count", lambda: 8)
-    settings = Settings(processing_max_workers=10)
-    assert processing._resolve_worker_count(settings, total_rows=6) == 6
-    settings2 = Settings(processing_max_workers=4)
-    assert processing._resolve_worker_count(settings2, total_rows=6) == 4
+    config = ProcessingConfig(processing_max_workers=10)
+    assert processing._resolve_worker_count(config, total_rows=6) == 6
+    config2 = ProcessingConfig(processing_max_workers=4)
+    assert processing._resolve_worker_count(config2, total_rows=6) == 4

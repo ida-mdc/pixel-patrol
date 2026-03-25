@@ -4,7 +4,6 @@ import os
 
 from pixel_patrol_base import api
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 
 def test_create_project_basic(mock_project_name: str, tmp_path: Path):
     project = api.create_project(mock_project_name, tmp_path)
@@ -13,7 +12,6 @@ def test_create_project_basic(mock_project_name: str, tmp_path: Path):
     assert project.base_dir == tmp_path.resolve() # Assert base_dir is set
     assert project.paths == [project.base_dir]
     assert project.records_df is None
-    assert isinstance(project.settings, Settings)
 
 def test_create_project_empty_name_not_allowed(tmp_path: Path): # Add tmp_path fixture
     with pytest.raises(ValueError, match="Project name cannot be empty or just whitespace."):

@@ -20,7 +20,7 @@ import webbrowser
 import time
 
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -876,14 +876,10 @@ def _run_processing(
             message="Setting project settings...",
         )
 
-        # Set settings (using defaults for cmap and n_example_files)
-        settings = Settings(
-            cmap="rainbow",  # Default value
-            n_example_files=9,  # Default value
+        processing_config = ProcessingConfig(
             selected_file_extensions=extensions,
             pixel_patrol_flavor=flavor,
         )
-        api.set_settings(project, settings)
 
         update_processing_state(
             status="running",
@@ -928,7 +924,7 @@ def _run_processing(
             )
         
         # Use the existing processing method with progress callback
-        api.process_files(project, progress_callback=progress_callback)
+        api.process_files(project, processing_config=processing_config, progress_callback=progress_callback)
         
         # Update progress after processing
         if project.records_df is not None:

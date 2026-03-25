@@ -9,8 +9,8 @@ import tifffile
 from PIL import Image
 
 from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
-from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
     _build_deep_record_df,
@@ -41,7 +41,9 @@ def test_build_records_df_from_file_system_no_images(tmp_path):
     extensions = {"png", "jpg"}
 
     with patch('pixel_patrol_base.core.processing._build_deep_record_df', return_value=pl.DataFrame()) as mock_get_deep_records_df:
-        records_df = build_records_df(paths, extensions, "bioio")
+        records_df = build_records_df(paths,
+                                      loader="bioio",
+                                      processing_config=ProcessingConfig(selected_file_extensions=extensions))
         assert records_df is None
         mock_get_deep_records_df.assert_not_called()
 
@@ -155,7 +157,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_valid = tmp_path / "valid.jpg"; p_valid.write_bytes(b"")
     p_invalid = tmp_path / "invalid.png"; p_invalid.write_bytes(b"")
 
-    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
+    def fake_load_and_process(file_path, _loader, _processors):
         if Path(file_path) == p_valid:
             return [{"width": 10, "height": 20}]
         return []
@@ -192,7 +194,7 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
 
     expected_paths = [str(img1), str(img2)]
 
-    def fake_build_deep_record_df(basic, loader_instance, settings=None, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader_instance, progress_callback=None):
         width_map = {str(img1): 64, str(img2): 128}
         height_map = {str(img1): 48, str(img2): 256}
         return basic.with_columns(
@@ -210,8 +212,8 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
 
     result = build_records_df(
         bases=[base],
-        selected_extensions={"jpg", "png"},
-        loader="bioio"
+        loader="bioio",
+        processing_config=ProcessingConfig(selected_file_extensions={"png", "jpg"})
     )
 
     assert result is not None
@@ -234,7 +236,7 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
     img1 = base / "one.jpg";  img1.write_text("x")
     img2 = base / "two.png";  img2.write_text("y")
 
-    def fake_build_deep_record_df(basic, loader, settings=None, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader, progress_callback=None):
         width_map = {str(img1): 10, str(img2): 20}
         height_map = {str(img1): 15, str(img2): 25}
         return basic.with_columns(
@@ -252,8 +254,8 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
 
     result = build_records_df(
         bases=[base],
-        selected_extensions={"jpg", "png"},
         loader="bioio",
+        processing_config=ProcessingConfig(selected_file_extensions={"jpg", "png"}),
         progress_callback=None
     )
 
@@ -267,7 +269,6 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
 
 
 def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
-    from pathlib import Path
     base = tmp_path
     df = pl.DataFrame({
         "path": [str(base / "sub" / "a.txt"), str(base / "sub" / "b.txt")],
@@ -289,8 +290,6 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
 
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
-    expected_full = [str(base), str(base)]
-    expected_last = [Path(base).name, Path(base).name]
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
@@ -306,8 +305,8 @@ def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
 
     df = build_records_df(
         bases=[img_dir],
-        selected_extensions={"png"},
-        loader=loader
+        loader=loader,
+        processing_config=ProcessingConfig(selected_file_extensions={"png"}),
     )
     assert isinstance(df, pl.DataFrame)
     paths = df["path"].to_list()
@@ -333,8 +332,8 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
 
     df = build_records_df(
         bases=[tmp_path],
-        selected_extensions={"tif"},
-        loader=loader
+        loader=loader,
+        processing_config=ProcessingConfig(selected_file_extensions={"tif"}),
     )
 
     expected_cols = {
@@ -393,8 +392,8 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
 
     df = build_records_df(
         bases=[tmp_path],
-        selected_extensions={"png"},
-        loader=loader
+        loader=loader,
+        processing_config=ProcessingConfig(selected_file_extensions={"png"}),
     )
 
     assert "mean_intensity" in df.columns

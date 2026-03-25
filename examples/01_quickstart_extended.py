@@ -1,6 +1,6 @@
 from pathlib import Path
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.report_config import ReportConfig
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -24,9 +24,11 @@ def main():
     # loader = None    # for basic file info only (no image data/metadata); only pixel-patrol-base package needed
     # loader = 'zarr'   # for zarr files; requires pixel-patrol-loader-zarr package
 
-    # Set your preferred file extensions to process (alternatively set to `{"tif", "png", "jpeg", ...}`, etc.)
-    # if loader is None all file types are processed, otherwise all file types supported by the loader
-    selected_file_extensions = "all" 
+    processing_config = ProcessingConfig(
+        processing_max_workers=4,  # adjust how many CPU cores to use for parallel processing
+        selected_file_extensions= {"tif", "png", "jpeg"},  # only process these file types; Don't set to process all files
+        #records_flush_dir=zip_path.parent / f"{project.name}_batches",  # if not set, inferred by default
+    )
 
     # --- Step 2: create a project ---
     project = api.create_project("Quickstart Project", base_dir=base_path, loader=loader)
@@ -34,22 +36,10 @@ def main():
     # --- Step 3: (optional) add sub-paths (inside base_path) ---
     api.add_paths(project, paths)
 
-    # --- Step 4: set basic settings (e.g. file types to process) ---
-    # `process_files()` will infer a default chunk directory
-    # We keep small batch/flush settings for the quickstart so the
-    # example writes visible chunks during the demo.
-    records_flush_dir = zip_path.parent / f"{project.name}_batches"
-
-    settings = Settings(
-        selected_file_extensions=selected_file_extensions,
-        processing_max_workers=4, # adjust how many cpu cores to use for parallel processing
-        records_flush_dir=records_flush_dir, # where do you want to store the intermediate result files
-    )
-    api.set_settings(project, settings)
 
     # --- Step 5: process files ---
     # This step creates a dataframe with file information, and if available metadata and data (e.g. the image itself) metrics.
-    api.process_files(project)
+    api.process_files(project, processing_config=processing_config)
 
     # get the results dataframe
     records_df = api.get_records_df(project)
