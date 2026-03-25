@@ -49,8 +49,8 @@ def test_build_records_df_from_file_system_no_images(tmp_path):
 
 
 def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
-    p1 = tmp_path / "img1.jpg"; p1.write_bytes(b"")
-    p2 = tmp_path / "img2.png"; p2.write_bytes(b"")
+    p1 = tmp_path / "img1.jpg"; p1.touch()
+    p2 = tmp_path / "img2.jpg"; p2.touch()
     paths = [p1, p2]
 
     def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True):
@@ -83,7 +83,7 @@ def test_load_and_process_returns_empty_for_nonexistent_file(tmp_path, loader):
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
-    img_file.write_bytes(b"not really an image")
+    img_file.write_bytes(b"not really an image") # type: ignore
     monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
     assert load_and_process_records_from_file(img_file, loader=loader, processors=[]) == []
 
@@ -131,7 +131,7 @@ class DummyImg:
 
 def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.png"
-    img_file.write_bytes(b"")
+    img_file.touch()
 
     monkeypatch.setattr(
         "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
@@ -154,10 +154,12 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
 
 
 def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch, loader, processors):
-    p_valid = tmp_path / "valid.jpg"; p_valid.write_bytes(b"")
-    p_invalid = tmp_path / "invalid.png"; p_invalid.write_bytes(b"")
+    p_valid = tmp_path / "valid.jpg"
+    p_valid.touch()
+    p_invalid = tmp_path / "invalid.png"
+    p_invalid.touch()
 
-    def fake_load_and_process(file_path, _loader, _processors):
+    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
         if Path(file_path) == p_valid:
             return [{"width": 10, "height": 20}]
         return []
@@ -185,16 +187,17 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
 
 
 def test_build_records_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):
-
     base = tmp_path / "root"
     base.mkdir()
-    img1 = base / "graphic.png"; img1.write_text("dummy")
-    img2 = base / "photo1.jpg";  img2.write_text("dummy")
+    img1 = base / "graphic.png"
+    img1.write_text("dummy")
+    img2 = base / "photo1.jpg"
+    img2.write_text("dummy")
     (base / "notes.txt").write_text("not an image")
 
     expected_paths = [str(img1), str(img2)]
 
-    def fake_build_deep_record_df(basic, loader_instance, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader_instance, processing_config=None, progress_callback=None):
         width_map = {str(img1): 64, str(img2): 128}
         height_map = {str(img1): 48, str(img2): 256}
         return basic.with_columns(
@@ -205,6 +208,7 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
             .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
             .alias("height"),
         )
+
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
         fake_build_deep_record_df
@@ -229,14 +233,16 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
     expected_dict = dict(zip(expected_paths, zip([64, 128], [48, 256])))
     assert result_dict == expected_dict
 
-def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
 
+def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
     base = tmp_path / "root"
     base.mkdir()
-    img1 = base / "one.jpg";  img1.write_text("x")
-    img2 = base / "two.png";  img2.write_text("y")
+    img1 = base / "one.jpg"
+    img1.write_text("x")
+    img2 = base / "two.png"
+    img2.write_text("y")
 
-    def fake_build_deep_record_df(basic, loader, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader, processing_config=None, progress_callback=None):
         width_map = {str(img1): 10, str(img2): 20}
         height_map = {str(img1): 15, str(img2): 25}
         return basic.with_columns(
@@ -247,6 +253,7 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
             .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
             .alias("height"),
         )
+
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
         fake_build_deep_record_df
@@ -291,6 +298,7 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
     assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
     assert out["modification_month"].to_list() == [3, 7]
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
+
 
 def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
     img_dir = tmp_path / "imgs"
