@@ -68,7 +68,7 @@ def test_zarr_path_recognition_as_image(zarr_folder: Path):
     Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
     """
     parent_dir = zarr_folder.parent
-    paths_df = build_records_df([parent_dir], selected_extensions='all', loader=ZarrLoader())
+    paths_df = build_records_df([parent_dir], loader=ZarrLoader())
     zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
 
     assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"

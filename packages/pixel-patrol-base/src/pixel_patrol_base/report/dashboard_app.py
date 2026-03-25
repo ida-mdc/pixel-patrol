@@ -9,6 +9,7 @@ from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash.exceptions import PreventUpdate
 from datetime import datetime
 import plotly.io as pio
+import logging
 
 from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
@@ -38,13 +39,8 @@ from pixel_patrol_base.report.constants import (
     SAVE_SNAPSHOT_BUTTON_ID,
     SAVE_SNAPSHOT_DOWNLOAD_ID,
     DEFAULT_REPORT_GROUP_COL,
-    GC_GROUP_COL,
-    GC_DIMENSIONS,
-    GC_FILTER,
-    GC_IS_SHOW_SIGNIFICANCE,
+    DEFAULT_CMAP,
 )
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +58,8 @@ def create_app(project: Project, initial_global_config: dict | None = None, repo
         initial_global_config = report_dict
     return _create_app(
         df=project.records_df,
-        default_palette_name=project.get_settings().cmap,
-        pixel_patrol_flavor=project.get_settings().pixel_patrol_flavor,
+        default_palette_name=report_config.cmap if report_config else DEFAULT_CMAP,
+        pixel_patrol_flavor='', # TODO: fix once we remove the zip file
         project_name=project.name,
         project=project,
         initial_global_config=initial_global_config,
@@ -124,7 +120,6 @@ def _create_app(
             logger.debug(f"Remaining after: {filtered_names}")
             if report_config.widgets_excluded - original_names:
                 logger.warning(f"Some excluded widget names were not found: {report_config.widgets_excluded - original_names}")
-            excluded_found = report_config.widgets_excluded & original_names
             still_present = report_config.widgets_excluded & filtered_names
             if still_present:
                 logger.error(f"Widgets that should be excluded are still present: {still_present}")
@@ -278,8 +273,8 @@ def _create_app(
         Compute filtered row POSITIONS once per global-config change.
         Widgets reuse these positions for fast positional indexing (df[positions]).
         """
-        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
-        return compute_filtered_row_positions(df, report_config)
+        report_cfg = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        return compute_filtered_row_positions(df, report_cfg)
 
 
     @app.callback(
@@ -296,11 +291,11 @@ def _create_app(
         """
         Build color map based on the *already filtered* subset and current grouping.
         """
-        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        report_cfg = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_processed, group_col, _resolved, _warning, order = prepare_widget_data(
             df,
             subset_positions,
-            report_config,
+            report_cfg,
             metric_base=None,
         )
 
@@ -353,7 +348,7 @@ def _create_app(
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
 
         if trigger_id == GLOBAL_RESET_BUTTON_ID:
-            report_config = ReportConfig(
+            report_cfg = ReportConfig(
                 group_col=DEFAULT_REPORT_GROUP_COL,
                 filter={},
                 dimensions={}
@@ -372,14 +367,14 @@ def _create_app(
                 if val and val != "All":
                     dimensions[id_obj['index']] = val
 
-            report_config = ReportConfig(
+            report_cfg = ReportConfig(
                 group_col=group_col,
                 filter=filters if filters else None,
                 dimensions=dimensions if dimensions else None,
                 is_show_significance=show_significance
             )
         
-        return report_config.to_dict()
+        return report_cfg.to_dict()
 
     @app.callback(
         Output(GLOBAL_GROUPBY_COLS_ID, "value"),
@@ -404,8 +399,8 @@ def _create_app(
         if not n_clicks:
             raise PreventUpdate
 
-        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
-        df_filtered, group_col = apply_global_row_filters_and_grouping(df, report_config)
+        report_cfg = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        df_filtered, group_col = apply_global_row_filters_and_grouping(df, report_cfg)
 
         # add a human-readable group label column for clarity
         df_export = df_filtered.with_columns(
@@ -432,8 +427,8 @@ def _create_app(
         from pathlib import Path
         from pixel_patrol_base import api as pp_api
 
-        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
-        df_filtered, _ = apply_global_row_filters_and_grouping(df, report_config)
+        report_cfg = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
+        df_filtered, _ = apply_global_row_filters_and_grouping(df, report_cfg)
 
         # 2. Clone the project and override records_df
         new_project = copy.copy(project)

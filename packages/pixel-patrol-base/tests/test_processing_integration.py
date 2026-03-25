@@ -7,8 +7,8 @@ from typing import List, Optional
 import polars as pl
 
 from pixel_patrol_base.core import processing
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 
 
 class DummyLoader:
@@ -152,7 +152,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    settings = Settings(
+    config = ProcessingConfig(
         processing_max_workers=1,
         records_flush_every_n=1,
         records_flush_dir=flush_dir,
@@ -165,52 +165,12 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
+    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
 
     assert df.height == 2
     assert "width" in df.columns
     assert (flush_dir / "records_df.parquet").exists()
     assert list(flush_dir.glob("records_batch_*.parquet")) == []
-
-
-def test_build_deep_record_df_resumes_from_partial_chunks(tmp_path, monkeypatch):
-    """Verify resume skips previously processed rows and preserves their data."""
-    flush_dir = tmp_path / "batches"
-    flush_dir.mkdir()
-    p1 = tmp_path / "first.png"
-    p2 = tmp_path / "second.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
-
-    partial_df = pl.DataFrame({
-        "row_index": [0],
-        "path": [str(p1)],
-        "width": [11],
-    })
-    partial_df.write_parquet(flush_dir / "records_batch_00000.parquet")
-
-    settings = Settings(
-        processing_max_workers=1,
-        records_flush_every_n=1,
-        records_flush_dir=flush_dir,
-        resume=True,
-    )
-
-    processed: List[str] = []
-
-    def tracking_fake(file_path, loader, processors, show_processor_progress=True):
-        processed.append(Path(file_path).name)
-        return [{"width": 22}]
-
-    monkeypatch.setattr(processing, "load_and_process_records_from_file", tracking_fake)
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
-
-    basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
-
-    assert processed == [p2.name]
-    assert df["path"].to_list() == [str(p1), str(p2)]
-    assert df["width"].to_list() == [11, 22]
 
 
 def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monkeypatch):
@@ -220,7 +180,7 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    settings = Settings(processing_max_workers=2)
+    config = ProcessingConfig(processing_max_workers=2)
 
     monkeypatch.setattr(
         processing, "load_and_process_records_from_file",
@@ -231,7 +191,7 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
+    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
 
     assert FakeProcessPoolExecutor.last_instance is not None
     assert FakeProcessPoolExecutor.last_instance.max_workers == 2
@@ -246,7 +206,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    settings = Settings(processing_max_workers=2)
+    config = ProcessingConfig(processing_max_workers=2)
 
     def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
         return {"width": 7}
@@ -266,7 +226,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
     monkeypatch.setattr(processing, "ThreadPoolExecutor", FakeThreadPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
+    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
 
     assert FakeThreadPoolExecutor.last_instance is not None
     assert FakeThreadPoolExecutor.last_instance.max_workers == 2
@@ -276,56 +236,12 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
 def test_process_records_infers_flush_dir_when_missing(tmp_path, monkeypatch):
     """Project should infer records_flush_dir when unset and base_dir is known."""
     project = Project(name="demo", base_dir=tmp_path, loader=None)
-    settings = Settings(selected_file_extensions={"png"})
-    project.set_settings(settings)
 
     monkeypatch.setattr(processing, "build_records_df", lambda *args, **kwargs: pl.DataFrame())
 
-    project.process_records()
+    project.process_records(processing_config=ProcessingConfig(selected_file_extensions="all"))
 
-    assert project.settings.records_flush_dir == Path(tmp_path) / "demo_batches"
-
-
-def test_build_deep_record_df_ignores_corrupt_resume_chunk(tmp_path, monkeypatch):
-    """Corrupt chunk files should be skipped and processing should continue."""
-    flush_dir = tmp_path / "batches"
-    flush_dir.mkdir()
-
-    p1 = tmp_path / "first.png"
-    p2 = tmp_path / "second.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
-
-    valid_df = pl.DataFrame({
-        "row_index": [0],
-        "path": [str(p1)],
-        "width": [11],
-    })
-    valid_df.write_parquet(flush_dir / "records_batch_00000.parquet")
-    (flush_dir / "records_batch_00001.parquet").write_bytes(b"corrupt")
-
-    settings = Settings(
-        processing_max_workers=1,
-        records_flush_every_n=1,
-        records_flush_dir=flush_dir,
-        resume=True,
-    )
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 22}),
-    )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
-
-    basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
-
-    ## New:
-    # Sort by path instead of row_index since row_index is deleted in post_process_final_df
-    df = df.sort("path")
-    ##
-    assert df["path"].to_list() == [str(p1), str(p2)]
-    assert df["width"].to_list() == [11, 22]
+    assert project.records_flush_dir == Path(tmp_path) / "demo_batches"
 
 
 def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
@@ -335,7 +251,7 @@ def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    settings = Settings(processing_max_workers=2)
+    config = ProcessingConfig(processing_max_workers=2)
 
     monkeypatch.setattr(
         processing, "load_and_process_records_from_file",
@@ -346,7 +262,7 @@ def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutorWithFailure)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
+    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
 
     assert df.height == 2
     assert "path" in df.columns
@@ -359,7 +275,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    settings = Settings(
+    config = ProcessingConfig(
         processing_max_workers=1,
         records_flush_every_n=1,
         records_flush_dir=None,
@@ -377,7 +293,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
     monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), settings=settings)
+    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
 
     df = df.sort("row_index")
     assert set(df.columns) == {"row_index", "path", "width", "extra"}

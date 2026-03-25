@@ -22,10 +22,7 @@ from pixel_patrol_base.utils.df_utils import (
     postprocess_basic_file_metadata_df,
 )
 from pixel_patrol_base.core.specs import is_record_matching_processor
-from pixel_patrol_base.config import (
-    DEFAULT_RECORDS_FLUSH_EVERY_N, COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
-)
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
 from pixel_patrol_base.utils.array_utils import set_slicing_config
@@ -64,13 +61,7 @@ def _process_worker_initializer(
     
     # Set slicing configuration for this worker thread/process
     if processing_config is not None:
-        # Create a temporary object with slicing attributes for thread-local storage
-        class _TempSlicingConfig:
-            def __init__(self, config):
-                self.slicing_enabled = config.slicing_enabled
-                self.slicing_dimensions_included = config.slicing_dimensions_included
-                self.slicing_dimensions_excluded = config.slicing_dimensions_excluded
-        set_slicing_config(_TempSlicingConfig(processing_config))
+        set_slicing_config(processing_config)
     
     _PROCESS_WORKER_CONTEXT = {
         "loader": loader_instance,
@@ -267,24 +258,23 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
 def _build_deep_record_df(
     basic: pl.DataFrame,
     loader_instance: PixelPatrolLoader,
-    settings: Optional[Settings] = None,
-    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     processing_config: Optional[ProcessingConfig] = None,
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> pl.DataFrame:
     """Process each path (optionally in parallel) and build a Polars DataFrame.
 
     Args:
         basic: The basic Polars DataFrame with file paths and metadata.
         loader_instance: An instance of PixelPatrolLoader to load files.
-        settings: Optional Settings object for processing configuration.
-        progress_callback: Optional GUI callback for progress updates.
         processing_config: Optional ProcessingConfig for slicing and processor selection.
+        progress_callback: Optional GUI callback for progress updates.
     Returns:
         A Polars DataFrame containing deep processed records, aka the results.
     """
     if basic.is_empty():
         return pl.DataFrame([])
 
+    config = processing_config or ProcessingConfig()
     total = basic.height
     processors = discover_processor_plugins()
     
@@ -295,29 +285,23 @@ def _build_deep_record_df(
             processors = [p for p in processors if p.__class__.__name__ not in processing_config.processors_excluded]
     
     processor_classes = [proc.__class__ for proc in processors]
-    
-    # Set slicing configuration for this thread (create a temporary Settings-like object for thread-local storage)
-    if processing_config:
-        # Create a temporary object with slicing attributes for thread-local storage
-        class _TempSlicingConfig:
-            def __init__(self, config):
-                self.slicing_enabled = config.slicing_enabled
-                self.slicing_dimensions_included = config.slicing_dimensions_included
-                self.slicing_dimensions_excluded = config.slicing_dimensions_excluded
-        set_slicing_config(_TempSlicingConfig(processing_config))
-    worker_count = _resolve_worker_count(settings, total)
-    flush_threshold = _resolve_flush_threshold(total, settings)
+
+    set_slicing_config(config)
+    worker_count = _resolve_worker_count(config, total)
+    flush_threshold = _resolve_flush_threshold(total, config)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
     show_processor_progress = worker_count == 1
 
     accumulator = _RecordsAccumulator(
         flush_every_n=flush_threshold,
-        flush_dir=getattr(settings, "records_flush_dir", None),
+        flush_dir=config.records_flush_dir,
     )
 
     processed_rows: Set[int] = set()
+
+    resume = False
     if accumulator.flush_dir:
-        if settings and getattr(settings, "resume", False):
+        if resume:
             # Resume: adopt existing partial chunks and skip already-processed files
             processed_rows = accumulator.load_existing_chunks()
         else:
@@ -545,28 +529,26 @@ def load_and_process_records_from_file(
 
 def build_records_df(
     bases: List[Path],
-    selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
-    settings: Optional[Settings] = None,
-    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     processing_config: Optional[ProcessingConfig] = None,
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> Optional[pl.DataFrame]:
     """Build the full records DataFrame by scanning files and processing them.
 
     Args:
         bases: List of base directories to scan for files.
-        selected_extensions: Set of file extensions to include, or "all" for all supported ('{"tif", "png", "jpg", ...}', or '"all"').
         loader: Optional PixelPatrolLoader instance to use for loading files.
-        settings: Optional Settings object for processing configuration.
-        progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
-                            Called for each file processed during deep processing.
         processing_config: Optional ProcessingConfig for slicing and processor selection.
+        progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
+                            Called for each file processed during deep processing
     Returns:
         A Polars DataFrame containing the full records, or None if no files were found.
     """
 
+    config = processing_config or ProcessingConfig()
+
     basic = _build_basic_file_df(
-        bases, loader=loader, accepted_extensions=selected_extensions
+        bases, loader=loader, accepted_extensions=config.selected_file_extensions
     )
     if loader is None or basic is None:
         return basic
@@ -574,7 +556,7 @@ def build_records_df(
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
-    deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback, processing_config=processing_config)
+    deep = _build_deep_record_df(basic, loader, processing_config=config, progress_callback=progress_callback)
 
     return deep
 
@@ -644,7 +626,7 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     return result
 
 
-def _resolve_worker_count(settings: Optional[Settings], total_rows: Optional[int] = None) -> int:
+def _resolve_worker_count(config: ProcessingConfig, total_rows: Optional[int] = None) -> int:
     """
     Determine the number of parallel workers to use (minimum 1).
 
@@ -656,15 +638,15 @@ def _resolve_worker_count(settings: Optional[Settings], total_rows: Optional[int
       datasets.
 
     Args:
-        settings: Optional Settings object that may specify `processing_max_workers`.
+        config: ProcessingConfig that may specify `processing_max_workers`.
         total_rows: Optional total number of rows/files that will be processed.
     Returns:
         An integer representing the number of parallel workers to use.
     """
     cpu_count = os.cpu_count() or 1
 
-    if settings and settings.processing_max_workers is not None:
-        requested = max(1, settings.processing_max_workers)
+    if config.processing_max_workers is not None:
+        requested = max(1, config.processing_max_workers)
         max_workers = min(requested, cpu_count)
     else:
         max_workers = max(1, cpu_count)
@@ -697,22 +679,18 @@ def _resolve_batch_size(
     return max(1, math.ceil(flush_threshold / max(1, worker_count)))
 
 
-def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> int:
+def _resolve_flush_threshold(total_rows: int, config: ProcessingConfig) -> int:
     """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush.
 
     Args:
         total_rows: Total number of rows/files to process.
-        settings: Optional Settings object that may specify `records_flush_every_n`.
+        config: ProcessingConfig that may specify `records_flush_every_n`.
     Returns:
         An integer representing the flush threshold for records.
     """
     if total_rows <= 0:
         return 0
-    value = (
-        settings.records_flush_every_n
-        if settings and settings.records_flush_every_n is not None
-        else DEFAULT_RECORDS_FLUSH_EVERY_N
-    )
+    value = config.records_flush_every_n
     # Preserve the ability to disable flushing when a non-positive value is configured.
     if value is None or value <= 0:
         return 0

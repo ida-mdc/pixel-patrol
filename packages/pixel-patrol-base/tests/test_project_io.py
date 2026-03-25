@@ -9,10 +9,8 @@ import shutil
 from typing import List, Optional
 
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
 from pixel_patrol_base.io.project_io import METADATA_FILENAME, RECORDS_DF_FILENAME
-from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
 from pixel_patrol_base.io.parquet_utils import _deserialize_ndarray_columns_dataframe
 
 # Configure logging for tests to capture warnings/errors
@@ -47,7 +45,6 @@ def test_export_project_empty(project_instance: Project, tmp_path: Path):
             assert Path(metadata['base_dir']) == project_instance.base_dir
             # For a newly created project, its `paths` list contains only its `base_dir`
             assert [Path(p) for p in metadata['paths']] == [project_instance.base_dir]
-            assert metadata['settings'] == _settings_to_dict(project_instance.settings)
 
 
 def test_export_project_with_minimal_data(project_with_minimal_data: Project, tmp_path: Path):
@@ -69,7 +66,6 @@ def test_export_project_with_minimal_data(project_with_minimal_data: Project, tm
             assert metadata['name'] == project_with_minimal_data.name
             assert Path(metadata['base_dir']) == project_with_minimal_data.base_dir
             assert [Path(p) for p in metadata['paths']] == project_with_minimal_data.paths
-            assert metadata['settings'] == _settings_to_dict(project_with_minimal_data.settings)
 
 
 def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: Path):
@@ -91,7 +87,6 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
             assert metadata['name'] == project_with_all_data.name
             assert Path(metadata['base_dir']) == project_with_all_data.base_dir
             assert [Path(p) for p in metadata['paths']] == project_with_all_data.paths
-            assert metadata['settings'] == _settings_to_dict(project_with_all_data.settings)
 
 
         # Verify records_df content
@@ -200,7 +195,6 @@ def test_import_project_empty(project_instance: Project, tmp_path: Path):
     assert imported_project.name == project_instance.name
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
-    assert imported_project.settings == project_instance.settings
     assert imported_project.records_df is None
 
 
@@ -214,7 +208,6 @@ def test_import_project_with_minimal_data(project_with_minimal_data: Project, tm
     assert imported_project.name == project_with_minimal_data.name
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
-    assert imported_project.settings == project_with_minimal_data.settings
     assert imported_project.records_df is None  # Not built in this fixture
 
 
@@ -228,7 +221,6 @@ def test_import_project_with_all_data(project_with_all_data: Project, tmp_path: 
     assert imported_project.name == project_with_all_data.name
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
-    assert imported_project.settings == project_with_all_data.settings
     assert imported_project.records_df is not None
 
     # Prepare expected records_df for comparison by dropping the 'thumbnail' column
@@ -312,37 +304,6 @@ def test_import_project_missing_metadata(tmp_path: Path):
         api.import_project(corrupted_zip_path)
 
 
-def test_import_project_malformed_metadata_settings_not_dict(project_instance: Project, tmp_path: Path, caplog):
-    """Test importing a project where settings in metadata.yml are not a dictionary."""
-    export_path = tmp_path / "malformed_settings_project.zip"
-    tmp_staging_path = tmp_path / "temp_staging_settings"
-    tmp_staging_path.mkdir()
-
-    try:
-        malformed_metadata = {
-            'name': project_instance.name,
-            'base_dir': str(project_instance.base_dir),
-            'paths': [str(p) for p in project_instance.paths],
-            'settings': "not a dictionary", # Intentionally malformed settings
-        }
-        metadata_file = tmp_staging_path / METADATA_FILENAME
-        with open(metadata_file, 'w') as f:
-            yaml.dump(malformed_metadata, f)
-
-        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(metadata_file, arcname=METADATA_FILENAME)
-
-        with caplog.at_level(logging.WARNING):
-            imported_project = api.import_project(export_path)
-            # Warning about malformed settings should be emitted and we fall back to defaults
-            assert "Settings IO: Expected a dict for settings but got str; using default Settings." in caplog.text
-
-        # Verify that default settings are used as a fallback
-        assert imported_project.settings == Settings()
-    finally:
-        shutil.rmtree(tmp_staging_path, ignore_errors=True)
-
-
 def test_import_project_malformed_metadata_paths_not_list(project_instance: Project, tmp_path: Path, caplog):
     """Test importing a project where paths in metadata.yml are not a list."""
     export_path = tmp_path / "malformed_paths_project.zip"
@@ -354,7 +315,6 @@ def test_import_project_malformed_metadata_paths_not_list(project_instance: Proj
             'name': project_instance.name,
             'base_dir': str(project_instance.base_dir),  # Ensure base_dir is present and a string
             'paths': "not a list",  # Intentionally malformed paths
-            'settings': _settings_to_dict(project_instance.settings),
         }
         metadata_file = tmp_staging_path / METADATA_FILENAME
         with open(metadata_file, 'w') as f:
@@ -396,7 +356,6 @@ def test_import_project_corrupted_dataframe_parquet(project_with_minimal_data: P
     assert imported_project.name == project_with_minimal_data.name
     assert imported_project.base_dir == project_with_minimal_data.base_dir
     assert imported_project.paths == project_with_minimal_data.paths
-    assert imported_project.settings == project_with_minimal_data.settings
     assert imported_project.records_df is None  # Still None for this fixture type
 
 
@@ -416,7 +375,6 @@ def test_import_project_missing_dataframe_files(project_instance: Project, tmp_p
     assert imported_project.records_df is None
     assert imported_project.base_dir == project_instance.base_dir
     assert imported_project.paths == project_instance.paths
-    assert imported_project.settings == project_instance.settings
 
 
 def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_path: Path):
@@ -433,7 +391,6 @@ def test_export_import_project_full_cycle(project_with_all_data: Project, tmp_pa
     assert imported_project.name == project_with_all_data.name
     assert imported_project.base_dir == project_with_all_data.base_dir
     assert imported_project.paths == project_with_all_data.paths
-    assert imported_project.settings == project_with_all_data.settings
     assert imported_project.records_df is not None
 
     # Exclude 'thumbnail' column from comparison as it's not being exported/imported correctly
@@ -497,7 +454,6 @@ def create_mock_project_zip(
         'name': project_name,
         'base_dir': base_dir_str,
         'paths': paths_str_list,
-        'settings': _settings_to_dict(Settings()),  # Use default settings for simplicity
     }
     metadata_file_path = temp_dir_to_zip / METADATA_FILENAME
     with open(metadata_file_path, 'w') as f:
@@ -690,7 +646,6 @@ def test_import_project_malformed_metadata_base_dir_none(tmp_path: Path):
             'name': "NullBaseDirNoImg",
             'base_dir': None,  # Explicitly None
             'paths': [],
-            'settings': _settings_to_dict(Settings()),
         }
         metadata_file = tmp_staging_path / METADATA_FILENAME
         with open(metadata_file, 'w') as f:
@@ -744,7 +699,6 @@ def test_import_project_malformed_metadata_base_dir_none_with_records_df(tmp_pat
         'name': "NullBaseDirWithImg",
         'base_dir': None,  # Explicitly None here
         'paths': [],
-        'settings': _settings_to_dict(Settings()),
     }
     metadata_file_path = temp_staging_path / METADATA_FILENAME
     with open(metadata_file_path, 'w') as f:
@@ -786,7 +740,6 @@ def test_import_project_malformed_metadata_paths_missing_key(project_instance: P
             'name': project_instance.name,
             'base_dir': str(project_instance.base_dir),
             # 'paths' key is intentionally missing
-            'settings': _settings_to_dict(project_instance.settings),
         }
         metadata_file = tmp_staging_path / METADATA_FILENAME
         with open(metadata_file, 'w') as f:
