@@ -63,7 +63,8 @@ class DataFrameWidget(BaseReportWidget):
         if df_filtered.is_empty():
             return show_no_data_message()
 
-        cols_to_display = df_filtered.columns[:MAX_COLS_DISPLAYED]
+        displayable_cols = [c for c in df_filtered.columns if df_filtered[c].dtype != pl.Binary]
+        cols_to_display = displayable_cols[:MAX_COLS_DISPLAYED]
         df_limited = (
             df_filtered
             .select(cols_to_display)
