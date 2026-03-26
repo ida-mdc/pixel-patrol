@@ -1,4 +1,5 @@
 from typing import Dict, Optional, List, Any, Tuple
+import random
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -499,8 +500,15 @@ def plot_violin(
     else:
         groups = df.get_column(group_col).unique().drop_nulls().sort().to_list()
 
+    VIOLIN_MAX_POINTS = 2000
+    any_sampled = False
+
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
+
+        if len(df_group) > VIOLIN_MAX_POINTS:
+            df_group = df_group.sample(n=VIOLIN_MAX_POINTS, seed=42)
+            any_sampled = True
 
         group_color = color_map.get(str(group_name), "#333333")
 
@@ -540,10 +548,14 @@ def plot_violin(
         box=dict(line_color="black"),
     )
 
+    display_title = title
+    if any_sampled:
+        display_title = (title or "") + f"<br><sup>sampled to {VIOLIN_MAX_POINTS} per group</sup>"
+
     layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         dict(
-            title_text=title,
+            title_text=display_title,
             yaxis_title=y.replace("_", " ").title(),
             xaxis_title=prettify_col_name(group_col),
             showlegend=show_legend,
