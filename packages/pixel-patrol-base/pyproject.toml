@@ -47,4 +47,5 @@ pixel_patrol_base_widget_builtins = "pixel_patrol_base.plugin_registry:register_
 dev = [
     "pytest>=8.3.5",
     "pytest-mock>=3.14.1",
+    "dash[testing]"
 ]
