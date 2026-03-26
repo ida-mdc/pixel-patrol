@@ -203,13 +203,24 @@ class TestThumbnailProcessor:
         np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 1])
         np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 2])
 
-    def test_non_uint8_s_dimension_produces_grayscale(self):
-        """S=3 float32 → no rgb capability → R == G == B."""
-        data = np.random.random((20, 20, 3)).astype(np.float32)
+    def test_non_uint8_s_dimension_renders_as_color(self):
+        """S=3 float32 → rgb:S capability → rendered as colour (R/G/B channels differ)."""
+        data = np.zeros((20, 20, 3), dtype=np.float32)
+        data[:, :, 0] = 1.0   # R = max
+        data[:, :, 1] = 0.5   # G = mid
+        data[:, :, 2] = 0.0   # B = 0
         thumb = self._thumbnail(data, "YXS")
         arr = np.array(_decode_thumbnail(thumb))
-        np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 1])
-        np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 2])
+        # Channels must differ — not grayscale
+        assert not np.array_equal(arr[:, :, 0], arr[:, :, 1])
+
+    def test_uint16_rgb_via_s_dimension(self):
+        """S=3 uint16 (e.g. Sentinel-2 reflectances) → rgb:S → correct colour thumbnail."""
+        # [100, 150, 200] with lower=0, upper=200 → [127, 191, 255]
+        data = np.full((64, 64, 3), [100, 150, 200], dtype=np.uint16)
+        thumb = self._thumbnail(data, "YXS")
+        arr = np.array(_decode_thumbnail(thumb))
+        np.testing.assert_array_equal(arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, :3], [127, 191, 255])
 
     # ------------------------------------------------------------------
     # Aspect ratio / padding
