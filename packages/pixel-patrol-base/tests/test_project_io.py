@@ -13,7 +13,6 @@ from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base import api
 from pixel_patrol_base.io.project_io import METADATA_FILENAME, RECORDS_DF_FILENAME
 from pixel_patrol_base.io.project_io import _settings_to_dict  # Helper for test assertions
-from pixel_patrol_base.io.parquet_utils import _deserialize_ndarray_columns_dataframe
 
 # Configure logging for tests to capture warnings/errors
 logging.basicConfig(level=logging.INFO)
@@ -97,7 +96,6 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
         # Verify records_df content
         with zf.open(RECORDS_DF_FILENAME) as df_file:
             loaded_df = pl.read_parquet(df_file)
-            loaded_df = _deserialize_ndarray_columns_dataframe(loaded_df)
 
             # TODO: this is a patch - need to handle thumbnail column (and future object columns) properly
             # TODO: But we should add the thumbnail io test in the bioio package.
@@ -133,22 +131,24 @@ def test_export_project_with_all_data(project_with_all_data: Project, tmp_path: 
                 imported_col = loaded_df_reordered[col]
 
                 if expected_col.dtype == pl.Object:
-                    # For object columns (like histogram numpy arrays), compare element by element
+                    # ndarray columns are stored as raw bytes; compare by reconstructing arrays
                     for i in range(len(expected_col)):
                         expected_val = expected_col[i]
                         imported_val = imported_col[i]
-                        if isinstance(expected_val, np.ndarray) and isinstance(
-                            imported_val, np.ndarray
-                        ):
+                        if isinstance(expected_val, np.ndarray):
+                            imported_arr = np.frombuffer(
+                                bytes(imported_val), dtype=expected_val.dtype
+                            )
                             np.testing.assert_array_equal(
                                 expected_val,
-                                imported_val,
-                                err_msg=f"Numpy arrays in column '{col}' at row {i} are not equal",
+                                imported_arr,
+                                err_msg=f"Column '{col}' row {i} mismatch after byte roundtrip",
                             )
                         else:
-                            assert (
-                                expected_val == imported_val
-                            ), f"Values in column '{col}' at row {i} are not equal: {expected_val} != {imported_val}"
+                            assert expected_val == imported_val, (
+                                f"Values in column '{col}' at row {i} are not equal: "
+                                f"{expected_val} != {imported_val}"
+                            )
                 elif expected_col.dtype in [pl.Float32, pl.Float64]:
                     # For floating-point columns, use approximate equality but with zero tolerance
                     for i in range(len(expected_col)):
