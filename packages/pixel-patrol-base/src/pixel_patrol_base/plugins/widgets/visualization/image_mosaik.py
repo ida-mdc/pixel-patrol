@@ -2,7 +2,7 @@ from typing import List, Dict, Set, Tuple
 
 import numpy as np
 import polars as pl
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, State
 import logging
 
 from PIL import Image
@@ -11,7 +11,8 @@ from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strin
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
-from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL
+from pixel_patrol_base.report import context as report_context
+from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL, REPORT_ZIP_PATH_STORE_ID, URL_COMPONENT_ID
 from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
 _SPRITE_SIZE = 32
@@ -64,14 +65,16 @@ class ImageMosaikWidget(BaseReportWidget):
             dcc.Graph(id=self.GRAPH_ID, style={"width": "100%"}),
         ]
 
-    def register(self, app, df: pl.DataFrame):
+    def register(self, app, df: pl.DataFrame | None):
         self._df = df
-        self._sortable_cols_cache = sort_strings_alpha(get_sortable_columns(df))
+        self._sortable_cols_cache = sort_strings_alpha(get_sortable_columns(df)) if df is not None else []
 
         app.callback(
             Output(self.SORT_ID, "options"),
             Output(self.SORT_ID, "value"),
             Input("color-map-store", "data"),
+            State(URL_COMPONENT_ID, "search"),
+            State(REPORT_ZIP_PATH_STORE_ID, "data"),
         )(self._set_control_options)
 
         app.callback(
@@ -80,10 +83,14 @@ class ImageMosaikWidget(BaseReportWidget):
             Input(self.SORT_ID, "value"),
             Input(FILTERED_INDICES_STORE_ID, "data"),
             Input(GLOBAL_CONFIG_STORE_ID, "data"),
+            State(URL_COMPONENT_ID, "search"),
+            State(REPORT_ZIP_PATH_STORE_ID, "data"),
         )(self._update_plot)
 
-    def _set_control_options(self, _color_map: Dict[str, str]):
-        sortable = self._sortable_cols_cache or []
+    def _set_control_options(self, _color_map: Dict[str, str], url_search: str | None = None, store_zip_path: str | None = None):
+        zip_path = report_context.zip_path_from_url_search(url_search) or store_zip_path
+        df, _, _ = report_context.get_report_context(zip_path)
+        sortable = sort_strings_alpha(get_sortable_columns(df)) if df is not None else (self._sortable_cols_cache or [])
         options = [{"label": c, "value": c} for c in sortable]
 
         default = None
@@ -100,9 +107,15 @@ class ImageMosaikWidget(BaseReportWidget):
         sort_column: str | None,
         subset_indices: List[int] | None,
         global_config: Dict | None,
+        url_search: str | None = None,
+        store_zip_path: str | None = None,
     ):
+        zip_path = report_context.zip_path_from_url_search(url_search) or store_zip_path
+        df, _, _ = report_context.get_report_context(zip_path)
+        if df is None:
+            df = self._df
         df_filtered, group_col, _resolved, _warning_msg, _order = prepare_widget_data(
-            self._df,
+            df,
             subset_indices,
             global_config or {},
             metric_base=None,
