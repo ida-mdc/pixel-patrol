@@ -130,17 +130,24 @@ def export(base_directory: Path, output_zip: Path, name: str | None, paths: tupl
 
 @cli.command()
 @click.option('--port', type=int, default=8051, show_default=True,
-              help='Port number for the Dash processing dashboard server.')
-def launch(port: int):
+              help='Port number for the Pixel Patrol launcher server.')
+@click.option('--host', type=str, default=lambda: os.environ.get("PIXEL_PATROL_HOST", "127.0.0.1"),
+              help='Host to bind to. Use 0.0.0.0 for Docker/remote access. Default: 127.0.0.1 (or PIXEL_PATROL_HOST env var).')
+def launch(port: int, host: str):
     """
-    Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
+    Launch the Pixel Patrol web interface.
+
+    Lists existing reports, lets you add new ones (with background processing),
+    and opens them in a built-in report viewer — all on a single port.
+    Reports are stored in PIXEL_PATROL_REPORTS_DIR (default: ~/pixel-patrol-reports).
     """
     from pixel_patrol_base.processing_dashboard import create_processing_app
-    
+
     app = create_processing_app()
-    dashboard_url = f"http://127.0.0.1:{port}"
-    click.echo(f"Processing dashboard will run on {dashboard_url}/")
-    click.echo("Attempting to open dashboard in your default browser...")
+    display_host = "localhost" if host == "0.0.0.0" else host
+    dashboard_url = f"http://{display_host}:{port}"
+    click.echo(f"Pixel Patrol will run on {dashboard_url}/")
+    click.echo("Attempting to open in your default browser...")
 
     def _open_browser():
         if not os.environ.get("WERKZEUG_RUN_MAIN"):
@@ -148,13 +155,15 @@ def launch(port: int):
 
     Timer(1, _open_browser).start()
 
-    click.echo("Starting processing dashboard...")
-    app.run(debug=False, host="127.0.0.1", port=port, use_reloader=False)
+    click.echo("Starting Pixel Patrol...")
+    app.run(debug=False, host=host, port=port, use_reloader=False)
 
 
 @cli.command()
 @click.argument('input_zip', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
 @click.option('--port', type=int, default=8050, show_default=True)
+@click.option('--host', type=str, default=lambda: os.environ.get("PIXEL_PATROL_HOST", "127.0.0.1"),
+              help='Host to bind to. Use 0.0.0.0 for Docker/remote access. Default: 127.0.0.1 (or PIXEL_PATROL_HOST env var).')
 @click.option('--group-by', type=str, default=None)
 @click.option('--filter-col', 'filter_col', type=str, default=None)
 @click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None)
@@ -162,7 +171,7 @@ def launch(port: int):
 @click.option('--dim', 'dims', multiple=True, help="Repeatable, format like: t=0  z=1  c=0")
 @click.option('--export-html', type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
               help='Export the report as a static HTML file instead of launching the interactive dashboard.')
-def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | None,
+def report(input_zip: Path, port: int, host: str, group_by: str | None, filter_col: str | None,
            filter_op: str | None, filter_value: str | None, dims: tuple[str, ...], export_html: Path | None):
 
     my_project = import_project(Path(input_zip))
@@ -196,11 +205,11 @@ def report(input_zip: Path, port: int, group_by: str | None, filter_col: str | N
     if export_html:
         # Export as static HTML
         click.echo(f"Exporting report to HTML: {export_html}")
-        export_html_report(my_project, export_html, port=port, global_config=global_config)
+        export_html_report(my_project, export_html, host=host, port=port, global_config=global_config)
         click.echo(f"HTML export complete: {export_html}")
     else:
         # Launch interactive dashboard
-        show_report(my_project, port=port, global_config=global_config)
+        show_report(my_project, host=host, port=port, global_config=global_config)
 
 
 if __name__ == '__main__':

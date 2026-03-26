@@ -5,6 +5,8 @@
 PALETTE_SELECTOR_ID = "palette-selector"
 GLOBAL_CONFIG_STORE_ID = "global-config-store"
 FILTERED_INDICES_STORE_ID = "global-filtered-indices-store"
+REPORT_ZIP_PATH_STORE_ID = "report-zip-path-store"
+URL_COMPONENT_ID = "url"  # dcc.Location id when report is embedded
 
 GLOBAL_GROUPBY_COLS_ID = "global-groupby-cols"
 GLOBAL_FILTER_COLUMN_ID = "global-filter-column"
