@@ -26,8 +26,6 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         super().__init__(*args, **kwargs)
         self.widget_id = widget_id
         self._df: pl.DataFrame | None = None
-        self._parsed_cols_cache: List[Dict] | None = None
-        self._cached_df_columns: tuple | None = None
 
     def get_content_layout(self) -> List:
         """Defines the generic layout with unique IDs derived from widget_id."""
@@ -37,8 +35,6 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
 
     def register(self, app, df: pl.DataFrame | None) -> None:
         self._df = df
-        if df is not None:
-            self._cache_parsed_columns(df.columns)
 
         app.callback(
             Output(f"{self.widget_id}-table-container", "children"),
@@ -55,17 +51,6 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     ):
         """Render the table of metrics vs. dimensions with distribution-aware sparklines."""
 
-        # Lazy-initialise column cache when pre-registered at startup without a df.
-        if self._parsed_cols_cache is None:
-            from pixel_patrol_base.report.context import get_report_context
-            ctx_df = get_report_context()[0]
-            if ctx_df is not None:
-                self._cache_parsed_columns(ctx_df.columns)
-
-        parsed_cols = self._parsed_cols_cache
-        if not parsed_cols:
-            return show_no_data_message()
-
         df_filtered, group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
@@ -74,6 +59,10 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         )
 
         if df_filtered.is_empty():
+            return show_no_data_message()
+
+        parsed_cols = self._parse_columns(df_filtered.columns)
+        if not parsed_cols:
             return show_no_data_message()
 
         # --- Dimension filter (from global controls) ---
@@ -236,20 +225,15 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
         raise NotImplementedError("Subclasses must return the list of supported metric base names.")
 
 
-    def _cache_parsed_columns(self, columns: List[str]) -> None:
-        """Parse columns once and cache the result."""
-        col_tuple = tuple(columns)
-        if self._cached_df_columns == col_tuple:
-            return
-
+    def _parse_columns(self, columns: List[str]) -> List[Dict]:
         supported_metrics = self.get_supported_metrics()
-        self._parsed_cols_cache = []
+        result = []
         for col in columns:
             parsed = parse_metric_dimension_column(col, supported_metrics=supported_metrics)
             if parsed is not None:
                 metric, dims = parsed
-                self._parsed_cols_cache.append({"col": col, "metric": metric, "dims": dims})
-        self._cached_df_columns = col_tuple
+                result.append({"col": col, "metric": metric, "dims": dims})
+        return result
 
 
 # ============================================================
