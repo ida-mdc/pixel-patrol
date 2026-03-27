@@ -2,14 +2,13 @@
 Dash app for configuring and monitoring Pixel Patrol processing.
 
 This app provides a web interface to:
-1. Configure processing parameters (equivalent to CLI export command)
+1. Configure processing parameters (equivalent to CLI process command)
 2. Monitor processing progress in real-time
 3. Launch the report dashboard after processing completes
 """
 import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime
 
 import polars as pl
 import dash_bootstrap_components as dbc
@@ -21,6 +20,7 @@ import time
 
 from pixel_patrol_base import api
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 ASSETS_DIR = (Path(__file__).parent / "report" / "assets").resolve()
 
 # Update progress every 500 ms
-PROGRESS_UPDATE_INTERVAL_MS = 500  
+PROGRESS_UPDATE_INTERVAL_MS = 500
 
 # Global state for processing progress
 # Note: Only JSON-serializable types should be stored here
@@ -44,7 +44,7 @@ _processing_state = {
     "processed_files": 0,
     "message": "",
     "error": None,
-    "output_zip": None,  # Store path as string, not Project object
+    "output_parquet": None,  # Path to the final parquet file (as string)
 }
 
 _processing_lock = threading.Lock()
@@ -84,30 +84,19 @@ def get_processing_state() -> Dict[str, Any]:
     """Get current processing state (thread-safe)."""
     with _processing_lock:
         state = _processing_state.copy()
-        # Remove any non-JSON-serializable objects (like Project instances)
-        # Explicitly remove 'project' key if it exists
-        if 'project' in state:
-            del state['project']
-        
-        # Only keep JSON-serializable types: str, int, float, bool, None, dict, list
+        # Only keep JSON-serializable types
         cleaned_state = {}
         for key, value in state.items():
-            # Skip 'project' key entirely
-            if key == 'project':
-                continue
             if value is None or isinstance(value, (str, int, float, bool)):
                 cleaned_state[key] = value
             elif isinstance(value, (dict, list)):
-                # Recursively check dict/list contents
                 try:
                     import json
-                    json.dumps(value)  # Test if it's JSON serializable
+                    json.dumps(value)
                     cleaned_state[key] = value
                 except (TypeError, ValueError):
-                    # Skip non-serializable values
                     logger.warning(f"Skipping non-serializable value for key '{key}': {type(value)}")
             else:
-                # Skip other types (like Project objects)
                 logger.warning(f"Skipping non-serializable value for key '{key}': {type(value)}")
         return cleaned_state
 
@@ -115,19 +104,11 @@ def get_processing_state() -> Dict[str, Any]:
 def update_processing_state(**kwargs):
     """Update processing state (thread-safe)."""
     with _processing_lock:
-        # Explicitly remove 'project' key if present
-        kwargs.pop('project', None)
-        
-        # Filter out any non-JSON-serializable objects before updating
         cleaned_kwargs = {}
         for key, value in kwargs.items():
-            # Skip 'project' key entirely
-            if key == 'project':
-                continue
             if value is None or isinstance(value, (str, int, float, bool)):
                 cleaned_kwargs[key] = value
             elif isinstance(value, (dict, list)):
-                # Test if it's JSON serializable
                 try:
                     import json
                     json.dumps(value)
@@ -135,31 +116,27 @@ def update_processing_state(**kwargs):
                 except (TypeError, ValueError):
                     logger.warning(f"Skipping non-serializable value for key '{key}': {type(value)}")
             else:
-                # Skip non-serializable types (like Project objects)
                 logger.warning(f"Skipping non-serializable value for key '{key}': {type(value)}")
         _processing_state.update(cleaned_kwargs)
-        # Ensure 'project' is never in the state
-        _processing_state.pop('project', None)
 
 
 def _get_available_loaders() -> List[Dict[str, Any]]:
     """Get list of available loaders with their names and supported extensions."""
     from pixel_patrol_base.plugin_registry import discover_plugins_from_entrypoints
-    
+
     loaders = []
     loader_plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
-    
+
     # Add "None" option
     loaders.append({
         "label": "None (basic file info only)",
         "value": "",
         "extensions": []
     })
-    
+
     # Add discovered loaders
     for loader_class in loader_plugins:
         try:
-            # Get supported extensions from the class
             extensions = getattr(loader_class, 'SUPPORTED_EXTENSIONS', set())
             loaders.append({
                 "label": loader_class.NAME,
@@ -173,7 +150,7 @@ def _get_available_loaders() -> List[Dict[str, Any]]:
                 "value": loader_class.NAME,
                 "extensions": []
             })
-    
+
     return loaders
 
 
@@ -184,7 +161,7 @@ def create_processing_app() -> Dash:
     handler = DashWarningHandler()
     handler.setLevel(logging.WARNING)
     logging.getLogger("pixel_patrol_base").addHandler(handler)
-    
+
     external_stylesheets = [
         dbc.themes.BOOTSTRAP,
         "https://codepen.io/chriddyp/pen/bWLwgP.css",
@@ -213,13 +190,13 @@ def _create_layout(app: Dash) -> html.Div:
             dcc.Store(id="processing-state-store", data=get_processing_state()),
             dcc.Interval(
                 id="progress-interval",
-                interval=PROGRESS_UPDATE_INTERVAL_MS,  # When / how often to update progress
+                interval=PROGRESS_UPDATE_INTERVAL_MS,
                 n_intervals=0,
                 disabled=True,
             ),
             dbc.Container(
                 [
-                    # Header with logo (same as report dashboard)
+                    # Header with logo
                     dbc.Row(
                         [
                             dbc.Col(
@@ -268,10 +245,10 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     "If no Loader is specified - only basic file information is extracted (e.g., path, size, timestamps).\n\n"
                                                                     "If loader is specified - Only files matching the selected **File Extensions** are included (leave empty = all supported).\n"
                                                                     "And PixelPatrol tries to extract rich data from those files - e.g. for images metadata and image data is processed.\n\n"
-                                                                    "When processing finishes, Pixel Patrol creates a **project ZIP** at the Output ZIP path. "
-                                                                    "This ZIP contains everything needed to generate the Pixel Patrol report.\n\n"
+                                                                    "When processing finishes, Pixel Patrol saves a **parquet file** in the Output Directory. "
+                                                                    "This file contains all processed data and project metadata needed to generate the Pixel Patrol report.\n\n"
                                                                     "You can open the report later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
-                                                                    "`pixel-patrol report /path/to/project.zip`\n\n"
+                                                                    "`pixel-patrol report /path/to/output_dir/project.parquet`\n\n"
                                                                     "Or launch the report directly from this page once processing completes."
                                                                 ),
                                                             ),
@@ -311,17 +288,17 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     dbc.Col(
                                                                         [
                                                                             dbc.Label(
-                                                                                "Output ZIP Path *",
-                                                                                html_for="output-zip",
+                                                                                "Output Directory *",
+                                                                                html_for="output-dir",
                                                                             ),
                                                                             dbc.Input(
-                                                                                id="output-zip",
+                                                                                id="output-dir",
                                                                                 type="text",
-                                                                                placeholder="project.zip",
+                                                                                placeholder="/path/to/output",
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Path where the output ZIP file will be saved - e.g., /path/to/project.zip",
+                                                                                "Directory where the output parquet and intermediate files will be saved",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -401,7 +378,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                                 },
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Comma-separated. Subdirectories of Base Directory ((absolute or relative).",
+                                                                                "Comma-separated. Subdirectories of Base Directory (absolute or relative).",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -443,7 +420,21 @@ def _create_layout(app: Dash) -> html.Div:
                                                                                 placeholder="Optional label",
                                                                             ),
                                                                         ],
-                                                                        md=12,
+                                                                        md=6,
+                                                                    ),
+                                                                    dbc.Col(
+                                                                        [
+                                                                            dbc.Label(
+                                                                                "Authors",
+                                                                                html_for="authors",
+                                                                            ),
+                                                                            dbc.Input(
+                                                                                id="authors",
+                                                                                type="text",
+                                                                                placeholder="e.g., ella, deborah",
+                                                                            ),
+                                                                        ],
+                                                                        md=6,
                                                                     ),
                                                                 ],
                                                                 className="mb-3",
@@ -466,7 +457,7 @@ def _create_layout(app: Dash) -> html.Div:
                                     ),
                                 ],
                                 md=8,
-                                className="offset-md-2",  # Center the form
+                                className="offset-md-2",
                             ),
                         ]
                     ),
@@ -510,7 +501,7 @@ def _create_layout(app: Dash) -> html.Div:
                                     ),
                                 ],
                                 md=8,
-                                className="offset-md-2",  # Center the progress panel
+                                className="offset-md-2",
                             ),
                         ]
                     ),
@@ -537,24 +528,26 @@ def _register_callbacks(app: Dash):
         ],
         [
             State("base-directory", "value"),
-            State("output-zip", "value"),
+            State("output-dir", "value"),
             State("project-name", "value"),
             State("loader", "value"),
             State("paths", "value"),
             State("file-extensions", "value"),
             State("flavor", "value"),
+            State("authors", "value"),
         ],
     )
     def update_processing_state_callback(
         n_clicks,
         _n_intervals,
         base_directory,
-        output_zip,
+        output_dir,
         project_name,
         loader,
         paths,
         file_extensions,
         flavor,
+        authors,
     ):
         """Handle start button click and progress updates."""
         ctx = callback_context
@@ -570,35 +563,35 @@ def _register_callbacks(app: Dash):
                 raise PreventUpdate
 
             # Validate required fields
-            if not base_directory or not output_zip:
+            if not base_directory or not output_dir:
                 update_processing_state(
                     status="error",
-                    error="Base directory and output ZIP are required",
+                    error="Base directory and output directory are required",
                 )
                 return get_processing_state(), True, False
 
             clear_warnings()
 
-            # Clear old output_zip from state when starting new processing
             update_processing_state(
                 status="running",
                 progress=0,
                 message="Starting processing...",
                 error=None,
-                output_zip=None,  # Clear old output_zip
+                output_parquet=None,
             )
-            
+
             # Start processing in background thread
             thread = threading.Thread(
                 target=_run_processing,
                 args=(
                     base_directory,
-                    output_zip,
+                    output_dir,
                     project_name,
                     loader or None,
                     paths,
                     file_extensions,
                     flavor or "",
+                    authors or "",
                 ),
                 daemon=True,
             )
@@ -610,9 +603,9 @@ def _register_callbacks(app: Dash):
         elif trigger_id == "progress-interval":
             state = get_processing_state()
             if state["status"] == "running":
-                return state, False, True  # Keep interval running, button disabled
+                return state, False, True
             elif state["status"] in ["completed", "error"]:
-                return state, True, False  # Stop interval, enable button
+                return state, True, False
 
         raise PreventUpdate
 
@@ -635,7 +628,7 @@ def _register_callbacks(app: Dash):
         current_file = state.get("current_file", "")
         processed_files = state.get("processed_files", 0)
         total_files = state.get("total_files", 0)
-        output_zip = state.get("output_zip")
+        output_parquet = state.get("output_parquet")
 
         # Status text
         if status == "idle":
@@ -693,7 +686,7 @@ def _register_callbacks(app: Dash):
 
         # Action buttons
         action_buttons = []
-        if status == "completed" and output_zip:
+        if status == "completed" and output_parquet:
             action_buttons.append(
                 dbc.Button(
                     "Launch Report Dashboard",
@@ -744,9 +737,7 @@ def _register_callbacks(app: Dash):
             )
 
         if warning_items:
-            return html.Div([
-                *warning_items
-            ])
+            return html.Div([*warning_items])
 
         return None
 
@@ -759,34 +750,32 @@ def _register_callbacks(app: Dash):
     def launch_report(n_clicks, state):
         """Launch the report dashboard in a new thread."""
         if n_clicks:
-            output_zip = state.get("output_zip")
-            if output_zip:
-                output_path = Path(output_zip)
-                # Resolve to absolute path to ensure we use the correct file
-                if not output_path.is_absolute():
-                    output_path = output_path.resolve()
-                
-                if output_path.exists():
-                    logger.info(f"Launching report from: {output_path}")
-                    # Launch report in background thread with resolved path
+            output_parquet = state.get("output_parquet")
+            if output_parquet:
+                parquet_path = Path(output_parquet)
+                if not parquet_path.is_absolute():
+                    parquet_path = parquet_path.resolve()
+
+                if parquet_path.exists():
+                    logger.info(f"Launching report from: {parquet_path}")
                     thread = threading.Thread(
                         target=_launch_report_app,
-                        args=(str(output_path),),
+                        args=(str(parquet_path),),
                         daemon=True,
                     )
                     thread.start()
-                    update_processing_state(message=f"Report dashboard launching from {output_path.name}...")
+                    update_processing_state(message=f"Report dashboard launching from {parquet_path.name}...")
                 else:
-                    logger.error(f"Output ZIP file does not exist: {output_path}")
+                    logger.error(f"Output parquet file does not exist: {parquet_path}")
                     update_processing_state(
                         status="error",
-                        error=f"Output ZIP file not found: {output_path}",
+                        error=f"Output file not found: {parquet_path}",
                     )
             else:
-                logger.error("No output ZIP path in state")
+                logger.error("No output parquet path in state")
                 update_processing_state(
                     status="error",
-                    error="No output ZIP file available. Please run processing first.",
+                    error="No output file available. Please run processing first.",
                 )
         return 0  # Reset button click count
 
@@ -800,14 +789,13 @@ def _register_callbacks(app: Dash):
     def update_file_extensions_placeholder(loader_value: str):
         """Update file extensions placeholder based on selected loader."""
         loaders = _get_available_loaders()
-        
-        # Find the selected loader
+
         selected_loader = None
         for loader in loaders:
             if loader["value"] == loader_value:
                 selected_loader = loader
                 break
-        
+
         if selected_loader and selected_loader["extensions"]:
             extensions_str = ", ".join(selected_loader["extensions"])
             placeholder = f"e.g., {extensions_str[:50]}{'...' if len(extensions_str) > 50 else ''}"
@@ -818,18 +806,19 @@ def _register_callbacks(app: Dash):
         else:
             placeholder = "Leave empty for all supported extensions"
             help_text = "Comma-separated extensions (leave empty for all)"
-        
+
         return placeholder, help_text
 
 
 def _run_processing(
     base_directory: str,
-    output_zip: str,
+    output_dir_str: str,
     project_name: Optional[str],
     loader: Optional[str],
     paths: Optional[str],
     file_extensions: Optional[str],
     flavor: str,
+    authors: str,
 ):
     """Run processing in background thread."""
     try:
@@ -876,9 +865,19 @@ def _run_processing(
             message="Setting project settings...",
         )
 
+        # output_dir is where the final parquet lands.
+        # Intermediate batch chunks go into output_dir/_batches/ automatically.
+        output_dir = Path(output_dir_str).resolve()
+
+        metadata = ProjectMetadata(
+            flavor=flavor,
+            authors=authors,
+        )
+
         processing_config = ProcessingConfig(
             selected_file_extensions=extensions,
-            pixel_patrol_flavor=flavor,
+            output_dir=output_dir,
+            metadata=metadata,
         )
 
         update_processing_state(
@@ -887,14 +886,14 @@ def _run_processing(
             message="Processing files...",
         )
 
-        # Get file count first for better progress tracking
+        # Get file count for progress tracking
         from pixel_patrol_base.core.file_system import walk_filesystem
         basic_df = walk_filesystem(
             project.get_paths() if project.get_paths() else [project.get_base_dir()],
             loader=project.get_loader(),
             accepted_extensions=extensions if isinstance(extensions, set) else "all"
         )
-        
+
         total_files = 0
         if basic_df is not None and not basic_df.is_empty():
             total_files = basic_df.filter(pl.col("type") == "file").height
@@ -904,14 +903,11 @@ def _run_processing(
                 message=f"Found {total_files} files. Processing...",
                 total_files=total_files,
             )
-        
-        # Define progress callback that updates our processing state
-        def progress_callback(current: int, total: int, current_file: Path) -> None:
-            """Callback function to update processing state during file processing."""
 
+        # Progress callback
+        def progress_callback(current: int, total: int, current_file: Path) -> None:
             display_total = total_files if total_files > 0 else total
             display_current = min(current, display_total)
-
             progress_pct = 20 + int((display_current / display_total) * 65) if display_total > 0 else 20
 
             update_processing_state(
@@ -922,65 +918,46 @@ def _run_processing(
                 total_files=display_total,
                 current_file=current_file.name if current_file else "",
             )
-        
-        # Use the existing processing method with progress callback
+
+        # Process files — this also saves the parquet with metadata into output_dir
         api.process_files(project, processing_config=processing_config, progress_callback=progress_callback)
-        
+
         # Update progress after processing
         if project.records_df is not None:
             actual_processed = project.records_df.height
             update_processing_state(
                 status="running",
-                progress=85,
-                message=f"Processed {actual_processed} files. Exporting...",
+                progress=90,
+                message=f"Processed {actual_processed} records. Finalizing...",
                 processed_files=actual_processed if total_files == 0 else total_files,
             )
         else:
             update_processing_state(
                 status="running",
-                progress=85,
-                message="Processing complete. Exporting...",
+                progress=90,
+                message="Processing complete. Finalizing...",
             )
 
-        update_processing_state(
-            status="running",
-            progress=90,
-            message="Exporting project...",
-        )
+        # process_records saves the final parquet to output_dir/<project_name>.parquet
+        final_parquet = output_dir / f"{project_name}.parquet"
+        if not final_parquet.exists():
+            raise FileNotFoundError(
+                f"Processing completed but output file not found at '{final_parquet}'"
+            )
 
-        # Export project
-        output_path = Path(output_zip).resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Get modification time before export to verify it changes
-        old_mtime = output_path.stat().st_mtime if output_path.exists() else 0
-        
-        api.export_project(project, output_path)
-        
-        # Verify the file was written and get its modification time
-        if not output_path.exists():
-            raise FileNotFoundError(f"Export failed: {output_path} does not exist after export")
-        
-        new_mtime = output_path.stat().st_mtime
-        file_size = output_path.stat().st_size
-        
-        if new_mtime <= old_mtime and old_mtime > 0:
-            logger.warning(f"ZIP file modification time did not change. Old: {old_mtime}, New: {new_mtime}")
-        
+        file_size = final_parquet.stat().st_size
         if file_size == 0:
-            raise ValueError(f"Export failed: {output_path} is empty after export")
+            raise ValueError(f"Output file is empty: {final_parquet}")
 
-        # Update state with the resolved absolute path to ensure we use the correct file
-        resolved_output_zip = str(output_path)
+        resolved_parquet = str(final_parquet)
         update_processing_state(
             status="completed",
             progress=100,
-            message=f"Project exported to {resolved_output_zip}",
-            output_zip=resolved_output_zip,
+            message=f"Project saved to {resolved_parquet}",
+            output_parquet=resolved_parquet,
         )
-        
-        logger.info(f"Processing completed. Output ZIP saved to: {resolved_output_zip}")
-        logger.info(f"ZIP file size: {file_size} bytes, modified: {datetime.fromtimestamp(new_mtime)}")
+
+        logger.info(f"Processing completed. Output saved to: {resolved_parquet} ({file_size} bytes)")
 
     except Exception as e:
         logger.exception("Error during processing")
@@ -990,87 +967,72 @@ def _run_processing(
         )
 
 
-def _launch_report_app(output_zip: str):
+def _launch_report_app(parquet_path: str):
     """Launch the report dashboard app in a subprocess."""
     import subprocess
     import sys
     import socket
     import hashlib
-    
+
     def is_port_in_use(port: int) -> bool:
-        """Check if a port is already in use."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(('127.0.0.1', port))
                 return False
             except OSError:
                 return True
-    
+
     def find_free_port(start_port: int = 8050, max_attempts: int = 20) -> int:
-        """Find a free port starting from start_port."""
         for i in range(max_attempts):
             port = start_port + i
             if not is_port_in_use(port):
                 return port
-        # If no free port found, return start_port anyway (will fail but at least we try)
         return start_port
-    
+
     try:
-        # Verify the ZIP file exists and get absolute path
-        output_path = Path(output_zip)
-        if not output_path.is_absolute():
-            output_path = output_path.resolve()
-        
-        if not output_path.exists():
-            raise FileNotFoundError(f"Output ZIP file does not exist: {output_path}")
-        
-        # Use a port based on the ZIP file hash to ensure consistency
-        # This way, the same ZIP file always uses the same port (if available)
-        # But different ZIP files can use different ports
-        zip_hash = hashlib.md5(str(output_path).encode()).hexdigest()
-        port_offset = int(zip_hash[:2], 16) % 100  # Use first 2 hex chars for port offset (0-255, mod 100 = 0-99)
+        file_path = Path(parquet_path)
+        if not file_path.is_absolute():
+            file_path = file_path.resolve()
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"Output file does not exist: {file_path}")
+
+        path_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+        port_offset = int(path_hash[:2], 16) % 100
         base_port = 8050
-        report_port = base_port + port_offset
-        
-        # Find a free port starting from our calculated port
-        report_port = find_free_port(report_port, max_attempts=10)
-        
-        logger.info(f"Launching report on port {report_port} from ZIP: {output_path}")
-        logger.info(f"ZIP file size: {output_path.stat().st_size} bytes")
-        logger.info(f"ZIP file modified: {datetime.fromtimestamp(output_path.stat().st_mtime)}")
-        
-        # Launch report in a separate process with absolute path
-        # Use the absolute path to ensure we're using the correct file
+        report_port = find_free_port(base_port + port_offset, max_attempts=10)
+
+        logger.info(f"Launching report on port {report_port} from: {file_path}")
+
         cmd = [
             sys.executable,
             "-m",
             "pixel_patrol_base.cli",
             "report",
-            str(output_path),  # Use absolute path as string
+            str(file_path),
             "--port",
             str(report_port),
         ]
-        
+
         logger.info(f"Executing command: {' '.join(cmd)}")
-        
-        # Launch process - don't capture stdout/stderr so errors are visible
+
         process = subprocess.Popen(
             cmd,
-            stdout=None,  # Let output go to console
-            stderr=None,  # Let errors go to console
+            stdout=None,
+            stderr=None,
             cwd=None,
         )
-        
-        logger.info(f"Report process started with PID {process.pid} for ZIP: {output_path}")
 
-        time.sleep(2)  # Give the server time to start
+        logger.info(f"Report process started with PID {process.pid}")
+
+        time.sleep(2)
         webbrowser.open(f"http://127.0.0.1:{report_port}/")
-        
+
         update_processing_state(
-            message=f"Report dashboard launching on http://127.0.0.1:{report_port}/ from {output_path.name}",
+            message=f"Report dashboard launching on http://127.0.0.1:{report_port}/ from {file_path.name}",
         )
     except Exception as e:
-        logger.exception(f"Error launching report app for {output_zip}")
+        logger.exception(f"Error launching report app for {parquet_path}")
         update_processing_state(
             status="error",
             error=f"Failed to launch report: {str(e)}",

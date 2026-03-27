@@ -204,16 +204,16 @@ def test_prepare_invalid_string_raises(project_with_loader: Project):
 
 def test_prepare_infers_flush_dir(project_no_loader: Project):
     config = project_no_loader._prepare_processing_config(None)
-    assert config.records_flush_dir == project_no_loader.base_dir / f"{project_no_loader.name}_batches"
+    assert config.output_dir == project_no_loader.base_dir / f"{project_no_loader.name}"
 
 
 def test_prepare_respects_explicit_flush_dir(project_no_loader: Project, tmp_path: Path):
     custom_dir = tmp_path / "custom_batches"
-    pc = ProcessingConfig(records_flush_dir=custom_dir)
+    pc = ProcessingConfig(output_dir=custom_dir)
     config = project_no_loader._prepare_processing_config(pc)
-    assert config.records_flush_dir == custom_dir
+    assert config.output_dir == custom_dir
 
 
 def test_prepare_stamps_flush_dir_on_project(project_no_loader: Project):
     project_no_loader._prepare_processing_config(None)
-    assert project_no_loader.records_flush_dir == project_no_loader.base_dir / f"{project_no_loader.name}_batches"
+    assert project_no_loader.output_dir == project_no_loader.base_dir / f"{project_no_loader.name}"

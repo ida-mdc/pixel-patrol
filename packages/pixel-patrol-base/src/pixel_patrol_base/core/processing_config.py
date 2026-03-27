@@ -8,6 +8,7 @@ from typing import Set, Union, Optional
 from pathlib import Path
 
 from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
+from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProcessingConfig:
     """Configuration for file processing operations."""
-    # Slicing configuration: If False, slicing is disabled entirely (only full-image stats computed)
+    # Slicing configuration: If False, only full-image stats computed
     slicing_enabled: bool = True
     # Dimensions to include in slicing (e.g., {"T", "C"}). If non-empty, only these dimensions are sliced.
     # If empty, slicing_dimensions_excluded is used instead.
@@ -31,10 +32,15 @@ class ProcessingConfig:
     selected_file_extensions: Union[Set[str], str] = 'all'
 
     # --- Run behaviour ---
-    pixel_patrol_flavor: str = ""
     processing_max_workers: Optional[int] = None
     records_flush_every_n: int = DEFAULT_RECORDS_FLUSH_EVERY_N
-    records_flush_dir: Optional[Path] = None
+
+    # Directory to save final project parquet AND intermediate records files.
+    # Inferred from project base_dir if not set.
+    output_dir: Optional[Path] = None
+
+    # --- Project Metadata ---
+    metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
 
 
     def __post_init__(self):

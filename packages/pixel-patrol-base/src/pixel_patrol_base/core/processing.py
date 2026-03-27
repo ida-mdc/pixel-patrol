@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+import shutil
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
@@ -24,7 +25,7 @@ from pixel_patrol_base.utils.df_utils import (
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
+from pixel_patrol_base.io.parquet_io import write_chunk
 from pixel_patrol_base.utils.array_utils import set_slicing_config
 
 
@@ -291,10 +292,11 @@ def _build_deep_record_df(
     flush_threshold = _resolve_flush_threshold(total, config)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
     show_processor_progress = worker_count == 1
+    flush_dir = Path(config.output_dir) / "_batches" if config.output_dir else None
 
     accumulator = _RecordsAccumulator(
         flush_every_n=flush_threshold,
-        flush_dir=config.records_flush_dir,
+        flush_dir=flush_dir,
     )
 
     processed_rows: Set[int] = set()
@@ -832,40 +834,13 @@ class _RecordsAccumulator:
 
         final_df = self.post_process_final_df(final_df)
 
-        # write combined parquet file and tidy up partial chunks
-        if self._flush_dir:
+        # Remove the entire flush directory
+        if self._flush_dir and self._flush_dir.exists():
             try:
-                combined_path = write_dataframe_to_parquet(
-                    final_df,
-                    "records_df.parquet",
-                    self._flush_dir,
-                    compression="zstd",
-                )
-                if combined_path is None:
-                    logger.warning(
-                        "Processing Core: failed to write combined records parquet to %s",
-                        self._flush_dir,
-                    )
-                    return final_df
-                logger.info(
-                    "Processing Core: writing combined records DataFrame to %s",
-                    combined_path,
-                )
-
-                # tidy up (leave combined parquet intact)
-                _cleanup_partial_chunks_dir(self._flush_dir, cleanup_combined_parquet=False)
-                # reset written files list
-                self._written_files = []
-            except (OSError, IOError, MemoryError) as exc:
-                logger.exception(
-                    "Processing Core: failed to finalize combined records parquet in %s: %s",
-                    self._flush_dir, exc
-                )
-            except Exception as exc:
-                logger.exception(
-                    "Processing Core: unexpected error while finalizing combined records parquet in %s: %s",
-                    self._flush_dir, exc
-                )
+                shutil.rmtree(self._flush_dir)
+                logger.info("Processing Core: Removed intermediate batches directory '%s'.", self._flush_dir)
+            except OSError as exc:
+                logger.warning("Processing Core: Could not remove '%s': %s", self._flush_dir, exc)
 
         return final_df
 
@@ -903,10 +878,9 @@ class _RecordsAccumulator:
         logger.debug(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
 
-        chunk_path = write_dataframe_to_parquet(
+        chunk_path = write_chunk(
             self._active_df,
-            chunk_filename,
-            self._flush_dir,
+            self._flush_dir / chunk_filename,
             compression="zstd",
         )
         if chunk_path is None:
