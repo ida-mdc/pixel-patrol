@@ -486,8 +486,8 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
             # --- Export buttons ---
             *_create_export_btn("📥 Export CSV", EXPORT_CSV_BUTTON_ID,
                                 "Download filtered data as CSV"),
-            *_create_export_btn("📦 Export Project", EXPORT_PROJECT_BUTTON_ID,
-                                "Download filtered project as .zip"),
+            *_create_export_btn("📦 Export Parquet", EXPORT_PROJECT_BUTTON_ID,
+                                "Download filtered table + project metadata as parquet"),
             *_create_export_btn("📸 Save Snapshot", SAVE_SNAPSHOT_BUTTON_ID,
                                 "Save current view as image"),
         ]),

@@ -21,11 +21,9 @@ class DummyLoader:
     FOLDER_EXTENSIONS = set()
 
     def is_folder_supported(self, path: Path) -> bool:
-        """Return False for all folders in this stub."""
         return False
 
     def load(self, source: str):
-        """This stub does not load actual data."""
         raise RuntimeError("DummyLoader should not load data in these tests.")
 
 
@@ -51,7 +49,6 @@ class FakeProcessPoolExecutor:
         return False
 
     def submit(self, fn, *args, **kwargs) -> Future:
-        """Execute the callable immediately and return a completed Future."""
         future: Future = Future()
         try:
             future.set_result(fn(*args, **kwargs))
@@ -76,7 +73,6 @@ class FakeThreadPoolExecutor:
         return False
 
     def submit(self, fn, *args, **kwargs) -> Future:
-        """Execute the callable immediately and return a completed Future."""
         future: Future = Future()
         try:
             future.set_result(fn(*args, **kwargs))
@@ -102,7 +98,6 @@ class FakeProcessPoolExecutorWithFailure:
         return False
 
     def submit(self, fn, *args, **kwargs) -> Future:
-        """Fail once to simulate worker crash, then return real results."""
         future: Future = Future()
         if not self._failed_once:
             self._failed_once = True
@@ -116,7 +111,6 @@ class FakeProcessPoolExecutorWithFailure:
 
 
 def _basic_df_for_paths(paths: List[Path]) -> pl.DataFrame:
-    """Build a minimal basic DataFrame with row indices and paths."""
     return (
         pl.DataFrame({"path": [str(p) for p in paths]})
         .with_row_index("row_index")
@@ -125,13 +119,6 @@ def _basic_df_for_paths(paths: List[Path]) -> pl.DataFrame:
 
 
 def _make_fake_load_and_process(return_props):
-    """Build a fake load_and_process_records_from_file returning a single-element list.
-
-    ``return_props`` can be:
-    - a dict: every call returns ``[return_props]``
-    - a callable ``(Path) -> dict``: result is wrapped in a list per file
-    """
-
     def fake(file_path, loader, processors, show_processor_progress=True):
         if callable(return_props) and not isinstance(return_props, dict):
             props = return_props(file_path)
@@ -145,8 +132,8 @@ def _make_fake_load_and_process(return_props):
 
 
 def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch):
-    """Ensure chunk flushing writes a combined parquet and cleans partial chunks."""
-    flush_dir = tmp_path / "batches"
+    """Ensure chunk flushing writes batches, combines them, and cleans up _batches dir."""
+    output_dir = tmp_path / "output"
     p1 = tmp_path / "a.png"
     p2 = tmp_path / "b.png"
     p1.write_bytes(b"")
@@ -155,7 +142,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
     config = ProcessingConfig(
         processing_max_workers=1,
         records_flush_every_n=1,
-        records_flush_dir=flush_dir,
+        output_dir=output_dir,
     )
 
     monkeypatch.setattr(
@@ -169,8 +156,9 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
 
     assert df.height == 2
     assert "width" in df.columns
-    assert (flush_dir / "records_df.parquet").exists()
-    assert list(flush_dir.glob("records_batch_*.parquet")) == []
+    # _batches dir should be cleaned up by finalize()
+    batches_dir = output_dir / "_batches"
+    assert not batches_dir.exists(), "_batches directory should be removed after finalize"
 
 
 def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monkeypatch):
@@ -208,12 +196,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
 
     config = ProcessingConfig(processing_max_workers=2)
 
-    def fake_get_all_record_properties(path, loader, processors=None, show_processor_progress=True):
-        return {"width": 7}
-
     class FailingProcessPoolExecutor:
-        """Executor that fails immediately to trigger fallback."""
-
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("process pool unavailable")
 
@@ -233,15 +216,15 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
     assert df["width"].to_list() == [7, 7]
 
 
-def test_process_records_infers_flush_dir_when_missing(tmp_path, monkeypatch):
-    """Project should infer records_flush_dir when unset and base_dir is known."""
+def test_process_records_infers_output_dir_when_missing(tmp_path, monkeypatch):
+    """Project should infer output_dir when unset and base_dir is known."""
     project = Project(name="demo", base_dir=tmp_path, loader=None)
 
     monkeypatch.setattr(processing, "build_records_df", lambda *args, **kwargs: pl.DataFrame())
 
     project.process_records(processing_config=ProcessingConfig(selected_file_extensions="all"))
 
-    assert project.records_flush_dir == Path(tmp_path) / "demo_batches"
+    assert project.output_dir == Path(tmp_path) / "demo"
 
 
 def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
@@ -278,7 +261,6 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
     config = ProcessingConfig(
         processing_max_workers=1,
         records_flush_every_n=1,
-        records_flush_dir=None,
     )
 
     def per_file_props(file_path):
@@ -304,48 +286,38 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
 
 
 class _StubRecord:
-    """Minimal Record-like object for unit tests."""
-
     def __init__(self, meta: dict):
         self.meta = meta
 
 
 def test_load_and_process_records_from_file_single_record(tmp_path):
-    """Single-record loader returns a one-element list."""
     f = tmp_path / "single.png"
     f.write_bytes(b"\x89PNG")
 
     class SingleLoader:
         NAME = "single"
-
         def load(self, source):
             return _StubRecord({"color": "red"})
 
-    result = processing.load_and_process_records_from_file(
-        f, SingleLoader(), processors=[]
-    )
+    result = processing.load_and_process_records_from_file(f, SingleLoader(), processors=[])
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0]["color"] == "red"
 
 
 def test_load_and_process_records_from_file_multi_record(tmp_path):
-    """Multi-record loader returns one dict per child with child_id set."""
     f = tmp_path / "multi.czi"
     f.write_bytes(b"\x00")
 
     class MultiLoader:
         NAME = "multi"
-
         def load(self, source):
             return {
                 "scene_A": _StubRecord({"width": 10}),
                 "scene_B": _StubRecord({"width": 20}),
             }
 
-    result = processing.load_and_process_records_from_file(
-        f, MultiLoader(), processors=[]
-    )
+    result = processing.load_and_process_records_from_file(f, MultiLoader(), processors=[])
     assert isinstance(result, list)
     assert len(result) == 2
     ids = {r["child_id"] for r in result}
@@ -355,80 +327,61 @@ def test_load_and_process_records_from_file_multi_record(tmp_path):
 
 
 def test_load_and_process_records_from_file_nonexistent(tmp_path):
-    """Missing files return an empty list."""
-
     class AnyLoader:
         NAME = "any"
-
         def load(self, source):
             raise AssertionError("should not be called")
 
-    result = processing.load_and_process_records_from_file(
-        tmp_path / "nope.png", AnyLoader(), processors=[]
-    )
+    result = processing.load_and_process_records_from_file(tmp_path / "nope.png", AnyLoader(), processors=[])
     assert result == []
 
 
 def test_load_and_process_records_from_file_loader_failure(tmp_path):
-    """Loader exceptions return an empty list, not a crash."""
     f = tmp_path / "bad.tif"
     f.write_bytes(b"bad")
 
     class FailLoader:
         NAME = "fail"
-
         def load(self, source):
             raise RuntimeError("boom")
 
-    result = processing.load_and_process_records_from_file(
-        f, FailLoader(), processors=[]
-    )
+    result = processing.load_and_process_records_from_file(f, FailLoader(), processors=[])
     assert result == []
 
 
 def test_load_and_process_records_from_file_loader_returns_none(tmp_path):
-    """Loader returning None yields an empty list."""
     f = tmp_path / "nothing.tif"
     f.write_bytes(b"x")
 
     class NoneLoader:
         NAME = "none"
-
         def load(self, source):
             return None
 
-    result = processing.load_and_process_records_from_file(
-        f, NoneLoader(), processors=[]
-    )
+    result = processing.load_and_process_records_from_file(f, NoneLoader(), processors=[])
     assert result == []
 
 
 def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
-    """Invalid child keys (empty) are skipped; ints are accepted and normalized to strings."""
     f = tmp_path / "keys.czi"
     f.write_bytes(b"\x00")
 
     class BadKeysLoader:
         NAME = "badkeys"
-
         def load(self, source):
             return {
-                "": _StubRecord({"x": 1}),          # empty key — skip
-                123: _StubRecord({"x": 2}),          # int key — accept
+                "": _StubRecord({"x": 1}),
+                123: _StubRecord({"x": 2}),
                 "valid": _StubRecord({"x": 3}),
             }
 
-    result = processing.load_and_process_records_from_file(
-        f, BadKeysLoader(), processors=[]
-    )
-
+    result = processing.load_and_process_records_from_file(f, BadKeysLoader(), processors=[])
     assert len(result) == 2
     child_ids = {r["child_id"] for r in result}
     assert child_ids == {"valid", "123"}
 
 
 def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monkeypatch):
-    """A loader returning multiple records per file expands to multiple rows."""
     p1 = tmp_path / "multi.czi"
     p1.write_bytes(b"")
 
@@ -448,5 +401,69 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
     assert "child_id" in df.columns
     assert set(df["child_id"].to_list()) == {"scene_0", "scene_1"}
     assert set(df["width"].to_list()) == {10, 20}
-    # Both rows share the same source path
     assert df["path"].to_list() == [str(p1), str(p1)]
+
+
+
+def test_cleanup_partial_batches_dir(tmp_path):
+    d = tmp_path / "batches"
+    d.mkdir()
+
+    p1 = d / "records_batch_00000.parquet"
+    p2 = d / "records_batch_00001.parquet"
+    combined = d / "records_df.parquet"
+
+    pl.DataFrame({"row_index": [0]}).write_parquet(p1)
+    pl.DataFrame({"row_index": [1]}).write_parquet(p2)
+    pl.DataFrame({"a": [1]}).write_parquet(combined)
+
+    assert p1.exists() and p2.exists() and combined.exists()
+
+    processing._cleanup_partial_chunks_dir(d)
+
+    assert not p1.exists()
+    assert not p2.exists()
+    assert not combined.exists()
+
+    # calling again is a no-op
+    processing._cleanup_partial_chunks_dir(d)
+
+    # empty directory should be removed
+    assert not d.exists()
+
+
+def test_finalize_removes_batches_dir(tmp_path):
+    """finalize() should remove the flush_dir after combining chunks."""
+    flush_dir = tmp_path / "_batches"
+    flush_dir.mkdir()
+
+    p1 = flush_dir / "records_batch_00000.parquet"
+    p2 = flush_dir / "records_batch_00001.parquet"
+    pl.DataFrame({"a": [1], "row_index": [0]}).write_parquet(p1)
+    pl.DataFrame({"a": [2], "row_index": [1]}).write_parquet(p2)
+
+    accumulator = processing._RecordsAccumulator(
+        flush_every_n=1,
+        flush_dir=flush_dir,
+    )
+    accumulator._written_files = [p1, p2]
+    accumulator._chunk_index = 2
+
+    result = accumulator.finalize()
+
+    assert result.height == 2
+    assert not flush_dir.exists(), "_batches directory should be removed after finalize"
+
+
+def test_finalize_without_flush_dir_returns_active_df():
+    """finalize() without a flush_dir returns the active DataFrame directly."""
+    accumulator = processing._RecordsAccumulator(
+        flush_every_n=100,
+        flush_dir=None,
+    )
+    accumulator._active_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    result = accumulator.finalize()
+
+    assert result.height == 3
+    assert result["a"].to_list() == [1, 2, 3]

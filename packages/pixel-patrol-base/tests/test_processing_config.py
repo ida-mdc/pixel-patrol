@@ -13,10 +13,9 @@ def test_defaults():
     assert config.processors_included == set()
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
-    assert config.pixel_patrol_flavor == ""
     assert config.processing_max_workers is None
     assert config.records_flush_every_n == DEFAULT_RECORDS_FLUSH_EVERY_N
-    assert config.records_flush_dir is None
+    assert config.output_dir is None
 
 
 # --- slicing_enabled ---
@@ -143,11 +142,11 @@ def test_flush_every_n_negative_raises():
 
 # --- records_flush_dir ---
 
-def test_flush_dir_path(tmp_path):
-    config = ProcessingConfig(records_flush_dir=tmp_path)
-    assert config.records_flush_dir == tmp_path
+def test_output_dir_path(tmp_path):
+    config = ProcessingConfig(output_dir=tmp_path)
+    assert config.output_dir == tmp_path
 
 
-def test_flush_dir_none():
-    config = ProcessingConfig(records_flush_dir=None)
-    assert config.records_flush_dir is None
+def test_output_dir_none():
+    config = ProcessingConfig(output_dir=None)
+    assert config.output_dir is None

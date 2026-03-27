@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Sequence
+from typing import List, Dict, Sequence, Union, Optional
 from pathlib import Path
 import dash_bootstrap_components as dbc
 import matplotlib.cm as cm
@@ -13,13 +13,16 @@ import logging
 
 from pixel_patrol_base.core.contracts import PixelPatrolWidget
 from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.core.report_config import ReportConfig
+from pixel_patrol_base.io.parquet_io import to_parquet_bytes, resolve_report_source
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.report.widget import organize_widgets_by_tab
 from pixel_patrol_base.report.global_controls import (build_sidebar,
                                                       apply_global_row_filters_and_grouping,
                                                       compute_filtered_row_positions,
-                                                      prepare_widget_data)
+                                                      prepare_widget_data,
+                                                      init_global_config,)
 from pixel_patrol_base.report.constants import (
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
@@ -40,89 +43,57 @@ from pixel_patrol_base.report.constants import (
     SAVE_SNAPSHOT_DOWNLOAD_ID,
     DEFAULT_REPORT_GROUP_COL,
     DEFAULT_CMAP,
+    DEFAULT_WIDGET_WIDTH,
 )
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WIDGET_WIDTH = 12
-
 ASSETS_DIR = (Path(__file__).parent / "assets").resolve()
 
+EXTERNAL_STYLESHEETS = [dbc.themes.BOOTSTRAP,
+                        "https://codepen.io/chriddyp/pen/bWLwgP.css",
+                        "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
+                        ]
 
-def create_app(project: Project, initial_global_config: dict | None = None, report_config: ReportConfig | None = None) -> Dash:
-    # Merge report_config with initial_global_config (initial takes precedence)
-    if report_config:
-        report_dict = report_config.to_dict()
-        if initial_global_config:
-            report_dict = {**report_dict, **initial_global_config}
-        initial_global_config = report_dict
+def prepare_app(
+    source: Union[Project, Path],
+    report_config: Optional[ReportConfig],
+) -> Dash:
+    """Resolves data source and config, then creates the Dash app."""
+    records_df, metadata = resolve_report_source(source)
+    global_config_dict = report_config.to_dict() if report_config else None
+    sanitized = init_global_config(records_df, global_config_dict)
     return _create_app(
-        df=project.records_df,
-        default_palette_name=report_config.cmap if report_config else DEFAULT_CMAP,
-        pixel_patrol_flavor='', # TODO: fix once we remove the zip file
-        project_name=project.name,
-        project=project,
-        initial_global_config=initial_global_config,
+        df=records_df,
+        metadata=metadata,
+        initial_global_config=_merge_configs(sanitized, report_config),
         report_config=report_config,
     )
 
 
 def _create_app(
         df: pl.DataFrame,
-        default_palette_name: str,
-        pixel_patrol_flavor: str,
-        project_name: str,
-        project: Project,
+        metadata: ProjectMetadata,
         initial_global_config: dict | None = None,
         report_config: ReportConfig | None = None,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
 
-    external_stylesheets = [dbc.themes.BOOTSTRAP,
-                            "https://codepen.io/chriddyp/pen/bWLwgP.css",
-                            "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
-                            ]
+    project_name = metadata.project_name
+    pixel_patrol_flavor = metadata.flavor
+    default_palette_name = report_config.cmap if report_config else DEFAULT_CMAP
 
     app = Dash(
         __name__,
-        external_stylesheets=external_stylesheets,
+        external_stylesheets=EXTERNAL_STYLESHEETS,
         suppress_callback_exceptions=True,
         assets_folder=str(ASSETS_DIR),
     )
 
     pio.templates.default = "plotly"
 
-    # Discover widget instances (new or legacy)
-    group_widgets: List[PixelPatrolWidget] = discover_widget_plugins()
-    
-    # Filter widgets based on report_config (using class name)
-    if report_config:
-        if report_config.widgets_included:
-            original_count = len(group_widgets)
-            original_names = {w.__class__.__name__ for w in group_widgets}
-            group_widgets = [w for w in group_widgets if w.__class__.__name__ in report_config.widgets_included]
-            filtered_names = {w.__class__.__name__ for w in group_widgets}
-            logger.info(f"Widget filtering (include mode): {len(group_widgets)}/{original_count} widgets included")
-            logger.debug(f"Requested: {report_config.widgets_included}")
-            logger.debug(f"Available: {original_names}")
-            logger.debug(f"Filtered: {filtered_names}")
-            if report_config.widgets_included - original_names:
-                logger.warning(f"Requested widget names not found: {report_config.widgets_included - original_names}")
-        elif report_config.widgets_excluded:
-            # Exclude widgets in the excluded set (using class name)
-            original_count = len(group_widgets)
-            original_names = {w.__class__.__name__ for w in group_widgets}
-            group_widgets = [w for w in group_widgets if w.__class__.__name__ not in report_config.widgets_excluded]
-            filtered_names = {w.__class__.__name__ for w in group_widgets}
-            logger.info(f"Widget filtering (exclude mode): {len(group_widgets)}/{original_count} widgets remaining after exclusion")
-            logger.debug(f"Excluded: {report_config.widgets_excluded}")
-            logger.debug(f"Available before: {original_names}")
-            logger.debug(f"Remaining after: {filtered_names}")
-            if report_config.widgets_excluded - original_names:
-                logger.warning(f"Some excluded widget names were not found: {report_config.widgets_excluded - original_names}")
-            still_present = report_config.widgets_excluded & filtered_names
-            if still_present:
-                logger.error(f"Widgets that should be excluded are still present: {still_present}")
+    # Discover and filter widgets based on report_config
+    group_widgets: List[PixelPatrolWidget] = _filter_widgets(discover_widget_plugins(), report_config)
 
     for w in group_widgets:
         if hasattr(w, "register"):
@@ -399,7 +370,7 @@ def _create_app(
         State(GLOBAL_CONFIG_STORE_ID, "data"),
         prevent_initial_call=True,
     )
-    def export_current_table_as_csv(n_clicks: int, global_config_dict: Dict):
+    def export_df_to_csv(n_clicks: int, global_config_dict: Dict):
         if not n_clicks:
             raise PreventUpdate
 
@@ -416,42 +387,24 @@ def _create_app(
 
         return dcc.send_string(csv_str, filename)
 
+
     @app.callback(
         Output(EXPORT_PROJECT_DOWNLOAD_ID, "data"),
         Input(EXPORT_PROJECT_BUTTON_ID, "n_clicks"),
         State(GLOBAL_CONFIG_STORE_ID, "data"),
         prevent_initial_call=True,
     )
-    def export_filtered_project(n_clicks: int, global_config_dict: Dict):
+    def export_df_w_metadata_to_parquet(n_clicks: int, global_config_dict: Dict):
         if not n_clicks:
             raise PreventUpdate
-
-        import tempfile
-        import copy
-        from pathlib import Path
-        from pixel_patrol_base import api as pp_api
 
         report_cfg = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, _ = apply_global_row_filters_and_grouping(df, report_cfg)
 
-        # 2. Clone the project and override records_df
-        new_project = copy.copy(project)
-        new_project.records_df = df_filtered
+        parquet_bytes = to_parquet_bytes(df_filtered, metadata)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return dcc.send_bytes(parquet_bytes, f"{project_name}_filtered_{ts}.parquet")
 
-        # 3. Export using PixelPatrol's real export_project API
-        with tempfile.TemporaryDirectory() as tmpdir:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            zip_path = Path(tmpdir) / f"{project_name}_filtered_{ts}.zip"
-
-            # This creates ONE zip file (not a directory)
-            pp_api.export_project(new_project, zip_path)
-
-            # 4. Read the zip file into memory
-            with open(zip_path, "rb") as f:
-                zip_bytes = f.read()
-
-        # 5. Return it to browser
-        return dcc.send_bytes(zip_bytes, f"{project_name}_filtered.zip")
 
     app.clientside_callback(
         ClientsideFunction(
@@ -465,6 +418,19 @@ def _create_app(
     )
 
     return app
+
+
+def _merge_configs(
+        initial_global_config: dict | None,
+        report_config: ReportConfig | None,
+) -> dict | None:
+    """Merge report_config into initial_global_config. initial takes precedence."""
+    if not report_config:
+        return initial_global_config
+    merged = report_config.to_dict()
+    if initial_global_config:
+        merged = {**merged, **initial_global_config}
+    return merged
 
 
 def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence[str]) -> bool:
@@ -494,3 +460,35 @@ def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence
             return False
 
     return True
+
+
+def _filter_widgets(
+        widgets: List[PixelPatrolWidget],
+        report_config: ReportConfig | None,
+) -> List[PixelPatrolWidget]:
+    """Filter discovered widgets by include/exclude sets from report_config."""
+    if not report_config:
+        return widgets
+
+    original_names = {w.__class__.__name__ for w in widgets}
+
+    if report_config.widgets_included:
+        filtered = [w for w in widgets if w.__class__.__name__ in report_config.widgets_included]
+        logger.info(f"Widget filtering (include mode): {len(filtered)}/{len(widgets)} widgets included")
+        missing = report_config.widgets_included - original_names
+        if missing:
+            logger.warning(f"Requested widget names not found: {missing}")
+        return filtered
+
+    if report_config.widgets_excluded:
+        filtered = [w for w in widgets if w.__class__.__name__ not in report_config.widgets_excluded]
+        logger.info(f"Widget filtering (exclude mode): {len(filtered)}/{len(widgets)} widgets remaining")
+        missing = report_config.widgets_excluded - original_names
+        if missing:
+            logger.warning(f"Some excluded widget names were not found: {missing}")
+        still_present = report_config.widgets_excluded & {w.__class__.__name__ for w in filtered}
+        if still_present:
+            logger.error(f"Widgets that should be excluded are still present: {still_present}")
+        return filtered
+
+    return widgets

@@ -9,6 +9,8 @@ from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_loader
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
+from pixel_patrol_base.io.parquet_io import save_parquet
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,13 +123,13 @@ class Project:
                                      selected_file_extensions=_resolve_extensions(config.selected_file_extensions,
                                                                                   self.loader))
 
-        # --- Infer flush dir if not set ---
-        if config.records_flush_dir is None and self.base_dir is not None:
-            inferred = Path(self.base_dir) / f"{self.name}_batches"
-            logger.info("Project Core: No records_flush_dir specified; inferring: %s", inferred)
-            config = dataclasses.replace(config, records_flush_dir=inferred)
+        if config.output_dir is None and self.base_dir is not None:
+            inferred = Path(self.base_dir) / self.name
+            logger.info("Project Core: No output_dir specified; inferring: %s", inferred)
+            config = dataclasses.replace(config, output_dir=inferred)
 
-        self.records_flush_dir = config.records_flush_dir
+        self.output_dir = config.output_dir
+        self.metadata = config.metadata.populate_from_project(self)
 
         return config
 
@@ -157,9 +159,16 @@ class Project:
         if self.records_df is None or self.records_df.is_empty():
             logger.warning("Project Core: No files found/processed. records_df will be None.")
             self.records_df = None
+            return self
+
+        # Save final parquet with metadata in footer
+        dest = Path(self.output_dir) / f"{self.name}.parquet"
+        try:
+            save_parquet(self.records_df, dest, self.metadata)
+        except Exception as e:
+            logger.warning("Project Core: Could not save parquet to '%s': %s", dest, e)
 
         return self
-
 
 
     def get_name(self) -> str:
