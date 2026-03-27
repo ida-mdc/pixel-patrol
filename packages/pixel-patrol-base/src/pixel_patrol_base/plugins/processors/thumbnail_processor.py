@@ -41,15 +41,20 @@ def _normalize(arr: da.Array) -> tuple[da.Array, float, float]:
     Lower bound = min(arr_min, 0) to keep zero as a fixed reference.
     Upper bound = arr_max.
     Returns (normalized_uint8, norm_min, norm_max).
+
+    Uses ``nanmin`` / ``nanmax`` so NaN voxels do not poison the intensity range.
+    If every value is NaN (or min/max are otherwise non-finite), returns a solid
+    black image and ``(0.0, 0.0)`` for the norm metadata (no meaningful stretch).
     """
-    mn, mx = da.compute(da.min(arr), da.max(arr))
+    mn, mx = da.compute(da.nanmin(arr), da.nanmax(arr))
     mn, mx = float(mn), float(mx)
+    if not np.isfinite(mn) or not np.isfinite(mx):
+        return da.full_like(arr, np.uint8(0), dtype=np.uint8), 0.0, 0.0
     lower = min(mn, 0.0)
     upper = mx
     if upper <= lower:
         fill = np.uint8(0 if upper <= 0 else 255)
-        result = da.map_blocks(lambda b: np.full(b.shape, fill, dtype=np.uint8), arr, dtype=np.uint8)
-        return result, lower, upper
+        return da.full_like(arr, fill, dtype=np.uint8), lower, upper
     normalized = (arr.astype(np.float64) - lower) / (upper - lower) * 255.0
     return da.clip(normalized, 0, 255).astype(np.uint8), lower, upper
 
@@ -58,6 +63,8 @@ def _resize_and_pad(img: np.ndarray) -> np.ndarray:
     """
     Scale img to fit within SPRITE_SIZE × SPRITE_SIZE while preserving aspect ratio,
     then center-pad to exactly SPRITE_SIZE × SPRITE_SIZE.
+
+    Downsampling / upsampling uses nearest-neighbor resampling.
 
     Returns an RGBA canvas (SPRITE_SIZE, SPRITE_SIZE, 4): padding pixels have alpha=0
     (transparent), content pixels have alpha=255 (opaque).
@@ -89,11 +96,6 @@ def _resize_and_pad(img: np.ndarray) -> np.ndarray:
     # Mark content region as fully opaque
     canvas[y_off:y_off + new_h, x_off:x_off + new_w, 3] = 255
     return canvas
-
-
-def _encode_raw(canvas: np.ndarray) -> bytes:
-    """Encode (SPRITE_SIZE, SPRITE_SIZE, 4) RGBA uint8 canvas as raw bytes."""
-    return canvas.tobytes()
 
 
 def _generate_thumbnail(
@@ -148,7 +150,7 @@ def _generate_thumbnail(
 
     try:
         canvas = _resize_and_pad(img)
-        return _encode_raw(canvas), norm_min, norm_max, dtype_name
+        return canvas.tobytes(), norm_min, norm_max, dtype_name
     except Exception as e:
         logger.error(f"Error generating thumbnail: {e}. Shape: {img.shape}, dtype: {img.dtype}")
         return None
@@ -171,20 +173,9 @@ class ThumbnailProcessor:
         color_dim = _get_color_dim(art.capabilities)
         result_data = _generate_thumbnail(art.data, art.dim_order, color_dim)
         if result_data is None:
-            return {
-                "thumbnail":          None,
-                "thumbnail_norm_min": None,
-                "thumbnail_norm_max": None,
-                "thumbnail_dtype":    None,
-            }
-        raw, norm_min, norm_max, dtype_name = result_data
+            return {x:None for x in self.OUTPUT_SCHEMA}
         return validate_processor_output(
-            {
-                "thumbnail":          raw,
-                "thumbnail_norm_min": norm_min,
-                "thumbnail_norm_max": norm_max,
-                "thumbnail_dtype":    dtype_name,
-            },
+            {x:result_data[i] for i, x in enumerate(self.OUTPUT_SCHEMA)},
             self.OUTPUT_SCHEMA,
             processor_name=self.NAME,
         )

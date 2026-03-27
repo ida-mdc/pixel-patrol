@@ -88,6 +88,24 @@ class TestThumbnailProcessor:
         assert arr[32, 16] == 0    # min (-50) → 0
         assert arr[32, 48] == 255  # max (+50) → 255
 
+    def test_normalization_ignores_nan_for_range(self):
+        """NaN pixels must not force the whole thumbnail to NaN / invalid uint8."""
+        data = np.full((64, 64), np.nan, dtype=np.float32)
+        data[:, 32:] = 0.0
+        data[:, 48:] = 1.0
+        thumb = self._thumbnail(data, "YX")
+        arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
+        assert arr[32, 16] == 0    # min (0) → 0
+        assert arr[32, 48] == 255  # max (1) → 255
+
+    def test_all_nan_image_yields_black_thumbnail(self):
+        data = np.full((32, 32), np.nan, dtype=np.float32)
+        result = self._run(data, "YX")
+        assert result["thumbnail_norm_min"] == 0.0
+        assert result["thumbnail_norm_max"] == 0.0
+        arr = np.array(_decode_thumbnail(result["thumbnail"]))
+        assert arr[:, :, 0].max() == 0  # RGB black (content region still opaque)
+
     def test_uint8_grayscale_is_normalized(self):
         """uint8 grayscale is also normalized (not passed through as-is)."""
         data = np.full((50, 50), 128, dtype=np.uint8)
