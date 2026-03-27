@@ -9,7 +9,7 @@ from pixel_patrol_base.core.report_config import ReportConfig
 
 def main():
     base_path = Path("datasets/bioio")
-    zip_path = Path("out/configured_project.zip")
+    output_dir = Path("out")
     loader = 'bioio'
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     
@@ -23,23 +23,23 @@ def main():
     #   slicing_dimensions_included={"T", "C"}  # slice only specific dimensions
     #   slicing_dimensions_excluded={"Z"}  # exclude specific dimensions from slicing
     processing_config = ProcessingConfig(
-        processors_included={"BasicStatsProcessor"}  # only run this processor
+        processors_included={"BasicStatsProcessor"},
+        output_dir=output_dir,
     )
     
     api.process_files(project, processing_config=processing_config)
-    api.export_project(project, zip_path)
-    
-    # Report configuration: exclude specific widgets
+
+    # --- Report: exclude specific widgets ---
     # Other options:
-    #   widgets_included={"FileSummaryWidget", "DataFrameWidget"}  # include instead of exclude
-    #   group_col="imported_path_short"  # group by column
-    #   filter={"file_extension": {"op": "in", "value": "tif, png"}}  # filter rows
-    #   dimensions={"T": "0", "Z": "1"}  # filter by dimensions
+    #   widgets_included={"FileSummaryWidget", "DataFrameWidget"}  — include instead of exclude
+    #   group_col="imported_path_short"                            — group by column
+    #   filter={"file_extension": {"op": "in", "value": "tif, png"}}
+    #   dimensions={"T": "0", "Z": "1"}                           — filter by dimensions
     report_config = ReportConfig(
-        cmap='viridis',
-        widgets_excluded={"ImageMosaikWidget"}
+        cmap="viridis",
+        widgets_excluded={"ImageMosaikWidget"},
     )
-    
+
     api.show_report(project, report_config=report_config)
 
 
