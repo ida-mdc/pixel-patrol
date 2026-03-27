@@ -56,3 +56,7 @@ SIGNIFICANCE_HELP_TEXT = (
     "- `**`: p < 0.01\n"
     "- `***`: p < 0.001"
 )
+
+DEFAULT_CMAP = 'rainbow'
+
+DEFAULT_WIDGET_WIDTH = 12

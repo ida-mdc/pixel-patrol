@@ -10,7 +10,6 @@ from PIL import Image
 from pixel_patrol_base.core.file_system import _aggregate_folder_sizes
 from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol_base.core.project import Project
-from pixel_patrol_base.core.project_settings import Settings
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 
 
@@ -96,13 +95,6 @@ def build_expected_paths_df():
             .sort("path")
         )
     return _fn
-
-
-@pytest.fixture
-def mock_settings() -> Settings:
-    """Provides a default Settings instance."""
-    return Settings(selected_file_extensions={"jpg", "png", "tif", "jpeg"})
-
 
 @pytest.fixture
 def mock_empty_paths_df() -> pl.DataFrame:
@@ -209,14 +201,6 @@ def project_with_all_data(project_instance: Project, temp_test_dirs: list[Path])
 
     # Add paths from the image-rich directory structure
     project.add_paths(temp_test_dirs)
-
-    # Set some custom settings for image processing
-    new_settings = Settings(
-        cmap="viridis",
-        n_example_files=5,
-        selected_file_extensions={"jpg", "png", "gif"} # Match extensions
-    )
-    project.set_settings(new_settings)
 
     project.process_records()
 

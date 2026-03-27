@@ -5,6 +5,7 @@ from dash import html, dcc, Input, Output
 
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 from pixel_patrol_base.report.data_utils import get_all_grouping_cols, select_needed_columns
@@ -49,14 +50,14 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
         self,
         color_map: Dict[str, str] | None,
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
     ):
         """Generic implementation: count rows by CATEGORY_COLUMN (+ optional group)."""
-
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, group_col, _resolved, warning_msg, group_order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config,
+            report_config,
             metric_base=None,
         )
         n_total_rows = df_filtered.height

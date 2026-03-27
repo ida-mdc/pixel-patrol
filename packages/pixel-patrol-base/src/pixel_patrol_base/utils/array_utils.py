@@ -1,11 +1,15 @@
 from itertools import combinations
-from typing import Callable, Tuple, Dict, List, Any, Iterable
+from typing import Callable, Tuple, Dict, List, Any, Iterable, Optional, Set
 from typing import NamedTuple
+import threading
 
 import dask.array as da
 import numpy as np
 
 NO_SLICE_AXES = ("X", "Y")
+
+# Thread-local storage for slicing configuration (stores Settings object)
+_thread_local = threading.local()
 
 class SliceAxisSpec(NamedTuple):
     dim: str    # e.g. "T", "C" or "Z"
@@ -13,19 +17,62 @@ class SliceAxisSpec(NamedTuple):
     size: int   # shape along that axis
 
 
-def calculate_np_array_stats(array: da.array, dim_order: str, registry: Dict[str, Dict[str, Callable]]) -> dict[str, float]:
+def set_slicing_config(settings: Optional[Any]) -> None:
+    """Set the slicing configuration for the current thread."""
+    _thread_local.slicing_config = settings
+
+
+def get_slicing_config() -> Optional[Any]:
+    """Get the Settings object for the current thread."""
+    return getattr(_thread_local, 'slicing_config', None)
+
+
+def calculate_np_array_stats(
+    array: da.array, 
+    dim_order: str, 
+    registry: Dict[str, Dict[str, Callable]],
+    slicing_enabled: Optional[bool] = None,
+    slicing_dimensions_included: Optional[Set[str]] = None,
+    slicing_dimensions_excluded: Optional[Set[str]] = None
+) -> dict[str, float]:
     if array.size == 0:
         return {k: np.nan for k, v in registry.items()}
     all_metrics = {k: v['fn'] for k, v in registry.items()}
     all_aggregators = {k: v['agg'] for k, v in registry.items() if v['agg'] is not None}
-    return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
+    return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators, 
+                                  slicing_enabled, slicing_dimensions_included, slicing_dimensions_excluded)
 
 
-def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, agg_fns: Dict) -> Dict[str, Any]:
+def calculate_sliced_stats(
+    array: da.Array, 
+    dim_order: str, 
+    metric_fns: Dict, 
+    agg_fns: Dict,
+    slicing_enabled: Optional[bool] = None,
+    slicing_dimensions_included: Optional[Set[str]] = None,
+    slicing_dimensions_excluded: Optional[Set[str]] = None
+) -> Dict[str, Any]:
     """
     Calculates statistics on a Dask array using an efficient `apply_gufunc` approach.
     This version is updated to handle both scalar and object metric results.
+    
+    Args:
+        array: Dask array to process
+        dim_order: String representing dimension order (e.g., "TCZYX")
+        metric_fns: Dictionary of metric functions to apply
+        agg_fns: Dictionary of aggregation functions
+        slicing_enabled: If False, slicing is disabled (only full-image stats). If None, uses thread-local config.
+        slicing_dimensions_included: Set of dimensions to include. If None, uses thread-local config.
+        slicing_dimensions_excluded: Set of dimensions to exclude. If None, uses thread-local config.
     """
+    # Use provided config or fall back to thread-local config
+    config = get_slicing_config()
+    if slicing_enabled is None:
+        slicing_enabled = getattr(config, 'slicing_enabled', True) if config else True
+    if slicing_dimensions_included is None:
+        slicing_dimensions_included = getattr(config, 'slicing_dimensions_included', set()) if config else set()
+    if slicing_dimensions_excluded is None:
+        slicing_dimensions_excluded = getattr(config, 'slicing_dimensions_excluded', {"X", "Y"}) if config else {"X", "Y"}
     if not metric_fns:
         return {}
 
@@ -35,11 +82,27 @@ def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, ag
         print("Warning: Array does not have both X and Y dimensions. Skipping.")
         return {}
 
-    loop_specs = [
-        SliceAxisSpec(dim, i, array.shape[i])
-        for i, dim in enumerate(dim_order)
-        if dim not in NO_SLICE_AXES
-    ]
+    # Determine which dimensions to slice based on configuration
+    if slicing_enabled is False:
+        # Explicitly disabled: only compute full-image stats
+        loop_specs = []
+    else:
+        # Determine which dimensions should be sliced
+        if slicing_dimensions_included:
+            # Only slice dimensions in the included set
+            dims_to_slice = slicing_dimensions_included
+        else:
+            # Slice all dimensions except those in the excluded set
+            dims_to_slice = set(dim_order) - slicing_dimensions_excluded
+        
+        # Always exclude spatial dimensions (X, Y) from slicing
+        dims_to_slice = dims_to_slice - set(spatial_dims)
+        
+        loop_specs = [
+            SliceAxisSpec(dim, i, array.shape[i])
+            for i, dim in enumerate(dim_order)
+            if dim in dims_to_slice
+        ]
 
     metric_names = list(metric_fns.keys())
     results_dask_array = _compute_all_metrics_gufunc(array, metric_fns.values(), xy_axes, len(metric_names))
@@ -84,10 +147,10 @@ def _compute_all_metrics_gufunc(
 
 
 def _format_and_aggregate_results(
-        results_array: np.ndarray,
-        loop_specs: List[Any],
-        metric_names: List[str],
-        agg_fns: Dict[str, Callable]
+    results_array: np.ndarray,
+    loop_specs: List[Any],
+    metric_names: List[str],
+    agg_fns: Dict[str, Callable]
 ) -> Dict[str, Any]:
     """
     Formats detailed metrics and computes aggregations.

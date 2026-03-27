@@ -1,10 +1,11 @@
 import logging
 import math
 import os
+import shutil
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable, Any
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
@@ -22,11 +23,10 @@ from pixel_patrol_base.utils.df_utils import (
     postprocess_basic_file_metadata_df,
 )
 from pixel_patrol_base.core.specs import is_record_matching_processor
-from pixel_patrol_base.config import (
-    DEFAULT_RECORDS_FLUSH_EVERY_N, COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
-)
-from pixel_patrol_base.core.project_settings import Settings
-from pixel_patrol_base.io.parquet_utils import write_dataframe_to_parquet
+from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.io.parquet_io import write_chunk
+from pixel_patrol_base.utils.array_utils import set_slicing_config
 
 
 logger = logging.getLogger(__name__)
@@ -47,17 +47,23 @@ class _IndexedPath(NamedTuple):
 
 
 def _process_worker_initializer(
-    loader_id: Optional[str], processor_classes: List[type]
+    loader_id: Optional[str], processor_classes: List[type], processing_config: Optional[Any] = None
 ) -> None:
     """Initialize per-process loader and processor instances.
     
     Args:
         loader_id: Optional string identifier for the loader to use.
         processor_classes: List of PixelPatrolProcessor classes to instantiate.
+        processing_config: Optional ProcessingConfig object to set in thread-local storage.
     """
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
     processors = [cls() for cls in processor_classes]
+    
+    # Set slicing configuration for this worker thread/process
+    if processing_config is not None:
+        set_slicing_config(processing_config)
+    
     _PROCESS_WORKER_CONTEXT = {
         "loader": loader_instance,
         "processors": processors,
@@ -253,7 +259,7 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
 def _build_deep_record_df(
     basic: pl.DataFrame,
     loader_instance: PixelPatrolLoader,
-    settings: Optional[Settings] = None,
+    processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> pl.DataFrame:
     """Process each path (optionally in parallel) and build a Polars DataFrame.
@@ -261,7 +267,7 @@ def _build_deep_record_df(
     Args:
         basic: The basic Polars DataFrame with file paths and metadata.
         loader_instance: An instance of PixelPatrolLoader to load files.
-        settings: Optional Settings object for processing configuration.
+        processing_config: Optional ProcessingConfig for slicing and processor selection.
         progress_callback: Optional GUI callback for progress updates.
     Returns:
         A Polars DataFrame containing deep processed records, aka the results.
@@ -269,22 +275,35 @@ def _build_deep_record_df(
     if basic.is_empty():
         return pl.DataFrame([])
 
+    config = processing_config or ProcessingConfig()
     total = basic.height
     processors = discover_processor_plugins()
+    
+    if processing_config:
+        if processing_config.processors_included:
+            processors = [p for p in processors if p.__class__.__name__ in processing_config.processors_included]
+        elif processing_config.processors_excluded:
+            processors = [p for p in processors if p.__class__.__name__ not in processing_config.processors_excluded]
+    
     processor_classes = [proc.__class__ for proc in processors]
-    worker_count = _resolve_worker_count(settings, total)
-    flush_threshold = _resolve_flush_threshold(total, settings)
+
+    set_slicing_config(config)
+    worker_count = _resolve_worker_count(config, total)
+    flush_threshold = _resolve_flush_threshold(total, config)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
     show_processor_progress = worker_count == 1
+    flush_dir = Path(config.output_dir) / "_batches" if config.output_dir else None
 
     accumulator = _RecordsAccumulator(
         flush_every_n=flush_threshold,
-        flush_dir=getattr(settings, "records_flush_dir", None),
+        flush_dir=flush_dir,
     )
 
     processed_rows: Set[int] = set()
+
+    resume = False
     if accumulator.flush_dir:
-        if settings and getattr(settings, "resume", False):
+        if resume:
             # Resume: adopt existing partial chunks and skip already-processed files
             processed_rows = accumulator.load_existing_chunks()
         else:
@@ -340,7 +359,7 @@ def _build_deep_record_df(
             with ProcessPoolExecutor(
                 max_workers=worker_count,
                 initializer=_process_worker_initializer,
-                initargs=(loader_name, processor_classes),
+                initargs=(loader_name, processor_classes, processing_config),
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
@@ -512,26 +531,26 @@ def load_and_process_records_from_file(
 
 def build_records_df(
     bases: List[Path],
-    selected_extensions: Set[str] | str,
     loader: Optional[PixelPatrolLoader],
-    settings: Optional[Settings] = None,
+    processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> Optional[pl.DataFrame]:
     """Build the full records DataFrame by scanning files and processing them.
 
     Args:
         bases: List of base directories to scan for files.
-        selected_extensions: Set of file extensions to include, or "all" for all supported ('{"tif", "png", "jpg", ...}', or '"all"').
         loader: Optional PixelPatrolLoader instance to use for loading files.
-        settings: Optional Settings object for processing configuration.
+        processing_config: Optional ProcessingConfig for slicing and processor selection.
         progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
-                            Called for each file processed during deep processing.
+                            Called for each file processed during deep processing
     Returns:
         A Polars DataFrame containing the full records, or None if no files were found.
     """
 
+    config = processing_config or ProcessingConfig()
+
     basic = _build_basic_file_df(
-        bases, loader=loader, accepted_extensions=selected_extensions
+        bases, loader=loader, accepted_extensions=config.selected_file_extensions
     )
     if loader is None or basic is None:
         return basic
@@ -539,7 +558,7 @@ def build_records_df(
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
-    deep = _build_deep_record_df(basic, loader, settings=settings, progress_callback=progress_callback)
+    deep = _build_deep_record_df(basic, loader, processing_config=config, progress_callback=progress_callback)
 
     return deep
 
@@ -609,7 +628,7 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     return result
 
 
-def _resolve_worker_count(settings: Optional[Settings], total_rows: Optional[int] = None) -> int:
+def _resolve_worker_count(config: ProcessingConfig, total_rows: Optional[int] = None) -> int:
     """
     Determine the number of parallel workers to use (minimum 1).
 
@@ -621,15 +640,15 @@ def _resolve_worker_count(settings: Optional[Settings], total_rows: Optional[int
       datasets.
 
     Args:
-        settings: Optional Settings object that may specify `processing_max_workers`.
+        config: ProcessingConfig that may specify `processing_max_workers`.
         total_rows: Optional total number of rows/files that will be processed.
     Returns:
         An integer representing the number of parallel workers to use.
     """
     cpu_count = os.cpu_count() or 1
 
-    if settings and settings.processing_max_workers is not None:
-        requested = max(1, settings.processing_max_workers)
+    if config.processing_max_workers is not None:
+        requested = max(1, config.processing_max_workers)
         max_workers = min(requested, cpu_count)
     else:
         max_workers = max(1, cpu_count)
@@ -662,22 +681,18 @@ def _resolve_batch_size(
     return max(1, math.ceil(flush_threshold / max(1, worker_count)))
 
 
-def _resolve_flush_threshold(total_rows: int, settings: Optional[Settings]) -> int:
+def _resolve_flush_threshold(total_rows: int, config: ProcessingConfig) -> int:
     """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush.
 
     Args:
         total_rows: Total number of rows/files to process.
-        settings: Optional Settings object that may specify `records_flush_every_n`.
+        config: ProcessingConfig that may specify `records_flush_every_n`.
     Returns:
         An integer representing the flush threshold for records.
     """
     if total_rows <= 0:
         return 0
-    value = (
-        settings.records_flush_every_n
-        if settings and settings.records_flush_every_n is not None
-        else DEFAULT_RECORDS_FLUSH_EVERY_N
-    )
+    value = config.records_flush_every_n
     # Preserve the ability to disable flushing when a non-positive value is configured.
     if value is None or value <= 0:
         return 0
@@ -819,40 +834,13 @@ class _RecordsAccumulator:
 
         final_df = self.post_process_final_df(final_df)
 
-        # write combined parquet file and tidy up partial chunks
-        if self._flush_dir:
+        # Remove the entire flush directory
+        if self._flush_dir and self._flush_dir.exists():
             try:
-                combined_path = write_dataframe_to_parquet(
-                    final_df,
-                    "records_df.parquet",
-                    self._flush_dir,
-                    compression="zstd",
-                )
-                if combined_path is None:
-                    logger.warning(
-                        "Processing Core: failed to write combined records parquet to %s",
-                        self._flush_dir,
-                    )
-                    return final_df
-                logger.info(
-                    "Processing Core: writing combined records DataFrame to %s",
-                    combined_path,
-                )
-
-                # tidy up (leave combined parquet intact)
-                _cleanup_partial_chunks_dir(self._flush_dir, cleanup_combined_parquet=False)
-                # reset written files list
-                self._written_files = []
-            except (OSError, IOError, MemoryError) as exc:
-                logger.exception(
-                    "Processing Core: failed to finalize combined records parquet in %s: %s",
-                    self._flush_dir, exc
-                )
-            except Exception as exc:
-                logger.exception(
-                    "Processing Core: unexpected error while finalizing combined records parquet in %s: %s",
-                    self._flush_dir, exc
-                )
+                shutil.rmtree(self._flush_dir)
+                logger.info("Processing Core: Removed intermediate batches directory '%s'.", self._flush_dir)
+            except OSError as exc:
+                logger.warning("Processing Core: Could not remove '%s': %s", self._flush_dir, exc)
 
         return final_df
 
@@ -890,10 +878,9 @@ class _RecordsAccumulator:
         logger.debug(f"Flushing active DataFrame to disk at chunk index {self._chunk_index}")
         chunk_filename = f"records_batch_{self._chunk_index:05d}.parquet"
 
-        chunk_path = write_dataframe_to_parquet(
+        chunk_path = write_chunk(
             self._active_df,
-            chunk_filename,
-            self._flush_dir,
+            self._flush_dir / chunk_filename,
             compression="zstd",
         )
         if chunk_path is None:

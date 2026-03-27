@@ -1,15 +1,16 @@
 import logging
 from pathlib import Path
+import dataclasses
 from typing import List, Union, Iterable, Optional, Set, Callable
-
 import polars as pl
 
-from pixel_patrol_base.config import MIN_N_EXAMPLE_FILES, MAX_N_EXAMPLE_FILES
 from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_loader
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
+from pixel_patrol_base.io.parquet_io import save_parquet
+
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,10 @@ class Project:
 
         validation.validate_project_name(name)
         self.name: str = name
-
         self.base_dir = base_dir
-
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
-
         self.paths: List[Path] = [self.base_dir]
-        self.settings: Settings = Settings()
+        self.records_flush_dir: Optional[Path] = None
         self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
@@ -35,7 +33,6 @@ class Project:
 
     @property
     def base_dir(self) -> Optional[Path]:
-        """Get the project base directory."""
         return self._base_dir
 
     @base_dir.setter
@@ -113,75 +110,66 @@ class Project:
 
         return self
 
-    def set_settings(self, settings: Settings) -> "Project":
-        logger.info(f"Project Core: Attempting to set project settings for '{self.name}'.")
 
-        # Handle selected_file_extensions first.
-        self._set_selected_file_extensions(settings)
+    def _prepare_processing_config(self, processing_config: Optional[ProcessingConfig]) -> ProcessingConfig:
+        """
+        Validates and fills in defaults on the provided ProcessingConfig:
+        - Resolves selected_file_extensions against the loader if needed.
+        - Infers records_flush_dir from base_dir if not explicitly set.
+        """
+        config: ProcessingConfig = processing_config or ProcessingConfig()
 
-        # Validate cmap: Must be a valid Matplotlib colormap
-        if not validation.is_valid_colormap(settings.cmap):
-            logger.error(f"Project Core: Invalid colormap name '{settings.cmap}'.")
-            raise ValueError(f"Invalid colormap name: '{settings.cmap}'. It is not a recognized Matplotlib colormap.")
+        config = dataclasses.replace(config,
+                                     selected_file_extensions=_resolve_extensions(config.selected_file_extensions,
+                                                                                  self.loader))
 
-        if not isinstance(settings.n_example_files, int) or \
-            settings.n_example_files < MIN_N_EXAMPLE_FILES or \
-            settings.n_example_files >= MAX_N_EXAMPLE_FILES:
-            logger.error(f"Project Core: Invalid n_example_files value: {settings.n_example_files}.")
-            raise ValueError("Number of example files must be an integer between 1 and 19 (i.e., positive and below 20).")
+        if config.output_dir is None and self.base_dir is not None:
+            inferred = Path(self.base_dir) / self.name
+            logger.info("Project Core: No output_dir specified; inferring: %s", inferred)
+            config = dataclasses.replace(config, output_dir=inferred)
 
-        # All validations passed, apply the new settings.
-        self.settings = settings
-        logger.info(f"Project Core: Project settings updated for '{self.name}'.")
-        return self
+        self.output_dir = config.output_dir
+        self.metadata = config.metadata.populate_from_project(self)
+
+        return config
 
 
     def process_records(
-        self, 
-        settings: Optional[Settings] = None,
-        progress_callback: Optional[Callable[[int, int, Path], None]] = None
+            self,
+            processing_config: Optional[ProcessingConfig] = None,
+            progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     ) -> "Project":
         """
-        Processes records (e.g. images) in the project, building `records_df`.
-        Args:
-            settings: An optional Settings object to apply to the project. If None, the project's current settings will be used.
-            progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
-                              Called for each file processed. Useful for progress tracking in UI.
+        Processes files in the project, building records_df.
 
-        Returns:
-            The Project instance with the `records_df` updated.
+        Args:
+            processing_config: Runtime options for slicing, processor selection, file
+                               extensions, flush behaviour, etc. If None, defaults are used.
+            progress_callback: Optional callback(current, total, current_file) called per file.
         """
-        if settings is not None:
-            logger.info("Project Core: Applying provided settings before processing files.")
-            self.set_settings(settings)
-        # Ensure we have a chunk directory set so processing will use on-disk
-        # partial flushes to avoid building an ever-growing in-memory DataFrame.
-        if getattr(self.settings, "records_flush_dir", None) is None and self.base_dir is not None:
-            inferred = Path(self.base_dir) / f"{self.name}_batches"
-            # Do not overwrite if explicitly set to None; only set when unset.
-            self.settings.records_flush_dir = inferred
-            logger.info(
-                "Project Core: No records_flush_dir specified; inferring chunk directory: %s",
-                inferred,
-            )
-        if not self.settings.selected_file_extensions:
-            raise ValueError("No supported file extensions selected. Provide at least one valid extension.")
-        exts = self.settings.selected_file_extensions
+        config = self._prepare_processing_config(processing_config)
 
         self.records_df = processing.build_records_df(
-            self.paths,
-            exts,
+            bases=self.paths,
             loader=self.loader,
-            settings=self.settings,
+            processing_config=config,
             progress_callback=progress_callback,
         )
 
         if self.records_df is None or self.records_df.is_empty():
-            logger.warning(
-                "Project Core: No files found/processed. records_df will be None.")
+            logger.warning("Project Core: No files found/processed. records_df will be None.")
             self.records_df = None
+            return self
+
+        # Save final parquet with metadata in footer
+        dest = Path(self.output_dir) / f"{self.name}.parquet"
+        try:
+            save_parquet(self.records_df, dest, self.metadata)
+        except Exception as e:
+            logger.warning("Project Core: Could not save parquet to '%s': %s", dest, e)
 
         return self
+
 
     def get_name(self) -> str:
         """Get the project name."""
@@ -194,10 +182,6 @@ class Project:
         """Get the list of directory paths added to the project."""
         return self.paths
 
-    def get_settings(self) -> Settings:
-        """Get the current project settings."""
-        return self.settings
-
     def get_records_df(self) -> Optional[pl.DataFrame]:
         """Get the single DataFrame containing processed data."""
         return self.records_df
@@ -205,58 +189,46 @@ class Project:
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
 
-    def _set_selected_file_extensions(self, new_settings: Settings) -> None:
-        """
-        Set `selected_file_extensions` on `new_settings`.
-        Rules:
-        - If already set on `self.settings`: keep as-is (immutable for this project instance).
-        - If input == "all":
-            * with loader  -> use `loader.SUPPORTED_EXTENSIONS`
-            * without loader -> 'all'
-        - If input is a Set[str]: lowercase, then
-            * with loader -> filter against `SUPPORTED_EXTENSIONS`.
-            * without loader -> use as-is.
-        Raises:
-        - TypeError: if input is neither "all" nor a Set[str].
-        """
 
-        existing_extensions = self.settings.selected_file_extensions
-        proposed_extensions = new_settings.selected_file_extensions
+def _resolve_extensions(
+        proposed: Union[Set[str], str],
+        loader: Optional[PixelPatrolLoader],
+) -> Union[Set[str], str]:
+    """
+    Resolves selected_file_extensions against the loader's supported extensions.
 
-        if existing_extensions:
-            logger.info(f"Project Core: selected_file_extensions already set; keeping existing value: {existing_extensions}")
-            new_settings.selected_file_extensions = existing_extensions
-            return
-
-        if isinstance(proposed_extensions, str) and proposed_extensions.lower() == 'all':
-            if self.loader is None:
-                new_settings.selected_file_extensions = 'all'
-                logger.info("Project Core: All file extensions are selected")
-                return
-            else:
-                new_settings.selected_file_extensions = self.loader.SUPPORTED_EXTENSIONS
-                logger.info(f"Project Core: Using loader-supported extensions: {new_settings.selected_file_extensions}")
-                return
-
-        if isinstance(proposed_extensions, Set):
-            proposed_extensions = {x.lower() for x in proposed_extensions if isinstance(x, str)}
-            if not proposed_extensions:
-                new_settings.selected_file_extensions = set()
-                logger.warning(f"Project Core: selected_file_extensions is an empty set - no file will be processed")
-                return
-            if not self.loader:
-                new_settings.selected_file_extensions = proposed_extensions
-                logger.info(f"Project Core: File extensions are selected: {proposed_extensions}")
-                return
-            else:
-                proposed_extensions = validation.validate_and_filter_extensions(proposed_extensions, self.loader.SUPPORTED_EXTENSIONS)
-                if not proposed_extensions:
-                    new_settings.selected_file_extensions = set()
-                    logger.warning("Project Core: No loader supported file extensions provided. No files will be processed.")
-                    return
-                new_settings.selected_file_extensions = proposed_extensions
-                logger.info(f"Project Core: Set file extensions to: {proposed_extensions}.")
-                return
+    Rules:
+    - "all" with loader    -> loader.SUPPORTED_EXTENSIONS
+    - "all" without loader -> "all"
+    - Set[str] with loader -> lowercased, filtered against SUPPORTED_EXTENSIONS (warns on unknowns)
+    - Set[str] no loader   -> lowercased as-is
+    - Empty set            -> empty set (caller decides whether to error)
+    - Other type           -> TypeError
+    """
+    if isinstance(proposed, str) and proposed.lower() == "all":
+        if loader is None:
+            logger.info("Project Core: All file extensions are selected.")
+            return "all"
         else:
-            logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed_extensions)}")
-            raise TypeError("selected_file_extensions must be 'all' or a Set[str].")
+            logger.info(f"Project Core: Using loader-supported extensions: {loader.SUPPORTED_EXTENSIONS}")
+            return loader.SUPPORTED_EXTENSIONS
+
+    if isinstance(proposed, set):
+        proposed = {x.lower() for x in proposed if isinstance(x, str)}
+        if not proposed:
+            logger.warning("Project Core: selected_file_extensions is an empty set - no file will be processed.")
+            return set()
+        if loader is None:
+            logger.info(f"Project Core: File extensions selected: {proposed}")
+            return proposed
+        else:
+            resolved = validation.validate_and_filter_extensions(proposed, loader.SUPPORTED_EXTENSIONS)
+            if not resolved:
+                logger.warning(
+                    "Project Core: No loader-supported file extensions provided. No files will be processed.")
+                return set()
+            logger.info(f"Project Core: File extensions set to: {resolved}.")
+            return resolved
+
+    logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed)}")
+    raise TypeError("selected_file_extensions must be 'all' or a Set[str].")

@@ -6,6 +6,7 @@ from dash import html, dcc, Input, Output
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL
 from pixel_patrol_base.report.data_utils import select_needed_columns
 from pixel_patrol_base.report.factory import plot_scatter, create_strip_plot_grid, show_no_data_message
@@ -49,14 +50,14 @@ class DimSizeWidget(BaseReportWidget):
         self,
         color_map: Dict[str, str],
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
     ):
-
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, group_col, _resolved, _warning, group_order = prepare_widget_data(
-                                self._df,
-                               subset_indices,
-                               global_config or {},
-                               metric_base = None,
+            self._df,
+            subset_indices,
+            report_config,
+            metric_base=None,
         )
 
         # Identify size columns (fast string check)
