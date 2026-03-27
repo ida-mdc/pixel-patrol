@@ -169,7 +169,7 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
 
 
 def _denormalize(arr: np.ndarray, norm_min: float, norm_max: float, dtype_name: str) -> np.ndarray:
-    """Map normalized [0, 255] thumbnail to dtype-relative [0, 255] display values."""
+    """Undo normalization from [0, 255] using `norm_min`/`norm_max`, then map to uint8 display values for the target integer dtype."""
     try:
         info = np.iinfo(np.dtype(dtype_name))
         dtype_lo, dtype_hi = float(info.min), float(info.max)
