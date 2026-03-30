@@ -1,5 +1,6 @@
-import matplotlib.cm as cm
 import logging
+
+import matplotlib
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Union, Optional, Tuple, Set
@@ -111,9 +112,7 @@ def is_valid_colormap(cmap_name: str) -> bool:
         logger.warning(f"Colormap name '{cmap_name}' is not a string type.")
         return False
     try:
-        # Using get_cmap() and catching ValueError is the robust way to check.
-        # This will work for both builtin and registered colormaps.
-        cm.get_cmap(cmap_name)
+        matplotlib.colormaps.get_cmap(cmap_name)
         return True
     except ValueError:
         return False
