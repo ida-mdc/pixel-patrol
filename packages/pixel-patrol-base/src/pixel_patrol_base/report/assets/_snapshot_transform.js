@@ -72,14 +72,13 @@ function transformSnapshotHtml(doc, timestamp, options) {
         doc.head.insertBefore(viewport, doc.head.firstChild);
     }
 
-    // 4. CLEANUP: Remove Buttons, tensorboard widget, etc. from the Snapshot
+    // 4. CLEANUP: Remove Buttons, etc. from the Snapshot
     var idsToRemove = [
         "global-apply-button",
         "global-reset-button",
         "export-csv-button",
         "export-project-button",
         "save-snapshot-button",
-        "embedding-projector-container"
     ];
 
     idsToRemove.forEach(function(id) {
