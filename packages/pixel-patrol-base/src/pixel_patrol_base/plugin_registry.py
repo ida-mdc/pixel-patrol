@@ -16,7 +16,6 @@ from pixel_patrol_base.plugins.widgets.metadata.dim_size import DimSizeWidget
 from pixel_patrol_base.plugins.widgets.summary.dataframe import DataFrameWidget
 from pixel_patrol_base.plugins.widgets.summary.file_summary import FileSummaryWidget
 from pixel_patrol_base.plugins.widgets.summary.sunburst import FileSunburstWidget
-from pixel_patrol_base.plugins.widgets.visualization.embedding_projector import EmbeddingProjectorWidget
 from pixel_patrol_base.plugins.widgets.visualization.image_mosaik import ImageMosaikWidget
 
 logger = logging.getLogger(__name__)
@@ -67,7 +66,6 @@ def register_processor_plugins():
 def register_widget_plugins():
     return [
         FileStatisticsWidget,
-        EmbeddingProjectorWidget,
         FileSummaryWidget,
         DataFrameWidget,
         FileSunburstWidget,
