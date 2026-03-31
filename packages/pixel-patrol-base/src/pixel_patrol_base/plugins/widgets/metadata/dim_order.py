@@ -7,7 +7,7 @@ from pixel_patrol_base.plugins.widgets.column_count_with_grouping_abstract_widge
 
 
 class DimOrderWidget(ColumnCountWithGroupingBarWidget):
-    NAME: str = "Dimension Order Distribution"
+    NAME: str = "dimension-order-distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"dim_order", "name"}
     REQUIRES_PATTERNS = None

@@ -20,7 +20,7 @@ class MultiMetricViolinGridWidget(BaseReportWidget):
     """
 
     # Subclasses MUST set these:
-    NAME: str = "Multi Metric Violin Grid"
+    NAME: str = "multi-metric-violin-grid"
     TAB: str = ""
     REQUIRES: Set[str] = set()
     REQUIRES_PATTERNS = None

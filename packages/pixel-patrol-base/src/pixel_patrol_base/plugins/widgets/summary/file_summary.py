@@ -13,7 +13,7 @@ from pixel_patrol_base.report.factory import plot_bar, show_no_data_message
 
 
 class FileSummaryWidget(BaseReportWidget):
-    NAME: str = "File Data Summary"
+    NAME: str = "file-data-summary"
     TAB: str = WidgetCategories.SUMMARY.value
     REQUIRES: Set[str] = {"size_bytes", "file_extension"}
     REQUIRES_PATTERNS = None

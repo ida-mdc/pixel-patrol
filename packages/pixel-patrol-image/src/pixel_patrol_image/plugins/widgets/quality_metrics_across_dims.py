@@ -8,7 +8,7 @@ from pixel_patrol_image.plugins.processors.quality_metrics_processor import Qual
 
 
 class QualityMetricsAcrossDimensionsWidget(MetricsAcrossDimensionsWidget):
-    NAME: str = "Quality Metrics Across Dimensions"
+    NAME: str = "quality-metrics-across-dimensions"
     TAB: str = WidgetCategories.DATASET_STATS.value
 
     # No fixed columns; rely on the processor's dynamic outputs

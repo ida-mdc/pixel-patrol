@@ -18,7 +18,7 @@ class MetricsAcrossDimensionsWidget(BaseReportWidget):
     Inherits from BaseReportWidget to provide standard Card layout.
     """
     # Subclasses set these:
-    NAME: str = "Metrics Across Dimensions"
+    NAME: str = "metrics-across-dimensions"
     TAB: str = ""
     REQUIRES = set()
     REQUIRES_PATTERNS = None

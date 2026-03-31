@@ -281,9 +281,9 @@ def _build_deep_record_df(
     
     if processing_config:
         if processing_config.processors_included:
-            processors = [p for p in processors if p.__class__.__name__ in processing_config.processors_included]
+            processors = [p for p in processors if p.NAME in processing_config.processors_included]
         elif processing_config.processors_excluded:
-            processors = [p for p in processors if p.__class__.__name__ not in processing_config.processors_excluded]
+            processors = [p for p in processors if p.NAME not in processing_config.processors_excluded]
     
     processor_classes = [proc.__class__ for proc in processors]
 

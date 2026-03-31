@@ -20,8 +20,8 @@ _DEFAULT_COL = 'mean_intensity'
 
 logger = logging.getLogger(__name__)
 
-class ImageMosaikWidget(BaseReportWidget):
-    NAME: str = "Image Mosaic"
+class ImageMosaicWidget(BaseReportWidget):
+    NAME: str = "image-mosaic"
     TAB: str = WidgetCategories.VISUALIZATION.value
     REQUIRES: Set[str] = {"thumbnail", "name"}
     REQUIRES_PATTERNS = None

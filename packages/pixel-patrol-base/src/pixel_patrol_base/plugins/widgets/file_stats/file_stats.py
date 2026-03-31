@@ -20,7 +20,7 @@ SIZE_NUM_BINS = 20
 
 class FileStatisticsWidget(BaseReportWidget):
     # --- Configuration ---
-    NAME: str = "File Statistics"
+    NAME: str = "file-statistics"
     TAB: str = WidgetCategories.FILE_STATS.value
     REQUIRES: Set[str] = {
         "name",

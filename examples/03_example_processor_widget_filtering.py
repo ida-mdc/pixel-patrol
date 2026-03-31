@@ -23,7 +23,7 @@ def main():
     #   slicing_dimensions_included={"T", "C"}  # slice only specific dimensions
     #   slicing_dimensions_excluded={"Z"}  # exclude specific dimensions from slicing
     processing_config = ProcessingConfig(
-        processors_included={"BasicStatsProcessor"},
+        processors_included={"basic-stats"},
         output_dir=output_dir,
     )
     
@@ -37,7 +37,7 @@ def main():
     #   dimensions={"T": "0", "Z": "1"}                           — filter by dimensions
     report_config = ReportConfig(
         cmap="viridis",
-        widgets_excluded={"ImageMosaikWidget"},
+        widgets_excluded={"image-mosaic-widget"},
     )
 
     api.show_report(project, report_config=report_config)
