@@ -1,4 +1,5 @@
 from typing import Dict, Optional, List, Any, Tuple
+import random
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -258,6 +259,122 @@ def plot_scatter(
     return fig
 
 
+def plot_aggregated_strip(
+        df: pl.DataFrame,
+        x: str,
+        y: str,
+        color: Optional[str] = None,
+        color_map: Optional[Dict[str, str]] = None,
+        title: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
+        hover_data: Optional[List[str]] = None,
+        height: Optional[int] = None,
+) -> go.Figure:
+    """Creates an aggregated strip plot with grouped data.
+
+    Alternative to plot_strip() for many points, where performance would be too bad.
+
+    1. group dataframe by group (like modification month) and the distinct values of the size. the group is the "color" I guess.
+    (2. gather all labels of each group and combine them into a long (maybe truncated string?))
+    3. add a scatter plot for each group and distinct size: sizes at the y-axis, groups on the x-axis
+    """
+    # Create aggregation key combining color and y (size)
+    agg_key = '_agg_key_'
+    if color:
+        df_with_key = df.with_columns([
+            (pl.col(color).cast(pl.String) + '_' + pl.col(y).cast(pl.String)).alias(agg_key)
+        ])
+    else:
+        df_with_key = df.with_columns([
+            pl.col(y).cast(pl.String).alias(agg_key)
+        ])
+
+    # Aggregate data - count occurrences and collect labels
+    agg_df = df_with_key.group_by([agg_key]).agg([
+        pl.col(x).first().alias(x),
+        pl.col(y).first().alias(y),
+        pl.len().alias('count')
+    ])
+
+    # Extract group and size from aggregation key
+    if color:
+        agg_df = agg_df.with_columns([
+            pl.col(agg_key).str.split('_').list.get(0).alias(color),
+            pl.col(agg_key).str.split('_').list.slice(1).list.join('_').alias(y)
+        ])
+    else:
+        agg_df = agg_df.with_columns([
+            pl.lit('All').alias(color)
+        ])
+
+    # Collect all original labels for each aggregation point
+    if hover_data and set(hover_data).issubset(set(df.columns)):
+        label_col = hover_data
+
+        # Get all labels for each aggregation group
+        labels_df = df_with_key.group_by([agg_key]).agg([
+            pl.col(label_col).alias('labels')
+        ])
+
+        # Join with aggregated data
+        agg_df = agg_df.join(labels_df, on=agg_key)
+
+        # Create hover text using Polars expressions
+        agg_df = agg_df.with_columns([
+            pl.when(pl.col('labels').list.len() <= 2)
+            .then(
+                pl.format("Group: {}<br>Size: {}<br>Count: {}<br>Labels: {}",
+                          pl.col(color), pl.col(y), pl.col('count'),
+                          pl.col('labels').list.join("<br>  "))
+            )
+            .otherwise(
+                pl.format("Group: {}<br>Size: {}<br>Count: {}<br>Labels: {} (+{} more)",
+                          pl.col(color), pl.col(y), pl.col('count'),
+                          pl.col('labels').list.slice(0, 2).list.join("<br>  "),
+                          pl.col('labels').list.len() - 2)
+            )
+            .alias('hover_text')
+        ])
+    else:
+        agg_df = agg_df.with_columns([
+            (pl.format("Group: {}", pl.col(color)) + "<br>" +
+             pl.format("Size: {}", pl.col(y)) + "<br>" +
+             pl.format("Count: {}", pl.col('count'))
+             ).alias('hover_text')
+        ])
+
+    # Create figure using plotly express
+    fig = px.scatter(
+        agg_df,  # Convert only at the very end for plotly express
+        x=x,
+        y=y,
+        size='count',  # Size proportional to count
+        color=color if color else None,
+        color_discrete_map=color_map or {},
+        hover_name=agg_key,
+        hover_data=[],  # No default hover data
+        title=title,
+        labels=labels or {},
+    )
+
+    # Update hover template to show custom text
+    fig.update_traces(
+        hovertext=agg_df['hover_text'],
+        hovertemplate='%{hovertext}<extra></extra>'
+    )
+
+    fig.update_xaxes(showline=True, showticklabels=True, title=None)
+    fig.update_yaxes(showline=True, showticklabels=True)
+
+    # Apply standard styling (similar to original function)
+    fig.update_layout(showlegend=False)
+
+    if height:
+        fig.update_layout(height=height)
+
+    return fig
+
+
 def plot_strip(
         df: pl.DataFrame,
         x: str,
@@ -319,7 +436,7 @@ def create_strip_plot_grid(
     for facet_val in facet_values:
         facet_df = df.filter(pl.col(facet_col) == facet_val)
 
-        fig = plot_strip(
+        strip_kwargs = dict(
             df=facet_df,
             x=x,
             y=y,
@@ -330,6 +447,11 @@ def create_strip_plot_grid(
             hover_data=hover_data,
             height=plot_height,
         )
+
+        if len(facet_df) < 100:  # TODO: threshold has no reasoning, decide a better/more justified value
+            fig = plot_strip(**strip_kwargs)
+        else:
+            fig = plot_aggregated_strip(**strip_kwargs)
 
         plots.append(
             html.Div(
@@ -378,8 +500,15 @@ def plot_violin(
     else:
         groups = df.get_column(group_col).unique().drop_nulls().sort().to_list()
 
+    VIOLIN_MAX_POINTS = 2000
+    any_sampled = False
+
     for group_name in groups:
         df_group = df.filter(pl.col(group_col) == group_name)
+
+        if len(df_group) > VIOLIN_MAX_POINTS:
+            df_group = df_group.sample(n=VIOLIN_MAX_POINTS, seed=42)
+            any_sampled = True
 
         group_color = color_map.get(str(group_name), "#333333")
 
@@ -387,13 +516,14 @@ def plot_violin(
         if custom_data_col and custom_data_col in df_group.columns:
             custom_data = df_group.get_column(custom_data_col).to_list()
 
+        show_points = "all" if len(df_group) < 1000 else "outliers"
         violin_kwargs = dict(
             y=df_group.get_column(y).to_list(),
             name=group_name,
             customdata=custom_data,
             opacity=0.9,
             showlegend=show_legend,
-            points="all",
+            points=show_points,
             pointpos=0,
             box=dict(visible=True),
             meanline=dict(visible=True),
@@ -418,10 +548,14 @@ def plot_violin(
         box=dict(line_color="black"),
     )
 
+    display_title = title
+    if any_sampled:
+        display_title = (title or "") + f"<br><sup>sampled to {VIOLIN_MAX_POINTS} per group</sup>"
+
     layout = _STANDARD_LAYOUT_KWARGS.copy()
     layout.update(
         dict(
-            title_text=title,
+            title_text=display_title,
             yaxis_title=y.replace("_", " ").title(),
             xaxis_title=prettify_col_name(group_col),
             showlegend=show_legend,

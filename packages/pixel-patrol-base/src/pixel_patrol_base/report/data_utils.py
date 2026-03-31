@@ -1,3 +1,4 @@
+import random
 import re
 from typing import List, Tuple, Dict, Optional, Sequence
 import polars as pl
@@ -482,6 +483,12 @@ def aggregate_histograms_by_group(
         count_files = 0
 
         # Process histograms for this group
+
+        # sample randomly rows to improve performance
+        AGGREGATION_ROW_COUNT = 256
+        if len(rows) > AGGREGATION_ROW_COUNT:
+            rows = random.sample(rows, AGGREGATION_ROW_COUNT)
+
         for row in rows:
             c_list = row[hist_col]
             minv = row[min_col] if has_min else None
