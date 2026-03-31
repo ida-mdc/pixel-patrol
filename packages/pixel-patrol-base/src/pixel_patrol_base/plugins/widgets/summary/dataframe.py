@@ -15,7 +15,7 @@ from pixel_patrol_base.report.factory import show_no_data_message
 
 class DataFrameWidget(BaseReportWidget):
     # ---- Declarative spec ----
-    NAME: str = "Dataframe Viewer"
+    NAME: str = "dataframe-viewer"
     TAB: str = WidgetCategories.SUMMARY.value
     REQUIRES: Set[str] = set()     # no required columns
     REQUIRES_PATTERNS = None

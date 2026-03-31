@@ -18,7 +18,7 @@ class ColumnCountWithGroupingBarWidget(BaseReportWidget):
     """
 
     # Subclasses MUST set these:
-    NAME: str = "Categorical Column Count by Group"
+    NAME: str = "categorical-column-count-by-group"
     TAB: str = ""
     REQUIRES: Set[str] = set()
     REQUIRES_PATTERNS = None

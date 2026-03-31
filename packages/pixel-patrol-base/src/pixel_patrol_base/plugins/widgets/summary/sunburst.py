@@ -18,7 +18,7 @@ class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
 
     # ---- Declarative spec ----
-    NAME: str = "File Structure Sunburst"
+    NAME: str = "file-system-sunburst"
     TAB: str = WidgetCategories.SUMMARY.value
     REQUIRES: Set[str] = {"path", "size_bytes"}
     REQUIRES_PATTERNS = None

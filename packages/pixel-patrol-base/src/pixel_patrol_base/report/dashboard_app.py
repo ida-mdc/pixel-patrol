@@ -437,7 +437,7 @@ def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence
     - REQUIRES_PATTERNS: regex patterns; each must match at least one column
     """
     cols = set(available_columns)
-    name = widget.__class__.__name__
+    name = getattr(widget, "NAME", widget.__class__.__name__)
 
     requires = set(getattr(widget, "REQUIRES", set()) or set())
     patterns = list(getattr(widget, "REQUIRES_PATTERNS", []) or [])
@@ -466,10 +466,10 @@ def _filter_widgets(
     if not report_config:
         return widgets
 
-    original_names = {w.__class__.__name__ for w in widgets}
+    original_names = {w.NAME for w in widgets}
 
     if report_config.widgets_included:
-        filtered = [w for w in widgets if w.__class__.__name__ in report_config.widgets_included]
+        filtered = [w for w in widgets if w.NAME in report_config.widgets_included]
         logger.info(f"Widget filtering (include mode): {len(filtered)}/{len(widgets)} widgets included")
         missing = report_config.widgets_included - original_names
         if missing:
@@ -477,12 +477,12 @@ def _filter_widgets(
         return filtered
 
     if report_config.widgets_excluded:
-        filtered = [w for w in widgets if w.__class__.__name__ not in report_config.widgets_excluded]
+        filtered = [w for w in widgets if w.NAME not in report_config.widgets_excluded]
         logger.info(f"Widget filtering (exclude mode): {len(filtered)}/{len(widgets)} widgets remaining")
         missing = report_config.widgets_excluded - original_names
         if missing:
             logger.warning(f"Some excluded widget names were not found: {missing}")
-        still_present = report_config.widgets_excluded & {w.__class__.__name__ for w in filtered}
+        still_present = report_config.widgets_excluded & {w.NAME for w in filtered}
         if still_present:
             logger.error(f"Widgets that should be excluded are still present: {still_present}")
         return filtered

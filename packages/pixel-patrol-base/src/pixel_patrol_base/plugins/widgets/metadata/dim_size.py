@@ -12,7 +12,7 @@ from pixel_patrol_base.report.data_utils import select_needed_columns
 from pixel_patrol_base.report.factory import plot_scatter, create_strip_plot_grid, show_no_data_message
 
 class DimSizeWidget(BaseReportWidget):
-    NAME: str = "Dimension Size Distribution"
+    NAME: str = "dimension-size-distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS: List[str] = [r"^[a-zA-Z]_size$"]  # dynamic size columns

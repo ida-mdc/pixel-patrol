@@ -21,7 +21,7 @@ from pixel_patrol_base.report.constants import (FILTERED_INDICES_STORE_ID,
 
 
 class DatasetHistogramWidget(BaseReportWidget):
-    NAME: str = "Pixel Value Histograms"
+    NAME: str = "pixel-value-histograms"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]

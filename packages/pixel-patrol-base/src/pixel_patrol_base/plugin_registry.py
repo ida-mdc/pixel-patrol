@@ -16,7 +16,7 @@ from pixel_patrol_base.plugins.widgets.metadata.dim_size import DimSizeWidget
 from pixel_patrol_base.plugins.widgets.summary.dataframe import DataFrameWidget
 from pixel_patrol_base.plugins.widgets.summary.file_summary import FileSummaryWidget
 from pixel_patrol_base.plugins.widgets.summary.sunburst import FileSunburstWidget
-from pixel_patrol_base.plugins.widgets.visualization.image_mosaik import ImageMosaikWidget
+from pixel_patrol_base.plugins.widgets.visualization.image_mosaic import ImageMosaicWidget
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def register_widget_plugins():
         DataTypeWidget,
         DimOrderWidget,
         DimSizeWidget,
-        ImageMosaikWidget,
+        ImageMosaicWidget,
         DatasetStatsWidget,
         DatasetStatsAcrossDimensionsWidget,
         DatasetHistogramWidget,
