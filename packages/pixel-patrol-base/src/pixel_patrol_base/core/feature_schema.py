@@ -91,6 +91,8 @@ def _validate_value(key: str, value: Any, type_spec: Any, processor_name: str) -
         else:
             if dtype is str:
                 return str(value)
+            if dtype is bytes:
+                return bytes(value)
             return np.array(value, dtype=dtype).reshape(1)[0]
     except Exception as e:
         logger.warning(f"[{processor_name}] Failed to validate '{key}': {e}")
