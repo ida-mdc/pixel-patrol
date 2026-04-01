@@ -6,76 +6,91 @@ from typing import Optional
 
 import numpy as np
 import polars as pl
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 
 
 def _serialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Serializes columns containing numpy ndarrays to lists of int64 for compatibility with Parquet.
-    This is necessary because Polars does not support direct serialization of numpy ndarrays.
-    Args:
-        df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with ndarray columns serialized to lists.
+    Serializes numpy-ndarray columns (stored as pl.Object) to raw bytes (pl.Binary).
+
+    The call site that reads back the bytes is responsible for knowing the dtype
+    (e.g. int32 for histogram counts, uint8 for thumbnails).
     """
     for col in polars_df.columns:
-        if polars_df[col].dtype == pl.Object:
-            try:
-                # Attempt to convert ndarray columns to lists
-                polars_df = polars_df.with_columns(
-                    pl.col(col).map_elements(
-                        lambda x: x.tolist() if isinstance(x, np.ndarray) else x,
-                        return_dtype=pl.List(pl.Int64),
-                    )
+        if polars_df[col].dtype != pl.Object:
+            continue
+        non_null = polars_df[col].drop_nulls()
+        if non_null.is_empty():
+            continue
+        sample = non_null[0]
+        if not isinstance(sample, np.ndarray):
+            continue
+        dtype_str = str(sample.dtype)
+        try:
+            polars_df = polars_df.with_columns(
+                pl.col(col).map_elements(
+                    lambda x, d=dtype_str: (
+                        x.astype(d).tobytes() if isinstance(x, np.ndarray) else None
+                    ),
+                    return_dtype=pl.Binary,
                 )
-                # logger.info(f"Project IO: Successfully serialized column '{col}' from ndarray to list.")
-            except Exception as e:
-                logger.warning(
-                    f"Project IO: Failed to serialize column '{col}' to list. Error: {e}. This column will be excluded from the Parquet export."
-                )
-                polars_df = polars_df.drop(col)
-    return polars_df
-
-
-def _deserialize_ndarray_columns_dataframe(polars_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Deserializes columns containing lists of int64 back to numpy ndarrays.
-    Args:
-        polars_df: The Polars DataFrame to process.
-    Returns:
-        A Polars DataFrame with list columns deserialized to ndarrays.
-    """
-    # 1. Identify columns that need conversion
-    target_cols = [
-        col for col in polars_df.columns if polars_df[col].dtype == pl.List(pl.Int64)
-    ]
-
-    if not target_cols:
-        return polars_df
-
-    # 2. Build a list of expressions to apply all at once
-    expressions = []
-    for col in target_cols:
-        expressions.append(
-            pl.col(col)
-            .map_elements(
-                lambda x: np.array(x) if isinstance(x, (list, pl.Series)) else x,
-                return_dtype=pl.Object,
             )
-            .alias(col)  # Ensure we overwrite the existing column
-        )
-
-    # 3. Apply all transformations in a single pass
-    try:
-        polars_df = polars_df.with_columns(expressions)
-        # logger.info(f"Project IO: Deserialized {len(target_cols)} columns to ndarray.")
-    except Exception as e:
-        # If the batch fails, you might need to fall back to the loop
-        # to identify exactly which column failed, or log the generic error.
-        logger.warning(f"Project IO: Batch deserialization failed. Error: {e}")
-
+        except Exception as e:
+            logger.warning(
+                "Project IO: Failed to serialize column '%s' to bytes. "
+                "Error: %s. Column will be excluded from Parquet export.",
+                col, e,
+            )
+            polars_df = polars_df.drop(col)
     return polars_df
+
+
+
+def _promote_uniform_binary_to_fixed(arrow_table: pa.Table) -> pa.Table:
+    """
+    Promotes binary columns whose values all share the same byte length to
+    FIXED_LEN_BYTE_ARRAY (``pa.binary(N)``).
+
+    Parquet stores FIXED_LEN_BYTE_ARRAY pages contiguously, which allows
+    column-projection readers (e.g. hyparquet) to scan them ~6× faster than
+    variable-length BYTE_ARRAY pages.  Applies to both serialized ndarray
+    columns and any other uniform-length binary column (e.g. thumbnails).
+    """
+    field_list = list(arrow_table.schema)
+    col_list = list(arrow_table.columns)
+
+    for i, (field, col) in enumerate(zip(field_list, col_list)):
+        if not (pa.types.is_binary(field.type) or pa.types.is_large_binary(field.type)):
+            continue
+        flat = col.combine_chunks()
+        valid = flat.filter(pc.is_valid(flat))
+        if len(valid) == 0:
+            continue
+        byte_lengths = pc.binary_length(valid)
+        min_len = pc.min(byte_lengths).as_py()
+        max_len = pc.max(byte_lengths).as_py()
+        if min_len != max_len or min_len is None or min_len == 0:
+            continue
+        N = min_len
+        try:
+            fixed = pa.array(flat.to_pylist(), type=pa.binary(N))
+            field_list[i] = pa.field(field.name, pa.binary(N))
+            col_list[i] = fixed
+        except Exception as e:
+            logger.warning(
+                "Project IO: Could not promote '%s' to fixed_size_binary(%d): %s",
+                field.name, N, e,
+            )
+
+    new_schema = pa.schema(field_list, metadata=arrow_table.schema.metadata)
+    return pa.table(
+        dict(zip(arrow_table.schema.names, col_list)),
+        schema=new_schema,
+    )
 
 
 def write_dataframe_to_parquet(
@@ -85,7 +100,12 @@ def write_dataframe_to_parquet(
     *,
     compression: str | None = None,
 ) -> Optional[Path]:
-    """Serialize the dataframe (if present) to Parquet under ``target_dir/base_filename``."""
+    """Serialize the dataframe (if present) to Parquet under ``target_dir/base_filename``.
+
+    Numpy ndarray columns are serialized to raw bytes and written as
+    FIXED_LEN_BYTE_ARRAY.  Uniform-length binary columns (e.g. thumbnails)
+    are promoted to FIXED_LEN_BYTE_ARRAY automatically.
+    """
     if df is None:
         return None
 
@@ -99,17 +119,15 @@ def write_dataframe_to_parquet(
         df = df.with_columns(pl.lit(None).alias(col))
 
     file_path = target_dir / base_filename
-    data_name = file_path.stem
     try:
-        df.write_parquet(file_path, compression=compression)
+        arrow_table = df.to_arrow()
+        arrow_table = _promote_uniform_binary_to_fixed(arrow_table)
+        pq.write_table(arrow_table, file_path, compression=compression or "zstd")
         return file_path
     except Exception as exc:
         logger.warning(
             "Project IO: Could not write %s data (%s) to directory %s: %s",
-            data_name,
-            base_filename,
-            target_dir,
-            exc,
+            file_path.stem, base_filename, target_dir, exc,
         )
         return None
 
@@ -120,14 +138,12 @@ def read_dataframe_from_parquet(
     """Helper to read an optional Polars DataFrame from a Parquet file."""
     if not file_path.exists():
         return None
-    data_name = file_path.stem
     try:
-        df = pl.read_parquet(file_path)
-        df = _deserialize_ndarray_columns_dataframe(df)
-        return df
+        return pl.read_parquet(file_path)
     except Exception as e:
         logger.warning(
-            f"Project IO: Could not read {data_name} data from '{file_path.name}' "
-            f"in archive '{src_archive.name}'. Data not loaded. Error: {e}"
+            "Project IO: Could not read %s data from '%s' in archive '%s'. "
+            "Data not loaded. Error: %s",
+            file_path.stem, file_path.name, src_archive.name, e,
         )
         return None
