@@ -5,7 +5,7 @@ import shutil
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
-from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable, Any
+from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
 from yaspin import yaspin
 import gc
@@ -26,7 +26,6 @@ from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.io.parquet_io import write_chunk
-from pixel_patrol_base.utils.array_utils import set_slicing_config
 
 
 logger = logging.getLogger(__name__)
@@ -46,23 +45,16 @@ class _IndexedPath(NamedTuple):
     path: str
 
 
-def _process_worker_initializer(
-    loader_id: Optional[str], processor_classes: List[type], processing_config: Optional[Any] = None
-) -> None:
+def _process_worker_initializer(loader_id: Optional[str], processor_classes: List[type]) -> None:
     """Initialize per-process loader and processor instances.
     
     Args:
         loader_id: Optional string identifier for the loader to use.
         processor_classes: List of PixelPatrolProcessor classes to instantiate.
-        processing_config: Optional ProcessingConfig object to set in thread-local storage.
     """
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
     processors = [cls() for cls in processor_classes]
-    
-    # Set slicing configuration for this worker thread/process
-    if processing_config is not None:
-        set_slicing_config(processing_config)
     
     _PROCESS_WORKER_CONTEXT = {
         "loader": loader_instance,
@@ -267,7 +259,7 @@ def _build_deep_record_df(
     Args:
         basic: The basic Polars DataFrame with file paths and metadata.
         loader_instance: An instance of PixelPatrolLoader to load files.
-        processing_config: Optional ProcessingConfig for slicing and processor selection.
+        processing_config: Optional ProcessingConfig for processor selection.
         progress_callback: Optional GUI callback for progress updates.
     Returns:
         A Polars DataFrame containing deep processed records, aka the results.
@@ -287,7 +279,6 @@ def _build_deep_record_df(
     
     processor_classes = [proc.__class__ for proc in processors]
 
-    set_slicing_config(config)
     worker_count = _resolve_worker_count(config, total)
     flush_threshold = _resolve_flush_threshold(total, config)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
@@ -359,7 +350,7 @@ def _build_deep_record_df(
             with ProcessPoolExecutor(
                 max_workers=worker_count,
                 initializer=_process_worker_initializer,
-                initargs=(loader_name, processor_classes, processing_config),
+                initargs=(loader_name, processor_classes),
                 mp_context=multiprocessing.get_context("spawn"),
             ) as executor:
                 future_map: Dict = {}
@@ -540,7 +531,7 @@ def build_records_df(
     Args:
         bases: List of base directories to scan for files.
         loader: Optional PixelPatrolLoader instance to use for loading files.
-        processing_config: Optional ProcessingConfig for slicing and processor selection.
+        processing_config: Optional ProcessingConfig for processor selection.
         progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
                             Called for each file processed during deep processing
     Returns:

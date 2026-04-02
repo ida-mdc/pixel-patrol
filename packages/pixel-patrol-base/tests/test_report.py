@@ -638,7 +638,7 @@ def test_base_report_widget_layout_wraps_content(monkeypatch):
     monkeypatch.setattr(base_widget, "create_widget_card", fake_create_widget_card)
 
     class MeanIntensityWidget(BaseReportWidget):
-        NAME = "Mean intensity"
+        NAME = "mean-intensity"
         REQUIRES = {"unique_id", "report_group"}
         REQUIRES_PATTERNS = [r"^mean_intensity(?:_.*)?$"]
 
@@ -656,7 +656,7 @@ def test_base_report_widget_layout_wraps_content(monkeypatch):
     out = w.layout()
 
     assert out == [{"card": True}]
-    assert calls["title"] == "Mean intensity"
+    assert calls["title"] == "Mean Intensity"
     assert calls["content"] == ["plot"]
     assert calls["widget_id"] == "meanintensitywidget"
     assert calls["help_text"] == "Distribution of mean intensity across selected dims."
