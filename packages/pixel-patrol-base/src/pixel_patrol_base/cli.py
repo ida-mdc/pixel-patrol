@@ -24,8 +24,8 @@ def cli():
     A command-line tool for processing image reports with Pixel Patrol.
 
     This tool facilitates a two-step process:
-    1. Exporting a processed project to a ZIP file.
-    2. Displaying a report from an exported ZIP file.
+    1. Processing images from a specified base directory and saving the results as a parquet file.
+    2. Displaying a report from an exported parquet file.
     """
     pass
 
@@ -143,7 +143,7 @@ def launch(port: int):
               help='Column name to filter on.')
 @click.option('--filter-op', type=click.Choice(["contains","not_contains","eq","gt","ge","lt","le","in"]), default=None,
               help='Filter operation.')
-@click.option('--filter', 'filter_value', type=str, default=None,
+@click.option('--filter-val', 'filter_value', type=str, default=None,
               help='Filter value.')
 @click.option('--dim', 'dims', multiple=True, help="Repeatable, format like: t=0  z=1  c=0")
 @click.option('--export-html', type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
