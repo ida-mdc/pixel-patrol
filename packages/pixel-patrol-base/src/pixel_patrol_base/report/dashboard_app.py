@@ -22,7 +22,7 @@ from pixel_patrol_base.report.global_controls import (build_sidebar,
                                                       apply_global_row_filters_and_grouping,
                                                       compute_filtered_row_positions,
                                                       prepare_widget_data,
-                                                      init_global_config,)
+                                                      validate_report_config,)
 from pixel_patrol_base.report.constants import (
     PALETTE_SELECTOR_ID,
     GLOBAL_CONFIG_STORE_ID,
@@ -61,20 +61,25 @@ def prepare_app(
 ) -> Dash:
     """Resolves data source and config, then creates the Dash app."""
     records_df, metadata = resolve_report_source(source)
-    global_config_dict = report_config.to_dict() if report_config else None
-    sanitized = init_global_config(records_df, global_config_dict)
+
+    if records_df is None:
+        logger.error("Cannot generate report: no data available (records_df is None).")
+        raise ValueError("No data available. Check that files exist and match the loader's supported extensions.")
+    if records_df.is_empty():
+        logger.error("Cannot generate report: dataset is empty.")
+        raise ValueError("Dataset is empty. Files were found but contained no valid records.")
+
+    validated_config = validate_report_config(records_df, report_config)
     return _create_app(
         df=records_df,
         metadata=metadata,
-        initial_global_config=_merge_configs(sanitized, report_config),
-        report_config=report_config,
+        report_config=validated_config,
     )
 
 
 def _create_app(
         df: pl.DataFrame,
         metadata: ProjectMetadata,
-        initial_global_config: dict | None = None,
         report_config: ReportConfig | None = None,
 ):
     """Instantiate Dash app, register callbacks, and assign layout."""
@@ -148,9 +153,8 @@ def _create_app(
         )
 
         # --- Sidebar with global controls (built once, outside content container) ---
-        initial_report_config = ReportConfig.from_dict(initial_global_config) if initial_global_config else report_config
         sidebar_controls, global_control_stores, extra_components = build_sidebar(
-            df, default_palette_name, initial_report_config=initial_report_config
+            df, default_palette_name, initial_report_config=report_config
         )
 
         # --- Group Widget Layout Generation (content only) ---
@@ -414,19 +418,6 @@ def _create_app(
     )
 
     return app
-
-
-def _merge_configs(
-        initial_global_config: dict | None,
-        report_config: ReportConfig | None,
-) -> dict | None:
-    """Merge report_config into initial_global_config. initial takes precedence."""
-    if not report_config:
-        return initial_global_config
-    merged = report_config.to_dict()
-    if initial_global_config:
-        merged = {**merged, **initial_global_config}
-    return merged
 
 
 def should_display_widget(widget: PixelPatrolWidget, available_columns: Sequence[str]) -> bool:

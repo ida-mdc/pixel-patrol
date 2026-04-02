@@ -220,10 +220,9 @@ def test_compute_filtered_row_positions_with_invalid_dimension_returns_none():
 
     df = _base_df_for_global_controls()
 
-    # "one" is not a valid dimension value - init_global_config should strip it out
-    raw_config = {"filter": {}, "dimensions": {"t": "one"}}
-    validated_config = gc.init_global_config(df, raw_config)
-    report_config = ReportConfig.from_dict(validated_config)
+    # "one" is not a valid dimension value - validate_report_config should strip it out
+    raw_config = ReportConfig(filter={}, dimensions={"t": "one"})
+    report_config = gc.validate_report_config(df, raw_config)
 
     result = gc.compute_filtered_row_positions(df, report_config)
     print(result)
@@ -544,55 +543,55 @@ def test_is_group_col_accepted_rejects_float_and_dimension_pattern():
     assert gc.is_group_col_accepted(df, "nonexistent") is False
 
 
-def test_init_global_config_validates_and_sanitizes():
-    """Test init_global_config returns sanitized config."""
+def test_validate_report_config_validates_and_sanitizes():
+    """Test validate_report_config returns sanitized ReportConfig."""
     df = _base_df_for_global_controls()
 
-    cfg = gc.init_global_config(df, {
-        "group_col": "report_group",
-        "filter": {"file_extension": [".tif"]},
-        "dimensions": {"t": "0"},
-    })
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="report_group",
+        filter={"file_extension": [".tif"]},
+        dimensions={"t": "0"},
+    ))
 
-    assert cfg["group_col"] == "report_group"
-    assert "file_extension" in cfg["filter"]
+    assert cfg.group_col == "report_group"
+    assert "file_extension" in cfg.filter
     # The filter value should be preserved
-    assert cfg["filter"]["file_extension"] == [".tif"]
-    assert cfg["dimensions"] == {"t": "0"}
+    assert cfg.filter["file_extension"] == [".tif"]
+    assert cfg.dimensions == {"t": "0"}
 
 
-def test_init_global_config_removes_invalid_filter_columns():
-    """Test that init_global_config removes filters on non-existent columns."""
+def test_validate_report_config_removes_invalid_filter_columns():
+    """Test that validate_report_config removes filters on non-existent columns."""
     df = _base_df_for_global_controls()
 
-    cfg = gc.init_global_config(df, {
-        "group_col": "report_group",
-        "filter": {
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="report_group",
+        filter={
             "nonexistent_col": [".tif"],
             "file_extension": [".png"],  # This one exists
         },
-        "dimensions": {},
-    })
+        dimensions={},
+    ))
 
     # The invalid filter should be removed
-    assert "nonexistent_col" not in cfg["filter"]
+    assert "nonexistent_col" not in cfg.filter
     # The valid filter should remain
-    assert "file_extension" in cfg["filter"]
+    assert "file_extension" in cfg.filter
 
 
-def test_init_global_config_rejects_invalid_group_col():
-    """Test that init_global_config rejects invalid group columns."""
+def test_validate_report_config_rejects_invalid_group_col():
+    """Test that validate_report_config rejects invalid group columns."""
     df = _base_df_for_global_controls()
 
     # Float column should be rejected as group_col
-    cfg = gc.init_global_config(df, {
-        "group_col": "mean_intensity_t0",  # This is a float column
-        "filter": {},
-        "dimensions": {},
-    })
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="mean_intensity_t0",  # This is a float column
+        filter={},
+        dimensions={},
+    ))
 
     # Should fall back to None (which means use default)
-    assert cfg["group_col"] is None
+    assert cfg.group_col is None
 
 
 # -----------------------

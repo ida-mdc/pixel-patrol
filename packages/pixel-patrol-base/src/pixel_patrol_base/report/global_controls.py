@@ -166,22 +166,13 @@ def is_group_col_accepted(df: pl.DataFrame, col: str) -> bool:
         return False
 
 
-def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
+def validate_report_config(df: pl.DataFrame, report_config: Optional[ReportConfig]) -> ReportConfig:
     """
-    One-shot initializer for global config:
-    - fills defaults
-    - validates keys/columns/ops/types
-    - returns a sanitized dict
+    Validate and sanitize a ReportConfig against the actual DataFrame:
+    - fills defaults for group_col, filter, dimensions
+    - validates columns/ops/types against df
+    - returns a sanitized ReportConfig (preserving widgets_included/excluded)
     """
-
-    if df is None:
-        logger.error("Cannot generate report: no data available (records_df is None).")
-        raise ValueError("No data available. Check that files exist and match the loader's supported extensions.")
-
-    if df.is_empty():
-        logger.error("Cannot generate report: dataset is empty.")
-        raise ValueError("Dataset is empty. Files were found but contained no valid records.")
-
     cfg = {
         GC_GROUP_COL: DEFAULT_REPORT_GROUP_COL,
         GC_FILTER: {},
@@ -189,13 +180,18 @@ def init_global_config(df: pl.DataFrame, initial: Optional[Dict]) -> Dict:
         GC_IS_SHOW_SIGNIFICANCE: False,
     }
 
-    if initial:
-        cfg.update(initial)
-        # ensure nested dicts exist even if someone passes None
+    if report_config:
+        cfg.update(report_config.to_dict())
         cfg[GC_FILTER] = cfg.get(GC_FILTER) or {}
         cfg[GC_DIMENSIONS] = cfg.get(GC_DIMENSIONS) or {}
         cfg[GC_GROUP_COL] = cfg.get(GC_GROUP_COL)
-    return _validate_global_config(df, cfg)
+
+    validated = _validate_global_config(df, cfg)
+    return ReportConfig.from_dict(
+        validated,
+        widgets_included=report_config.widgets_included if report_config else set(),
+        widgets_excluded=report_config.widgets_excluded if report_config else set(),
+    )
 
 
 def _validate_global_config(df: pl.DataFrame, global_config: Optional[Dict]) -> Dict:
@@ -382,14 +378,21 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
             ], style={"display": "inline-block", "width": "70px", "marginRight": "5px"})
         )
 
-    # 5. Build initial values from initial_report_config
-    if initial_report_config:
-        init_dict = initial_report_config.to_dict()
-    else:
-        init_dict = None
-    init_cfg = init_global_config(df, init_dict)
-    init_group_col = init_cfg.get(GC_GROUP_COL) or DEFAULT_REPORT_GROUP_COL
-    init_dims = init_cfg.get(GC_DIMENSIONS) or {}
+    # 5. Build initial values from initial_report_config (already validated)
+    validated = initial_report_config if initial_report_config else ReportConfig()
+    init_group_col = validated.group_col or DEFAULT_REPORT_GROUP_COL
+    init_dims = validated.dimensions or {}
+
+    init_filter = validated.filter or {}
+    init_filter_col = None
+    init_filter_op = None
+    init_filter_text = ""
+    if init_filter:
+        init_filter_col = next(iter(init_filter))
+        spec = init_filter[init_filter_col]
+        if isinstance(spec, dict):
+            init_filter_op = spec.get("op")
+            init_filter_text = spec.get("value", "")
 
     # pre-select dims in dropdowns
     for dd in dim_dropdowns:
@@ -437,6 +440,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
             dcc.Dropdown(
                 id=GLOBAL_FILTER_COLUMN_ID,
                 options=filter_col_options,
+                value=init_filter_col,
                 placeholder="Column...",
                 clearable=True,
                 style={"marginBottom": "5px"},
@@ -453,6 +457,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
                     {"label": "<=", "value": "le"},
                     {"label": "in (comma-sep)", "value": "in"},
                 ],
+                value=init_filter_op,
                 placeholder="Operator...",
                 clearable=True,
                 style={"marginBottom": "5px"},
@@ -460,6 +465,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
             dcc.Input(
                 id=GLOBAL_FILTER_TEXT_ID,
                 type="text",
+                value=init_filter_text,
                 placeholder="Value...",
                 debounce=True,
                 style={"width": "100%", "marginBottom": "8px"},
@@ -495,7 +501,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
     )
 
     stores = [
-        dcc.Store(id=GLOBAL_CONFIG_STORE_ID, data=init_cfg),
+        dcc.Store(id=GLOBAL_CONFIG_STORE_ID, data=validated.to_dict()),
     ]
 
     extra = [
