@@ -7,55 +7,12 @@ from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
 
 def test_defaults():
     config = ProcessingConfig()
-    assert config.slicing_enabled is True
-    assert config.slicing_dimensions_included == set()
-    assert config.slicing_dimensions_excluded == {"X", "Y"}
     assert config.processors_included == set()
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
     assert config.processing_max_workers is None
     assert config.records_flush_every_n == DEFAULT_RECORDS_FLUSH_EVERY_N
     assert config.output_dir is None
-
-
-# --- slicing_enabled ---
-
-def test_slicing_enabled_false():
-    config = ProcessingConfig(slicing_enabled=False)
-    assert config.slicing_enabled is False
-
-
-def test_slicing_enabled_not_bool_raises():
-    with pytest.raises(TypeError, match="slicing_enabled must be a bool"):
-        ProcessingConfig(slicing_enabled="yes")
-
-
-# --- slicing_dimensions_included / excluded conflict ---
-
-def test_slicing_dims_included_only():
-    config = ProcessingConfig(slicing_dimensions_included={"T", "C"})
-    assert config.slicing_dimensions_included == {"T", "C"}
-
-
-def test_slicing_dims_excluded_only():
-    config = ProcessingConfig(slicing_dimensions_excluded={"X", "Y", "Z"})
-    assert config.slicing_dimensions_excluded == {"X", "Y", "Z"}
-
-
-def test_slicing_dims_both_set_warns(caplog):
-    with caplog.at_level("WARNING"):
-        ProcessingConfig(
-            slicing_dimensions_included={"T"},
-            slicing_dimensions_excluded={"Z"},
-        )
-    assert "slicing_dimensions_excluded will be ignored" in caplog.text
-
-
-def test_slicing_dims_included_with_default_excluded_no_warning(caplog):
-    # Default excluded is {"X", "Y"} — should not warn
-    with caplog.at_level("WARNING"):
-        ProcessingConfig(slicing_dimensions_included={"T"})
-    assert "slicing_dimensions_excluded will be ignored" not in caplog.text
 
 
 # --- processors_included / excluded conflict ---

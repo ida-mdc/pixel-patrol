@@ -50,12 +50,6 @@ def cli():
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
 @click.option('--authors', type=str, default="",
               help='Optional: Authors of this project (free-form, e.g., "ella, deborah").')
-@click.option('--no-slicing', is_flag=True, default=False,
-              help='Disable dimension slicing (only compute full-image statistics).')
-@click.option('--slice-dimensions-include', multiple=True, type=str,
-              help='Only slice these dimensions (e.g., T, C). Can be specified multiple times. If specified, --slice-dimensions-exclude is ignored.')
-@click.option('--slice-dimensions-exclude', multiple=True, type=str,
-              help='Exclude these dimensions from slicing (e.g., Z). Can be specified multiple times. Default: X, Y are never sliced.')
 @click.option('--processors-include', multiple=True, type=str,
               help='Only use these processors (e.g., basic-stats). Can be specified multiple times. If specified, --processors-exclude is ignored.')
 @click.option('--processors-exclude', multiple=True, type=str,
@@ -63,8 +57,6 @@ def cli():
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, authors: str,
-              no_slicing: bool,
-              slice_dimensions_include: tuple[str, ...], slice_dimensions_exclude: tuple[str, ...],
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...]):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
@@ -98,9 +90,6 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     processing_config = ProcessingConfig(
         selected_file_extensions=selected_extensions,
         output_dir=output_dir,
-        slicing_enabled=not no_slicing,
-        slicing_dimensions_included=set(slice_dimensions_include) if slice_dimensions_include else set(),
-        slicing_dimensions_excluded=set(slice_dimensions_exclude) if slice_dimensions_exclude else {"X", "Y"},
         processors_included=set(processors_include) if processors_include else set(),
         processors_excluded=set(processors_exclude) if processors_exclude else set(),
         metadata=metadata,

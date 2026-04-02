@@ -19,9 +19,6 @@ def main():
     # Processing configuration: include only specific processors
     # Other options:
     #   processors_excluded={"HistogramProcessor"}  # exclude instead of include
-    #   slicing_enabled=False  # disable slicing entirely
-    #   slicing_dimensions_included={"T", "C"}  # slice only specific dimensions
-    #   slicing_dimensions_excluded={"Z"}  # exclude specific dimensions from slicing
     processing_config = ProcessingConfig(
         processors_included={"basic-stats"},
         output_dir=output_dir,
