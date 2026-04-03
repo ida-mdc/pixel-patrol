@@ -19,9 +19,10 @@ def _setup_fake_cli(monkeypatch, dataset_root: Path):
     dummy_project: dict[str, Any] = {}
     added_paths: list[Path] = []
 
-    def fake_create_project(name: str, base_dir: str, loader: str | None = None):
+    def fake_create_project(name: str, base_dir: str, loader: str | None = None, output_path: str | Path | None = None):
         assert Path(base_dir).resolve() == dataset_root.resolve()
         dummy_project["name"] = name
+        dummy_project["output_path"] = Path(output_path) if output_path else None
         return dummy_project
 
     def fake_add_paths(project, paths: Union[str, Path, Iterable[Union[str, Path]]]):
@@ -60,8 +61,7 @@ def test_process_accepts_relative_base_and_paths(monkeypatch, tmp_path):
     pngs_dir.mkdir(parents=True)
     tifs_dir.mkdir()
 
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
+    output_path = tmp_path / "out.parquet"
 
     added_paths = _setup_fake_cli(monkeypatch, dataset_root)
 
@@ -73,7 +73,7 @@ def test_process_accepts_relative_base_and_paths(monkeypatch, tmp_path):
             "process",
             "dataset",
             "-o",
-            str(output_dir),
+            str(output_path),
             "-p",
             "pngs",
             "-p",
@@ -95,8 +95,7 @@ def test_process_accepts_absolute_paths(monkeypatch, tmp_path):
     pngs_dir.mkdir(parents=True)
     tifs_dir.mkdir()
 
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
+    output_path = tmp_path / "out.parquet"
 
     added_paths = _setup_fake_cli(monkeypatch, dataset_root)
 
@@ -106,7 +105,7 @@ def test_process_accepts_absolute_paths(monkeypatch, tmp_path):
             "process",
             str(dataset_root),
             "-o",
-            str(output_dir),
+            str(output_path),
             "-p",
             str(pngs_dir),
             "-p",

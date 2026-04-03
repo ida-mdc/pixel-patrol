@@ -9,11 +9,11 @@ from pixel_patrol_base.core.report_config import ReportConfig
 
 def main():
     base_path = Path("datasets/bioio")
-    output_dir = Path("out")
+    output_path = Path("out/configured_project.parquet")
     loader = 'bioio'
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     
-    project = api.create_project("Configured Project", base_dir=base_path, loader=loader)
+    project = api.create_project("Configured Project", base_dir=base_path, loader=loader, output_path=output_path)
     api.add_paths(project, paths)
     
     # Processing configuration: include only specific processors
@@ -21,7 +21,6 @@ def main():
     #   processors_excluded={"HistogramProcessor"}  # exclude instead of include
     processing_config = ProcessingConfig(
         processors_included={"basic-stats"},
-        output_dir=output_dir,
     )
     
     api.process_files(project, processing_config=processing_config)

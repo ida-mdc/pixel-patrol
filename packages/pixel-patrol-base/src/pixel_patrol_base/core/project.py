@@ -8,7 +8,7 @@ from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_loader
-from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy
+from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy, resolve_parquet_output_path
 from pixel_patrol_base.io.parquet_io import save_parquet
 
 
@@ -16,11 +16,17 @@ logger = logging.getLogger(__name__)
 
 class Project:
 
-    def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None):
+    def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None, output_path: Optional[Union[str, Path]]=None):
 
         validation.validate_project_name(name)
         self.name: str = name
         self.base_dir = base_dir
+
+        if output_path is None:
+            output_path = Path(self.base_dir) / f"{self.name}.parquet"
+            logger.info(f"Project Core: No output_path specified; inferring: '{output_path}'.")
+        self.output_path: Path = resolve_parquet_output_path(output_path)
+
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
         self.records_flush_dir: Optional[Path] = None
@@ -123,12 +129,6 @@ class Project:
                                      selected_file_extensions=_resolve_extensions(config.selected_file_extensions,
                                                                                   self.loader))
 
-        if config.output_dir is None and self.base_dir is not None:
-            inferred = Path(self.base_dir) / self.name
-            logger.info("Project Core: No output_dir specified; inferring: %s", inferred)
-            config = dataclasses.replace(config, output_dir=inferred)
-
-        self.output_dir = config.output_dir
         self.metadata = config.metadata.populate_from_project(self)
 
         return config
@@ -148,12 +148,14 @@ class Project:
             progress_callback: Optional callback(current, total, current_file) called per file.
         """
         config = self._prepare_processing_config(processing_config)
+        flush_dir = self.output_path.parent / "_batches"
 
         self.records_df = processing.build_records_df(
             bases=self.paths,
             loader=self.loader,
             processing_config=config,
             progress_callback=progress_callback,
+            flush_dir=flush_dir,
         )
 
         if self.records_df is None or self.records_df.is_empty():
@@ -161,12 +163,10 @@ class Project:
             self.records_df = None
             return self
 
-        # Save final parquet with metadata in footer
-        dest = Path(self.output_dir) / f"{self.name}.parquet"
         try:
-            save_parquet(self.records_df, dest, self.metadata)
+            save_parquet(self.records_df, self.output_path, self.metadata)
         except Exception as e:
-            logger.warning("Project Core: Could not save parquet to '%s': %s", dest, e)
+            logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
         return self
 

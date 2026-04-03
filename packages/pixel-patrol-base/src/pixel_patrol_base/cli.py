@@ -31,7 +31,7 @@ def cli():
 
 @cli.command()
 @click.argument('base_directory', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, path_type=Path))
-@click.option('--output', '-o', type=click.Path(exists=False, file_okay=False, writable=True, path_type=Path),
+@click.option('--output', '-o', type=click.Path(exists=False, file_okay=True,  dir_okay=False, writable=True, path_type=Path),
               help='Required: Path for the output parquet file (e.g., my_project.parquet).',
               required=True)
 @click.option('--name', type=str, required=False,
@@ -68,7 +68,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
 
     click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
-    my_project = create_project(name, str(base_directory), loader=loader)
+    my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
 
     if paths:
         click.echo(f"Adding explicitly specified paths: {', '.join(paths)}. Resolution will be relative to '{base_directory}'")
@@ -80,7 +80,10 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
 
     selected_extensions = set(file_extensions) if file_extensions else "all"
 
-    output_dir = Path(output).resolve()
+    output_path = Path(output).resolve()
+    if output_path.suffix.lower() != ".parquet":
+        output_path = output_path.with_suffix(".parquet")
+        click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
 
     metadata = ProjectMetadata(
         flavor=flavor,
@@ -89,7 +92,6 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
 
     processing_config = ProcessingConfig(
         selected_file_extensions=selected_extensions,
-        output_dir=output_dir,
         processors_included=set(processors_include) if processors_include else set(),
         processors_excluded=set(processors_exclude) if processors_exclude else set(),
         metadata=metadata,
@@ -99,14 +101,10 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     click.echo("Processing images...")
     process_files(my_project, processing_config=processing_config)
 
-    # process_files -> project.process_records saves the final parquet
-    # (with metadata in footer) to output_dir/<name>.parquet.
-    final_parquet = output_dir / f"{name}.parquet"
-    if final_parquet.exists():
-        click.echo(f"Output saved to: '{final_parquet}'")
+    if Path(output).exists():
+        click.echo(f"Output saved to: '{output}'")
     else:
-        click.echo(f"Processing complete. Output directory: '{output_dir}'")
-
+        click.echo(f"Processing complete. Expected output: '{output}'")
 
 
 @cli.command()

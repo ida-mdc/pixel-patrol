@@ -133,7 +133,7 @@ def _make_fake_load_and_process(return_props):
 
 def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch):
     """Ensure chunk flushing writes batches, combines them, and cleans up _batches dir."""
-    output_dir = tmp_path / "output"
+    output_path = tmp_path / "output.parquet"
     p1 = tmp_path / "a.png"
     p2 = tmp_path / "b.png"
     p1.write_bytes(b"")
@@ -142,7 +142,6 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
     config = ProcessingConfig(
         processing_max_workers=1,
         records_flush_every_n=1,
-        output_dir=output_dir,
     )
 
     monkeypatch.setattr(
@@ -157,7 +156,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
     assert df.height == 2
     assert "width" in df.columns
     # _batches dir should be cleaned up by finalize()
-    batches_dir = output_dir / "_batches"
+    batches_dir = output_path.parent / "_batches"
     assert not batches_dir.exists(), "_batches directory should be removed after finalize"
 
 
@@ -224,7 +223,7 @@ def test_process_records_infers_output_dir_when_missing(tmp_path, monkeypatch):
 
     project.process_records(processing_config=ProcessingConfig(selected_file_extensions="all"))
 
-    assert project.output_dir == Path(tmp_path) / "demo"
+    assert project.output_path == Path(tmp_path) / "demo.parquet"
 
 
 def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):

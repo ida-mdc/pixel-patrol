@@ -27,9 +27,6 @@ class ProcessingConfig:
     processing_max_workers: Optional[int] = None
     records_flush_every_n: int = DEFAULT_RECORDS_FLUSH_EVERY_N
 
-    # Directory to save final project parquet AND intermediate records files.
-    # Inferred from project base_dir if not set.
-    output_dir: Optional[Path] = None
 
     # --- Project Metadata ---
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)

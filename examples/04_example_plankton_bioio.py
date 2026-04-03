@@ -9,14 +9,13 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     base_path = get_or_download_example_plankton(target_dir=Path("datasets")).resolve()
-    output_dir = Path("out")
+    output_path = Path("out/plankton.parquet")
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
 
-    project = api.create_project("plankton", base_path, loader="bioio")
+    project = api.create_project("plankton", base_path, loader="bioio", output_path=output_path)
     api.add_paths(project, paths)
 
     processing_config = ProcessingConfig(
-        output_dir=output_dir,
         processing_max_workers=20,
         metadata=ProjectMetadata(authors="pixel-patrol-team"),
     )
