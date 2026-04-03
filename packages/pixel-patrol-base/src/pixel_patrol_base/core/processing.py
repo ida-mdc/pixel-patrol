@@ -253,6 +253,7 @@ def _build_deep_record_df(
     loader_instance: PixelPatrolLoader,
     processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    flush_dir: Optional[Path] = None,
 ) -> pl.DataFrame:
     """Process each path (optionally in parallel) and build a Polars DataFrame.
 
@@ -283,7 +284,6 @@ def _build_deep_record_df(
     flush_threshold = _resolve_flush_threshold(total, config)
     batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
     show_processor_progress = worker_count == 1
-    flush_dir = Path(config.output_dir) / "_batches" if config.output_dir else None
 
     accumulator = _RecordsAccumulator(
         flush_every_n=flush_threshold,
@@ -525,6 +525,7 @@ def build_records_df(
     loader: Optional[PixelPatrolLoader],
     processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    flush_dir: Optional[Path] = None,
 ) -> Optional[pl.DataFrame]:
     """Build the full records DataFrame by scanning files and processing them.
 
@@ -534,6 +535,7 @@ def build_records_df(
         processing_config: Optional ProcessingConfig for processor selection.
         progress_callback: Optional callback `function(current: int, total: int, current_file: Path) -> None`
                             Called for each file processed during deep processing
+        flush_dir: Optional Path to a directory for flushing intermediate parquet chunks during processing.
     Returns:
         A Polars DataFrame containing the full records, or None if no files were found.
     """
@@ -549,7 +551,11 @@ def build_records_df(
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
-    deep = _build_deep_record_df(basic, loader, processing_config=config, progress_callback=progress_callback)
+    deep = _build_deep_record_df(basic,
+                                 loader,
+                                 processing_config=config,
+                                 progress_callback=progress_callback,
+                                 flush_dir=flush_dir,)
 
     return deep
 

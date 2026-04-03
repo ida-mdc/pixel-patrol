@@ -248,7 +248,7 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     "When processing finishes, Pixel Patrol saves a **parquet file** in the Output Directory. "
                                                                     "This file contains all processed data and project metadata needed to generate the Pixel Patrol report.\n\n"
                                                                     "You can open the report later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
-                                                                    "`pixel-patrol report /path/to/output_dir/project.parquet`\n\n"
+                                                                    "`pixel-patrol report /path/to/output.parquet`\n\n"
                                                                     "Or launch the report directly from this page once processing completes."
                                                                 ),
                                                             ),
@@ -288,17 +288,17 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     dbc.Col(
                                                                         [
                                                                             dbc.Label(
-                                                                                "Output Directory *",
-                                                                                html_for="output-dir",
+                                                                                "Output Path *",
+                                                                                html_for="output-path",
                                                                             ),
                                                                             dbc.Input(
-                                                                                id="output-dir",
+                                                                                id="output-path",
                                                                                 type="text",
-                                                                                placeholder="/path/to/output",
+                                                                                placeholder="/path/to/output.parquet",
                                                                                 required=True,
                                                                             ),
                                                                             dbc.FormText(
-                                                                                "Directory where the output parquet and intermediate files will be saved",
+                                                                                "Where to save the results file (.parquet format). e.g. /my/dir/project.parquet",
                                                                                 color="secondary",
                                                                             ),
                                                                         ],
@@ -528,7 +528,7 @@ def _register_callbacks(app: Dash):
         ],
         [
             State("base-directory", "value"),
-            State("output-dir", "value"),
+            State("output-path", "value"),
             State("project-name", "value"),
             State("loader", "value"),
             State("paths", "value"),
@@ -541,7 +541,7 @@ def _register_callbacks(app: Dash):
         n_clicks,
         _n_intervals,
         base_directory,
-        output_dir,
+        output_path,
         project_name,
         loader,
         paths,
@@ -563,10 +563,10 @@ def _register_callbacks(app: Dash):
                 raise PreventUpdate
 
             # Validate required fields
-            if not base_directory or not output_dir:
+            if not base_directory or not output_path:
                 update_processing_state(
                     status="error",
-                    error="Base directory and output directory are required",
+                    error="Base directory and output parquet path are required",
                 )
                 return get_processing_state(), True, False
 
@@ -585,7 +585,7 @@ def _register_callbacks(app: Dash):
                 target=_run_processing,
                 args=(
                     base_directory,
-                    output_dir,
+                    output_path,
                     project_name,
                     loader or None,
                     paths,
@@ -812,7 +812,7 @@ def _register_callbacks(app: Dash):
 
 def _run_processing(
     base_directory: str,
-    output_dir_str: str,
+    output_path_str: str,
     project_name: Optional[str],
     loader: Optional[str],
     paths: Optional[str],
@@ -852,7 +852,7 @@ def _run_processing(
         )
 
         # Create project
-        project = api.create_project(project_name, str(base_dir), loader=loader)
+        project = api.create_project(project_name, str(base_dir), loader=loader, output_path=Path(output_path_str).resolve())
 
         if path_list:
             api.add_paths(project, path_list)
@@ -865,10 +865,6 @@ def _run_processing(
             message="Setting project settings...",
         )
 
-        # output_dir is where the final parquet lands.
-        # Intermediate batch chunks go into output_dir/_batches/ automatically.
-        output_dir = Path(output_dir_str).resolve()
-
         metadata = ProjectMetadata(
             flavor=flavor,
             authors=authors,
@@ -876,7 +872,6 @@ def _run_processing(
 
         processing_config = ProcessingConfig(
             selected_file_extensions=extensions,
-            output_dir=output_dir,
             metadata=metadata,
         )
 
@@ -919,7 +914,7 @@ def _run_processing(
                 current_file=current_file.name if current_file else "",
             )
 
-        # Process files — this also saves the parquet with metadata into output_dir
+        # Process files — saves the parquet with metadata to project.output_path
         api.process_files(project, processing_config=processing_config, progress_callback=progress_callback)
 
         # Update progress after processing
@@ -938,8 +933,7 @@ def _run_processing(
                 message="Processing complete. Finalizing...",
             )
 
-        # process_records saves the final parquet to output_dir/<project_name>.parquet
-        final_parquet = output_dir / f"{project_name}.parquet"
+        final_parquet = project.output_path
         if not final_parquet.exists():
             raise FileNotFoundError(
                 f"Processing completed but output file not found at '{final_parquet}'"

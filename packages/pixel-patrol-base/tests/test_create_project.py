@@ -69,3 +69,74 @@ def test_create_project_base_dir_with_relative_path(mock_project_name: str, tmp_
         assert project.base_dir == (tmp_path / relative_dir_name).resolve()
     finally:
         os.chdir(original_cwd)  # Restore original CWD
+
+def test_output_path_inferred_when_not_provided(mock_project_name: str, tmp_path: Path):
+    """When no output_path is given, it should default to base_dir/name.parquet."""
+    project = api.create_project(mock_project_name, tmp_path)
+    assert project.output_path == tmp_path.resolve() / f"{mock_project_name}.parquet"
+
+
+def test_output_path_explicit_absolute(mock_project_name: str, tmp_path: Path):
+    """An explicit absolute path is stored as-is (resolved and normalised)."""
+    output = tmp_path / "results" / "my_output.parquet"
+    project = api.create_project(mock_project_name, tmp_path, output_path=output)
+    assert project.output_path == output.resolve()
+
+
+def test_output_path_suffix_corrected(mock_project_name: str, tmp_path: Path):
+    """A path without .parquet extension gets the suffix added automatically."""
+    output = tmp_path / "my_output"
+    project = api.create_project(mock_project_name, tmp_path, output_path=output)
+    assert project.output_path.suffix == ".parquet"
+    assert project.output_path == (tmp_path / "my_output.parquet").resolve()
+
+
+def test_output_path_parent_dir_created(mock_project_name: str, tmp_path: Path):
+    """resolve_parquet_output_path should mkdir -p the parent directory."""
+    output = tmp_path / "deep" / "nested" / "output.parquet"
+    assert not output.parent.exists()
+    project = api.create_project(mock_project_name, tmp_path, output_path=output)
+    assert output.parent.exists()
+    assert project.output_path == output.resolve()
+
+
+def test_output_path_relative_resolved(mock_project_name: str, tmp_path: Path):
+    """A relative output_path is resolved against the current working directory."""
+    original_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        project = api.create_project(mock_project_name, tmp_path, output_path=Path("relative_output.parquet"))
+        assert project.output_path == (tmp_path / "relative_output.parquet").resolve()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_output_path_is_always_absolute(mock_project_name: str, tmp_path: Path):
+    """output_path must always be an absolute path regardless of input."""
+    output = tmp_path / "out.parquet"
+    project = api.create_project(mock_project_name, tmp_path, output_path=output)
+    assert project.output_path.is_absolute()
+
+
+def test_output_path_inferred_is_always_absolute(mock_project_name: str, tmp_path: Path):
+    """The inferred default output_path must also be absolute."""
+    project = api.create_project(mock_project_name, tmp_path)
+    assert project.output_path.is_absolute()
+
+
+def test_output_path_string_input_accepted(mock_project_name: str, tmp_path: Path):
+    """output_path can be supplied as a plain string."""
+    output = str(tmp_path / "from_string.parquet")
+    project = api.create_project(mock_project_name, tmp_path, output_path=output)
+    assert project.output_path == Path(output).resolve()
+    assert project.output_path.suffix == ".parquet"
+
+
+def test_output_path_independent_of_base_dir(mock_project_name: str, tmp_path: Path):
+    """output_path does not have to live inside base_dir."""
+    base = tmp_path / "base"
+    base.mkdir()
+    output = tmp_path / "elsewhere" / "out.parquet"
+    project = api.create_project(mock_project_name, base, output_path=output)
+    assert project.output_path == output.resolve()
+    assert not project.output_path.is_relative_to(base)

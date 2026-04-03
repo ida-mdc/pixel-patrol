@@ -46,17 +46,15 @@ def test_processor_schemata():
     results_dir = test_dir / "benchmark_results"
     results_dir.mkdir(exist_ok=True)
 
-    output_dir = tmp_path / "output"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = tmp_path / "output.parquet"
 
     generate_image_dataset(images_dir, 1, 1, 3, 1, 10, 10)
 
     project_name = "project"
-    project = api.create_project(project_name, base_dir=images_dir, loader="bioio")
+    project = api.create_project(project_name, base_dir=images_dir, loader="bioio", output_path=output_path)
 
     processing_config = ProcessingConfig(
         selected_file_extensions={"tif"},
-        output_dir=output_dir,
     )
     project.process_records(processing_config=processing_config)
 
@@ -67,8 +65,8 @@ def test_processor_schemata():
     assert project.records_df.height == 1
 
     # Load from saved parquet to verify round-trip
-    parquet_files = list(output_dir.glob("*.parquet"))
-    assert len(parquet_files) > 0, f"No parquet file found in {output_dir}"
+    parquet_files = list(project.output_path.parent.glob("*.parquet"))
+    assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
     records_df, metadata = api.load(parquet_files[0])
 
     print(records_df.columns)

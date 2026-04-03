@@ -12,9 +12,13 @@ from pixel_patrol_base.report.html_export import export_html_from_dashboard
 
 logger = logging.getLogger(__name__)
 
-def create_project(name: str, base_dir: Union[str, Path], loader: str = None) -> Project:
+def create_project(name: str,
+                   base_dir: Union[str, Path],
+                   loader: str = None,
+                   output_path: Optional[Union[str, Path]] = None
+                   ) -> Project:
     logger.info(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
-    return Project(name, base_dir, loader)
+    return Project(name, base_dir, loader, output_path)
 
 def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> Project:
     logger.info(f"API Call: Adding paths to project '{project.name}'.")

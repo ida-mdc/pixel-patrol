@@ -128,11 +128,10 @@ def test_project_process_saves_parquet(project_with_all_data: Project, tmp_path:
     """process_records saves a parquet with metadata in output_dir."""
     # project_with_all_data already ran process_records via conftest
     # Check that a parquet exists in output_dir
-    if project_with_all_data.output_dir:
-        parquet_files = list(Path(project_with_all_data.output_dir).glob("*.parquet"))
-        assert len(parquet_files) >= 1
+    if project_with_all_data.output_path:
+        assert project_with_all_data.output_path.exists()
 
-        loaded_df, loaded_meta = load_parquet(parquet_files[0])
+        loaded_df, loaded_meta = load_parquet(project_with_all_data.output_path)
         assert loaded_df.height == project_with_all_data.records_df.height
         assert loaded_meta.project_name == project_with_all_data.name
 

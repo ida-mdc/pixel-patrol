@@ -197,7 +197,7 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
 
     expected_paths = [str(img1), str(img2)]
 
-    def fake_build_deep_record_df(basic, loader_instance, processing_config=None, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader_instance, processing_config=None, progress_callback=None, flush_dir=None):
         width_map = {str(img1): 64, str(img2): 128}
         height_map = {str(img1): 48, str(img2): 256}
         return basic.with_columns(
@@ -242,7 +242,7 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
     img2 = base / "two.png"
     img2.write_text("y")
 
-    def fake_build_deep_record_df(basic, loader, processing_config=None, progress_callback=None):
+    def fake_build_deep_record_df(basic, loader, processing_config=None, progress_callback=None, flush_dir=None):
         width_map = {str(img1): 10, str(img2): 20}
         height_map = {str(img1): 15, str(img2): 25}
         return basic.with_columns(

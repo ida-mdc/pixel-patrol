@@ -12,7 +12,7 @@ def main():
     # Choose a base directory with files to be processed, sub-paths, and loader ---
     base_path = Path("datasets/bioio")
     # output path for parquet file
-    output_dir = Path("out")
+    output_path = Path("out/quickstart_extended.parquet")
 
     # Optional: Define sub-dirs that in the report are compared as experimental conditions
     # If you don't specify any paths, all files in base_path and its subfolders are processed as one condition.
@@ -30,7 +30,6 @@ def main():
     processing_config = ProcessingConfig(
         processing_max_workers=4,
         selected_file_extensions={"tif", "png", "jpeg"},
-        output_dir=output_dir,
         # Metadata is embedded in the output parquet footer
         metadata=ProjectMetadata(
             flavor="Example Datasets",
@@ -38,7 +37,7 @@ def main():
         ),
     )
 
-    project = api.create_project("quickstart_extended", base_dir=base_path, loader=loader)
+    project = api.create_project("quickstart_extended", base_dir=base_path, loader=loader, output_path=output_path)
     api.add_paths(project, paths)
     api.process_files(project, processing_config=processing_config)
 
@@ -55,8 +54,7 @@ def main():
     api.show_report(project, report_config=report_config)
 
     # --- Load a previously saved project ---
-    parquet_path = output_dir / "quickstart_extended.parquet"
-    records_df, metadata = api.load(parquet_path)
+    records_df, metadata = api.load(output_path)
     print(f"Loaded: {metadata.project_name}  (v{metadata.version}, by {metadata.authors})")
 
 if __name__ == "__main__":

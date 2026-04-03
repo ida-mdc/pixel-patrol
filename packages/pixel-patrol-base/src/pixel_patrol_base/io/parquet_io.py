@@ -1,7 +1,6 @@
 """
 Project persistence via a single parquet file.
-Provenance metadata (project name, flavor, authors, base_dir, paths, etc.)
-is stored in the parquet footer — zero overhead on data reads.
+Provenance metadata (project name, flavor, authors, base_dir, paths, etc.) is stored in the parquet footer
 """
 
 from __future__ import annotations
