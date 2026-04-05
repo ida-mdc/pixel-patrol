@@ -1,9 +1,8 @@
 from pathlib import Path
 from pixel_patrol_base import api
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-
 import logging
 logging.basicConfig(level=logging.INFO)
+
 
 def main():
     # --- Step 1: choose a base directory with files to be processed, sub-paths, and loader ---
