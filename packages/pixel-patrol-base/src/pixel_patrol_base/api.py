@@ -1,14 +1,16 @@
 import logging
 from pathlib import Path
-from typing import Union, Iterable, List, Optional, Callable
+from typing import Union, Iterable, List, Optional, Callable, Set, Dict
 import polars as pl
 
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.io.parquet_io import load_parquet
 from pixel_patrol_base.report.dashboard_app import prepare_app
 from pixel_patrol_base.report.html_export import export_html_from_dashboard
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,24 +30,53 @@ def delete_path(project: Project, path: str) -> Project:
     logger.info(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
 
+
 def process_files(
-    project: Project,
-    processing_config: Optional[ProcessingConfig] = None,
-    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+        project: Project,
+        progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+        # --- Processor selection ---
+        processors_included: Optional[Set[str]] = None,
+        processors_excluded: Optional[Set[str]] = None,
+        # --- File selection ---
+        selected_file_extensions: Union[Set[str], str, None] = None,
+        # --- Run behaviour ---
+        processing_max_workers: Optional[int] = None,
+        records_flush_every_n: Optional[int] = None,
+        # --- Metadata ---
+        flavor: Optional[str] = None,
+        authors: Optional[str] = None,
 ) -> Project:
     """
     Process files in the project.
-    
+
     Args:
-        project: The project to process
-        processing_config: Optional ProcessingConfig for slicing and processor selection.
-                          If None, uses default behavior (all processors, slice all dimensions except X, Y).
-        progress_callback: Optional callback function(current: int, total: int, current_file: Path) -> None
-                          Called for each file processed. Useful for progress tracking in UI.
-    
+        project:                    The project to process.
+        progress_callback:          Optional callback(current, total, current_file) -> None,
+                                    called for each file processed.
+        processors_included:        Only run these processors (e.g. {"basic-stats"}).
+                                    If set, processors_excluded is ignored.
+        processors_excluded:        Exclude these processors (e.g. {"histogram"}).
+        selected_file_extensions:   Extensions to process, e.g. {"tif", "png"}, or "all".
+                                    Defaults to "all".
+        processing_max_workers:     Thread-pool size. None = default.
+        records_flush_every_n:      Flush intermediate results to disk every N records.
+        flavor:                     Config flavour label embedded in the parquet metadata.
+        authors:                    Free-form authors string embedded in the parquet metadata.
+
     Returns:
-        The project with processed records_df
+        The project with processed records_df.
     """
+    processing_config = ProcessingConfig(
+        processors_included=processors_included or set(),
+        processors_excluded=processors_excluded or set(),
+        selected_file_extensions=selected_file_extensions or "all",
+        processing_max_workers=processing_max_workers,
+        records_flush_every_n=records_flush_every_n,
+        metadata=ProjectMetadata(
+            flavor=flavor or "",
+            authors=authors or "",
+        ),
+    )
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
@@ -55,22 +86,38 @@ def show_report(
     host: str = "127.0.0.1",
     port: int = None,
     debug: bool = False,
-    report_config: Optional[ReportConfig] = None,
+    cmap: Optional[str] = None,
+    widgets_included: Optional[Set[str]] = None,
+    widgets_excluded: Optional[Set[str]] = None,
+    group_col: Optional[str] = None,
+    filter_by: Optional[Dict] = None,
+    dimensions: Optional[Dict[str, str]] = None,
+    is_show_significance: bool = False,
 ) -> None:
     """
     Launch the interactive report dashboard.
 
     Args:
-        source:         A processed Project or path to a saved .parquet file.
-        host:           Host address for the server.
-        port:           Port number for the server.
-        debug:          Enable Flask debug mode. Note: use_reloader is always False to
-                        prevent the script being executed twice.
-        report_config:  Display options: colormap, widgets, initial filters/grouping.
-                        If None, all widgets are shown with default settings.
+        source:                 A processed Project or path to a saved .parquet file.
+        host:                   Host address for the server.
+        port:                   Port number for the server.
+        debug:                  Enable Flask debug mode. Note: use_reloader is always False to
+                                prevent the script being executed twice.
+        cmap:                   Colormap name for visualizations.
+        widgets_included:       Only show these widgets (by NAME). If set, widgets_excluded is ignored.
+        widgets_excluded:       Exclude these widgets (by NAME).
+        group_col:              Column name to group by.
+        filter_by:              Filter dict, e.g. {"file_extension": {"op": "in", "value": "tif, png"}}.
+        dimensions:             Dimension filters, e.g. {"T": "0", "Z": "1"}.
+        is_show_significance:   Whether to show statistical significance annotations.
     """
+    report_config = ReportConfig.from_kwargs(
+        cmap=cmap, widgets_included=widgets_included, widgets_excluded=widgets_excluded,
+        group_col=group_col, filter_by=filter_by, dimensions=dimensions,
+        is_show_significance=is_show_significance,
+    )
     app = prepare_app(source, report_config)
-    logger.info(f"API Call: Showing report'.")
+    logger.info("API Call: Showing report.")
     app.run(debug=debug, host=host, port=port, use_reloader=False)
 
 
@@ -80,37 +127,50 @@ def export_html_report(
     host: str = "127.0.0.1",
     port: int = None,
     timeout: int = 120,
-    report_config: Optional[ReportConfig] = None,
+    cmap: Optional[str] = None,
+    widgets_included: Optional[Set[str]] = None,
+    widgets_excluded: Optional[Set[str]] = None,
+    group_col: Optional[str] = None,
+    filter_by: Optional[Dict] = None,
+    dimensions: Optional[Dict[str, str]] = None,
+    is_show_significance: bool = False,
 ) -> None:
     """
     Export the report dashboard as a static HTML file via headless browser automation.
 
     Args:
-        source:         A processed Project or path to a saved .parquet file.
-        output_path:    Path where the HTML file should be saved.
-        host:           Host address for the temporary server.
-        port:           Port for the temporary server (None = auto-assign).
-        timeout:        Maximum seconds to wait for export.
-        report_config:  Display options: colormap, widgets, initial filters/grouping.
-                        If None, all widgets are shown with default settings.
+        source:                 A processed Project or path to a saved .parquet file.
+        output_path:            Path where the HTML file should be saved.
+        host:                   Host address for the temporary server.
+        port:                   Port for the temporary server (None = auto-assign).
+        timeout:                Maximum seconds to wait for export.
+        cmap:                   Colormap name for visualizations.
+        widgets_included:       Only show these widgets (by NAME). If set, widgets_excluded is ignored.
+        widgets_excluded:       Exclude these widgets (by NAME).
+        group_col:              Column name to group by.
+        filter_by:              Filter dict, e.g. {"file_extension": {"op": "in", "value": "tif, png"}}.
+        dimensions:             Dimension filters, e.g. {"T": "0", "Z": "1"}.
+        is_show_significance:   Whether to show statistical significance annotations.
     Raises:
         ImportError: If Playwright is not installed
         RuntimeError: If the export fails
-    
+
     Example:
         >>> from pixel_patrol_base import api
-        >>> from pixel_patrol_base.core.report_config import ReportConfig
         >>> api.export_html_report(
         ...     "pathA/my_project.parquet",
         ...     "pathB/report.html",
-        ...     report_config=ReportConfig(
-        ...         widgets_excluded={"DatasetHistogram"},
-        ...         group_col="size_readable",
-        ...         filter={"file_extension": {"op": "in", "value": "tif, png"}},
-        ...     )
+        ...     widgets_excluded={"DatasetHistogram"},
+        ...     group_col="size_readable",
+        ...     filter_by={"file_extension": {"op": "in", "value": "tif, png"}},
         ... )
     """
     output_path = Path(output_path)
+    report_config = ReportConfig.from_kwargs(
+        cmap=cmap, widgets_included=widgets_included, widgets_excluded=widgets_excluded,
+        group_col=group_col, filter_by=filter_by, dimensions=dimensions,
+        is_show_significance=is_show_significance,
+    )
     app = prepare_app(source, report_config)
     logger.info(f"API Call: Exporting HTML report to '{output_path}'.")
     export_html_from_dashboard(app, output_path, host=host, port=port, timeout=timeout)

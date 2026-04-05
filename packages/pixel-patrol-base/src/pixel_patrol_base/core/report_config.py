@@ -19,7 +19,7 @@ class ReportConfig:
     widgets_excluded: Set[str] = field(default_factory=set)
     # Global configuration for filters, grouping, and dimensions
     group_col: Optional[str] = None  # Column name to group by (e.g., "imported_path_short")
-    filter: Optional[Dict] = None  # Filter dict, e.g., {"file_extension": {"op": "in", "value": "tif, png"}}
+    filter_by: Optional[Dict] = None  # Filter dict, e.g., {"file_extension": {"op": "in", "value": "tif, png"}}
     dimensions: Optional[Dict[str, str]] = None  # Dimension filters, e.g., {"T": "0", "Z": "1"}
     is_show_significance: bool = False  # Whether to show statistical significance annotations
 
@@ -44,8 +44,8 @@ class ReportConfig:
         result = {"cmap": self.cmap}
         if self.group_col is not None:
             result["group_col"] = self.group_col
-        if self.filter is not None:
-            result["filter"] = self.filter
+        if self.filter_by is not None:
+            result["filter_by"] = self.filter_by
         if self.dimensions is not None:
             result["dimensions"] = self.dimensions
         if self.is_show_significance:
@@ -60,8 +60,30 @@ class ReportConfig:
         return cls(
             cmap=d.get("cmap", DEFAULT_CMAP),
             group_col=d.get("group_col"),
-            filter=d.get("filter"),
+            filter_by=d.get("filter_by"),
             dimensions=d.get("dimensions"),
             is_show_significance=d.get("is_show_significance", False),
             **kwargs
+        )
+
+    @classmethod
+    def from_kwargs(
+        cls,
+        cmap: Optional[str] = None,
+        widgets_included: Optional[Set[str]] = None,
+        widgets_excluded: Optional[Set[str]] = None,
+        group_col: Optional[str] = None,
+        filter_by: Optional[Dict] = None,
+        dimensions: Optional[Dict[str, str]] = None,
+        is_show_significance: bool = False,
+    ) -> "ReportConfig":
+        """Construct a ReportConfig from flat keyword arguments (used by the public API)."""
+        return cls(
+            cmap=cmap or DEFAULT_CMAP,
+            widgets_included=widgets_included or set(),
+            widgets_excluded=widgets_excluded or set(),
+            group_col=group_col,
+            filter_by=filter_by,
+            dimensions=dimensions,
+            is_show_significance=is_show_significance,
         )

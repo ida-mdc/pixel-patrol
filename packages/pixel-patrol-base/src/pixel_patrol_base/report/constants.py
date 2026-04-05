@@ -26,7 +26,7 @@ SAVE_SNAPSHOT_DOWNLOAD_ID = "save-snapshot-download"
 ## Grouping and filtering:
 
 GC_GROUP_COL = "group_col"
-GC_FILTER = "filter"
+GC_FILTER = "filter_by"
 GC_DIMENSIONS = "dimensions"
 GC_IS_SHOW_SIGNIFICANCE = "is_show_significance"
 

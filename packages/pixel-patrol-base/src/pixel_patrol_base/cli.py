@@ -12,9 +12,6 @@ from pixel_patrol_base.api import (
     show_report,
     export_html_report,
 )
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.project_metadata import ProjectMetadata
-from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import NO_GROUPING_COL, DEFAULT_CMAP
 
 
@@ -85,21 +82,15 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         output_path = output_path.with_suffix(".parquet")
         click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
 
-    metadata = ProjectMetadata(
-        flavor=flavor,
-        authors=authors,
-    )
-
-    processing_config = ProcessingConfig(
-        selected_file_extensions=selected_extensions,
-        processors_included=set(processors_include) if processors_include else set(),
-        processors_excluded=set(processors_exclude) if processors_exclude else set(),
-        metadata=metadata,
-    )
-    click.echo(f"Processing configuration: {processing_config}")
-
     click.echo("Processing images...")
-    process_files(my_project, processing_config=processing_config)
+    process_files(
+        my_project,
+        selected_file_extensions=selected_extensions,
+        processors_included=set(processors_include) if processors_include else None,
+        processors_excluded=set(processors_exclude) if processors_exclude else None,
+        flavor=flavor or None,
+        authors=authors or None,
+    )
 
     if Path(output).exists():
         click.echo(f"Output saved to: '{output}'")
@@ -185,29 +176,25 @@ def report(input_parquet: Path, port: int,
     if filter_col and filter_op and filter_value:
         filters[filter_col] = {"op": filter_op, "value": filter_value}
 
-    # Build ReportConfig from CLI options (combines widgets and global config)
-    report_config = None
-    if widgets_include or widgets_exclude or group_by or filter_col or dims:
-        report_config = ReportConfig(
-            cmap=cmap,
-            widgets_included=set(widgets_include) if widgets_include else set(),
-            widgets_excluded=set(widgets_exclude) if widgets_exclude else set(),
-            group_col=group_by or NO_GROUPING_COL if group_by else None,
-            filter=filters if filters else None,
-            dimensions=dim_dict if dim_dict else None,
-        )
-        click.echo(f"Report configuration: widgets={len(report_config.widgets_included)} included, {len(report_config.widgets_excluded)} excluded")
-
     parquet_path = Path(input_parquet)
+
+    report_kwargs = dict(
+        cmap=cmap,
+        widgets_included=set(widgets_include) if widgets_include else None,
+        widgets_excluded=set(widgets_exclude) if widgets_exclude else None,
+        group_col=group_by or NO_GROUPING_COL if group_by else None,
+        filter_by=filters if filters else None,
+        dimensions=dim_dict if dim_dict else None,
+    )
 
     if export_html:
         # Export as static HTML
         click.echo(f"Exporting report to HTML: {export_html}")
-        export_html_report(parquet_path, export_html, port=port, report_config=report_config)
+        export_html_report(parquet_path, export_html, port=port, **report_kwargs)
         click.echo(f"HTML export complete: {export_html}")
     else:
         # Launch interactive dashboard
-        show_report(parquet_path, port=port, report_config=report_config)
+        show_report(parquet_path, port=port, **report_kwargs)
 
 
 if __name__ == '__main__':

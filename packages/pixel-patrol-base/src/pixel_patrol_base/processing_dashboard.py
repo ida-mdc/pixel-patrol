@@ -19,8 +19,6 @@ import webbrowser
 import time
 
 from pixel_patrol_base import api
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
@@ -865,16 +863,6 @@ def _run_processing(
             message="Setting project settings...",
         )
 
-        metadata = ProjectMetadata(
-            flavor=flavor,
-            authors=authors,
-        )
-
-        processing_config = ProcessingConfig(
-            selected_file_extensions=extensions,
-            metadata=metadata,
-        )
-
         update_processing_state(
             status="running",
             progress=15,
@@ -915,7 +903,13 @@ def _run_processing(
             )
 
         # Process files — saves the parquet with metadata to project.output_path
-        api.process_files(project, processing_config=processing_config, progress_callback=progress_callback)
+        api.process_files(
+            project,
+            progress_callback=progress_callback,
+            selected_file_extensions=extensions,
+            flavor=flavor,
+            authors=authors,
+        )
 
         # Update progress after processing
         if project.records_df is not None:

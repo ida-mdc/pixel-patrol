@@ -4,8 +4,6 @@ Example demonstrating configuration options for processors and widgets.
 
 from pathlib import Path
 from pixel_patrol_base import api
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.report_config import ReportConfig
 
 def main():
     base_path = Path("datasets/bioio")
@@ -15,28 +13,20 @@ def main():
     
     project = api.create_project("Configured Project", base_dir=base_path, loader=loader, output_path=output_path)
     api.add_paths(project, paths)
-    
-    # Processing configuration: include only specific processors
-    # Other options:
-    #   processors_excluded={"HistogramProcessor"}  # exclude instead of include
-    processing_config = ProcessingConfig(
-        processors_included={"basic-stats"},
-    )
-    
-    api.process_files(project, processing_config=processing_config)
+
+    api.process_files(project, processors_included={"basic-stats"})
 
     # --- Report: exclude specific widgets ---
     # Other options:
     #   widgets_included={"FileSummaryWidget", "DataFrameWidget"}  — include instead of exclude
     #   group_col="imported_path_short"                            — group by column
-    #   filter={"file_extension": {"op": "in", "value": "tif, png"}}
+    #   filter_by={"file_extension": {"op": "in", "value": "tif, png"}}
     #   dimensions={"T": "0", "Z": "1"}                           — filter by dimensions
-    report_config = ReportConfig(
+    api.show_report(
+        project,
         cmap="viridis",
         widgets_excluded={"image-mosaic-widget"},
     )
-
-    api.show_report(project, report_config=report_config)
 
 
 if __name__ == "__main__":

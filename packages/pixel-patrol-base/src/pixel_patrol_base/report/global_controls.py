@@ -383,7 +383,7 @@ def build_sidebar(df: pl.DataFrame, default_palette_name: str, initial_report_co
     init_group_col = validated.group_col or DEFAULT_REPORT_GROUP_COL
     init_dims = validated.dimensions or {}
 
-    init_filter = validated.filter or {}
+    init_filter = validated.filter_by or {}
     init_filter_col = None
     init_filter_op = None
     init_filter_text = ""
@@ -556,7 +556,7 @@ def compute_filtered_row_positions(
     if report_config is None:
         return None
     
-    filters = report_config.filter or {}
+    filters = report_config.filter_by or {}
     dimensions = report_config.dimensions or {}
 
     # If no filters and no dimension constraints, return None (use full df)

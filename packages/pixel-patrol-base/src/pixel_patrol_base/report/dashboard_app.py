@@ -325,7 +325,7 @@ def _create_app(
         if trigger_id == GLOBAL_RESET_BUTTON_ID:
             report_cfg = ReportConfig(
                 group_col=DEFAULT_REPORT_GROUP_COL,
-                filter={},
+                filter_by={},
                 dimensions={}
             )
         else:
@@ -344,7 +344,7 @@ def _create_app(
 
             report_cfg = ReportConfig(
                 group_col=group_col,
-                filter=filters if filters else None,
+                filter_by=filters if filters else None,
                 dimensions=dimensions if dimensions else None,
                 is_show_significance=show_significance
             )
