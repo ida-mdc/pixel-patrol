@@ -10,6 +10,7 @@ from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
+from pixel_patrol_base.report.data_utils import column_names_skipping_binary
 from pixel_patrol_base.report.factory import show_no_data_message
 
 
@@ -64,7 +65,10 @@ class DataFrameWidget(BaseReportWidget):
         if df_filtered.is_empty():
             return show_no_data_message()
 
-        cols_to_display = df_filtered.columns[:MAX_COLS_DISPLAYED]
+        cols_to_display = column_names_skipping_binary(df_filtered, MAX_COLS_DISPLAYED)
+        if not cols_to_display:
+            return show_no_data_message()
+
         df_limited = (
             df_filtered
             .select(cols_to_display)
