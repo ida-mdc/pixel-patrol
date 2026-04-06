@@ -792,7 +792,7 @@ class _RecordsAccumulator:
 
     def finalize(self) -> pl.DataFrame:
         """
-        Finalize accumulation: flush remaining active data and combine all chunks into one Parquet file if applicable, while remopving partial chunks.
+        Finalize accumulation: flush remaining active data and combine all chunks into one Parquet file if applicable, while removing partial chunks.
         If insufficient memory is available for combining, skips the combine step and retains chunk files.
 
         Returns:
@@ -808,17 +808,8 @@ class _RecordsAccumulator:
             return self._active_df
 
         total_size = sum(p.stat().st_size for p in self._written_files if p.exists())
-        available_memory = _estimate_available_memory_bytes()
-        if available_memory is not None:
-            projected = total_size * self._combine_headroom_ratio
-            if projected > available_memory:
-                logger.warning(
-                    "Processing Core: skipping final combine; chunk files remain at %s (total %.2f MB, available %.2f MB)",
-                    self._flush_dir,
-                    total_size / (1024 * 1024),
-                    available_memory / (1024 * 1024),
-                )
-                return pl.DataFrame([])
+        if not self._is_enough_memory_to_combine(total_size):
+            return pl.DataFrame([])
 
         frames = [pl.read_parquet(path) for path in self._written_files]
         if not self._active_df.is_empty():
@@ -828,18 +819,24 @@ class _RecordsAccumulator:
             return pl.DataFrame([])
 
         final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
-
         final_df = self.post_process_final_df(final_df)
 
-        # Remove the entire flush directory
-        if self._flush_dir and self._flush_dir.exists():
-            try:
-                shutil.rmtree(self._flush_dir)
-                logger.info("Processing Core: Removed intermediate batches directory '%s'.", self._flush_dir)
-            except OSError as exc:
-                logger.warning("Processing Core: Could not remove '%s': %s", self._flush_dir, exc)
-
         return final_df
+
+    def _is_enough_memory_to_combine(self, total_size: int) -> bool:
+        available_memory = _estimate_available_memory_bytes()
+        if available_memory is None:
+            return True
+        projected = total_size * self._combine_headroom_ratio
+        if projected > available_memory:
+            logger.warning(
+                "Processing Core: skipping final combine; chunk files remain at %s (total %.2f MB, available %.2f MB)",
+                self._flush_dir,
+                total_size / (1024 * 1024),
+                available_memory / (1024 * 1024),
+            )
+            return False
+        return True
 
     @staticmethod
     def post_process_final_df(final_df):
@@ -984,3 +981,20 @@ def optimize_dtypes(
             continue
 
     return df.with_columns(series_updates) if series_updates else df
+
+
+def cleanup_flush_dir(flush_dir: Optional[Path]) -> None:
+    """Remove the flush directory after a successful save.
+
+    Should be called by the caller (e.g. project.py) after save_parquet succeeds,
+    ensuring chunks are only deleted once the final parquet is safely written.
+    Args:
+        flush_dir: Path to the directory to remove. No-op if None or does not exist.
+    """
+    if not flush_dir or not flush_dir.exists():
+        return
+    try:
+        shutil.rmtree(flush_dir)
+        logger.info("Processing Core: Removed intermediate batches directory '%s'.", flush_dir)
+    except OSError as exc:
+        logger.warning("Processing Core: Could not remove '%s': %s", flush_dir, exc)

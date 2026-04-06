@@ -9,6 +9,7 @@ import polars as pl
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
+import pixel_patrol_base.core.project as project_module
 
 
 class DummyLoader:
@@ -155,9 +156,6 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
 
     assert df.height == 2
     assert "width" in df.columns
-    # _batches dir should be cleaned up by finalize()
-    batches_dir = output_path.parent / "_batches"
-    assert not batches_dir.exists(), "_batches directory should be removed after finalize"
 
 
 def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monkeypatch):
@@ -431,8 +429,9 @@ def test_cleanup_partial_batches_dir(tmp_path):
     assert not d.exists()
 
 
-def test_finalize_removes_batches_dir(tmp_path):
-    """finalize() should remove the flush_dir after combining chunks."""
+def test_finalize_leaves_batches_dir_intact(tmp_path):
+    """finalize() should combine chunks into a DataFrame but leave the flush_dir
+    in place — cleanup is the caller's responsibility (via cleanup_flush_dir)."""
     flush_dir = tmp_path / "_batches"
     flush_dir.mkdir()
 
@@ -451,7 +450,8 @@ def test_finalize_removes_batches_dir(tmp_path):
     result = accumulator.finalize()
 
     assert result.height == 2
-    assert not flush_dir.exists(), "_batches directory should be removed after finalize"
+    assert "a" in result.columns
+    assert flush_dir.exists(), "flush_dir must survive finalize(); only cleanup_flush_dir should remove it"
 
 
 def test_finalize_without_flush_dir_returns_active_df():
@@ -466,3 +466,62 @@ def test_finalize_without_flush_dir_returns_active_df():
 
     assert result.height == 3
     assert result["a"].to_list() == [1, 2, 3]
+
+
+# ---------- tests for cleanup_flush_dir ----------
+
+
+def test_cleanup_not_called_when_no_records(tmp_path, monkeypatch):
+    """cleanup_flush_dir must not be called when build_records_df returns nothing."""
+    cleanup_calls = []
+    monkeypatch.setattr(processing, "build_records_df", lambda *a, **kw: None)
+    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+
+    p = Project(name="test", base_dir=tmp_path)
+    p.process_records()
+
+    assert cleanup_calls == [], "cleanup_flush_dir must not be called when there are no records"
+
+
+def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
+    """cleanup_flush_dir must not be called when save_parquet raises — chunks are
+    the only remaining copy of the data and must be preserved."""
+    cleanup_calls = []
+    monkeypatch.setattr(
+        processing, "build_records_df",
+        lambda *a, **kw: pl.DataFrame({"a": [1]}),
+    )
+
+    def failing_save(df, path, meta):
+        raise OSError("disk full")
+
+    # Patch save_parquet on the project module where it was imported
+    monkeypatch.setattr(project_module, "save_parquet", failing_save)
+    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+
+    p = Project(name="test", base_dir=tmp_path)
+    p.process_records()
+
+    assert cleanup_calls == [], "cleanup_flush_dir must not be called after a failed save"
+
+
+def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkeypatch):
+    """cleanup_flush_dir must be called exactly once with flush_dir = output_path.parent / '_batches'
+    when save_parquet succeeds."""
+    cleanup_calls = []
+    monkeypatch.setattr(
+        processing, "build_records_df",
+        lambda *a, **kw: pl.DataFrame({"a": [1]}),
+    )
+    monkeypatch.setattr(project_module, "save_parquet", lambda df, path, meta: None)
+    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+
+    p = Project(name="test", base_dir=tmp_path)
+    expected_flush_dir = p.output_path.parent / "_batches"
+
+    p.process_records()
+
+    assert len(cleanup_calls) == 1, "cleanup_flush_dir must be called exactly once on success"
+    assert cleanup_calls[0] == expected_flush_dir, (
+        f"cleanup_flush_dir called with wrong path: {cleanup_calls[0]!r}, expected {expected_flush_dir!r}"
+    )

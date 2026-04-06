@@ -165,6 +165,7 @@ class Project:
 
         try:
             save_parquet(self.records_df, self.output_path, self.metadata)
+            processing.cleanup_flush_dir(flush_dir)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
