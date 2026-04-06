@@ -473,9 +473,6 @@ def _filter_widgets(
         missing = report_config.widgets_excluded - original_names
         if missing:
             logger.debug(f"Some excluded widget names were not found: {missing}")
-        still_present = report_config.widgets_excluded & {w.NAME for w in filtered}
-        if still_present:
-            logger.error(f"Widgets that should be excluded are still present: {still_present}")
         return filtered
 
     return widgets
