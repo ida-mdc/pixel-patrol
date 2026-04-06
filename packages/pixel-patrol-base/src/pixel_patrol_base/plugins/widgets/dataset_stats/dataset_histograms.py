@@ -11,7 +11,8 @@ from pixel_patrol_base.report.data_utils import (
     compute_histogram_edges,
     format_selection_title,
     sort_strings_alpha,
-    select_needed_columns
+    select_needed_columns,
+    _hist_bytes_to_array,
 )
 from pixel_patrol_base.report.global_controls import prepare_widget_data
 from pixel_patrol_base.core.report_config import ReportConfig
@@ -303,7 +304,7 @@ def get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selec
             maxv = row.get_column(max_key).item() if max_key in row.columns else 255
 
             if c_list is not None:
-                c_arr = np.array(c_list, dtype=float)
+                c_arr = _hist_bytes_to_array(c_list)
                 if c_arr.size > 0 and c_arr.sum() > 0:
                     c_arr /= c_arr.sum()
                     _, centers, width = compute_histogram_edges(c_arr, minv, maxv)

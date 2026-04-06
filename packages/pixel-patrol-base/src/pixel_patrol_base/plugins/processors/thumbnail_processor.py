@@ -11,78 +11,148 @@ from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
 
-THUMBNAIL_SIZE = SPRITE_SIZE * SPRITE_SIZE
 
-# TODO: decide how we create thumbnail for images with S (probably call to gray) and C
-def _generate_thumbnail(da_array: da.array, dim_order: str) -> np.ndarray:
+def _get_color_dim(capabilities) -> str | None:
+    """Return the color dimension letter encoded in an 'rgb:<dim>' capability, or None."""
+    for cap in capabilities:
+        if cap.startswith('rgb:'):
+            return cap[4:]
+    return None
+
+
+def _reduce_to_spatial(arr, dim_order: str, keep_dims: set) -> tuple[da.Array, str]:
+    """Reduce all dimensions not in keep_dims by taking the center slice."""
+    current = dim_order
+    i = 0
+    while i < len(current):
+        dim = current[i]
+        if dim not in keep_dims:
+            center = arr.shape[i] // 2
+            arr = da.take(arr, indices=center, axis=i)
+            current = current.replace(dim, '', 1)
+        else:
+            i += 1
+    return arr, current
+
+
+def _normalize(arr: da.Array) -> tuple[da.Array, float, float]:
     """
-    Generate a square, grayscale thumbnail as a NumPy array.
+    Normalize to uint8 [0, 255].
+    Lower bound = min(arr_min, 0) to keep zero as a fixed reference.
+    Upper bound = arr_max.
+    Returns (normalized_uint8, norm_min, norm_max).
+
+    Uses ``nanmin`` / ``nanmax`` so NaN voxels do not poison the intensity range.
+    If every value is NaN (or min/max are otherwise non-finite), returns a solid
+    black image and ``(0.0, 0.0)`` for the norm metadata (no meaningful stretch).
+    """
+    mn, mx = da.compute(da.nanmin(arr), da.nanmax(arr))
+    mn, mx = float(mn), float(mx)
+    if not np.isfinite(mn) or not np.isfinite(mx):
+        return da.full_like(arr, np.uint8(0), dtype=np.uint8), 0.0, 0.0
+    lower = min(mn, 0.0)
+    upper = mx
+    if upper <= lower:
+        fill = np.uint8(0 if upper <= 0 else 255)
+        return da.full_like(arr, fill, dtype=np.uint8), lower, upper
+    normalized = (arr.astype(np.float64) - lower) / (upper - lower) * 255.0
+    return da.clip(normalized, 0, 255).astype(np.uint8), lower, upper
+
+
+def _resize_and_pad(img: np.ndarray) -> np.ndarray:
+    """
+    Scale img to fit within SPRITE_SIZE × SPRITE_SIZE while preserving aspect ratio,
+    then center-pad to exactly SPRITE_SIZE × SPRITE_SIZE.
+
+    Downsampling / upsampling uses nearest-neighbor resampling.
+
+    Returns an RGBA canvas (SPRITE_SIZE, SPRITE_SIZE, 4): padding pixels have alpha=0
+    (transparent), content pixels have alpha=255 (opaque).
+
+    img must be (H, W) or (H, W, C).
+    """
+    h, w = img.shape[:2]
+    scale = min(SPRITE_SIZE / h, SPRITE_SIZE / w)
+    new_h = max(1, int(h * scale))
+    new_w = max(1, int(w * scale))
+
+    row_idx = np.linspace(0, h - 1, new_h).astype(np.int64)
+    col_idx = np.linspace(0, w - 1, new_w).astype(np.int64)
+    resized = img[row_idx][:, col_idx]
+
+    # RGBA canvas: alpha=0 everywhere (transparent padding)
+    canvas = np.zeros((SPRITE_SIZE, SPRITE_SIZE, 4), dtype=np.uint8)
+    y_off = (SPRITE_SIZE - new_h) // 2
+    x_off = (SPRITE_SIZE - new_w) // 2
+
+    if resized.ndim == 2:
+        # Grayscale → replicate to RGB
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 0] = resized
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 1] = resized
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 2] = resized
+    else:
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w, :resized.shape[2]] = resized[:, :, :4]
+
+    # Mark content region as fully opaque
+    canvas[y_off:y_off + new_h, x_off:x_off + new_w, 3] = 255
+    return canvas
+
+
+def _generate_thumbnail(
+    da_array: da.Array, dim_order: str, color_dim: str | None
+) -> tuple[bytes, float, float, str] | None:
+    """
+    Generate a thumbnail as raw RGBA bytes (SPRITE_SIZE × SPRITE_SIZE × 4, uint8).
+
+    All images are normalized: lower bound = min(data_min, 0), upper = data_max.
+
+    Returns (raw_bytes, norm_min, norm_max, dtype_name), or None if generation fails.
     """
     if da_array is None or da_array.size == 0:
         return None
 
-    arr_to_process = da_array.copy()
+    dtype_name = str(da_array.dtype)
+    arr = da_array.copy()
+    if arr.dtype == bool:
+        arr = arr.astype(np.float32)
 
-    # Cast boolean arrays so min/max/normalization behave
-    if arr_to_process.dtype == bool:
-        arr_to_process = arr_to_process.astype(np.uint8)
+    is_rgb = color_dim is not None
 
-    current_dim_order = dim_order
+    keep_dims = {'X', 'Y'}
+    if is_rgb:
+        keep_dims.add(color_dim)
 
-    # Reduce non-spatial, non-channel dims by taking the center slice
-    i = 0
-    while arr_to_process.ndim > 2 and i < len(current_dim_order):
-        dim = current_dim_order[i]
-        if dim not in ["X", "Y", "C"]:
-            center_index = arr_to_process.shape[i] // 2
-            arr_to_process = da.take(arr_to_process, indices=center_index, axis=i)
-            current_dim_order = current_dim_order.replace(dim, "")
-        else:
-            i += 1
+    # For non-RGB, preserve C/S so they get meaned below rather than center-sliced
+    reduce_keep_dims = keep_dims if is_rgb else keep_dims | {'C', 'S'}
+    arr, current_dim_order = _reduce_to_spatial(arr, dim_order, reduce_keep_dims)
 
-    if arr_to_process.size > 1:
-        arr_to_process = da.squeeze(arr_to_process)
+    # Collapse any leftover non-spatial dimensions by mean
+    target_ndim = 3 if is_rgb else 2
+    while arr.ndim > target_ndim:
+        arr = da.mean(arr, axis=0)
+        current_dim_order = current_dim_order[1:]
 
-    # If still >2D, collapse remaining non-XY dims by mean
-    if arr_to_process.ndim > 2:
-        logger.debug(
-            f"Thumbnail: Array still multi-dimensional after reduction ({arr_to_process.ndim}D). "
-            f"Taking mean along remaining non-XY dimensions."
-        )
-        while arr_to_process.ndim > 2:
-            arr_to_process = da.mean(arr_to_process, axis=0)
+    normalized, norm_min, norm_max = _normalize(arr)
+    img = normalized.compute()
 
-    min_val = da.min(arr_to_process)
-    max_val = da.max(arr_to_process)
+    # Transpose to (H, W) or (H, W, C)
+    dims = list(current_dim_order)
+    if is_rgb and color_dim in dims:
+        img = np.transpose(img, [dims.index('Y'), dims.index('X'), dims.index(color_dim)])
+        if img.shape[2] == 4:
+            img = img[:, :, :3]
+    elif 'Y' in dims and 'X' in dims and img.ndim == 2:
+        img = np.transpose(img, [dims.index('Y'), dims.index('X')])
 
-    # Handle constant arrays
-    if da.all(min_val == max_val).compute():
-        fill_value = 255 if float(max_val.compute()) > 0 else 0
-        normalized_array = da.full_like(arr_to_process, fill_value=fill_value, dtype=da.uint8)
-    else:
-        normalized_array = (arr_to_process - min_val) / (max_val - min_val) * 255
-        normalized_array = da.clip(normalized_array, 0, 255).astype(da.uint8)
+    h, w = img.shape[:2]
+    if h == 0 or w == 0:
+        return None
 
     try:
-        if normalized_array.ndim == 3 and normalized_array.shape[0] == 1:
-            normalized_array = da.squeeze(normalized_array, axis=0)
-
-        img = normalized_array.compute()
-
-        h, w = img.shape[:2]
-        if h == 0 or w == 0:
-            return None
-
-        row_idx = (np.linspace(0, h - 1, SPRITE_SIZE)).astype(np.int64)
-        col_idx = (np.linspace(0, w - 1, SPRITE_SIZE)).astype(np.int64)
-        thumbnail_2d = img[row_idx][:, col_idx]
-        return thumbnail_2d.flatten().astype(np.uint8)
-
-    except TypeError as e:
-        logger.error(
-            f"Error resizing thumbnail: {e}. "
-            f"Array shape: {normalized_array.shape}, dtype: {normalized_array.dtype}"
-        )
+        canvas = _resize_and_pad(img)
+        return canvas.tobytes(), norm_min, norm_max, dtype_name
+    except Exception as e:
+        logger.error(f"Error generating thumbnail: {e}. Shape: {img.shape}, dtype: {img.dtype}")
         return None
 
 
@@ -92,14 +162,20 @@ class ThumbnailProcessor:
     OUTPUT = "features"
 
     OUTPUT_SCHEMA = {
-        "thumbnail": (np.uint8, THUMBNAIL_SIZE),
+        "thumbnail":          bytes,
+        "thumbnail_norm_min": float,
+        "thumbnail_norm_max": float,
+        "thumbnail_dtype":    str,
     }
+    OUTPUT_SCHEMA_PATTERNS = []
 
     def run(self, art: Record) -> ProcessResult:
-        dim_order = art.dim_order
-        result = {"thumbnail": _generate_thumbnail(art.data, dim_order)}
+        color_dim = _get_color_dim(art.capabilities)
+        result_data = _generate_thumbnail(art.data, art.dim_order, color_dim)
+        if result_data is None:
+            return {x:None for x in self.OUTPUT_SCHEMA}
         return validate_processor_output(
-            result,
+            {x:result_data[i] for i, x in enumerate(self.OUTPUT_SCHEMA)},
             self.OUTPUT_SCHEMA,
-            processor_name=self.NAME
+            processor_name=self.NAME,
         )

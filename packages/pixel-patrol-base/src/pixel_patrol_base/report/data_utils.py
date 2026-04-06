@@ -10,6 +10,40 @@ from pixel_patrol_base.report.constants import GROUPING_COL_PREFIX, MISSING_LABE
 
 # --- Data Helpers ---
 
+def _hist_bytes_to_array(val) -> np.ndarray:
+    """Convert a histogram column value to a float64 numpy array.
+
+    Histogram columns are stored as FIXED_LEN_BYTE_ARRAY (int32 bytes) in
+    Parquet and read back as ``bytes`` by Polars.  This helper also accepts
+    plain lists and numpy arrays for callers that may encounter either form.
+    """
+    if isinstance(val, (bytes, bytearray, memoryview)):
+        return np.frombuffer(val, dtype=np.int32).astype(np.float64)
+    return np.asarray(val, dtype=np.float64)
+
+
+def _dtype_includes_binary(dtype: pl.DataType) -> bool:
+    """True if this column stores raw bytes (incl. ``List``/``Array`` of binary)."""
+    if dtype == pl.Binary:
+        return True
+    if isinstance(dtype, pl.List):
+        return _dtype_includes_binary(dtype.inner)
+    if isinstance(dtype, pl.Array):
+        return _dtype_includes_binary(dtype.inner)
+    return False
+
+
+def column_names_skipping_binary(df: pl.DataFrame, max_cols: int) -> list[str]:
+    """First ``max_cols`` columns in frame order that are not binary-backed (for Dash tables)."""
+    out: list[str] = []
+    for c in df.columns:
+        if len(out) >= max_cols:
+            break
+        if not _dtype_includes_binary(df[c].dtype):
+            out.append(c)
+    return out
+
+
 def sort_strings_alpha(values: Sequence[str]) -> List[str]:
     """
     Alphabetical, case-insensitive sort. Keeps original strings.
@@ -490,7 +524,7 @@ def aggregate_histograms_by_group(
             if c_list is None:
                 continue
 
-            c_arr = np.asarray(c_list, dtype=float)
+            c_arr = _hist_bytes_to_array(c_list)
             if c_arr.size == 0 or c_arr.sum() == 0:
                 continue
 
