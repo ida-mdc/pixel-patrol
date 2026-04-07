@@ -148,7 +148,7 @@ class Project:
             progress_callback: Optional callback(current, total, current_file) called per file.
         """
         config = self._prepare_processing_config(processing_config)
-        flush_dir = self.output_path.parent / "_batches"
+        flush_dir = self.output_path.parent / f"_batches_{self.name}"
 
         self.records_df = processing.build_records_df(
             bases=self.paths,
