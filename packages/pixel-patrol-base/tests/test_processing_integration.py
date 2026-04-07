@@ -517,7 +517,7 @@ def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkey
     monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
 
     p = Project(name="test", base_dir=tmp_path)
-    expected_flush_dir = p.output_path.parent / "_batches"
+    expected_flush_dir = p.output_path.parent / f"_batches_{p.name}"
 
     p.process_records()
 
