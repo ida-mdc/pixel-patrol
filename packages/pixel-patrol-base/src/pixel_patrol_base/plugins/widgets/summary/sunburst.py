@@ -8,6 +8,7 @@ from dash import dcc, Input, Output, html
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, MIXED_GROUPING_COLOR
 from pixel_patrol_base.report.factory import plot_sunburst, show_no_data_message
 
@@ -17,7 +18,7 @@ class FileSunburstWidget(BaseReportWidget):
     """Display file structure as a sunburst plot."""
 
     # ---- Declarative spec ----
-    NAME: str = "File Structure Sunburst"
+    NAME: str = "file-system-sunburst"
     TAB: str = WidgetCategories.SUMMARY.value
     REQUIRES: Set[str] = {"path", "size_bytes"}
     REQUIRES_PATTERNS = None
@@ -51,13 +52,13 @@ class FileSunburstWidget(BaseReportWidget):
         self,
         color_map: Dict[str, Any] | None,
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
     ):
-
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, group_col, _resolved, _warning_msg, _order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config or {},
+            report_config,
             metric_base=None,
         )
 

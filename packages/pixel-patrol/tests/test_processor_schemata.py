@@ -6,7 +6,7 @@ from typing import List
 
 import numpy as np
 import tifffile
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.specs import is_record_matching_processor
 
 from pixel_patrol_base import api
@@ -39,55 +39,57 @@ def create_synthetic_tiff(
 
 
 def test_processor_schemata():
-
     tmp_path = Path(tempfile.gettempdir())
 
-    images_dir = tmp_path / f"source_images"
+    images_dir = tmp_path / "source_images"
     test_dir = Path(__file__).parent
     results_dir = test_dir / "benchmark_results"
     results_dir.mkdir(exist_ok=True)
 
+    output_path = tmp_path / "output.parquet"
+
     generate_image_dataset(images_dir, 1, 1, 3, 1, 10, 10)
 
-    # We must create a FRESH project instance to measure processing accurately
-    project_name = f"project"
-    project = api.create_project(project_name, base_dir=images_dir, loader="bioio")
-    project.set_settings(Settings(selected_file_extensions={"tif"}))
+    project_name = "project"
+    project = api.create_project(project_name, base_dir=images_dir, loader="bioio", output_path=output_path)
 
-    project.process_records()
+    processing_config = ProcessingConfig(
+        selected_file_extensions={"tif"},
+    )
+    project.process_records(processing_config=processing_config)
 
     if project.records_df is None or project.records_df.is_empty():
         print("    [Error] No records processed!")
         return
 
-    zip_path = tmp_path / f"export.zip"
-    api.export_project(project, zip_path)
-
-    imported_project = api.import_project(zip_path)
-
     assert project.records_df.height == 1
 
-    print(imported_project.records_df.columns)
+    # Load from saved parquet to verify round-trip
+    parquet_files = list(project.output_path.parent.glob("*.parquet"))
+    assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
+    records_df, metadata = api.load(parquet_files[0])
+
+    print(records_df.columns)
 
     processors = discover_processor_plugins()
-    df_columns = set(imported_project.records_df.columns)
-    
+    df_columns = set(records_df.columns)
+
     # Load a sample record to check if processors should run
     sample_file = list(images_dir.glob("*.tif"))[0]
-    sample_record = imported_project.loader.load(str(sample_file))
+    sample_record = project.loader.load(str(sample_file))
 
     for processor in processors:
         # Check if processor should run on the test dataset
         if not is_record_matching_processor(sample_record, processor.INPUT):
             continue
-        
+
         # Verify OUTPUT_SCHEMA columns are present
         for col_name in processor.OUTPUT_SCHEMA.keys():
             assert col_name in df_columns, (
                 f"Processor {processor.NAME}: expected column '{col_name}' from OUTPUT_SCHEMA "
                 f"not found in records_df. Available columns: {sorted(df_columns)}"
             )
-        
+
         # Verify OUTPUT_SCHEMA_PATTERNS columns are present
         if hasattr(processor, 'OUTPUT_SCHEMA_PATTERNS') and processor.OUTPUT_SCHEMA_PATTERNS:
             for pattern, _type in processor.OUTPUT_SCHEMA_PATTERNS:

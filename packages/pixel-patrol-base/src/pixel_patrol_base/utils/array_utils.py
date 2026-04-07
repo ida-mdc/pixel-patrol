@@ -1,11 +1,13 @@
 from itertools import combinations
-from typing import Callable, Tuple, Dict, List, Any, Iterable
-from typing import NamedTuple
-
+from typing import Callable, Tuple, Dict, List, Any, Iterable, NamedTuple
+import logging
 import dask.array as da
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 NO_SLICE_AXES = ("X", "Y")
+
 
 class SliceAxisSpec(NamedTuple):
     dim: str    # e.g. "T", "C" or "Z"
@@ -13,7 +15,11 @@ class SliceAxisSpec(NamedTuple):
     size: int   # shape along that axis
 
 
-def calculate_np_array_stats(array: da.array, dim_order: str, registry: Dict[str, Dict[str, Callable]]) -> dict[str, float]:
+def calculate_np_array_stats(
+    array: da.array, 
+    dim_order: str, 
+    registry: Dict[str, Dict[str, Callable]],
+) -> dict[str, float]:
     if array.size == 0:
         return {k: np.nan for k, v in registry.items()}
     all_metrics = {k: v['fn'] for k, v in registry.items()}
@@ -21,16 +27,27 @@ def calculate_np_array_stats(array: da.array, dim_order: str, registry: Dict[str
     return calculate_sliced_stats(array, dim_order, all_metrics, all_aggregators)
 
 
-def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, agg_fns: Dict) -> Dict[str, Any]:
+def calculate_sliced_stats(
+    array: da.Array, 
+    dim_order: str, 
+    metric_fns: Dict, 
+    agg_fns: Dict,
+) -> Dict[str, Any]:
     """
     Calculates statistics on a Dask array using an efficient `apply_gufunc` approach.
     This version is updated to handle both scalar and object metric results.
+    
+    Args:
+        array: Dask array to process
+        dim_order: String representing dimension order (e.g., "TCZYX")
+        metric_fns: Dictionary of metric functions to apply
+        agg_fns: Dictionary of aggregation functions
     """
+
     if not metric_fns:
         return {}
 
-    spatial_dims = NO_SLICE_AXES
-    xy_axes = tuple(dim_order.index(d) for d in spatial_dims if d in dim_order)
+    xy_axes = tuple(dim_order.index(d) for d in NO_SLICE_AXES if d in dim_order)
     if len(xy_axes) != 2:
         print("Warning: Array does not have both X and Y dimensions. Skipping.")
         return {}
@@ -43,7 +60,6 @@ def calculate_sliced_stats(array: da.Array, dim_order: str, metric_fns: Dict, ag
 
     metric_names = list(metric_fns.keys())
     results_dask_array = _compute_all_metrics_gufunc(array, metric_fns.values(), xy_axes, len(metric_names))
-
     results_np_array = results_dask_array.compute()
 
     all_image_properties = _format_and_aggregate_results(
@@ -84,10 +100,10 @@ def _compute_all_metrics_gufunc(
 
 
 def _format_and_aggregate_results(
-        results_array: np.ndarray,
-        loop_specs: List[Any],
-        metric_names: List[str],
-        agg_fns: Dict[str, Callable]
+    results_array: np.ndarray,
+    loop_specs: List[Any],
+    metric_names: List[str],
+    agg_fns: Dict[str, Callable]
 ) -> Dict[str, Any]:
     """
     Formats detailed metrics and computes aggregations.

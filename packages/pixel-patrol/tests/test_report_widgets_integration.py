@@ -19,12 +19,12 @@ import tifffile
 from dash._utils import to_json as dash_to_json
 
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project_settings import Settings
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.plugin_registry import discover_widget_plugins
 from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_histograms import DatasetHistogramWidget
-from pixel_patrol_base.plugins.widgets.visualization.image_mosaik import ImageMosaikWidget
-from pixel_patrol_base.report.dashboard_app import create_app, should_display_widget
-from pixel_patrol_base.report.global_controls import compute_filtered_row_positions, init_global_config
+from pixel_patrol_base.plugins.widgets.visualization.image_mosaic import ImageMosaicWidget
+from pixel_patrol_base.report.dashboard_app import prepare_app, should_display_widget
+from pixel_patrol_base.report.global_controls import compute_filtered_row_positions
 
 
 @dataclass
@@ -48,7 +48,7 @@ def _smoke_render_widget(widget, ctx: _SmokeCtx) -> None:
         out = widget._update_plot(
             {}, "shape", [], None, ctx.subset, ctx.global_config
         )
-    elif isinstance(widget, ImageMosaikWidget):
+    elif isinstance(widget, ImageMosaicWidget):
         out = widget._update_plot(
             {}, None, ctx.subset, ctx.global_config, "normalized"
         )
@@ -71,14 +71,13 @@ def test_report_widgets_dash_json_after_processing(tmp_path, capsys):
     tifffile.imwrite(str(tif_path), data, photometric="minisblack")
 
     project = api.create_project("proj", base_dir=images_dir, loader="bioio")
-    project.set_settings(Settings(selected_file_extensions={"tif"}))
-    project.process_records()
+    api.process_files(project, selected_file_extensions={"tif"})
 
     df = project.records_df
     assert df is not None and not df.is_empty()
 
-    gc_conf = init_global_config(df, {})
-    subset = compute_filtered_row_positions(df, gc_conf)
+    gc_conf = ReportConfig().to_dict()
+    subset = compute_filtered_row_positions(df, None)
     ctx = _SmokeCtx(global_config=gc_conf, subset=subset)
 
     tested_names: list[str] = []
@@ -100,7 +99,7 @@ def test_report_widgets_dash_json_after_processing(tmp_path, capsys):
         f"skipped (embedding): {skipped_embedding or '—'}"
     )
 
-    app = create_app(project)
+    app = prepare_app(project, None)
     layout = app.layout() if callable(app.layout) else app.layout
     dash_to_json(layout)
 

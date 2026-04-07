@@ -7,7 +7,7 @@ from pixel_patrol_base.plugins.widgets.column_count_with_grouping_abstract_widge
 
 
 class DataTypeWidget(ColumnCountWithGroupingBarWidget):
-    NAME: str = "Data Type Distribution"
+    NAME: str = "data-type-distribution"
     TAB: str = WidgetCategories.METADATA.value
     REQUIRES: Set[str] = {"dtype", "name"}
     REQUIRES_PATTERNS = None

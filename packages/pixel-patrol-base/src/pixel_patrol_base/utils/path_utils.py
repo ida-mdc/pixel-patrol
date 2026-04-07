@@ -1,5 +1,6 @@
 from pathlib import Path, PurePosixPath
 from typing import Union, List
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,3 +92,21 @@ def find_common_base(paths: List[str]) -> str:
     system_path_ending = "/" if isinstance(common_base, PurePosixPath) else "\\"
 
     return str(common_base) + system_path_ending
+
+
+def resolve_parquet_output_path(path: Union[str, Path]) -> Path:
+    """
+    Normalise and validate a user-supplied output path:
+      - Converts to absolute Path
+      - Ensures .parquet suffix
+      - Creates parent directory (mkdir -p)
+      - Checks parent is writable
+    Returns the clean Path; raises ValueError / PermissionError on failure.
+    """
+    p = Path(path).resolve()
+    if p.suffix.lower() != ".parquet":
+        p = p.with_suffix(".parquet")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if not os.access(p.parent, os.W_OK):
+        raise PermissionError(f"Output directory is not writable: {p.parent}")
+    return p

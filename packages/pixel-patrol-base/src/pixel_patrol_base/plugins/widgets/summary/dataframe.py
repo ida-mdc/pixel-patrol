@@ -8,6 +8,7 @@ from pixel_patrol_base.config import MAX_ROWS_DISPLAYED, MAX_COLS_DISPLAYED
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID
 from pixel_patrol_base.report.data_utils import column_names_skipping_binary
 from pixel_patrol_base.report.factory import show_no_data_message
@@ -15,7 +16,7 @@ from pixel_patrol_base.report.factory import show_no_data_message
 
 class DataFrameWidget(BaseReportWidget):
     # ---- Declarative spec ----
-    NAME: str = "Dataframe Viewer"
+    NAME: str = "dataframe-viewer"
     TAB: str = WidgetCategories.SUMMARY.value
     REQUIRES: Set[str] = set()     # no required columns
     REQUIRES_PATTERNS = None
@@ -51,13 +52,13 @@ class DataFrameWidget(BaseReportWidget):
         self,
         _color_map: Dict[str, str] | None,
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
     ):
-
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, _group_col, _resolved, _warning, _order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config or {},
+            report_config,
             metric_base=None,
         )
 

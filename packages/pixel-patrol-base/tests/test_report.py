@@ -6,6 +6,7 @@ from pixel_patrol_base.report import data_utils as du
 from pixel_patrol_base.report import global_controls as gc
 from pixel_patrol_base.report import dashboard_app as da
 from pixel_patrol_base.report.base_widget import BaseReportWidget
+from pixel_patrol_base.core.report_config import ReportConfig
 import pixel_patrol_base.report.base_widget as base_widget
 
 
@@ -210,7 +211,8 @@ def test_compute_filtered_row_positions_none_when_no_filters_or_dims():
     df = _base_df_for_global_controls()
 
     # Empty filter and dimensions should return None (meaning "use all rows")
-    assert gc.compute_filtered_row_positions(df, {"filter": {}, "dimensions": {}}) is None
+    report_config = ReportConfig(filter_by={}, dimensions={})
+    assert gc.compute_filtered_row_positions(df, report_config) is None
     assert gc.compute_filtered_row_positions(df, None) is None
 
 
@@ -218,11 +220,11 @@ def test_compute_filtered_row_positions_with_invalid_dimension_returns_none():
 
     df = _base_df_for_global_controls()
 
-    # "one" is not a valid dimension value - init_global_config should strip it out
-    raw_config = {"filter": {}, "dimensions": {"t": "one"}}
-    validated_config = gc.init_global_config(df, raw_config)
+    # "one" is not a valid dimension value - validate_report_config should strip it out
+    raw_config = ReportConfig(filter_by={}, dimensions={"t": "one"})
+    report_config = gc.validate_report_config(df, raw_config)
 
-    result = gc.compute_filtered_row_positions(df, validated_config)
+    result = gc.compute_filtered_row_positions(df, report_config)
     print(result)
     assert result is None
 
@@ -231,13 +233,10 @@ def test_compute_filtered_row_positions_with_value_filter_only():
     """Test filtering by value (file_extension) without dimension filters."""
     df = _base_df_for_global_controls()
 
-    cfg = {
-        "filter": {"file_extension": [".tif"]},
-        "dimensions": {},
-    }
+    report_config = ReportConfig(filter_by={"file_extension": [".tif"]}, dimensions={})
 
     # .tif rows are at positions 0, 1, 2, 4 (row 3 has .png)
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == [0, 1, 2, 4]
 
     # Verify by checking the actual unique_ids at those positions
@@ -249,15 +248,12 @@ def test_compute_filtered_row_positions_with_dimension_filter():
     """Test filtering by dimension (t=0) which requires non-null in _t0 columns."""
     df = _base_df_for_global_controls()
 
-    cfg = {
-        "filter": {},
-        "dimensions": {"t": "0"},
-    }
+    report_config = ReportConfig(filter_by={}, dimensions={"t": "0"})
 
     # t=0 requires any column containing "_t0" to be non-null
     # mean_intensity_t0 values: [120.0, None, 110.0, None, 90.0]
     # Non-null at positions: 0, 2, 4
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == [0, 2, 4]
 
     # Verify the actual data
@@ -272,26 +268,20 @@ def test_compute_filtered_row_positions_with_value_and_dimension_filter():
     df = _base_df_for_global_controls()
 
     # Filter for .png AND t=0
-    cfg = {
-        "filter": {"file_extension": [".png"]},
-        "dimensions": {"t": "0"},
-    }
+    report_config = ReportConfig(filter_by={"file_extension": [".png"]}, dimensions={"t": "0"})
 
     # .png rows: only row 3 (unique_id=103)
     # t=0 non-null rows: 0, 2, 4
     # Intersection: empty (row 3 has mean_intensity_t0=None)
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == []
 
     # Now test .tif AND t=0 - should give rows where both conditions are met
-    cfg2 = {
-        "filter": {"file_extension": [".tif"]},
-        "dimensions": {"t": "0"},
-    }
+    report_config2 = ReportConfig(filter_by={"file_extension": [".tif"]}, dimensions={"t": "0"})
     # .tif rows: 0, 1, 2, 4
     # t=0 non-null rows: 0, 2, 4
     # Intersection: 0, 2, 4 (row 1 excluded because mean_intensity_t0 is None)
-    positions2 = gc.compute_filtered_row_positions(df, cfg2)
+    positions2 = gc.compute_filtered_row_positions(df, report_config2)
     assert positions2 == [0, 2, 4]
 
 
@@ -299,13 +289,10 @@ def test_compute_filtered_row_positions_dimension_not_found_returns_empty():
     """Test that a non-existent dimension filter returns empty list."""
     df = _base_df_for_global_controls()
 
-    cfg = {
-        "filter": {},
-        "dimensions": {"z": "9"},  # no _z9 columns exist
-    }
+    report_config = ReportConfig(filter_by={}, dimensions={"z": "9"})  # no _z9 columns exist
 
     # When dimensions are specified but no matching columns found, return empty
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == []
 
 
@@ -313,15 +300,12 @@ def test_compute_filtered_row_positions_with_s_dimension():
     """Test filtering by s dimension."""
     df = _base_df_for_global_controls()
 
-    cfg = {
-        "filter": {},
-        "dimensions": {"s": "1"},
-    }
+    report_config = ReportConfig(filter_by={}, dimensions={"s": "1"})
 
     # s=1 requires any column containing "_s1" to be non-null
     # mean_intensity_s1 values: [None, 3.0, None, None, None]
     # Non-null only at position 1
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == [1]
 
     # Verify the actual value
@@ -333,22 +317,17 @@ def test_compute_filtered_row_positions_with_dict_filter_spec():
     df = _base_df_for_global_controls()
 
     # Test "contains" operator
-    cfg = {
-        "filter": {"path": {"op": "contains", "value": "runA"}},
-        "dimensions": {},
-    }
+    report_config = ReportConfig(filter_by={"path": {"op": "contains", "value": "runA"}}, dimensions={})
 
     # runA paths are rows 0, 1 (unique_ids 100, 101)
-    positions = gc.compute_filtered_row_positions(df, cfg)
+    positions = gc.compute_filtered_row_positions(df, report_config)
     assert positions == [0, 1]
 
     # Test "not_contains" operator
-    cfg2 = {
-        "filter": {"path": {"op": "not_contains", "value": "runA"}},
-        "dimensions": {},
-    }
+    report_config2 = ReportConfig(filter_by={"path": {"op": "not_contains", "value": "runA"}}, dimensions={})
     # runB paths are rows 2, 3, 4
-    positions2 = gc.compute_filtered_row_positions(df, cfg2)
+    positions2 = gc.compute_filtered_row_positions(df, report_config2)
+    assert positions2 == [2, 3, 4]
     assert positions2 == [2, 3, 4]
 
 
@@ -357,10 +336,11 @@ def test_prepare_widget_data_resolves_dim_aware_metric_and_warns_when_missing():
     df = _base_df_for_global_controls()
 
     # dims t=0, metric_base mean_intensity => resolve to mean_intensity_t0 and drop nulls
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={"t": "0"})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=None,
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {"t": "0"}},
+        report_config=report_config,
         metric_base="mean_intensity",
     )
 
@@ -382,10 +362,11 @@ def test_prepare_widget_data_warns_when_dimension_not_found():
     df = _base_df_for_global_controls()
 
     # dims t=9 => no mean_intensity_t9 column exists
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={"t": "9"})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=None,
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {"t": "9"}},
+        report_config=report_config,
         metric_base="mean_intensity",
     )
 
@@ -404,10 +385,11 @@ def test_prepare_widget_data_with_subset_row_positions():
     df = _base_df_for_global_controls()
 
     # Only use rows at positions 0, 2 (unique_ids 100, 102)
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={"t": "0"})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=[0, 2],
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {"t": "0"}},
+        report_config=report_config,
         metric_base="mean_intensity",
     )
 
@@ -425,10 +407,11 @@ def test_prepare_widget_data_subset_filters_before_metric_null_check():
 
     # Row 1 (unique_id=101) has mean_intensity_t0=None
     # If we only include row 1, the result should be empty after null filtering
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={"t": "0"})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=[1],  # Only row 1, which has t0=None
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {"t": "0"}},
+        report_config=report_config,
         metric_base="mean_intensity",
     )
 
@@ -442,10 +425,11 @@ def test_prepare_widget_data_empty_subset_returns_empty_df():
     """Test prepare_widget_data with empty subset_row_positions."""
     df = _base_df_for_global_controls()
 
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=[],
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {}},
+        report_config=report_config,
         metric_base="mean_intensity",
     )
 
@@ -458,10 +442,11 @@ def test_prepare_widget_data_no_metric_base_skips_column_resolution():
     """Test prepare_widget_data without metric_base doesn't filter rows based on metric nulls."""
     df = _base_df_for_global_controls()
 
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={})
     df_f, group_col, resolved, warn, group_order = gc.prepare_widget_data(
         df=df,
         subset_row_positions=None,
-        global_config={"group_col": "report_group", "filter": {}, "dimensions": {}},
+        report_config=report_config,
         metric_base=None,  # No metric base
     )
 
@@ -475,14 +460,8 @@ def test_apply_global_row_filters_and_grouping_filters_then_resolves_group_col()
     """Test apply_global_row_filters_and_grouping with filters."""
     df = _base_df_for_global_controls()
 
-    df2, group_col = gc.apply_global_row_filters_and_grouping(
-        df,
-        {
-            "group_col": "report_group",
-            "filter": {"file_extension": [".png"]},
-            "dimensions": {},
-        },
-    )
+    report_config = ReportConfig(group_col="report_group", filter_by={"file_extension": [".png"]}, dimensions={})
+    df2, group_col = gc.apply_global_row_filters_and_grouping(df, report_config)
 
     # group_col should be the original column name (not prefixed - this function is for exports)
     assert group_col == "report_group"
@@ -497,10 +476,8 @@ def test_apply_global_row_filters_and_grouping_no_filters_returns_full_df():
     """Test that no filters returns the full dataframe."""
     df = _base_df_for_global_controls()
 
-    df2, group_col = gc.apply_global_row_filters_and_grouping(
-        df,
-        {"group_col": "report_group", "filter": {}, "dimensions": {}},
-    )
+    report_config = ReportConfig(group_col="report_group", filter_by={}, dimensions={})
+    df2, group_col = gc.apply_global_row_filters_and_grouping(df, report_config)
 
     assert df2.height == df.height
     assert df2["unique_id"].to_list() == df["unique_id"].to_list()
@@ -510,14 +487,8 @@ def test_apply_global_row_filters_and_grouping_fallback_when_group_col_missing()
     """Test that group_col falls back correctly when specified column doesn't exist."""
     df = _base_df_for_global_controls()
 
-    df2, group_col = gc.apply_global_row_filters_and_grouping(
-        df,
-        {
-            "group_col": "nonexistent_column",
-            "filter": {},
-            "dimensions": {},
-        },
-    )
+    report_config = ReportConfig(group_col="nonexistent_column", filter_by={}, dimensions={})
+    df2, group_col = gc.apply_global_row_filters_and_grouping(df, report_config)
 
     # Should fall back to a column that exists in the df
     assert group_col in df.columns
@@ -530,15 +501,18 @@ def test_resolve_group_column_returns_valid_column():
     df = _base_df_for_global_controls()
 
     # With valid column
-    group_col = gc.resolve_group_column(df, {"group_col": "report_group"})
+    report_config = ReportConfig(group_col="report_group")
+    group_col = gc.resolve_group_column(df, report_config)
     assert group_col == "report_group"
 
     # With valid column that's not report_group
-    group_col2 = gc.resolve_group_column(df, {"group_col": "file_extension"})
+    report_config2 = ReportConfig(group_col="file_extension")
+    group_col2 = gc.resolve_group_column(df, report_config2)
     assert group_col2 == "file_extension"
 
     # With nonexistent column, should fall back to something valid
-    group_col3 = gc.resolve_group_column(df, {"group_col": "nonexistent"})
+    report_config3 = ReportConfig(group_col="nonexistent")
+    group_col3 = gc.resolve_group_column(df, report_config3)
     assert group_col3 in df.columns
 
 
@@ -569,55 +543,55 @@ def test_is_group_col_accepted_rejects_float_and_dimension_pattern():
     assert gc.is_group_col_accepted(df, "nonexistent") is False
 
 
-def test_init_global_config_validates_and_sanitizes():
-    """Test init_global_config returns sanitized config."""
+def test_validate_report_config_validates_and_sanitizes():
+    """Test validate_report_config returns sanitized ReportConfig."""
     df = _base_df_for_global_controls()
 
-    cfg = gc.init_global_config(df, {
-        "group_col": "report_group",
-        "filter": {"file_extension": [".tif"]},
-        "dimensions": {"t": "0"},
-    })
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="report_group",
+        filter_by={"file_extension": [".tif"]},
+        dimensions={"t": "0"},
+    ))
 
-    assert cfg["group_col"] == "report_group"
-    assert "file_extension" in cfg["filter"]
+    assert cfg.group_col == "report_group"
+    assert "file_extension" in cfg.filter_by
     # The filter value should be preserved
-    assert cfg["filter"]["file_extension"] == [".tif"]
-    assert cfg["dimensions"] == {"t": "0"}
+    assert cfg.filter_by["file_extension"] == [".tif"]
+    assert cfg.dimensions == {"t": "0"}
 
 
-def test_init_global_config_removes_invalid_filter_columns():
-    """Test that init_global_config removes filters on non-existent columns."""
+def test_validate_report_config_removes_invalid_filter_columns():
+    """Test that validate_report_config removes filters on non-existent columns."""
     df = _base_df_for_global_controls()
 
-    cfg = gc.init_global_config(df, {
-        "group_col": "report_group",
-        "filter": {
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="report_group",
+        filter_by={
             "nonexistent_col": [".tif"],
             "file_extension": [".png"],  # This one exists
         },
-        "dimensions": {},
-    })
+        dimensions={},
+    ))
 
     # The invalid filter should be removed
-    assert "nonexistent_col" not in cfg["filter"]
+    assert "nonexistent_col" not in cfg.filter_by
     # The valid filter should remain
-    assert "file_extension" in cfg["filter"]
+    assert "file_extension" in cfg.filter_by
 
 
-def test_init_global_config_rejects_invalid_group_col():
-    """Test that init_global_config rejects invalid group columns."""
+def test_validate_report_config_rejects_invalid_group_col():
+    """Test that validate_report_config rejects invalid group columns."""
     df = _base_df_for_global_controls()
 
     # Float column should be rejected as group_col
-    cfg = gc.init_global_config(df, {
-        "group_col": "mean_intensity_t0",  # This is a float column
-        "filter": {},
-        "dimensions": {},
-    })
+    cfg = gc.validate_report_config(df, ReportConfig(
+        group_col="mean_intensity_t0",  # This is a float column
+        filter_by={},
+        dimensions={},
+    ))
 
     # Should fall back to None (which means use default)
-    assert cfg["group_col"] is None
+    assert cfg.group_col is None
 
 
 # -----------------------
@@ -663,7 +637,7 @@ def test_base_report_widget_layout_wraps_content(monkeypatch):
     monkeypatch.setattr(base_widget, "create_widget_card", fake_create_widget_card)
 
     class MeanIntensityWidget(BaseReportWidget):
-        NAME = "Mean intensity"
+        NAME = "mean-intensity"
         REQUIRES = {"unique_id", "report_group"}
         REQUIRES_PATTERNS = [r"^mean_intensity(?:_.*)?$"]
 
@@ -681,7 +655,7 @@ def test_base_report_widget_layout_wraps_content(monkeypatch):
     out = w.layout()
 
     assert out == [{"card": True}]
-    assert calls["title"] == "Mean intensity"
+    assert calls["title"] == "Mean Intensity"
     assert calls["content"] == ["plot"]
     assert calls["widget_id"] == "meanintensitywidget"
     assert calls["help_text"] == "Distribution of mean intensity across selected dims."
