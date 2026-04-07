@@ -7,7 +7,7 @@ from pixel_patrol_base.report.widget_categories import WidgetCategories
 
 
 class DatasetStatsAcrossDimensionsWidget(MetricsAcrossDimensionsWidget):
-    NAME: str = "Basic Statistics Across Dimensions"
+    NAME: str = "basic-statistics-across-dimensions"
     TAB: str = WidgetCategories.DATASET_STATS.value
 
     REQUIRES: Set[str] = set()

@@ -15,14 +15,14 @@ from pixel_patrol_base.report.data_utils import (
     _hist_bytes_to_array,
 )
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import (FILTERED_INDICES_STORE_ID,
                                                 GLOBAL_CONFIG_STORE_ID,
-                                                GC_DIMENSIONS,
                                                 MAX_RECORDS_IN_MENU)
 
 
 class DatasetHistogramWidget(BaseReportWidget):
-    NAME: str = "Pixel Value Histograms"
+    NAME: str = "pixel-value-histograms"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS: List[str] = [r"^histogram"]
@@ -135,12 +135,13 @@ class DatasetHistogramWidget(BaseReportWidget):
         )(self._update_plot)
 
 
-    def _set_control_options(self, subset_indices, global_config):
+    def _set_control_options(self, subset_indices, global_config_dict):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
 
         df_processed, group_col, _resolved, _warning, _order = self._get_prepared_data(
             subset_indices,
-            global_config,
-            metric_base="histogram_counts",  # Consistent with other callbacks for cache hits
+            report_config,
+            metric_base="histogram_counts",
         )
 
         if not group_col or df_processed.is_empty():
@@ -151,12 +152,13 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         return group_options, []
 
-    def _update_file_options(self, selected_groups, global_config, subset_indices):
+    def _update_file_options(self, selected_groups, global_config_dict, subset_indices):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
 
         df_processed, group_col, _resolved, _warning, _order = self._get_prepared_data(
             subset_indices,
-            global_config,
-            metric_base="histogram_counts",  # Consistent with other callbacks for cache hits
+            report_config,
+            metric_base="histogram_counts",
         )
 
         if selected_groups:
@@ -192,13 +194,14 @@ class DatasetHistogramWidget(BaseReportWidget):
             selected_groups: List[str] | None,
             selected_file: str | None,
             subset_indices: List[int] | None,
-            global_config: Dict,
+            global_config_dict: Dict,
     ):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         metric_base = "histogram_counts"
 
         df_filtered, group_col, resolved_col, warning_msg, group_order = self._get_prepared_data(
             subset_indices,
-            global_config,
+            report_config,
             metric_base=metric_base,
         )
 
@@ -213,24 +216,20 @@ class DatasetHistogramWidget(BaseReportWidget):
         extra = [group_col] if group_col else []
         df_filtered = select_needed_columns(df_filtered, cols_needed, extra_cols=extra)
 
-        # Apply optional (within widget) group selection
         if selected_groups:
             df_filtered = df_filtered.filter(pl.col(group_col).is_in(selected_groups))
 
-        # Excludes selected_file because overlay is computed separately and is cheap
-        # This way, changing only the overlay file won't re-aggregate all histograms
+        config_dict = report_config.to_dict() if report_config else {}
         agg_cache_key = (
             tuple(subset_indices) if subset_indices else None,
-            tuple(sorted((global_config or {}).items())),
+            tuple(sorted(config_dict.items())),
             remap_mode,
             tuple(sorted(selected_groups)) if selected_groups else None,
         )
 
-        # Use cached aggregation if available, otherwise compute and cache
         if self._agg_cache_key == agg_cache_key and self._agg_cache_result is not None:
             group_data = self._agg_cache_result
         else:
-            # This is the expensive operation - aggregate per-group histograms
             group_data = aggregate_histograms_by_group(
                 df=df_filtered,
                 group_col=group_col,
@@ -245,10 +244,9 @@ class DatasetHistogramWidget(BaseReportWidget):
         if not group_data:
             return show_no_data_message()
 
-        # Optional single-file overlay (cheap operation, always recompute)
         overlay_data = get_overlay_of_single_row(df_filtered, max_key, min_key, resolved_col, selected_file)
 
-        dims_selection = (global_config or {}).get(GC_DIMENSIONS, {})
+        dims_selection = report_config.dimensions or {} if report_config else {}
 
         fig = plot_grouped_histogram(
             group_data=group_data,
@@ -261,7 +259,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         return dcc.Graph(figure=fig, style={"height": "600px"})
 
 
-    def _get_prepared_data(self, subset_indices, global_config, metric_base="histogram_counts"):
+    def _get_prepared_data(self, subset_indices, report_config: ReportConfig | None, metric_base="histogram_counts"):
         """
         Cached wrapper around prepare_widget_data.
 
@@ -270,10 +268,12 @@ class DatasetHistogramWidget(BaseReportWidget):
 
         Cache is invalidated automatically when any input changes.
         """
+        config_dict = report_config.to_dict() if report_config else {}
+        
         # Build a hashable cache key from all inputs
         cache_key = (
             tuple(subset_indices) if subset_indices else None,
-            tuple(sorted((global_config or {}).items())),
+            tuple(sorted(config_dict.items())),
             metric_base,
         )
 
@@ -285,7 +285,7 @@ class DatasetHistogramWidget(BaseReportWidget):
         result = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config or {},
+            report_config,
             metric_base=metric_base,
         )
 

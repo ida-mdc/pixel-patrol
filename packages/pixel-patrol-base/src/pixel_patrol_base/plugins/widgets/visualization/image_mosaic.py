@@ -12,6 +12,7 @@ from pixel_patrol_base.report.data_utils import get_sortable_columns, sort_strin
 from pixel_patrol_base.report.widget_categories import WidgetCategories
 from pixel_patrol_base.report.base_widget import BaseReportWidget
 from pixel_patrol_base.report.global_controls import prepare_widget_data
+from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.report.constants import GLOBAL_CONFIG_STORE_ID, FILTERED_INDICES_STORE_ID, HOVER_LABEL_COL
 from pixel_patrol_base.report.factory import show_no_data_message, plot_image_mosaic
 
@@ -21,8 +22,8 @@ _DEFAULT_COL = 'mean_intensity'
 
 logger = logging.getLogger(__name__)
 
-class ImageMosaikWidget(BaseReportWidget):
-    NAME: str = "Image Mosaic"
+class ImageMosaicWidget(BaseReportWidget):
+    NAME: str = "image-mosaic"
     TAB: str = WidgetCategories.VISUALIZATION.value
     REQUIRES: Set[str] = {"thumbnail", "name"}
     REQUIRES_PATTERNS = None
@@ -109,13 +110,14 @@ class ImageMosaikWidget(BaseReportWidget):
         color_map: Dict[str, str] | None,
         sort_column: str | None,
         subset_indices: List[int] | None,
-        global_config: Dict | None,
+        global_config_dict: Dict | None,
         display_mode: str = "normalized",
     ):
+        report_config = ReportConfig.from_dict(global_config_dict) if global_config_dict else None
         df_filtered, group_col, _resolved, _warning_msg, _order = prepare_widget_data(
             self._df,
             subset_indices,
-            global_config or {},
+            report_config,
             metric_base=None,
         )
 

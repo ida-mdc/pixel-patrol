@@ -38,6 +38,11 @@ class BaseReportWidget(ABC):
         """
         return self.__class__.__name__.lower()
 
+    @property
+    def display_name(self) -> str:
+        """Human-readable label derived from NAME: 'pixel-value-histograms' → 'Pixel Value Histograms'."""
+        return self.NAME.replace("-", " ").replace("_", " ").title()
+
     # --- The Template Method ---
     def layout(self) -> List[Component]:
         """
@@ -51,7 +56,7 @@ class BaseReportWidget(ABC):
 
         # 2. Wrap it in the standard visual shell
         card = create_widget_card(
-            title=self.NAME,
+            title=self.display_name,
             content=inner_content,
             widget_id=self.widget_id_prefix,
             help_text=self.help_text

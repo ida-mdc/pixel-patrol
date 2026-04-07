@@ -7,7 +7,7 @@ from pixel_patrol_base.report.constants import SIGNIFICANCE_HELP_TEXT
 
 
 class DatasetStatsWidget(MultiMetricViolinGridWidget):
-    NAME: str = "Pixel Value Statistics"
+    NAME: str = "pixel-value-statistics"
     TAB: str = WidgetCategories.DATASET_STATS.value
     REQUIRES: Set[str] = {"name"}
     REQUIRES_PATTERNS = None
