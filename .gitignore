@@ -11,4 +11,6 @@ build
 uv.lock
 packages/pixel-patrol/tests/benchmarks/results/
 packages/*/dist/
+playground/results/
+playground/*.png
 
