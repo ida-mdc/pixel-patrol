@@ -25,10 +25,10 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     """
     # compute min/max without pulling full arrays where possible
     if isinstance(x, da.Array):
-        min_val, max_val = da.compute(x.min(), x.max())
+        min_val, max_val = da.compute(x.nanmin(), x.nanmax())
         min_val, max_val = np.float64(min_val), np.float64(max_val)  # cast to float64 to avoid overflows
     else:
-        min_val, max_val = np.float64(np.min(x)), np.float64(np.max(x))
+        min_val, max_val = np.float64(np.nanmin(x)), np.float64(np.nanmax(x))
 
     # If the underlying data type is uint8, set the minimum to 0 so we
     # use the full 0..255 bin range for display/processing. This ensures
