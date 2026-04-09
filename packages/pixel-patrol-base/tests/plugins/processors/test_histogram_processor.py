@@ -238,15 +238,17 @@ class TestHistogramProcessor:
         assert result["histogram_max"] == pytest.approx(3000.0, rel=1e-5)
 
     def test_histogram_with_nan_dask(self):
-        data = np.array([[0., 1., 2.], [np.nan, float("nan"), 3.]], dtype=np.float32)
+        data = np.array([[0., 1., 2., 1.], [np.nan, np.nan, float("nan"), 255.]], dtype=np.float32)
         dask_data = da.from_array(data, chunks=(2, 3))
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = HistogramProcessor()
 
         result = processor.run(record)
 
-        # Should produce 256-bin histogram
         assert "histogram_counts" in result
         assert len(result["histogram_counts"]) == 256
-        assert result["histogram_min"] == pytest.approx(0.0, rel=1e-5)
-        assert result["histogram_max"] == pytest.approx(3., rel=1e-5)
+        assert result["histogram_min"] == pytest.approx(0., rel=1e-5)
+        assert result["histogram_max"] == pytest.approx(255., rel=1e-5)
+        assert list(result["histogram_counts"][0:3]) == [1, 2, 1]
+        assert result["histogram_counts"][255] == 1
+
