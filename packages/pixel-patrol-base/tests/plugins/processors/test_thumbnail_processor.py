@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import dask.array as da
 import pytest
@@ -287,3 +289,12 @@ class TestThumbnailProcessor:
         data = np.zeros((10, 10), dtype=np.uint16)
         result = self._run(data, "YX")
         assert result["thumbnail_dtype"] == "uint16"
+
+    # ------------------------------------------------------------------
+    # NaN handling
+    # ------------------------------------------------------------------
+    def test_nan_handling(self):
+        data = np.array([[0, 1, 2, np.nan]], dtype=np.float32)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            self._run(data, "YX")
