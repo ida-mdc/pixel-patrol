@@ -168,3 +168,17 @@ class TestBasicStatsProcessor:
         assert result["max_intensity"] == pytest.approx(42.0, rel=1e-5)
         assert result["std_intensity"] == pytest.approx(0.0, rel=1e-5)
 
+    def test_basic_stats_image_with_nan(self):
+        """Test basic stats on single pixel image."""
+        data = np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32)
+        dask_data = da.from_array(data, chunks=(1, 1))
+
+        record = record_from(dask_data, {"dim_order": "YX"})
+        processor = BasicStatsProcessor()
+
+        result = processor.run(record)
+
+        assert result["mean_intensity"] == pytest.approx(2, rel=1e-5)
+        assert result["min_intensity"] == pytest.approx(0, rel=1e-5)
+        assert result["max_intensity"] == pytest.approx(4, rel=1e-5)
+        assert result["std_intensity"] == pytest.approx(2**0.5, rel=1e-5)
