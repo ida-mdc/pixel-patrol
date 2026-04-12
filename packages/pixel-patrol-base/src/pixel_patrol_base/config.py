@@ -12,3 +12,5 @@ DEFAULT_RECORDS_FLUSH_EVERY_N: int = 10000
 COMBINE_HEADROOM_RATIO = 1.5
 # Maximum number of intermediate flushes allowed to avoid overwhelming the system with too many tasks.
 MAX_INTERMEDIATE_FLUSHES = 1000
+
+HISTOGRAM_BINS = 256
