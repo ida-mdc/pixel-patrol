@@ -10,11 +10,9 @@ from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
 from pixel_patrol_base.core.feature_schema import validate_processor_output
+from pixel_patrol_base.config import HISTOGRAM_BINS
 
 logger = logging.getLogger(__name__)
-
-HISTOGRAM_BINS = 256
-
 
 def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     """
@@ -25,10 +23,14 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     """
     # compute min/max without pulling full arrays where possible
     if isinstance(x, da.Array):
-        min_val, max_val = da.compute(x.min(), x.max())
+        min_val, max_val = da.compute(da.nanmin(x), da.nanmax(x))
         min_val, max_val = np.float64(min_val), np.float64(max_val)  # cast to float64 to avoid overflows
     else:
-        min_val, max_val = np.float64(np.min(x)), np.float64(np.max(x))
+        min_val, max_val = np.float64(np.nanmin(x)), np.float64(np.nanmax(x))
+
+    # catching the all-NaN array:
+    if not np.isfinite(min_val) or not np.isfinite(max_val):
+        return 0.0, 0.0, 1.0
 
     # If the underlying data type is uint8, set the minimum to 0 so we
     # use the full 0..255 bin range for display/processing. This ensures
@@ -60,11 +62,18 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
     """
     Calculates a histogram on a Dask or NumPy array.
     For Dask arrays this uses Dask's histogram to avoid pulling the full chunk into memory.
+    NaNs are excluded from bin counts and tallied separately in nan_count.
     Returns a dict with:
       - "counts": numpy.ndarray (dtype=np.int64)
       - "min": Python float
       - "max": Python float
+      - "nan_count": int
     """
+    if isinstance(arr, da.Array):
+        nan_count = int(da.compute(da.sum(da.isnull(arr)))[0])
+    else:
+        nan_count = int(np.sum(np.isnan(arr)))
+
     # Compute min/max and adjusted upper bound with shared helper
     min_val, max_val, max_adj_val = safe_hist_range(arr)
 
@@ -78,7 +87,7 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
         counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
         counts_arr = np.asarray(counts_np, dtype=np.int64)
 
-    return {"counts": counts_arr, "min": min_val, "max": max_val}
+    return {"counts": counts_arr, "min": min_val, "max": max_val, "nan_count": nan_count}
 
 
 class HistogramProcessor:
@@ -95,11 +104,13 @@ class HistogramProcessor:
         "histogram_counts": (np.int32, HISTOGRAM_BINS),
         "histogram_min": np.float32,
         "histogram_max": np.float32,
+        "histogram_nan_count": np.uint32,
     }
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^histogram_counts_.*$", (np.int32, HISTOGRAM_BINS)),
         (r"^histogram_min_.*$", np.float32),
         (r"^histogram_max_.*$", np.float32),
+        (r"^histogram_nan_count_.*$", np.uint32),
     ]
 
     def run(self, art: Record) -> ProcessResult:
@@ -112,7 +123,12 @@ class HistogramProcessor:
 
         # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
         if getattr(data, "size", 0) == 0:
-            return {"histogram_counts": np.array([]), "histogram_min": 0.0, "histogram_max": 0.0}
+            return {
+                "histogram_counts":    np.zeros(HISTOGRAM_BINS, dtype=np.int32),
+                "histogram_min":       0.0,
+                "histogram_max":       0.0,
+                "histogram_nan_count": np.uint32(0),
+            }
 
         # Metric functions operate on 2D numpy planes provided by apply_gufunc.
         # To avoid calling _hist_func three times per plane, compute once and reuse
@@ -134,10 +150,15 @@ class HistogramProcessor:
         def _max_fn(plane: np.ndarray):
             return _compute_once(plane)["max"]
 
+        def _nan_count_fn(plane: np.ndarray):
+            return _compute_once(plane)["nan_count"]
+
+
         metrics = {
             "histogram_counts": _counts_fn,
             "histogram_min": _min_fn,
             "histogram_max": _max_fn,
+            "histogram_nan_count": _nan_count_fn,
         }
 
         # Aggregators: sum counts per-bin, and take min/max for boundaries
@@ -145,6 +166,7 @@ class HistogramProcessor:
             "histogram_counts": np.sum,
             "histogram_min": np.min,
             "histogram_max": np.max,
+            "histogram_nan_count": np.sum,
         }
 
         result = calculate_sliced_stats(data, dim_order, metrics, aggregators)

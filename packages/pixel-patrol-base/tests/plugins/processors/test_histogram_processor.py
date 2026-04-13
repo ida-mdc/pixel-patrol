@@ -4,7 +4,7 @@ import pytest
 
 from pixel_patrol_base.core.record import record_from
 from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
-
+from pixel_patrol_base.config import HISTOGRAM_BINS
 
 class TestHistogramProcessor:
     """Test suite for HistogramProcessor to verify correct calculation of histograms."""
@@ -25,8 +25,8 @@ class TestHistogramProcessor:
         assert "histogram_min" in result
         assert "histogram_max" in result
         
-        # Verify histogram_counts is a list of 256 elements
-        assert len(result["histogram_counts"]) == 256
+        # Verify histogram_counts is a list of HISTOGRAM_BINS (256) elements
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
         assert isinstance(result["histogram_counts"], np.ndarray)
         
         # Verify min and max
@@ -63,7 +63,7 @@ class TestHistogramProcessor:
         # All pixels have value 42
         assert result["histogram_counts"][42] == 100
         # All other bins should be 0
-        for i in range(256):
+        for i in range(HISTOGRAM_BINS):
             if i != 42:
                 assert result["histogram_counts"][i] == 0
         
@@ -85,7 +85,7 @@ class TestHistogramProcessor:
         # for uint8, histogram should use full 0-255 range
         assert result["histogram_min"] == 0.0
         assert result["histogram_max"] == 255.0
-        assert len(result["histogram_counts"]) == 256
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
 
     def test_histogram_with_time_dimension(self):
         """Test histogram on image with time dimension."""
@@ -115,8 +115,8 @@ class TestHistogramProcessor:
         assert "histogram_max_t1" in result
         
         # Verify per-time histogram counts
-        assert len(result["histogram_counts_t0"]) == 256
-        assert len(result["histogram_counts_t1"]) == 256
+        assert len(result["histogram_counts_t0"]) == HISTOGRAM_BINS
+        assert len(result["histogram_counts_t1"]) == HISTOGRAM_BINS
         
         # Each time slice has 9 pixels
         assert sum(result["histogram_counts_t0"]) == 9
@@ -154,7 +154,7 @@ class TestHistogramProcessor:
     def test_histogram_with_multiple_dimensions(self):
         """Test histogram on image with T, C, Z dimensions."""
         # Create a TCZYX image: 2 time, 2 channels, 2 z-slices, 2x2 spatial
-        data = np.random.randint(0, 256, size=(2, 2, 2, 2, 2), dtype=np.uint8)
+        data = np.random.randint(0, HISTOGRAM_BINS, size=(2, 2, 2, 2, 2), dtype=np.uint8)
         dask_data = da.from_array(data, chunks=(1, 1, 1, 2, 2))
         
         record = record_from(dask_data, {"dim_order": "TCZYX"})
@@ -171,29 +171,26 @@ class TestHistogramProcessor:
         assert any("histogram_counts_c" in key for key in result.keys())
         assert any("histogram_counts_z" in key for key in result.keys())
         
-        # Verify all histogram_counts lists have 256 elements
+        # Verify all histogram_counts lists have HISTOGRAM_BINS (256) elements
         for key, value in result.items():
             if key.startswith("histogram_counts"):
-                assert len(value) == 256
+                assert len(value) == HISTOGRAM_BINS
                 assert isinstance(value, np.ndarray) # TODO: FIXME: expected list, got array 'cause function casts to numpy array
 
     def test_histogram_empty_image(self):
-        """Test histogram on empty image."""
+        """Empty array: zero-filled 256-bin histogram, nan_count=0.
+        Distinguishable from all-NaN by nan_count == 0."""
         data = np.array([[]], dtype=np.uint8)
         dask_data = da.from_array(data, chunks=(1, 1))
-        
         record = record_from(dask_data, {"dim_order": "YX"})
-        processor = HistogramProcessor()
-        
-        result = processor.run(record)
-        
-        # Should handle empty arrays gracefully
-        assert "histogram_counts" in result
-        assert len(result["histogram_counts"]) == 0
-        # All counts should be zero
-        assert all(count == 0 for count in result["histogram_counts"])
+        result = HistogramProcessor().run(record)
+
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
+        assert sum(result["histogram_counts"]) == 0
         assert result["histogram_min"] == 0.0
         assert result["histogram_max"] == 0.0
+        assert result["histogram_nan_count"] == 0
+
 
     def test_histogram_float_image(self):
         """Test histogram on float image (non-uint8)."""
@@ -206,9 +203,9 @@ class TestHistogramProcessor:
         
         result = processor.run(record)
         
-        # Should still produce 256-bin histogram
+        # Should still produce HISTOGRAM_BINS (256)-bin histogram
         assert "histogram_counts" in result
-        assert len(result["histogram_counts"]) == 256
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
         
         # Min and max should reflect actual data range
         assert result["histogram_min"] == pytest.approx(0.0, rel=1e-5)
@@ -228,12 +225,40 @@ class TestHistogramProcessor:
         
         result = processor.run(record)
         
-        # Should produce 256-bin histogram
+        # Should produce HISTOGRAM_BINS (256-bin) histogram
         assert "histogram_counts" in result
-        assert len(result["histogram_counts"]) == 256
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
         
         # Min and max should reflect actual data range
         assert result["histogram_min"] == pytest.approx(0.0, rel=1e-5)
         # For integer types, max_adj = max + 1, but histogram_max should be the actual max
         assert result["histogram_max"] == pytest.approx(3000.0, rel=1e-5)
+
+    def test_histogram_with_nan_dask(self):
+        """Partial NaN: valid pixels binned correctly, NaNs tallied in nan_count."""
+        data = np.array([[0., 1., 2., 1.], [np.nan, np.nan, float("nan"), 255.]], dtype=np.float32)
+        dask_data = da.from_array(data, chunks=(2, 3))
+        record = record_from(dask_data, {"dim_order": "YX"})
+        result = HistogramProcessor().run(record)
+
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
+        assert result["histogram_min"] == pytest.approx(0., rel=1e-5)
+        assert result["histogram_max"] == pytest.approx(255., rel=1e-5)
+        assert list(result["histogram_counts"][0:3]) == [1, 2, 1]
+        assert result["histogram_counts"][255] == 1
+        assert result["histogram_nan_count"] == 3
+
+    def test_histogram_all_nan_image(self):
+        """All-NaN array: zero bin counts, nan_count == total pixels.
+        Distinguishable from empty array by nan_count > 0."""
+        data = np.full((10, 10), np.nan, dtype=np.float32)
+        dask_data = da.from_array(data, chunks=(5, 5))
+        record = record_from(dask_data, {"dim_order": "YX"})
+        result = HistogramProcessor().run(record)
+
+        assert len(result["histogram_counts"]) == HISTOGRAM_BINS
+        assert sum(result["histogram_counts"]) == 0
+        assert np.isfinite(result["histogram_min"])
+        assert np.isfinite(result["histogram_max"])
+        assert result["histogram_nan_count"] == 100
 
