@@ -168,3 +168,37 @@ class TestBasicStatsProcessor:
         assert result["max_intensity"] == pytest.approx(42.0, rel=1e-5)
         assert result["std_intensity"] == pytest.approx(0.0, rel=1e-5)
 
+    def test_basic_stats_image_with_nan(self):
+        """Test basic stats on image with NaN values — NaNs are ignored in all statistics."""
+        data = np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32)
+        dask_data = da.from_array(data, chunks=(1, 1))
+
+        record = record_from(dask_data, {"dim_order": "YX"})
+        processor = BasicStatsProcessor()
+
+        result = processor.run(record)
+
+        assert result["mean_intensity"] == pytest.approx(2, rel=1e-5)
+        assert result["min_intensity"] == pytest.approx(0, rel=1e-5)
+        assert result["max_intensity"] == pytest.approx(4, rel=1e-5)
+        assert result["std_intensity"] == pytest.approx(2**0.5, rel=1e-5)
+
+    def test_basic_stats_nan_slice_does_not_poison_aggregate(self):
+        """If one time slice is entirely NaN, the aggregate must reflect only the valid slice."""
+        data = np.array([
+            [[1., 2.], [3., 4.]],  # t0: mean=2.5, min=1, max=4
+            [[np.nan, np.nan], [np.nan, np.nan]],  # t1: all NaN
+        ], dtype=np.float32)
+        dask_data = da.from_array(data, chunks=(1, 2, 2))
+
+        record = record_from(dask_data, {"dim_order": "TYX"})
+        result = BasicStatsProcessor().run(record)
+
+        # Per-slice: t0 is valid, t1 is all-NaN
+        assert result["mean_intensity_t0"] == pytest.approx(2.5, rel=1e-5)
+        assert np.isnan(result["mean_intensity_t1"])
+
+        # Aggregate: all-NaN slice must not poison the result
+        assert result["mean_intensity"] == pytest.approx(2.5, rel=1e-5)
+        assert result["min_intensity"] == pytest.approx(1.0, rel=1e-5)
+        assert result["max_intensity"] == pytest.approx(4.0, rel=1e-5)

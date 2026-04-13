@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 def _column_fn_registry() -> Dict[str, Dict[str, Callable]]:
     return {
-        'mean_intensity': {'fn': lambda a: np.float32(np.mean(a)) if a.size else np.float32(np.nan), 'agg': np.mean},
-        'std_intensity': {'fn': lambda a: np.float32(np.std(a)) if a.size else np.float32(np.nan), 'agg': np.mean},
-        'min_intensity': {'fn': lambda a: np.float32(np.min(a)) if a.size else np.float32(np.nan), 'agg': np.min},
-        'max_intensity': {'fn': lambda a: np.float32(np.max(a)) if a.size else np.float32(np.nan), 'agg': np.max},
+        'mean_intensity': {'fn': lambda a: np.float32(np.nanmean(a)) if a.size else np.float32(np.nan), 'agg': np.nanmean},
+        'std_intensity': {'fn': lambda a: np.float32(np.nanstd(a)) if a.size else np.float32(np.nan), 'agg': np.nanmean},
+        'min_intensity': {'fn': lambda a: np.float32(np.nanmin(a)) if a.size else np.float32(np.nan), 'agg': np.nanmin},
+        'max_intensity': {'fn': lambda a: np.float32(np.nanmax(a)) if a.size else np.float32(np.nan), 'agg': np.nanmax},
     }
 
 class BasicStatsProcessor:

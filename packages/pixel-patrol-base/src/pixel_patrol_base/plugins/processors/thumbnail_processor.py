@@ -115,6 +115,9 @@ def _generate_thumbnail(
     arr = da_array.copy()
     if arr.dtype == bool:
         arr = arr.astype(np.float32)
+    elif np.issubdtype(arr.dtype, np.floating):
+        # replace NaNs with zeros to avoid RuntimeWarnings of dask
+        arr = da.where(da.isnull(arr), 0.0, arr)
 
     is_rgb = color_dim is not None
 
