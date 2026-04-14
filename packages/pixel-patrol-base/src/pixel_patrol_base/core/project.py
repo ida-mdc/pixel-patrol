@@ -164,7 +164,10 @@ class Project:
             return self
 
         try:
-            save_parquet(self.records_df, self.output_path, self.metadata)
+            rgs_kwargs = {}
+            if config.parquet_row_group_size is not None:
+                rgs_kwargs["row_group_size"] = config.parquet_row_group_size
+            save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
             processing.cleanup_flush_dir(flush_dir)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)

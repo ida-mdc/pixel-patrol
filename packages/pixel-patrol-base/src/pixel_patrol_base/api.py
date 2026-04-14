@@ -42,6 +42,7 @@ def process_files(
         # --- Run behaviour ---
         processing_max_workers: Optional[int] = None,
         records_flush_every_n: Optional[int] = None,
+        parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
         flavor: Optional[str] = None,
         authors: Optional[str] = None,
@@ -72,6 +73,7 @@ def process_files(
         selected_file_extensions=selected_file_extensions or "all",
         processing_max_workers=processing_max_workers,
         records_flush_every_n=records_flush_every_n,
+        parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",
             authors=authors or "",

@@ -51,10 +51,13 @@ def cli():
               help='Only use these processors (e.g., basic-stats). Can be specified multiple times. If specified, --processors-exclude is ignored.')
 @click.option('--processors-exclude', multiple=True, type=str,
               help='Exclude these processors (e.g., histogram). Can be specified multiple times.')
+@click.option('--parquet-row-group-size', type=int, default=None, show_default=True,
+              help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, authors: str,
-              processors_include: tuple[str, ...], processors_exclude: tuple[str, ...]):
+              processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
+              parquet_row_group_size: int | None):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
     """
@@ -90,6 +93,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         flavor=flavor or None,
         authors=authors or None,
+        parquet_row_group_size=parquet_row_group_size,
     )
 
     if Path(output).exists():
