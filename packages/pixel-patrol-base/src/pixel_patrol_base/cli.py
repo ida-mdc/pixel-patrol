@@ -197,5 +197,25 @@ def report(input_parquet: Path, port: int,
         show_report(parquet_path, port=port, **report_kwargs)
 
 
+@cli.command()
+@click.argument('parquet_file',
+                type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path))
+@click.option('--port', type=int, default=8052, show_default=True,
+              help='Port for the local viewer server.')
+@click.option('--no-browser', is_flag=True, default=False,
+              help='Do not open the browser automatically.')
+def view(parquet_file: Path, port: int, no_browser: bool):
+    """
+    Open a parquet file in the Pixel Patrol static viewer.
+
+    PARQUET_FILE is the path to a .parquet file produced by the 'process' command.
+    Starts a local HTTP server backed by native DuckDB and opens the viewer in
+    the browser.
+    """
+    from pixel_patrol_base.viewer_server import serve_viewer
+
+    serve_viewer(parquet_file, port=port, open_browser=not no_browser)
+
+
 if __name__ == '__main__':
     cli()
