@@ -46,14 +46,18 @@ def save_parquet(
     df: pl.DataFrame,
     dest: Path,
     metadata: ProjectMetadata,
+    row_group_size: Optional[int] = None,
 ) -> None:
     """
     Write records_df to a parquet file with provenance metadata in the footer.
 
     Args:
-        df:       The records DataFrame to save.
-        dest:     Destination path (will get .parquet suffix if missing).
-        metadata: ProjectMetadata written to the footer (includes project_name).
+        df:             The records DataFrame to save.
+        dest:           Destination path (will get .parquet suffix if missing).
+        metadata:       ProjectMetadata written to the footer (includes project_name).
+        row_group_size: Rows per parquet row group. None uses the PyArrow default
+                        (~1 million). Smaller values reduce I/O when the viewer
+                        samples thumbnails via reservoir sampling.
     """
     dest = Path(dest)
     if dest.suffix.lower() != ".parquet":
@@ -62,12 +66,14 @@ def save_parquet(
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     footer_meta = metadata.to_parquet_meta()
-
     table = df.to_arrow()
     existing_meta = table.schema.metadata or {}
     encoded = {k.encode(): v.encode() for k, v in footer_meta.items()}
     table = table.replace_schema_metadata({**existing_meta, **encoded})
-    pq.write_table(table, dest, compression="zstd")
+    kwargs = {"compression": "zstd"}
+    if row_group_size is not None:
+        kwargs["row_group_size"] = row_group_size
+    pq.write_table(table, dest, **kwargs)
     logger.info("Parquet IO: Saved '%s' to '%s'.", metadata.project_name, dest)
 
 
@@ -135,10 +141,14 @@ def to_parquet_bytes(df: pl.DataFrame, metadata: ProjectMetadata) -> bytes:
     return buf.getvalue()
 
 
-def _write_with_metadata(df: pl.DataFrame, metadata: ProjectMetadata, dest) -> None:
+def _write_with_metadata(df: pl.DataFrame, metadata: ProjectMetadata, dest, row_group_size: Optional[int] = None) -> None:
     """Write df to dest (Path or BytesIO) with metadata in the parquet footer."""
     table = df.to_arrow()
     existing = table.schema.metadata or {}
     encoded = {k.encode(): v.encode() for k, v in metadata.to_parquet_meta().items()}
     table = table.replace_schema_metadata({**existing, **encoded})
-    pq.write_table(table, dest, compression="zstd")
+    kwargs = {"compression": "zstd"}
+    if row_group_size is not None:
+        kwargs["row_group_size"] = row_group_size
+    pq.write_table(table, dest, **kwargs)
+

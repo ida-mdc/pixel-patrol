@@ -25,7 +25,7 @@ class ProcessingConfig:
     # --- Run behaviour ---
     processing_max_workers: Optional[int] = None
     records_flush_every_n: Optional[int] = None
-
+    parquet_row_group_size: Optional[int] = None  # None → use parquet_io default (2048)
 
     # --- Project Metadata ---
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
