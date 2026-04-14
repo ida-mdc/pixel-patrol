@@ -11,4 +11,5 @@ build
 uv.lock
 packages/pixel-patrol/tests/benchmarks/results/
 packages/*/dist/
-
+viewer/node_modules
+viewer/dist
