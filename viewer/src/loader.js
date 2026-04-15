@@ -44,8 +44,12 @@ export async function initDuckDB() {
 
 /**
  * Register a remote URL and create the pp_data view/table.
+ *
+ * For Parquet files: uses DuckDB's HTTP protocol so it can issue HTTP range
+ * requests and only fetch the footer + the specific byte ranges needed per
+ * query, instead of downloading the whole file upfront.
  */
-export async function loadFromUrl(conn, url) {
+export async function loadFromUrl(db, conn, url) {
   if (isArrowFile(url)) {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
@@ -54,11 +58,12 @@ export async function loadFromUrl(conn, url) {
     await conn.insertArrowFromIPCStream(new Uint8Array(buf), { name: 'pp_data', create: true });
     return finishLoad(conn, null);
   } else {
-    const escaped = url.replace(/'/g, "''");
+    const fname = `remote_${++_loadSeq}.parquet`;
+    await db.registerFileURL(fname, url, duckdb.DuckDBDataProtocol.HTTP, false);
     await conn.query(
-      `CREATE OR REPLACE VIEW pp_data AS SELECT * FROM read_parquet('${escaped}', file_row_number = true)`,
+      `CREATE OR REPLACE VIEW pp_data AS SELECT * FROM read_parquet('${fname}', file_row_number = true)`,
     );
-    return finishLoad(conn, url);
+    return finishLoad(conn, fname);
   }
 }
 
@@ -143,8 +148,9 @@ async function _readParquetMeta(conn, path) {
 
 async function filterGroupColsByCardinality(conn, cols) {
   if (!cols.length) return [];
-  // One query for all candidates — same approach as Dash's n_unique computation.
-  const exprs = cols.map(c => `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`).join(', ');
+  // APPROX_COUNT_DISTINCT uses HyperLogLog — single pass, no sort, accurate
+  // enough for the 2–12 cardinality check (error << 1 for small cardinalities).
+  const exprs = cols.map(c => `APPROX_COUNT_DISTINCT(${q(c)}) AS ${q(c)}`).join(', ');
   try {
     const res = await conn.query(`SELECT ${exprs} FROM pp_data`);
     const first = res.toArray()[0];

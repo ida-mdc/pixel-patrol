@@ -7,8 +7,8 @@
   <link rel="icon" type="image/png" href="./icon.png"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
-  <script type="module" crossorigin src="./assets/index-DzBZ_XCf.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CkuqYaBh.css">
+  <script type="module" crossorigin src="./assets/index-j9zjkoyh.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BTTbenvT.css">
 </head>
 <body class="d-flex flex-column" style="min-height:100vh">
 
@@ -21,7 +21,7 @@
 <!-- ── Welcome / file upload screen ── -->
 <div id="welcome-screen">
   <div class="welcome-inner">
-    <img src="./icon.png" alt="Pixel Patrol" class="welcome-logo"/>
+    <img src="./prevalidation.png" alt="Pixel Patrol" class="welcome-logo"/>
     <h1 class="welcome-title">Pixel Patrol</h1>
     <p class="welcome-sub">Interactive Report Viewer</p>
 
@@ -44,6 +44,9 @@
 <div id="main-app" style="display:none">
   <!-- Top bar -->
   <div class="topbar">
+    <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
+      <i class="bi bi-list" style="font-size:1.1rem"></i>
+    </button>
     <img src="./icon.png" alt="Pixel Patrol" class="topbar-icon"/>
     <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
     <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
@@ -53,6 +56,7 @@
     <span id="current-filename" class="text-muted small text-truncate" style="max-width:300px"></span>
     <span id="row-count-badge" class="badge bg-secondary ms-auto"></span>
   </div>
+  <div id="sidebar-backdrop"></div>
 
   <!-- Body: sidebar + content -->
   <div class="d-flex" style="min-height:calc(100vh - 49px)">

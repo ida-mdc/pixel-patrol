@@ -115,7 +115,7 @@ async function boot() {
 async function openUrl(url) {
   setLoading(`Loading ${url.split('/').pop()}…`);
   try {
-    ({ schema, totalRows, projectName, authors } = await loadFromUrl(conn, url));
+    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, url));
     document.getElementById('current-filename').textContent = url.split('/').pop();
     hideLoading();
     afterLoad();
