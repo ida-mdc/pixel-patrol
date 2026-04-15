@@ -21,6 +21,7 @@ jobs:
           - pixel-patrol-image
           - pixel-patrol
           - pixel-patrol-tensorboard
+          - pixel-patrol-geospatial
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
