@@ -9,9 +9,11 @@ class TestGeoImageLoader:
     def test_load_example_image(self):
         Z = np.full((2, 2), fill_value=1, dtype="uint8")
         transform = rasterio.transform.from_bounds(west=0, south=0, east=1, north=1, width=Z.shape[0], height=Z.shape[1])
-        with tempfile.NamedTemporaryFile("wb") as file:
+        with tempfile.NamedTemporaryFile(delete_on_close=False) as fp:
+            fp.close()  # on Windows a file can't be opened twice, so rasterio cannot open it for writing
+
             with rasterio.open(
-                file.name,
+                fp.name,
                 'w',
                 driver='GTiff',
                 height=Z.shape[0],
@@ -23,7 +25,7 @@ class TestGeoImageLoader:
             ) as ds:
                 ds.write(Z, 1)
 
-            record = GeoImageLoader().load(file.name)
+            record = GeoImageLoader().load(fp.name)
             assert record
             for out_field in GeoImageLoader.OUTPUT_SCHEMA:
                 assert out_field in record.meta
