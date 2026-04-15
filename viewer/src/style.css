@@ -40,6 +40,8 @@ body { background: #f8f9fa; }
   position: sticky; top: 0; z-index: 100;
 }
 
+#sidebar-toggle { display: none; }
+
 #sidebar {
   width: 300px; min-width: 280px; max-width: 320px;
   position: sticky; top: 49px; height: calc(100vh - 49px);
@@ -47,8 +49,39 @@ body { background: #f8f9fa; }
   border-right: 1px solid #dee2e6; flex-shrink: 0;
 }
 
+#sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0; top: 49px;
+  background: rgba(0,0,0,0.4); z-index: 199;
+}
+#sidebar-backdrop.sidebar-open { display: block; }
+
 #main-content { flex: 1; overflow-x: hidden; min-width: 0; }
 #content-inner { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+/* ── Mobile layout ── */
+@media (max-width: 967px) {
+  #sidebar-toggle {
+    display: inline-flex; align-items: center;
+  }
+
+  #sidebar {
+    position: fixed; top: 49px; left: 0; z-index: 200;
+    width: 280px; min-width: 280px; max-width: 280px;
+    height: calc(100vh - 49px);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.18);
+  }
+  #sidebar.sidebar-open { transform: translateX(0); }
+
+  #current-filename { display: none; }
+
+  .pp-footer-inner { flex-direction: column; gap: 12px; text-align: center; }
+  .pp-footer-left  { flex-direction: column; align-items: center; gap: 8px; }
+  .pp-footer-logo  { margin-right: 0; }
+  .pp-footer-right { justify-content: center; }
+}
 
 #project-name { display: flex; flex-direction: column; gap: 2px; }
 .project-title   { font-size: 20px; font-weight: 600; color: #212529; }

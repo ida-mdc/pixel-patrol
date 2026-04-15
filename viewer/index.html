@@ -42,6 +42,9 @@
 <div id="main-app" style="display:none">
   <!-- Top bar -->
   <div class="topbar">
+    <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
+      <i class="bi bi-list" style="font-size:1.1rem"></i>
+    </button>
     <img src="./icon.png" alt="Pixel Patrol" class="topbar-icon"/>
     <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
     <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
@@ -51,6 +54,7 @@
     <span id="current-filename" class="text-muted small text-truncate" style="max-width:300px"></span>
     <span id="row-count-badge" class="badge bg-secondary ms-auto"></span>
   </div>
+  <div id="sidebar-backdrop"></div>
 
   <!-- Body: sidebar + content -->
   <div class="d-flex" style="min-height:calc(100vh - 49px)">
