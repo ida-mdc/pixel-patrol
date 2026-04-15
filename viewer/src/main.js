@@ -291,5 +291,26 @@ function showFatalError(message, err, hint = null) {
   ws.appendChild(banner);
 }
 
+// ── Sidebar toggle (mobile) ───────────────────────────────────────────────────
+
+(function initSidebarToggle() {
+  const toggle   = document.getElementById('sidebar-toggle');
+  const sidebar  = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+
+  function setSidebarOpen(open) {
+    sidebar.classList.toggle('sidebar-open', open);
+    backdrop.classList.toggle('sidebar-open', open);
+  }
+
+  toggle?.addEventListener('click',   () => setSidebarOpen(!sidebar.classList.contains('sidebar-open')));
+  backdrop?.addEventListener('click', () => setSidebarOpen(false));
+
+  // Close sidebar when a filter/apply button is tapped on mobile.
+  document.getElementById('apply-btn')?.addEventListener('click', () => {
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  });
+})();
+
 // ── Go ─────────────────────────────────────────────────────────────────────────
 boot();
