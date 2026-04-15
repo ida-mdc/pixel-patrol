@@ -148,11 +148,11 @@ async function _readParquetMeta(conn, path) {
 
 async function filterGroupColsByCardinality(conn, cols) {
   if (!cols.length) return [];
-  // APPROX_COUNT_DISTINCT uses HyperLogLog — single pass, no sort, accurate
-  // enough for the 2–12 cardinality check (error << 1 for small cardinalities).
+  // Sample 10 000 rows — enough to reliably detect 2–12 unique values without
+  // fetching every column chunk from a remote file.
   const exprs = cols.map(c => `APPROX_COUNT_DISTINCT(${q(c)}) AS ${q(c)}`).join(', ');
   try {
-    const res = await conn.query(`SELECT ${exprs} FROM pp_data`);
+    const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data LIMIT 10000)`);
     const first = res.toArray()[0];
     if (!first) return [];
 
