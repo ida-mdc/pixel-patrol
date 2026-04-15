@@ -2,9 +2,6 @@ import { q, sample, groupCol } from '../sql.js';
 import { groupColor } from '../colors.js';
 import { LEGEND, appendPlot, niceName } from '../plot-utils.js';
 
-const MAX_XY_FILES_FOR_SCATTER = 50_000;
-const HEATMAP_TARGET_BINS = 70; // ~70x70 keeps plots responsive
-
 /**
  * Dimension Size Distribution — matches Dash DimSizeWidget:
  *   - X/Y scatter (bubble size = count) to spot resolution mismatches
@@ -61,80 +58,133 @@ export default {
     `;
     container.appendChild(ratioDiv);
 
-    // ── X/Y scatter ───────────────────────────────────────────────────────
+    // ── X/Y plot: bubble scatter for small datasets, log heatmap for large ──
+    const MAX_XY_BUBBLE = 50_000;
+    const HEATMAP_BINS  = 70;
     const hasXY = sizeCols.includes('X_size') && sizeCols.includes('Y_size');
     if (hasXY) {
-      const xyCond = `"X_size" > 1 AND "Y_size" > 1`;
+      const xyCond  = `"X_size" > 1 AND "Y_size" > 1`;
       const xyWhere = ctx.where ? `${ctx.where} AND ${xyCond}` : `WHERE ${xyCond}`;
-      const xyStats = (await ctx.queryRows(`
-        SELECT
-          COUNT(*)::BIGINT AS n,
-          MIN("X_size")::DOUBLE AS min_x,
-          MAX("X_size")::DOUBLE AS max_x,
-          MIN("Y_size")::DOUBLE AS min_y,
-          MAX("Y_size")::DOUBLE AS max_y
+
+      const statsRow = (await ctx.queryRows(`
+        SELECT COUNT(*)::BIGINT         AS n,
+               MIN("X_size")::DOUBLE   AS min_x, MAX("X_size")::DOUBLE AS max_x,
+               MIN("Y_size")::DOUBLE   AS min_y, MAX("Y_size")::DOUBLE AS max_y
         FROM pp_data ${xyWhere}
       `))[0] ?? {};
+      const xyFiles = Number(statsRow.n ?? 0);
 
-      const xyFiles = Number(xyStats.n ?? 0);
+      if (xyFiles <= MAX_XY_BUBBLE) {
+        // ── Bubble scatter (mirrors Dash px.scatter with size='bubble_size') ──
+        const xyRows = await ctx.queryRows(`
+          SELECT "X_size"  AS x,
+                 "Y_size"  AS y,
+                 ${gcExpr} AS __group__,
+                 COUNT(*)  AS bubble_size
+          FROM pp_data ${xyWhere}
+          GROUP BY 1, 2, 3
+          ORDER BY 1, 2
+        `);
+        if (xyRows.length) {
+          // sizeref = 2 * max / size_max² replicates Plotly Express area scaling
+          const maxCount = Math.max(...xyRows.map(r => Number(r.bubble_size)));
+          const sizeref  = (2 * maxCount) / (20 ** 2);
+          const traces = ctx.groups.map(g => {
+            const gRows = xyRows.filter(r => String(r.__group__) === g);
+            if (!gRows.length) return null;
+            return {
+              type:   'scatter',
+              mode:   'markers',
+              name:   g,
+              x:      gRows.map(r => Number(r.x)),
+              y:      gRows.map(r => Number(r.y)),
+              marker: {
+                size:     gRows.map(r => Number(r.bubble_size)),
+                sizeref,
+                sizemode: 'area',
+                color:    groupColor(ctx.colorMap, g),
+                line:     { width: 1, color: 'white' },
+              },
+              hovertemplate:
+                `<b>${g}</b><br>X: %{x} px<br>Y: %{y} px<br>Count: %{text}<extra></extra>`,
+              text: gRows.map(r => String(r.bubble_size)),
+            };
+          }).filter(Boolean);
+          appendPlot(container, traces, {
+            title:      { text: 'Distribution of X and Y Dimension Sizes' },
+            xaxis:      { title: 'X size (pixels)' },
+            yaxis:      { title: 'Y size (pixels)' },
+            showlegend: ctx.groups.length > 1,
+            legend:     LEGEND,
+          }, 'margin-bottom:24px');
+        }
+      } else {
+        // ── Log-scale heatmap for large datasets ─────────────────────────────
+        const spanX = Number(statsRow.max_x) - Number(statsRow.min_x);
+        const spanY = Number(statsRow.max_y) - Number(statsRow.min_y);
+        const binX  = Math.max(1, Math.ceil(spanX / HEATMAP_BINS));
+        const binY  = Math.max(1, Math.ceil(spanY / HEATMAP_BINS));
+        const minX  = Number(statsRow.min_x);
+        const minY  = Number(statsRow.min_y);
 
-      // For small-ish filtered datasets, use the same aggregated bubble scatter as the Dash widget.
-      // For large datasets, switch to a binned 2D heatmap for performance.
-      const useHeatmap =
-        Number.isFinite(xyFiles) && xyFiles > MAX_XY_FILES_FOR_SCATTER &&
-        Number.isFinite(Number(xyStats.min_x)) && Number.isFinite(Number(xyStats.max_x)) &&
-        Number.isFinite(Number(xyStats.min_y)) && Number.isFinite(Number(xyStats.max_y));
+        const binRows = await ctx.queryRows(`
+          SELECT (FLOOR(("X_size" - ${minX}) / ${binX}) * ${binX} + ${minX})::INTEGER AS xbin,
+                 (FLOOR(("Y_size" - ${minY}) / ${binY}) * ${binY} + ${minY})::INTEGER AS ybin,
+                 COUNT(*)::INTEGER AS n
+          FROM pp_data ${xyWhere}
+          GROUP BY 1, 2
+          ORDER BY 1, 2
+        `);
+        if (binRows.length) {
+          const xs = [...new Set(binRows.map(r => Number(r.xbin)))].sort((a, b) => a - b);
+          const ys = [...new Set(binRows.map(r => Number(r.ybin)))].sort((a, b) => a - b);
+          const xi = new Map(xs.map((v, i) => [v, i]));
+          const yi = new Map(ys.map((v, i) => [v, i]));
+          // z = log10(count) for filled bins; null for empty cells (rendered as
+          // plot background, clearly distinct from the darkest Viridis colour).
+          const z = Array.from({ length: ys.length }, () => Array(xs.length).fill(null));
+          let zMax = 0;
+          for (const r of binRows) {
+            const cx = xi.get(Number(r.xbin));
+            const cy = yi.get(Number(r.ybin));
+            if (cx != null && cy != null) {
+              const logVal = Math.log10(Number(r.n));
+              z[cy][cx] = logVal;
+              if (logVal > zMax) zMax = logVal;
+            }
+          }
 
-      const xyRows = useHeatmap
-        ? await queryXYHeatmapBins(ctx, xyWhere, {
-            minX: Number(xyStats.min_x),
-            maxX: Number(xyStats.max_x),
-            minY: Number(xyStats.min_y),
-            maxY: Number(xyStats.max_y),
-          })
-        : await ctx.queryRows(`
-            SELECT "X_size"    AS x,
-                   "Y_size"    AS y,
-                   ${gcExpr}   AS __group__,
-                   COUNT(*)    AS bubble_size
-            FROM pp_data ${xyWhere}
-            GROUP BY 1, 2, 3
-            ORDER BY 1, 2
-          `);
+          // Colorbar ticks at every integer power of 10 up to the data max.
+          const tickVals = [], tickText = [];
+          for (let i = 0; i <= Math.ceil(zMax); i++) {
+            tickVals.push(i);
+            tickText.push(String(10 ** i));
+          }
 
-      if (xyRows.length) {
-        const traces = useHeatmap
-          ? [buildHeatmapTrace(xyRows)]
-          : ctx.groups.map(g => {
-              const gRows = xyRows.filter(r => String(r.__group__) === g);
-              const sizes = gRows.map(r => {
-                const n = Number(r.bubble_size);
-                return Math.max(4, Math.min(40, 4 + 4 * Math.log10(Math.max(n, 1))));
-              });
-              return {
-                type:   'scatter',
-                mode:   'markers',
-                name:   g,
-                x:      gRows.map(r => Number(r.x)),
-                y:      gRows.map(r => Number(r.y)),
-                marker: {
-                  size:  sizes,
-                  color: groupColor(ctx.colorMap, g),
-                  line:  { width: 1, color: 'white' },
-                },
-                hovertemplate:
-                  `<b>${g}</b><br>X: %{x}<br>Y: %{y}<br>Count: %{text}<extra></extra>`,
-                text: gRows.map(r => String(r.bubble_size)),
-              };
-            }).filter(t => t.x.length);
-
-        appendPlot(container, traces, {
-          title:      { text: 'Distribution of X and Y Dimension Sizes' },
-          xaxis:      { title: 'X size (pixels)' },
-          yaxis:      { title: 'Y size (pixels)' },
-          showlegend: !useHeatmap && ctx.groups.length > 1,
-          legend:     !useHeatmap ? LEGEND : undefined,
-        }, 'margin-bottom:24px');
+          appendPlot(container, [{
+            type:          'heatmap',
+            x:             xs,
+            y:             ys,
+            z,
+            colorscale:    'Viridis',
+            zmin:          0,          // anchors colour scale at count = 1
+            zmax:          zMax,
+            colorbar: {
+              title:    { text: 'count', side: 'right' },
+              tickvals: tickVals,
+              ticktext: tickText,
+            },
+            hovertemplate: 'X: %{x} px<br>Y: %{y} px<br>count: %{text}<extra></extra>',
+            text: ys.map((_, cy) => xs.map((_, cx) => {
+              const v = z[cy][cx];
+              return v != null ? String(Math.round(10 ** v)) : '';
+            })),
+          }], {
+            title:  { text: 'Distribution of X and Y Dimension Sizes (log scale)' },
+            xaxis:  { title: 'X size (pixels)' },
+            yaxis:  { title: 'Y size (pixels)' },
+          }, 'margin-bottom:24px');
+        }
       }
     }
 
@@ -198,47 +248,3 @@ export default {
   },
 };
 
-async function queryXYHeatmapBins(ctx, xyWhere, { minX, maxX, minY, maxY }) {
-  const spanX = Math.max(1, maxX - minX);
-  const spanY = Math.max(1, maxY - minY);
-  const binX  = Math.max(1, Math.ceil(spanX / HEATMAP_TARGET_BINS));
-  const binY  = Math.max(1, Math.ceil(spanY / HEATMAP_TARGET_BINS));
-
-  return await ctx.queryRows(`
-    SELECT
-      (FLOOR( ("X_size" - ${minX}) / ${binX} ) * ${binX} + ${minX})::INTEGER AS xbin,
-      (FLOOR( ("Y_size" - ${minY}) / ${binY} ) * ${binY} + ${minY})::INTEGER AS ybin,
-      COUNT(*)::INTEGER AS n
-    FROM pp_data ${xyWhere}
-    GROUP BY 1, 2
-    ORDER BY 1, 2
-  `);
-}
-
-function buildHeatmapTrace(rows) {
-  const xs = [...new Set(rows.map(r => Number(r.xbin)))].sort((a, b) => a - b);
-  const ys = [...new Set(rows.map(r => Number(r.ybin)))].sort((a, b) => a - b);
-  const xi = new Map(xs.map((v, i) => [v, i]));
-  const yi = new Map(ys.map((v, i) => [v, i]));
-
-  const z = Array.from({ length: ys.length }, () => Array(xs.length).fill(0));
-  for (const r of rows) {
-    const x = Number(r.xbin);
-    const y = Number(r.ybin);
-    const n = Number(r.n ?? 0);
-    const cx = xi.get(x);
-    const cy = yi.get(y);
-    if (cx == null || cy == null) continue;
-    z[cy][cx] = n;
-  }
-
-  return {
-    type: 'heatmap',
-    x: xs,
-    y: ys,
-    z,
-    colorscale: 'Viridis',
-    hovertemplate: 'X bin: %{x}<br>Y bin: %{y}<br>Count: %{z}<extra></extra>',
-    colorbar: { title: 'Count' },
-  };
-}
