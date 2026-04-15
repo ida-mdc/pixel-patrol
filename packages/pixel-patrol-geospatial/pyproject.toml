@@ -29,3 +29,13 @@ geo_extension_widgets = "pixel_patrol_geospatial.plugin_registry:register_widget
 
 [tool.uv.sources]
 pixel-patrol-base = { path = "../../packages/pixel-patrol-base" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+]
