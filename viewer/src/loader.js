@@ -22,12 +22,15 @@ function pickRowIdColumnFromSchema(allCols) {
 
 /**
  * Initialise DuckDB WASM using the jsDelivr CDN bundles.
- * selectBundle() automatically picks the mvp (single-threaded) bundle when
- * SharedArrayBuffer is unavailable — which is the case on GitHub Pages.
+ *
+ * Always use the mvp (single-threaded) bundle. The eh bundle's CachingFileSystem
+ * silently hangs on HTTP range reads for remote parquet files — the openFile
+ * HEAD probe succeeds but the actual footer read never fires a network request.
+ * mvp uses plain synchronous XHR for range reads and works correctly.
  */
 export async function initDuckDB() {
   const BUNDLES = duckdb.getJsDelivrBundles();
-  const bundle  = await duckdb.selectBundle(BUNDLES);
+  const bundle  = BUNDLES.mvp;
 
   const workerUrl = URL.createObjectURL(
     new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }),
