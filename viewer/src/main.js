@@ -113,14 +113,20 @@ async function boot() {
 // ── Open data ─────────────────────────────────────────────────────────────────
 
 async function openUrl(url) {
-  setLoading(`Loading ${url.split('/').pop()}…`);
+  const filename = url.split('/').pop();
+  setLoading(`Downloading ${filename}…`);
   try {
-    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, url));
-    document.getElementById('current-filename').textContent = url.split('/').pop();
+    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, url, (loaded, total) => {
+      if (total > 0) {
+        const pct = Math.round(loaded / total * 100);
+        setLoadingProgress(pct, `Downloading ${filename}… ${pct}%`);
+      }
+    }));
+    document.getElementById('current-filename').textContent = filename;
     hideLoading();
     afterLoad();
   } catch (err) {
-    showFatalError(`Failed to load ${url.split('/').pop()}`, err, loadErrorHint(err));
+    showFatalError(`Failed to load ${filename}`, err, loadErrorHint(err));
   }
 }
 
@@ -249,7 +255,15 @@ function setLoading(msg) {
   document.getElementById('loading-overlay').style.display = 'flex';
 }
 
+function setLoadingProgress(pct, msg) {
+  const bar = document.getElementById('loading-progress');
+  if (bar) { bar.style.display = 'block'; bar.value = pct; }
+  if (msg) document.getElementById('loading-text').textContent = msg;
+}
+
 function hideLoading() {
+  const bar = document.getElementById('loading-progress');
+  if (bar) { bar.style.display = 'none'; bar.value = 0; }
   document.getElementById('loading-overlay').style.display = 'none';
 }
 
