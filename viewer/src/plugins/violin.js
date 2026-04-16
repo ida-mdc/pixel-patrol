@@ -7,13 +7,18 @@ import { appendPlot, createFlexGrid, niceName } from '../plot-utils.js';
 const VIOLIN_MAX_POINTS = 2000;  // per group, matches Dash app
 const MAX_METRICS = 12;
 
-// Basic intensity stats produced by BasicStatsProcessor / RasterImageProcessor.
+// Matches BasicStatsProcessor.OUTPUT_SCHEMA
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-function isBasicMetric(col) {
-  for (const base of BASIC_METRIC_BASES) {
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA
+const QUALITY_METRIC_BASES = new Set([
+  'laplacian_variance', 'tenengrad', 'brenner', 'noise_std', 'blocking_records', 'ringing_records',
+]);
+
+function matchesBases(col, bases) {
+  for (const base of bases) {
     if (col === base || col.startsWith(base + '_')) return true;
   }
   return false;
@@ -31,164 +36,171 @@ const SIGNIFICANCE_HELP = [
   '- `***`: p < 0.001',
 ].join('\n');
 
-export default {
-  id: 'violin',
-  label: 'Pixel Value Statistics',
+const BASIC_INFO = [
+  'Shows **per-image intensity statistics** across groups.',
+  '',
+  'You can choose which statistic to plot and filter by image dimensions.',
+  '',
+  'In the plot each point is one image; the box shows the distribution per group.',
+  '',
+  SIGNIFICANCE_HELP,
+].join('\n');
 
-  info: [
-    '**Basic Metrics** — per-image intensity statistics (mean, std, min, max) across groups.',
-    '',
-    '**Quality Metrics** — focus sharpness (Laplacian variance, Tenengrad, Brenner), noise, and compression artifacts (blocking, ringing).',
-    '',
-    'Each point represents one image; the box shows the distribution per group.',
-    '',
-    SIGNIFICANCE_HELP,
-  ].join('\n'),
+const QUALITY_INFO = [
+  'Visualizes **image quality metrics** as violin plots across groups.',
+  '',
+  'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
+  '',
+  '**Metrics**',
+  '- **Laplacian variance** – Edge-based sharpness estimate. Higher values indicate a sharper image.',
+  '- **Tenengrad** – Focus measure based on Sobel gradients; captures overall edge strength.',
+  '- **Brenner** – Measures fine structural detail using pixel intensity differences.',
+  '- **Noise std** – Estimated pixel-level noise standard deviation; higher noise reduces clarity.',
+  '- **Blocking records** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
+  '- **Ringing records** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
+  '',
+  SIGNIFICANCE_HELP,
+].join('\n');
 
-  requires(schema) {
-    return schema.metricCols.length > 0;
-  },
+async function renderViolins(container, ctx, filterMetric) {
+  const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions)
+    .filter(filterMetric)
+    .slice(0, MAX_METRICS);
 
-  async render(container, ctx) {
-    const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions).slice(0, MAX_METRICS);
-    if (!metrics.length) {
-      container.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
-      return;
-    }
+  if (!metrics.length) {
+    container.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
+    return;
+  }
 
-    // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
-    const gc  = groupCol(ctx.state);
-    const sql = `
-      WITH ranked AS (
-        SELECT ${groupExpr(ctx.state)},
-               ${metrics.map(q).join(', ')},
-               ROW_NUMBER() OVER (PARTITION BY ${gc} ORDER BY random()) AS __rn__,
-               COUNT(*)     OVER (PARTITION BY ${gc}) AS __group_size__
-        FROM pp_data ${ctx.where}
-      )
-      SELECT * EXCLUDE (__rn__) FROM ranked WHERE __rn__ <= ${VIOLIN_MAX_POINTS}
-    `;
+  // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
+  const gc  = groupCol(ctx.state);
+  const sql = `
+    WITH ranked AS (
+      SELECT ${groupExpr(ctx.state)},
+             ${metrics.map(q).join(', ')},
+             ROW_NUMBER() OVER (PARTITION BY ${gc} ORDER BY random()) AS __rn__,
+             COUNT(*)     OVER (PARTITION BY ${gc}) AS __group_size__
+      FROM pp_data ${ctx.where}
+    )
+    SELECT * EXCLUDE (__rn__) FROM ranked WHERE __rn__ <= ${VIOLIN_MAX_POINTS}
+  `;
 
-    const rows = await ctx.queryRows(sql);
-    if (!rows.length) {
-      container.innerHTML = '<div class="no-data">No rows match the current filter.</div>';
-      return;
-    }
+  const rows = await ctx.queryRows(sql);
+  if (!rows.length) {
+    container.innerHTML = '<div class="no-data">No rows match the current filter.</div>';
+    return;
+  }
 
-    const groups = [...new Set(rows.map(r => String(r.__group__)))].sort();
+  const groups = [...new Set(rows.map(r => String(r.__group__)))].sort();
 
-    // Separate metrics with variance from those without.
-    const toPlot    = [];
-    const noVariance = [];
-    for (const metric of metrics) {
-      const vals = rows.map(r => r[metric]).filter(v => v != null).map(Number);
-      if (!vals.length) continue;
-      if (new Set(vals).size <= 1) noVariance.push({ metric, value: vals[0] });
-      else                        toPlot.push(metric);
-    }
+  // Separate metrics with variance from those without.
+  const toPlot     = [];
+  const noVariance = [];
+  for (const metric of metrics) {
+    const vals = rows.map(r => r[metric]).filter(v => v != null).map(Number);
+    if (!vals.length) continue;
+    if (new Set(vals).size <= 1) noVariance.push({ metric, value: vals[0] });
+    else                         toPlot.push(metric);
+  }
 
-    // Split into basic and quality sections.
-    const basicToPlot   = toPlot.filter(m => isBasicMetric(m));
-    const qualityToPlot = toPlot.filter(m => !isBasicMetric(m));
+  const numGroups  = groups.length;
+  const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+  const sampledGroups = new Set(
+    rows.filter(r => Number(r.__group_size__) > VIOLIN_MAX_POINTS).map(r => String(r.__group__))
+  );
+  const showSig = ctx.state.showSignificance && groups.length >= 2;
 
-    // Adapt plots per row based on group count — matches Dash logic exactly.
-    const numGroups = groups.length;
-    const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+  if (toPlot.length) {
+    const { wrap, flexBasisPct } = createFlexGrid(container, plotsPerRow);
 
-    const sampledGroups = new Set(
-      rows.filter(r => Number(r.__group_size__) > VIOLIN_MAX_POINTS).map(r => String(r.__group__))
-    );
+    for (const metric of toPlot) {
+      const label     = niceName(metric);
+      const isSampled = sampledGroups.size > 0;
+      const title     = `Distribution of ${label}` +
+        (isSampled ? `<br><sup>sampled to ${VIOLIN_MAX_POINTS} per group</sup>` : '');
 
-    const showSig = ctx.state.showSignificance && groups.length >= 2;
+      const groupData = {};
+      for (const g of groups) {
+        groupData[g] = rows
+          .filter(r => String(r.__group__) === g)
+          .map(r => r[metric])
+          .filter(v => v != null)
+          .map(Number);
+      }
 
-    function renderSection(metricList, sectionLabel) {
-      if (!metricList.length) return;
+      const traces = groups.map(g => {
+        const vals       = groupData[g];
+        const showPoints = vals.length < 1000 ? 'all' : 'outliers';
+        return {
+          type:     'violin',
+          y:        vals,
+          name:     g,
+          box:      { visible: true },
+          meanline: { visible: true },
+          points:   showPoints,
+          pointpos: 0,
+          opacity:  0.9,
+          marker:   { color: groupColor(ctx.colorMap, g), line: { width: 1, color: 'black' } },
+          hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
+        };
+      });
 
-      // Section heading
-      const heading = document.createElement('div');
-      heading.style.cssText =
-        'font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;' +
-        'color:#6c757d;padding:4px 0 8px;border-top:1px solid #e9ecef;margin-top:12px;margin-bottom:4px';
-      heading.textContent = sectionLabel;
-      container.appendChild(heading);
+      const outerDiv = appendPlot(wrap, traces, {
+        title:      { text: title },
+        yaxis:      { title: label },
+        xaxis:      { title: '' },
+        showlegend: false,
+      }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
 
-      // createFlexGrid appends wrap to the DOM before we add plots — required so
-      // Plotly can measure clientWidth at render time (see plot-utils.js).
-      const { wrap, flexBasisPct } = createFlexGrid(container, plotsPerRow);
-
-      for (const metric of metricList) {
-        const label   = niceName(metric);
-        const isSampled = sampledGroups.size > 0;
-        const title = `Distribution of ${label}` +
-          (isSampled ? `<br><sup>sampled to ${VIOLIN_MAX_POINTS} per group</sup>` : '');
-
-        // Collect per-group data for this metric.
-        const groupData = {};
-        for (const g of groups) {
-          groupData[g] = rows
-            .filter(r => String(r.__group__) === g)
-            .map(r => r[metric])
-            .filter(v => v != null)
-            .map(Number);
-        }
-
-        const traces = groups.map(g => {
-          const vals       = groupData[g];
-          const showPoints = vals.length < 1000 ? 'all' : 'outliers';
-          return {
-            type:     'violin',
-            y:        vals,
-            name:     g,
-            box:      { visible: true },
-            meanline: { visible: true },
-            points:   showPoints,
-            pointpos: 0,
-            opacity:  0.9,
-            marker:   { color: groupColor(ctx.colorMap, g), line: { width: 1, color: 'black' } },
-            hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
-          };
-        });
-
-        const outerDiv = appendPlot(wrap, traces, {
-          title:      { text: title },
-          yaxis:      { title: label },
-          xaxis:      { title: '' },
-          showlegend: false,
-        }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
-
-        if (showSig) {
-          const pairs = computeSignificancePairs(groups, groupData);
-          addSignificanceBrackets(outerDiv, pairs, groups);
-        }
+      if (showSig) {
+        const pairs = computeSignificancePairs(groups, groupData);
+        addSignificanceBrackets(outerDiv, pairs, groups);
       }
     }
+  }
 
-    renderSection(basicToPlot,   'Basic Metrics');
-    renderSection(qualityToPlot, 'Quality Metrics');
+  // No-variance table — matches Dash's "Metrics with No Variance" section.
+  if (noVariance.length) {
+    const hr = document.createElement('hr');
+    container.appendChild(hr);
+    const h = document.createElement('h6');
+    h.style.cssText = 'margin-top:20px;margin-bottom:12px';
+    h.textContent = 'Metrics with No Variance';
+    container.appendChild(h);
 
-    // No-variance table — matches Dash's "Metrics with No Variance" section.
-    if (noVariance.length) {
-      const hr = document.createElement('hr');
-      container.appendChild(hr);
-      const h = document.createElement('h6');
-      h.style.cssText = 'margin-top:20px;margin-bottom:12px';
-      h.textContent = 'Metrics with No Variance';
-      container.appendChild(h);
+    const table = document.createElement('table');
+    table.className = 'stat-table';
+    table.innerHTML = `
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        ${noVariance.map(({ metric, value }) =>
+          `<tr><td>${niceName(metric)}</td><td>${Number(value).toFixed(4)}</td></tr>`
+        ).join('')}
+      </tbody>
+    `;
+    container.appendChild(table);
+  }
+}
 
-      const table = document.createElement('table');
-      table.className = 'stat-table';
-      table.innerHTML = `
-        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-        <tbody>
-          ${noVariance.map(({ metric, value }) =>
-            `<tr><td>${niceName(metric)}</td><td>${Number(value).toFixed(4)}</td></tr>`
-          ).join('')}
-        </tbody>
-      `;
-      container.appendChild(table);
-    }
-  },
-};
+function makeViolinPlugin(id, label, info, filterMetric) {
+  return {
+    id,
+    label,
+    info,
+    requires(schema) {
+      return schema.metricCols.some(filterMetric)
+        || (schema.dimMetricCols ?? []).some(filterMetric);
+    },
+    async render(container, ctx) {
+      await renderViolins(container, ctx, filterMetric);
+    },
+  };
+}
+
+export default [
+  makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES)),
+  makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES)),
+];
 
 // ── Dimension-aware metric resolution ─────────────────────────────────────────
 
@@ -204,8 +216,6 @@ function resolveMetrics(schema, dimensions) {
     return true;
   });
 
-  // Also include dim-metric columns (e.g. mean_intensity_c0) when every dimension
-  // they carry is pinned by the current selection and matches the selected index.
   const fromDimMetricCols = (schema.dimMetricCols ?? []).filter(col => {
     const tokens = [...col.matchAll(/_([a-z])(\d+)/g)];
     return tokens.length > 0 &&
