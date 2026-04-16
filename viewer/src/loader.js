@@ -20,14 +20,7 @@ function pickRowIdColumnFromSchema(allCols) {
   return null;
 }
 
-/**
- * Initialise DuckDB WASM using the jsDelivr CDN bundles.
- *
- * Always use the mvp (single-threaded) bundle. The eh bundle's CachingFileSystem
- * silently hangs on HTTP range reads for remote parquet files — the openFile
- * HEAD probe succeeds but the actual footer read never fires a network request.
- * mvp uses plain synchronous XHR for range reads and works correctly.
- */
+/** Initialise DuckDB WASM using the jsDelivr CDN bundles (mvp single-threaded bundle). */
 export async function initDuckDB() {
   const BUNDLES = duckdb.getJsDelivrBundles();
   const bundle  = BUNDLES.mvp;
@@ -45,24 +38,37 @@ export async function initDuckDB() {
   return { db, conn };
 }
 
-/**
- * Register a remote URL and create the pp_data view/table.
- *
- * For Parquet files: uses DuckDB's HTTP protocol so it can issue HTTP range
- * requests and only fetch the footer + the specific byte ranges needed per
- * query, instead of downloading the whole file upfront.
- */
-export async function loadFromUrl(db, conn, url) {
+/** Fetch a URL with optional progress callback: onProgress(loadedBytes, totalBytes). */
+async function fetchWithProgress(url, onProgress) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
+  const total  = Number(resp.headers.get('Content-Length') ?? 0);
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let loaded   = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.(loaded, total);
+  }
+  const out = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.byteLength; }
+  return out;
+}
+
+/** Register a remote URL and create the pp_data view/table, downloading the file upfront. */
+export async function loadFromUrl(db, conn, url, onProgress) {
+  const buf = await fetchWithProgress(url, onProgress);
   if (isArrowFile(url)) {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
-    const buf = await resp.arrayBuffer();
     await conn.query(`DROP TABLE IF EXISTS pp_data`);
-    await conn.insertArrowFromIPCStream(new Uint8Array(buf), { name: 'pp_data', create: true });
+    await conn.insertArrowFromIPCStream(buf, { name: 'pp_data', create: true });
     return finishLoad(conn, null);
   } else {
     const fname = `remote_${++_loadSeq}.parquet`;
-    await db.registerFileURL(fname, url, duckdb.DuckDBDataProtocol.HTTP, false);
+    await db.registerFileBuffer(fname, buf);
     await conn.query(
       `CREATE OR REPLACE VIEW pp_data AS SELECT * FROM read_parquet('${fname}', file_row_number = true)`,
     );
