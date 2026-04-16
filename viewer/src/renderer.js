@@ -1,0 +1,176 @@
+import { buildColorMap } from './colors.js';
+import { buildWhere, q, sample } from './sql.js';
+import { updateFilteredInfo } from './controls.js';
+import { state } from './state.js';
+
+/**
+ * Build a plugin context object.
+ *
+ * ctx is passed to every plugin's render() call. Plugins should only interact
+ * with DuckDB through ctx.query / ctx.queryRows to keep the sampling strategy
+ * centralised.
+ *
+ * @param {object} conn       DuckDB async connection
+ * @param {object} schema     detected schema
+ * @param {object} state      current UI state
+ * @param {object} colorMap   {group: hex}
+ * @param {string} where      SQL WHERE fragment (or '')
+ * @param {string[]} groups   distinct group values (already fetched)
+ * @param {number} filteredCount
+ * @param {number} totalRows
+ */
+function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, totalRows) {
+  return {
+    schema,
+    state,
+    colorMap,
+    where,
+    groups,
+    filteredCount,
+    totalRows,
+
+    /**
+     * Run arbitrary SQL against pp_data.
+     * Returns a raw Apache Arrow Table — use when you need binary columns
+     * (thumbnails, histograms) or want Arrow-native aggregation.
+     */
+    query(sql) {
+      return conn.query(sql);
+    },
+
+    /**
+     * Run SQL and convert each row to a plain JS object.
+     * Binary columns become Uint8Array; numeric columns become numbers.
+     * Convenient for most non-binary queries.
+     */
+    async queryRows(sql) {
+      const result = await conn.query(sql);
+      return result.toArray().map(r => r.toJSON());
+    },
+
+    /**
+     * Shorthand: SELECT <cols> FROM pp_data <where> USING SAMPLE <n>
+     * groupCol (if set) is always included as __group__.
+     */
+    async querySample(cols, n = 5000) {
+      const gcExpr  = state.groupCol ? `${q(state.groupCol)} AS __group__, ` : `'all' AS __group__, `;
+      const colList = cols.map(q).join(', ');
+      const sql     = `SELECT ${gcExpr}${colList} FROM pp_data ${where} ${sample(n)}`;
+      return this.queryRows(sql);
+    },
+  };
+}
+
+/**
+ * Discover active plugins, query group/count metadata, then render each plugin.
+ * Safe to call multiple times — clears the widget container each time.
+ *
+ * @param {object[]} plugins  registered plugin objects
+ * @param {object}   conn     DuckDB async connection
+ * @param {object}   schema
+ * @param {object}   state
+ * @param {number}   totalRows
+ */
+export async function renderAll(plugins, conn, schema, state, totalRows) {
+  const where = buildWhere(state.filter);
+
+  // Fetch distinct groups and filtered count in parallel.
+  const gcExpr = state.groupCol ? q(state.groupCol) : `'all'`;
+  const [groupResult, countResult] = await Promise.all([
+    conn.query(
+      `SELECT DISTINCT ${gcExpr} AS g FROM pp_data ${where} ORDER BY 1 LIMIT 50`,
+    ),
+    conn.query(`SELECT COUNT(*) AS n FROM pp_data ${where}`),
+  ]);
+
+  const groups       = groupResult.toArray().map(r => String(r.g));
+  const filteredCount = Number(countResult.toArray()[0].n);
+  const colorMap     = buildColorMap(groups, state.palette);
+
+  updateFilteredInfo(filteredCount, totalRows);
+
+  const ctx = buildCtx(
+    conn, schema, state, colorMap, where, groups, filteredCount, totalRows,
+  );
+
+  const container = document.getElementById('widget-container');
+  container.innerHTML = '';
+
+  const activePlugins = plugins.filter(p => {
+    try { return p.requires(schema) && !state.hiddenWidgets.has(p.id); }
+    catch { return false; }
+  });
+
+  for (const plugin of activePlugins) {
+    const card = createCard(plugin.label, plugin.info);
+    container.appendChild(card);
+    const body = card.querySelector('.widget-card-body');
+
+    try {
+      await plugin.render(body, ctx);
+    } catch (err) {
+      body.innerHTML = `<div class="text-danger small p-2">
+        <strong>${plugin.id}</strong>: ${err.message}
+      </div>`;
+      console.error(`[viewer] plugin "${plugin.id}" error:`, err);
+    }
+  }
+}
+
+function createCard(label, info) {
+  const div = document.createElement('div');
+  div.className = 'widget-card';
+
+  const header = document.createElement('div');
+  header.className = 'widget-card-header';
+
+  const title = document.createElement('span');
+  title.className = 'widget-card-title';
+  title.textContent = label;
+  header.appendChild(title);
+
+  if (info) {
+    const panel = document.createElement('div');
+    panel.className = 'widget-info-panel';
+    panel.hidden = true;
+    panel.innerHTML = renderInfoHtml(info);
+
+    const btn = document.createElement('button');
+    btn.className = 'widget-info-btn';
+    btn.title = 'About this widget';
+    btn.textContent = 'ⓘ';
+    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    header.appendChild(btn);
+
+    div.appendChild(header);
+    div.appendChild(panel);
+  } else {
+    div.appendChild(header);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'widget-card-body';
+  div.appendChild(body);
+
+  return div;
+}
+
+/** Minimal markdown → HTML converter for info panel text. */
+function renderInfoHtml(text) {
+  let html = '';
+  for (const para of text.trim().split(/\n\n+/)) {
+    const lines = para.split('\n');
+    const bullets = lines.filter(l => /^\s*-\s/.test(l));
+    const prose   = lines.filter(l => !/^\s*-\s/.test(l));
+    if (prose.length)   html += `<p>${prose.map(mdInline).join('<br>')}</p>`;
+    if (bullets.length) html += `<ul>${bullets.map(l => `<li>${mdInline(l.replace(/^\s*-\s*/, ''))}</li>`).join('')}</ul>`;
+  }
+  return html;
+}
+
+function mdInline(t) {
+  return t
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+}

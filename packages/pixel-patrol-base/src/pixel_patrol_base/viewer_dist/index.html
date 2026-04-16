@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pixel Patrol – Viewer</title>
+  <link rel="icon" type="image/png" href="./icon.png"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
+  <script type="module" crossorigin src="./assets/index-BErDYzQz.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BTTbenvT.css">
+</head>
+<body class="d-flex flex-column" style="min-height:100vh">
+
+<!-- ── Loading overlay ── -->
+<div id="loading-overlay" style="display:none">
+  <div class="spinner-border text-primary" style="width:2.5rem;height:2.5rem"></div>
+  <p id="loading-text" class="text-secondary mb-0">Loading…</p>
+  <progress id="loading-progress" max="100" value="0" style="display:none;width:220px"></progress>
+</div>
+
+<!-- ── Welcome / file upload screen ── -->
+<div id="welcome-screen">
+  <div class="welcome-inner">
+    <img src="./prevalidation.png" alt="Pixel Patrol" class="welcome-logo"/>
+    <h1 class="welcome-title">Pixel Patrol</h1>
+    <p class="welcome-sub">Interactive Report Viewer</p>
+
+    <label for="file-input-welcome" class="btn btn-primary welcome-open-btn">
+      <i class="bi bi-folder2-open me-2"></i>Open Report File
+    </label>
+    <input type="file" id="file-input-welcome" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
+
+    <p class="welcome-hint">
+      Or pass a URL: <code>?data=https://…/records_df.parquet</code>
+    </p>
+
+    <p class="welcome-local">
+      <i class="bi bi-shield-check me-1"></i>Your data stays local — nothing is uploaded.
+    </p>
+  </div>
+</div>
+
+<!-- ── Main app ── -->
+<div id="main-app" style="display:none">
+  <!-- Top bar -->
+  <div class="topbar">
+    <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
+      <i class="bi bi-list" style="font-size:1.1rem"></i>
+    </button>
+    <img src="./icon.png" alt="Pixel Patrol" class="topbar-icon"/>
+    <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
+    <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
+      <i class="bi bi-folder2-open"></i> Open File
+    </label>
+    <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
+    <span id="current-filename" class="text-muted small text-truncate" style="max-width:300px"></span>
+    <span id="row-count-badge" class="badge bg-secondary ms-auto"></span>
+  </div>
+  <div id="sidebar-backdrop"></div>
+
+  <!-- Body: sidebar + content -->
+  <div class="d-flex" style="min-height:calc(100vh - 49px)">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="card border-0">
+        <div class="card-body p-0">
+
+          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Color Palette</label>
+          <select id="palette-selector" class="form-select form-select-sm mb-3"></select>
+
+          <hr class="my-2"/>
+          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Group By</label>
+          <select id="groupby-selector" class="form-select form-select-sm mb-3"></select>
+
+          <hr class="my-2"/>
+          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Dimension</label>
+          <div id="dimension-controls" class="mb-3">
+            <small class="text-muted">No dimensions detected.</small>
+          </div>
+
+          <hr class="my-2"/>
+          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Filter Rows</label>
+          <select id="filter-column" class="form-select form-select-sm mb-1">
+            <option value="">Column…</option>
+          </select>
+          <select id="filter-op" class="form-select form-select-sm mb-1">
+            <option value="">Operator…</option>
+            <option value="contains">contains</option>
+            <option value="not_contains">not contains</option>
+            <option value="eq">equals</option>
+            <option value="gt">&gt;</option>
+            <option value="ge">&gt;=</option>
+            <option value="lt">&lt;</option>
+            <option value="le">&lt;=</option>
+            <option value="in">in (comma-sep)</option>
+          </select>
+          <input id="filter-value" type="text" class="form-control form-control-sm mb-3" placeholder="Value…"/>
+
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="show-significance-cb">
+            <label class="form-check-label small" for="show-significance-cb">
+              Show significance brackets
+            </label>
+          </div>
+
+          <div class="d-flex gap-2 mb-3">
+            <button id="apply-btn" class="btn btn-primary flex-grow-1 btn-sm">Apply</button>
+            <button id="reset-btn" class="btn btn-outline-secondary flex-grow-1 btn-sm">Reset</button>
+          </div>
+
+          <hr class="my-2"/>
+          <button id="export-csv-btn" class="btn btn-outline-secondary btn-sm w-100">
+            <i class="bi bi-download me-1"></i>Export CSV
+          </button>
+          <div id="filtered-info" class="text-muted small mt-2 text-center"></div>
+
+          <hr class="my-2"/>
+          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Widgets</label>
+          <div id="widget-toggles" class="mb-3">
+            <small class="text-muted">Load a file to see widgets.</small>
+          </div>
+
+        </div>
+      </div>
+    </div><!-- /sidebar -->
+
+    <!-- Main content -->
+    <div id="main-content">
+      <div id="content-inner">
+        <div id="project-name" class="text-muted my-3"></div>
+        <div id="widget-container"></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /main-app -->
+
+<!-- ── Footer ── -->
+<footer class="pp-footer">
+  <div class="pp-footer-inner">
+    <div class="pp-footer-left">
+      <a href="https://helmholtz-imaging.de" target="_blank">
+        <img src="./Helmholtz-Imaging_Mark.png" alt="Helmholtz Imaging" class="pp-footer-logo"/>
+      </a>
+      <div class="pp-footer-text">
+        <span>Pixel Patrol is developed by </span>
+        <a href="https://helmholtz-imaging.de" target="_blank" class="pp-footer-link-light">Helmholtz Imaging</a>
+        <span>.</span>
+      </div>
+    </div>
+    <div class="pp-footer-right">
+      <a href="mailto:support@helmholtz-imaging.de" class="pp-footer-link">support@helmholtz-imaging.de</a>
+      <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" class="pp-footer-link">
+        <i class="bi bi-github me-1"></i>GitHub
+      </a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
