@@ -45,9 +45,9 @@ import fileStats        from './plugins/file-stats.js';
 import sunburst         from './plugins/sunburst.js';
 import metadata         from './plugins/metadata.js';
 import dimSize          from './plugins/dim-size.js';
-import violin           from './plugins/violin.js';
-import histogram        from './plugins/histogram.js';
-import statsAcrossDims  from './plugins/stats-across-dims.js';
+import violinPlugins        from './plugins/violin.js';
+import histogram            from './plugins/histogram.js';
+import statsAcrossDimsPlugins from './plugins/stats-across-dims.js';
 import mosaic           from './plugins/mosaic.js';
 
 const BUILTIN_PLUGINS = [
@@ -56,8 +56,8 @@ const BUILTIN_PLUGINS = [
   sunburst,
   metadata,
   dimSize,
-  violin,
-  statsAcrossDims,
+  ...violinPlugins,
+  ...statsAcrossDimsPlugins,
   histogram,
   mosaic,
 ];
