@@ -119,6 +119,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     query_lock:       threading.Lock
     project_name:     Optional[str]
     authors:          Optional[str]
+    extension_dir:    Optional[Path]  # directory containing extension.json + plugin JS files
 
     # ------------------------------------------------------------------
     def do_HEAD(self) -> None:
@@ -132,6 +133,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/data.parquet":
             self._serve_parquet(self.parquet_path)
+        elif path.startswith("/extension/"):
+            self._serve_extension_file(path)
         else:
             self._serve_static(path)
 
@@ -258,14 +261,38 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self._common_headers(_mime(file_path.suffix), size)
         self.end_headers()
 
+    def _serve_extension_file(self, url_path: str) -> None:
+        """Serve extension.json or a plugin JS file from extension_dir."""
+        if self.extension_dir is None:
+            self.send_error(404)
+            return
+        filename  = url_path.split("/")[-1]
+        file_path = (self.extension_dir / filename).resolve()
+        try:
+            file_path.relative_to(self.extension_dir)
+        except ValueError:
+            self.send_error(403)
+            return
+        if not file_path.is_file():
+            self.send_error(404)
+            return
+        data         = file_path.read_bytes()
+        content_type = "application/json" if file_path.suffix == ".json" else "application/javascript"
+        self.send_response(200)
+        self._common_headers(content_type, len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _inject_server_config(self, html: bytes) -> bytes:
         """Inject window.__PP_* config variables before </head>."""
+        extension_urls = ["/extension/extension.json"] if self.extension_dir else []
         script = (
             "<script>\n"
             "window.__PP_SERVER = true;\n"
             f"window.__PP_FILENAME = {json.dumps(self.parquet_path.name)};\n"
             f"window.__PP_PROJECT_NAME = {json.dumps(self.project_name)};\n"
             f"window.__PP_AUTHORS = {json.dumps(self.authors)};\n"
+            f"window.__PP_EXTENSION_URLS = {json.dumps(extension_urls)};\n"
             "</script>\n"
         ).encode()
         return html.replace(b"</head>", script + b"</head>", 1)
@@ -306,6 +333,7 @@ def serve_viewer(
     port:          int            = 8052,
     open_browser:  bool           = True,
     dist_dir:      Optional[Path] = None,
+    extension:     Optional[Path] = None,
 ) -> None:
     """
     Start a local HTTP server and (optionally) open the viewer in the browser.
@@ -320,15 +348,24 @@ def serve_viewer(
         Open the default browser automatically (default True).
     dist_dir:
         Override the viewer dist directory (useful for testing).
+    extension:
+        Path to a local directory containing ``extension.json`` and plugin JS
+        files.  The directory is served at ``/extension/`` and the manifest is
+        loaded automatically, which in turn loads every plugin listed in it.
+        Mirrors the ``?extension=<url>`` URL parameter used when the viewer is
+        hosted remotely.
     """
-    parquet_path = Path(parquet_path).resolve()
+    parquet_path  = Path(parquet_path).resolve()
     if not parquet_path.exists():
         raise FileNotFoundError(parquet_path)
 
-    dist_dir = dist_dir or find_viewer_dist()
+    dist_dir      = dist_dir or find_viewer_dist()
+    extension_dir = Path(extension).resolve() if extension else None
 
     import click
     click.echo(f"Serving parquet  : {parquet_path}")
+    if extension_dir:
+        click.echo(f"Extension        : {extension_dir}")
 
     duck_conn, project_name, authors = _setup_duckdb(parquet_path)
     query_lock = threading.Lock()
@@ -337,12 +374,13 @@ def serve_viewer(
         "_Handler",
         (_ViewerHandler,),
         {
-            "dist_dir":     dist_dir,
-            "parquet_path": parquet_path,
-            "duck_conn":    duck_conn,
-            "query_lock":   query_lock,
-            "project_name": project_name,
-            "authors":      authors,
+            "dist_dir":      dist_dir,
+            "parquet_path":  parquet_path,
+            "duck_conn":     duck_conn,
+            "query_lock":    query_lock,
+            "project_name":  project_name,
+            "authors":       authors,
+            "extension_dir": extension_dir,
         },
     )
 

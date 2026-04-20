@@ -9,6 +9,8 @@
  *   dims      — active dimensions, e.g. "c0.t1"  (dot-separated, no encoding needed)
  *   sig       — "1" when significance brackets enabled
  *   hidden    — dot-separated hidden widget IDs  (dot-separated, no encoding needed)
+ *   extension — URL of a JSON extension manifest (repeatable); manifest format:
+ *               { "plugins": ["./a.js", "./b.js"] }  (relative URLs resolved from manifest)
  */
 
 export function writeUrlParams(state) {

@@ -32,86 +32,115 @@ automatically.
 
 ## Usage
 
-### Local file (browser only)
+### Drop a file in the browser
 
-Open `dist/index.html` (or the dev server URL) in a browser and drag & drop a `.parquet`
-file onto the welcome screen, or use the file picker.
+Open the deployed viewer or `dist/index.html` and drag & drop a `.parquet` file, or use the file picker.
 
-### Served by the Python CLI
+### Python CLI
 
 ```sh
 pixel-patrol view path/to/data.parquet
 ```
 
-This starts a local HTTP server and opens the viewer in the default browser. In this mode
-all SQL is executed server-side by a native DuckDB connection instead of WASM, which is
-significantly faster for large files.
+Starts a local HTTP server and opens the viewer. SQL runs server-side via native DuckDB — significantly faster than WASM for large files.
 
-### URL parameter
+### URL parameters
 
-Append `?file=<url>` to load a remote parquet file directly:
+| Parameter | Description |
+|---|---|
+| `?data=<url>` | Load a remote parquet file on startup |
+| `?extension=<url>` | Load an extension manifest (repeatable) |
+
+Example:
 
 ```
-http://localhost:8052/?file=https://example.com/data.parquet
+https://ida-mdc.github.io/pixel-patrol/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
 ```
 
 ---
 
-## Extending with plugins
+## Extensions
 
-A plugin is a plain JS object with four fields:
+An extension is a folder containing an `extension.json` manifest and one or more plugin JS files.
 
-```js
+### Manifest format
+
+```json
 {
-  id:       'my-widget',           // unique string
-  label:    'My Widget',           // card header
-  requires(schema) { ... },        // return false to hide when columns are absent
-  async render(container, ctx) {   // draw into container (a <div>)
-    const rows = await ctx.queryRows('SELECT col FROM pp_data LIMIT 10');
-    container.textContent = JSON.stringify(rows);
-  },
+  "name": "My Extension",
+  "plugins": ["./plugin_a.js", "./plugin_b.js"]
 }
 ```
 
-`ctx` fields available inside `render`:
+Relative paths in `plugins` are resolved against the manifest URL, so the JS files can live alongside it.
+
+### Loading an extension
+
+**Remotely** — pass the manifest URL as a query parameter:
+
+```
+?extension=https://your-host/my-extension/extension.json
+```
+
+Multiple extensions can be chained: `&extension=url1&extension=url2`
+
+**Locally** — pass the extension directory to `serve_viewer`:
+
+```python
+from pixel_patrol_base.viewer_server import serve_viewer
+serve_viewer('data.parquet', extension='path/to/my-extension/')
+```
+
+The server serves the directory at `/extension/` and injects the manifest URL automatically.
+
+### Writing a plugin
+
+A plugin is an ES module that exports a single object:
+
+```js
+export default {
+  id:    'my-widget',   // unique across all loaded plugins
+  label: 'My Widget',   // shown in the sidebar widget list
+
+  requires(schema) {
+    // return false to hide the widget when expected columns are absent
+    return schema.allCols.includes('my_column');
+  },
+
+  async render(container, ctx) {
+    const rows = await ctx.queryRows(`
+      SELECT my_column, COUNT(*) AS cnt
+      FROM pp_data
+      ${ctx.where}
+      GROUP BY 1 ORDER BY 2 DESC
+    `);
+    // write into container using plain DOM, Plotly (window.Plotly), or any CDN library
+  },
+};
+```
+
+`Plotly` is exposed as `window.Plotly` so plugins can use it without a separate import.
+
+The DuckDB table is always named `pp_data`. Use `${ctx.where}` to respect the active filter —
+note that `ctx.where` is already a full `WHERE …` clause (or empty string), so if your query
+has its own `WHERE`, merge with `AND`:
+
+```js
+WHERE my_col IS NOT NULL
+  ${ctx.where ? 'AND ' + ctx.where.replace(/^WHERE\s+/i, '') : ''}
+```
+
+### `ctx` reference
 
 | Field | Type | Description |
-|-------|------|-------------|
-| `ctx.query(sql)` | `async → Arrow Table` | Raw Arrow result (use for binary/blob columns) |
-| `ctx.queryRows(sql)` | `async → object[]` | Plain JS objects (blobs as `Uint8Array`) |
-| `ctx.querySample(cols, n)` | `async → object[]` | Sampled scalar query shorthand |
+|---|---|---|
+| `ctx.queryRows(sql)` | `async → object[]` | Query returning plain JS objects |
+| `ctx.query(sql)` | `async → Arrow Table` | Raw Arrow result (for binary/blob columns) |
+| `ctx.querySample(cols, n)` | `async → object[]` | Sampled scalar shorthand |
 | `ctx.schema` | object | `{ metricCols, groupCols, dimensionInfo, allCols, blobCols }` |
 | `ctx.state` | object | `{ palette, groupCol, filter, dimensions }` |
 | `ctx.colorMap` | object | `{ groupValue: hexColor }` |
-| `ctx.where` | string | SQL `WHERE` fragment reflecting the current filter (or `''`) |
+| `ctx.where` | string | SQL `WHERE` clause for the current filter (or `''`) |
 | `ctx.groups` | string[] | Distinct values of the active group column |
 | `ctx.filteredCount` | number | Rows matching the current filter |
 | `ctx.totalRows` | number | Total rows in the file |
-
-The main DuckDB table is always called `pp_data`.
-
-### Registration options
-
-**At page load — inline object:**
-```html
-<script>
-window.__PP_PLUGINS = [{ id: 'my-widget', label: '...', requires: () => true, render: async (el, ctx) => { ... } }];
-</script>
-```
-
-**At page load — external ES module:**
-```html
-<script>
-window.__PP_PLUGIN_URLS = ['./my-plugin.js'];
-</script>
-```
-The module must export the plugin object as its `default` export.
-
-**At runtime:**
-```js
-window.PixelPatrol.registerPlugin(plugin);           // object
-await window.PixelPatrol.loadPlugin('./my-plugin.js'); // URL → default export
-```
-
-If a plugin with the same `id` is registered twice the second call replaces the first,
-and the dashboard re-renders immediately.
