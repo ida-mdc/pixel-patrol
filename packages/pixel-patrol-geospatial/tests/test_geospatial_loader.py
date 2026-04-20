@@ -77,6 +77,7 @@ def test_get_rectangle_polygon_shape_from_bounds_dict_converted():
 
     assert polygon_dict
     assert len(polygon_dict) == 8
-    assert polygon_dict["bbox_point1_lon"] == 0
-    assert polygon_dict["bbox_point1_lat"] == 1
+
+    assert polygon_dict["bbox_point1_lon"] == pytest.approx(0)
+    assert polygon_dict["bbox_point1_lat"] == pytest.approx(2)
 

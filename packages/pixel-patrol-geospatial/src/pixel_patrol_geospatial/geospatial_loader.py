@@ -147,6 +147,14 @@ class GeoImageLoader(PixelPatrolLoader):
                      "rasterio_valid_data_count": int,
                      "rasterio_invalid_data_count": int,
                      "rasterio_invalid_data_percentage": float,
+                     "bbox_point1_lat": float,
+                     "bbox_point2_lat": float,
+                     "bbox_point3_lat": float,
+                     "bbox_point4_lat": float,
+                     "bbox_point1_lon": float,
+                     "bbox_point2_lon": float,
+                     "bbox_point3_lon": float,
+                     "bbox_point4_lon": float,
                      }
     OUTPUT_SCHEMA_PATTERNS = [(rf"^nodata_c\d+$", float)]
 
