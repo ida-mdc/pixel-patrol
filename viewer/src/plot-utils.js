@@ -10,6 +10,9 @@
 
 import Plotly from 'plotly.js-dist-min';
 
+// Expose globally so dynamically-loaded extension plugins can use it.
+window.Plotly = Plotly;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------

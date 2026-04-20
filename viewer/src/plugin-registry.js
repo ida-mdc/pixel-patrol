@@ -1,23 +1,16 @@
 /**
  * Runtime plugin registry.
  *
- * Built-in plugins are bundled at build time. External plugins can be added
- * at runtime through any of the following mechanisms:
+ * Built-in plugins are bundled at build time. External plugins are loaded via
+ * an extension manifest — a JSON file listing the plugin JS URLs:
  *
- *   1. window.__PP_PLUGINS = [pluginObject, ...]
- *      Set before the viewer module loads. Objects are registered directly.
+ *   Remote:  ?extension=https://example.com/my-extension/extension.json
+ *   Local:   window.__PP_EXTENSION_URLS = ['/extension/extension.json']
+ *            (injected automatically when serve_viewer(extension=...) is used)
  *
- *   2. window.__PP_PLUGIN_URLS = ['./my-plugin.js', 'https://cdn.example.com/p.js']
- *      Set before the viewer module loads. Each URL is dynamically imported
- *      (must export a plugin as default) before the first render.
- *
- *   3. window.PixelPatrol.registerPlugin(plugin)
- *      Call at any time. If the viewer is already displaying data it will
- *      re-render immediately.
- *
- *   4. await window.PixelPatrol.loadPlugin(url)
- *      Dynamically imports an ES module from url, registers its default
- *      export, and triggers a re-render.
+ * Manifest format:
+ *   { "plugins": ["./plugin_a.js", "./plugin_b.js"] }
+ *   Relative paths are resolved against the manifest URL.
  *
  * Plugin contract:
  *   {
@@ -115,45 +108,3 @@ export const registry = {
   },
 };
 
-// ── window.PixelPatrol public API ─────────────────────────────────────────────
-
-if (typeof window !== 'undefined') {
-  window.PixelPatrol ??= {};
-
-  /**
-   * Register a plugin object at runtime.
-   *
-   * @param {object} plugin  { id, label, requires, render }
-   * @returns {boolean}  true on success
-   *
-   * @example
-   * window.PixelPatrol.registerPlugin({
-   *   id: 'my-widget',
-   *   label: 'My Custom Widget',
-   *   requires: (schema) => schema.allCols.includes('my_col'),
-   *   render: async (container, ctx) => {
-   *     const rows = await ctx.querySample(['my_col']);
-   *     container.textContent = JSON.stringify(rows[0]);
-   *   },
-   * });
-   */
-  window.PixelPatrol.registerPlugin = (plugin) => registry.register(plugin);
-
-  /**
-   * Dynamically load a plugin from url and register it.
-   * The module at url must export the plugin as its default export.
-   *
-   * @param {string} url  ES module URL
-   * @returns {Promise<object>}  The registered plugin
-   *
-   * @example
-   * await window.PixelPatrol.loadPlugin('./my-plugin.js');
-   */
-  window.PixelPatrol.loadPlugin = (url) => registry.loadFromUrl(url);
-
-  /** Read-only view of all currently registered plugins. */
-  Object.defineProperty(window.PixelPatrol, 'plugins', {
-    get: () => [..._plugins],
-    enumerable: true,
-  });
-}

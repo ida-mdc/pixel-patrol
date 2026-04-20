@@ -27,14 +27,27 @@ let authors     = null;
  * is already in the registry when afterLoad() runs.
  */
 async function loadExternalPlugins() {
-  // Inline plugin objects: window.__PP_PLUGINS = [{ id, label, requires, render }, ...]
-  const inlinePlugins = Array.isArray(window.__PP_PLUGINS) ? window.__PP_PLUGINS : [];
-  for (const plugin of inlinePlugins) {
-    registry.register(plugin);
-  }
+  const params = new URLSearchParams(window.location.search);
 
-  // URL-based plugins: window.__PP_PLUGIN_URLS = ['./my-plugin.js', ...]
-  const urls = Array.isArray(window.__PP_PLUGIN_URLS) ? window.__PP_PLUGIN_URLS : [];
+  // ?extension=<url> or window.__PP_EXTENSION_URLS (injected by local server)
+  // Manifest format: { "plugins": ["./a.js", "./b.js"] }
+  // Relative URLs are resolved against the manifest's own URL.
+  const pageExtUrls   = Array.isArray(window.__PP_EXTENSION_URLS) ? window.__PP_EXTENSION_URLS : [];
+  const extensionUrls = [...pageExtUrls, ...params.getAll('extension').filter(Boolean)];
+  const urls = (
+    await Promise.all(extensionUrls.map(async extUrl => {
+      try {
+        const res      = await fetch(extUrl);
+        const manifest = await res.json();
+        const base     = new URL(extUrl, window.location.href);
+        return (manifest.plugins ?? []).map(p => new URL(p, base).href);
+      } catch (err) {
+        console.warn(`[viewer] failed to load extension manifest "${extUrl}":`, err);
+        return [];
+      }
+    }))
+  ).flat();
+
   await Promise.all(
     urls.map(url =>
       registry.loadFromUrl(url).catch(err =>
@@ -50,7 +63,6 @@ async function boot() {
   on('render', doRender);
   registry.onAdd(doRender);
 
-  // Load any external plugins declared by the host page before the first render.
   await loadExternalPlugins();
 
   // ── Server mode: native DuckDB via local Python server ──────────────────────
