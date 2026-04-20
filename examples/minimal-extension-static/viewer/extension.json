@@ -1,0 +1,7 @@
+{
+  "name": "Markdown Diary Extension",
+  "plugins": [
+    "./plugin_mood_trend.js",
+    "./plugin_word_frequency.js"
+  ]
+}
