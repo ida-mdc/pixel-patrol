@@ -2,7 +2,11 @@ import rasterio
 import tempfile
 import pytest
 import numpy as np
-from pixel_patrol_geospatial.geospatial_loader import GeoImageLoader, _get_datatype
+from pixel_patrol_geospatial.geospatial_loader import (
+    GeoImageLoader,
+    _get_datatype,
+    _get_rectangle_polygon_shape_from_bounds,
+)
 
 
 class TestGeoImageLoader:
@@ -46,4 +50,33 @@ class TestGeoImageLoader:
 def test_get_datatype(test_input, expected):
     actual = _get_datatype(dtypes=test_input)
     assert actual == expected
+
+def test_get_rectangle_polygon_shape_from_bounds_dict_correct():
+    import rasterio
+    left, right, bottom, top = 0, 1, 2, 3
+    bounds = rasterio.coords.BoundingBox(left=left, right=right, bottom=bottom, top=top)
+    img_crs = rasterio.CRS.from_epsg(4326)
+    polygon_dict = _get_rectangle_polygon_shape_from_bounds(bounds, img_crs)
+
+    assert polygon_dict
+    assert len(polygon_dict) == 8
+    expected_dict = {
+        "bbox_point1_lon": left, "bbox_point1_lat": bottom,
+        "bbox_point2_lon": right, "bbox_point2_lat": bottom,
+        "bbox_point3_lon": right, "bbox_point3_lat": top,
+        "bbox_point4_lon": left, "bbox_point4_lat": top,
+    }
+    assert polygon_dict == expected_dict
+
+def test_get_rectangle_polygon_shape_from_bounds_dict_converted():
+    import rasterio
+    left, right, bottom, top = 19989707.63115344, 20109321.668429803, 238632.7592445848, 355454.8524736772
+    bounds = rasterio.coords.BoundingBox(left=left, right=right, bottom=bottom, top=top)
+    img_crs = rasterio.CRS.from_epsg(3876)
+    polygon_dict = _get_rectangle_polygon_shape_from_bounds(bounds, img_crs)
+
+    assert polygon_dict
+    assert len(polygon_dict) == 8
+    assert polygon_dict["bbox_point1_lon"] == 0
+    assert polygon_dict["bbox_point1_lat"] == 1
 
