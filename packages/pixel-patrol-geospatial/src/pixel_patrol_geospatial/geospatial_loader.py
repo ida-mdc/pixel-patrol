@@ -80,8 +80,12 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
 
     metadata["band_count"] = img.count
-    metadata["crs_epsg"] = img.crs.to_epsg(confidence_threshold=70)
-    metadata["crs_str"] = img.crs.to_string()
+    if img.crs:
+        metadata["crs_epsg"] = img.crs.to_epsg(confidence_threshold=70)
+        metadata["crs_str"] = img.crs.to_string()
+    else:
+        metadata["crs_epsg"] = None
+        metadata["crs_str"] = None
 
     datatype = _get_datatype(img.dtypes)
     metadata["dtype"] = datatype
