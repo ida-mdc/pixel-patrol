@@ -49,6 +49,32 @@ def _get_datatype(dtypes: Optional) -> Optional:
         case _:
             return dtypes
 
+def _get_rectangle_polygon_shape_from_bounds(bounds: rasterio.coords.BoundingBox, img_crs) -> Dict[str, float]:
+    # BoundingBox(left=395999.999999962, bottom=5931347.999999857, right=396060.799999962, top=5931408.799999856)
+    lat_lon_crs = rasterio.CRS.from_epsg(4326)
+    coords = [
+        # (x, y) | (lon, lat)
+        (bounds.left,  bounds.bottom),
+        (bounds.right, bounds.bottom),
+        (bounds.right, bounds.top),
+        (bounds.left,  bounds.top),
+    ]
+    geom = {
+        "type": "Polygon",
+        "coordinates": [coords]
+    }
+    geom_lat_lon = rasterio.warp.transform_geom(img_crs, lat_lon_crs, geom)
+
+    coords_out = geom_lat_lon["coordinates"][0]
+    p1, p2, p3, p4, p5 = coords_out
+    assert p1 == p5
+    d = dict(
+        bbox_point1_lon=p1[0], bbox_point1_lat=p1[1],
+        bbox_point2_lon=p2[0], bbox_point2_lat=p2[1],
+        bbox_point3_lon=p3[0], bbox_point3_lat=p3[1],
+        bbox_point4_lon=p4[0], bbox_point4_lat=p4[1],
+    )
+    return d
 
 def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
@@ -80,15 +106,9 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     metadata["latitude"] = lat
     metadata["longitude"] = lng
 
-    bounds_img_crs = img.bounds  # eg. BoundingBox(left=395999.999999962, bottom=5931347.999999857, right=396060.799999962, top=5931408.799999856)
-    lat_lon_crs = rasterio.CRS.from_epsg(4326)
-    bounds_tuple_lat_lon = rasterio.warp.transform_bounds(img.crs, lat_lon_crs, *bounds_img_crs)
-    # bounds_tuple_lat_lon:  (lower left x, lower left y, upper right x, upper right y)
-
-    metadata["bbox_west"] = bounds_tuple_lat_lon[0]  # left
-    metadata["bbox_south"] = bounds_tuple_lat_lon[1]  # bottom
-    metadata["bbox_east"] = bounds_tuple_lat_lon[2]  # right
-    metadata["bbox_north"] = bounds_tuple_lat_lon[3]  # top
+    if img.bounds:
+        bound_dict_lat_lon = _get_rectangle_polygon_shape_from_bounds(bounds=img.bounds, img_crs=img.crs)
+        metadata.update(bound_dict_lat_lon)
 
     # TODO: pixel size in meters using img.res after (after converting to the local UTM grid)
     # TODO: scales if set
@@ -112,7 +132,6 @@ class GeoImageLoader(PixelPatrolLoader):
                      "crs_epsg": rasterio.crs.CRS,
                      "crs_str": str,
                      "nodata_value": Optional[float],
-                     "bbox_north": float, "bbox_south": float, "bbox_east": float, "bbox_west": float,
                      "dim_order": str,
                      "dim_names": List[str],
                      "shape": List[int],
