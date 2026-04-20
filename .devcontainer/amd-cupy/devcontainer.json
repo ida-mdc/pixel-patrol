@@ -1,0 +1,25 @@
+{
+    "name": "cupy-amd-gpu",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "../.."
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.debugpy"
+            ],
+        },
+    },
+    "runArgs": [
+        "--device=/dev/kfd",
+        "--device=/dev/dri",
+        "--ipc=host",
+        "--shm-size=4g",
+        "--group-add", "video",
+        "--group-add", "render"
+    ]
+}

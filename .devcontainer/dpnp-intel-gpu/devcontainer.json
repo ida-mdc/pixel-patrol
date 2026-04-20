@@ -1,0 +1,22 @@
+{
+    "name": "dpnp-intel-gpu",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "../.."
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.debugpy"
+            ]
+        }
+    },
+    "runArgs": [
+        "--device=/dev/dri",
+        "--volume=/dev/dri/by-path:/dev/dri/by-path",
+        "--ipc=host"
+    ]
+}
