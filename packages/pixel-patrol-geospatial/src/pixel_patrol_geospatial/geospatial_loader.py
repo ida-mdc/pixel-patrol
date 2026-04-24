@@ -19,6 +19,7 @@ def _get_nodata_value(
     if image_nodata_value: nodata_values.append(image_nodata_value)
     if band_nodata_values: nodata_values.extend(band_nodata_values)
 
+    nodata_values = [v for v in nodata_values if v and ~np.isnan(v)]  # remove NaNs, because float("nan") != float("nan")
     if len(set(nodata_values)) > 1:
         msg = (
             "Multiple no data values found: '%s', which is currently not supported!\n"
@@ -26,9 +27,11 @@ def _get_nodata_value(
         )
         logger.warning(msg, nodata_values)
         return None
-    else:
+    elif len(set(nodata_values)) == 1:
         nodata_value = nodata_values[0]
         return nodata_value
+    else:
+        return None
 
 def _get_datatype(dtypes: Optional) -> Optional:
     match dtypes:
@@ -83,9 +86,15 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     if img.crs:
         metadata["crs_epsg"] = img.crs.to_epsg(confidence_threshold=70)
         metadata["crs_str"] = img.crs.to_string()
+        lng, lat = img.lnglat()  # Geographic coordinates of the dataset’s center.
+        metadata["latitude"] = lat
+        metadata["longitude"] = lng
     else:
         metadata["crs_epsg"] = None
         metadata["crs_str"] = None
+        metadata["latitude"] = None
+        metadata["longitude"] = None
+
 
     datatype = _get_datatype(img.dtypes)
     metadata["dtype"] = datatype
@@ -106,11 +115,7 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     metadata["Y_size"] = metadata["width"] = img.width
 
 
-    lng, lat = img.lnglat()  # Geographic coordinates of the dataset’s center.
-    metadata["latitude"] = lat
-    metadata["longitude"] = lng
-
-    if img.bounds:
+    if img.bounds and img.crs:
         bound_dict_lat_lon = _get_rectangle_polygon_shape_from_bounds(bounds=img.bounds, img_crs=img.crs)
         metadata.update(bound_dict_lat_lon)
 
@@ -158,7 +163,7 @@ class GeoImageLoader(PixelPatrolLoader):
                      }
     OUTPUT_SCHEMA_PATTERNS = [(rf"^nodata_c\d+$", float)]
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"tif"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"tif", "nc"}
 
     def load(self, source: str) -> Record:
         p = Path(source)
