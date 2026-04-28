@@ -1,5 +1,6 @@
 export default {
   id: 'dim-size',
+  group: 'Metadata',
   label: 'Dimension Size Distribution',
   info: [
     'Shows how **image dimensions** (X, Y, Z, T, …) vary across the dataset.',

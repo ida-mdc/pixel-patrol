@@ -6,6 +6,7 @@ const FILE_SEL_ID      = 'hist-file-select';
 
 export default {
   id: 'histogram',
+  group: 'Dataset Stats',
   label: 'Pixel Value Histograms',
   info: [
     'Histograms are computed **per image** and grouped based on your groupings.',

@@ -5,6 +5,7 @@ const FILE_STATS_MARGIN  = { l: 50, r: 80, t: 50, b: 80 };
 
 export default {
   id: 'file-stats',
+  group: 'File Stats',
   info: [
     'High-level **file statistics** for the dataset.',
     '',

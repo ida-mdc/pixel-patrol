@@ -129,7 +129,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
 
 function makeAcrossDimsPlugin(id, label, info, filterMetric) {
   return {
-    id, label, info,
+    id, label, info, group: 'Dataset Stats',
     requires(schema) {
       return detectDimMetricGroups(schema.dimMetricCols ?? []).some(g => filterMetric(g.base));
     },

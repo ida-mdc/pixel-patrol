@@ -43,7 +43,8 @@ def _discover_installed_extensions() -> list[Path]:
     try:
         from importlib.metadata import entry_points
         dirs: list[Path] = []
-        for ep in entry_points(group="pixel_patrol.viewer_extensions"):
+        eps = sorted(entry_points(group="pixel_patrol.viewer_extensions"), key=lambda ep: (ep.name, ep.value))
+        for ep in eps:
             try:
                 fn = ep.load()
                 d  = Path(fn())

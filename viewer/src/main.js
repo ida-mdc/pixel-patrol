@@ -44,27 +44,34 @@ async function loadExternalPlugins() {
   // Relative URLs are resolved against the manifest's own URL.
   const pageExtUrls   = Array.isArray(window.__PP_EXTENSION_URLS) ? window.__PP_EXTENSION_URLS : [];
   const extensionUrls = [...bundledExtUrls, ...pageExtUrls, ...params.getAll('extension').filter(Boolean)];
-  const urls = (
+  const manifests = (
     await Promise.all(extensionUrls.map(async extUrl => {
       try {
         const res      = await fetch(extUrl);
         const manifest = await res.json();
         const base     = new URL(extUrl, window.location.href);
-        return (manifest.plugins ?? []).map(p => new URL(p, base).href);
+        const packageKey = String(manifest.package_name ?? manifest.name ?? extUrl).toLowerCase();
+        const pluginUrls = (manifest.plugins ?? []).map(p => new URL(p, base).href);
+        return { packageKey, pluginUrls };
       } catch (err) {
         console.warn(`[viewer] failed to load extension manifest "${extUrl}":`, err);
-        return [];
+        return { packageKey: extUrl.toLowerCase(), pluginUrls: [] };
       }
     }))
-  ).flat();
+  ).sort((a, b) => a.packageKey.localeCompare(b.packageKey));
 
-  await Promise.all(
-    urls.map(url =>
-      registry.loadFromUrl(url).catch(err =>
-        console.warn(`[viewer] failed to load plugin from "${url}":`, err),
-      ),
-    ),
-  );
+  // Deterministic ordering:
+  // 1) package alphabetical (manifest package_name/name), then
+  // 2) plugin order from each package's extension manifest.
+  for (const { pluginUrls } of manifests) {
+    for (const url of pluginUrls) {
+      try {
+        await registry.loadFromUrl(url);
+      } catch (err) {
+        console.warn(`[viewer] failed to load plugin from "${url}":`, err);
+      }
+    }
+  }
 }
 
 async function boot() {

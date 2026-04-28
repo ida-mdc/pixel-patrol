@@ -155,7 +155,7 @@ async function renderViolins(container, ctx, filterMetric) {
 
 function makeViolinPlugin(id, label, info, filterMetric) {
   return {
-    id, label, info,
+    id, label, info, group: 'Dataset Stats',
     requires(schema) {
       return schema.metricCols.some(filterMetric) || (schema.dimMetricCols ?? []).some(filterMetric);
     },
