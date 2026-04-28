@@ -20,6 +20,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: viewer/
+          path: src/markdown_diary_tracker_static/viewer/
       - id: deployment
         uses: actions/deploy-pages@v4

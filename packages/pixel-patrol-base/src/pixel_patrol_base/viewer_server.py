@@ -20,12 +20,45 @@ from __future__ import annotations
 
 import json
 import threading
+import warnings
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 import importlib.resources
 
+
+
+# ---------------------------------------------------------------------------
+# Installed extension discovery
+# ---------------------------------------------------------------------------
+
+def _discover_installed_extensions() -> list[Path]:
+    """
+    Return viewer extension directories declared by installed packages.
+
+    Each entry point in the ``pixel_patrol.viewer_extensions`` group must be a
+    callable that returns the path to a directory containing ``extension.json``.
+    """
+    try:
+        from importlib.metadata import entry_points
+        dirs: list[Path] = []
+        for ep in entry_points(group="pixel_patrol.viewer_extensions"):
+            try:
+                fn = ep.load()
+                d  = Path(fn())
+                if d.is_dir() and (d / "extension.json").exists():
+                    dirs.append(d)
+                else:
+                    warnings.warn(
+                        f"[pixel-patrol] viewer extension {ep.name!r}: "
+                        f"{d} is not a directory containing extension.json"
+                    )
+            except Exception as exc:
+                warnings.warn(f"[pixel-patrol] viewer extension {ep.name!r} failed to load: {exc}")
+        return dirs
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +152,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     query_lock:       threading.Lock
     project_name:     Optional[str]
     authors:          Optional[str]
-    extension_dir:    Optional[Path]  # directory containing extension.json + plugin JS files
+    extension_dirs:   list  # list[Path] — each dir contains extension.json + plugin JS files
 
     # ------------------------------------------------------------------
     def do_HEAD(self) -> None:
@@ -137,6 +170,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self._serve_extension_file(path)
         else:
             self._serve_static(path)
+
 
     def do_POST(self) -> None:
         if self.path == "/api/query":
@@ -262,14 +296,28 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _serve_extension_file(self, url_path: str) -> None:
-        """Serve extension.json or a plugin JS file from extension_dir."""
-        if self.extension_dir is None:
+        """Serve extension.json or a plugin JS file from extension_dirs[idx].
+
+        URL format: /extension/{idx}/{filename}
+        """
+        parts = url_path.strip("/").split("/")  # ["extension", "{idx}", "{filename}"]
+        if len(parts) != 3:
             self.send_error(404)
             return
-        filename  = url_path.split("/")[-1]
-        file_path = (self.extension_dir / filename).resolve()
         try:
-            file_path.relative_to(self.extension_dir)
+            idx = int(parts[1])
+        except ValueError:
+            self.send_error(404)
+            return
+        if idx < 0 or idx >= len(self.extension_dirs):
+            self.send_error(404)
+            return
+
+        ext_dir   = self.extension_dirs[idx]
+        filename  = parts[2]
+        file_path = (ext_dir / filename).resolve()
+        try:
+            file_path.relative_to(ext_dir)
         except ValueError:
             self.send_error(403)
             return
@@ -285,7 +333,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
     def _inject_server_config(self, html: bytes) -> bytes:
         """Inject window.__PP_* config variables before </head>."""
-        extension_urls = ["/extension/extension.json"] if self.extension_dir else []
+        extension_urls = [f"/extension/{i}/extension.json" for i in range(len(self.extension_dirs))]
         script = (
             "<script>\n"
             "window.__PP_SERVER = true;\n"
@@ -350,22 +398,26 @@ def serve_viewer(
         Override the viewer dist directory (useful for testing).
     extension:
         Path to a local directory containing ``extension.json`` and plugin JS
-        files.  The directory is served at ``/extension/`` and the manifest is
-        loaded automatically, which in turn loads every plugin listed in it.
+        files.  Added on top of any extensions auto-discovered from installed
+        packages (``pixel_patrol.viewer_extensions`` entry-point group).
         Mirrors the ``?extension=<url>`` URL parameter used when the viewer is
         hosted remotely.
     """
-    parquet_path  = Path(parquet_path).resolve()
+    parquet_path = Path(parquet_path).resolve()
     if not parquet_path.exists():
         raise FileNotFoundError(parquet_path)
 
-    dist_dir      = dist_dir or find_viewer_dist()
-    extension_dir = Path(extension).resolve() if extension else None
+    dist_dir = dist_dir or find_viewer_dist()
+
+    # Collect extension directories: auto-discovered first, then explicit.
+    extension_dirs: list[Path] = _discover_installed_extensions()
+    if extension:
+        extension_dirs.append(Path(extension).resolve())
 
     import click
     click.echo(f"Serving parquet  : {parquet_path}")
-    if extension_dir:
-        click.echo(f"Extension        : {extension_dir}")
+    for d in extension_dirs:
+        click.echo(f"Extension        : {d}")
 
     duck_conn, project_name, authors = _setup_duckdb(parquet_path)
     query_lock = threading.Lock()
@@ -374,13 +426,13 @@ def serve_viewer(
         "_Handler",
         (_ViewerHandler,),
         {
-            "dist_dir":      dist_dir,
-            "parquet_path":  parquet_path,
-            "duck_conn":     duck_conn,
-            "query_lock":    query_lock,
-            "project_name":  project_name,
-            "authors":       authors,
-            "extension_dir": extension_dir,
+            "dist_dir":       dist_dir,
+            "parquet_path":   parquet_path,
+            "duck_conn":      duck_conn,
+            "query_lock":     query_lock,
+            "project_name":   project_name,
+            "authors":        authors,
+            "extension_dirs": extension_dirs,
         },
     )
 
