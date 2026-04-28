@@ -91,6 +91,7 @@ async function boot() {
       projectName ??= window.__PP_PROJECT_NAME ?? null;
       authors     ??= window.__PP_AUTHORS      ?? null;
 
+      hideFileOpenControlsForServerMode();
       document.getElementById('current-filename').textContent =
         window.__PP_FILENAME ?? 'data.parquet';
       hideLoading();
@@ -305,6 +306,12 @@ function showWelcome() {
 function showApp() {
   document.getElementById('welcome-screen').style.display = 'none';
   document.getElementById('main-app').style.display       = 'flex';
+}
+
+function hideFileOpenControlsForServerMode() {
+  document.querySelector('label[for="file-input-welcome"]')?.style.setProperty('display', 'none');
+  document.querySelector('label[for="file-input-top"]')?.style.setProperty('display', 'none');
+  document.getElementById('open-file-top-btn')?.style.setProperty('display', 'none');
 }
 
 function showFatalError(message, err, hint = null) {
