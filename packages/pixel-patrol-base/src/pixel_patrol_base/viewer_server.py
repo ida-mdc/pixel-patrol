@@ -19,6 +19,7 @@ also be used.
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import warnings
 import webbrowser
@@ -437,8 +438,20 @@ def serve_viewer(
         },
     )
 
-    server     = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    viewer_url = f"http://127.0.0.1:{port}/"
+    chosen_port = port
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", chosen_port), handler)
+    except OSError as exc:
+        # If the requested port is occupied, transparently fall back to an
+        # ephemeral port so `pixel-patrol view` still starts.
+        if exc.errno not in {getattr(socket, "EADDRINUSE", 98), 98}:
+            raise
+
+        click.echo(f"Port {chosen_port} is in use; selecting a free port.")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        chosen_port = int(server.server_address[1])
+
+    viewer_url = f"http://127.0.0.1:{chosen_port}/"
 
     click.echo(f"Viewer URL       : {viewer_url}")
     click.echo("Press Ctrl+C to stop.\n")
