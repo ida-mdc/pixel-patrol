@@ -8,6 +8,7 @@ const DIST_COLS = ['dtype', 'dim_order'];
 
 export default {
   id: 'metadata',
+  group: 'Metadata',
   label: 'Metadata',
   info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nAlso lists properties shared by all files, and available dimension ranges.',
 

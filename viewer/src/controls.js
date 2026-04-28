@@ -1,6 +1,7 @@
 import { state, setState, resetState, emit } from './state.js';
 import { BLOB_COLS } from './schema.js';
 import { getPaletteNames } from './colors.js';
+import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 
 /**
  * Wire up all sidebar controls for a loaded schema.
@@ -136,13 +137,27 @@ function buildWidgetToggles(plugins, schema) {
     return;
   }
 
-  container.innerHTML = applicable.map(p => `
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" id="wt-${p.id}"
-             ${state.hiddenWidgets.has(p.id) ? '' : 'checked'}>
-      <label class="form-check-label small" for="wt-${p.id}">${p.label}</label>
-    </div>
-  `).join('');
+  const grouped = new Map();
+  for (const p of applicable) {
+    const grp = pluginGroup(p);
+    if (!grouped.has(grp)) grouped.set(grp, []);
+    grouped.get(grp).push(p);
+  }
+  const orderedGroups = orderedGroupNames(applicable);
+
+  container.innerHTML = orderedGroups.map(g => {
+    const rows = grouped.get(g).map(p => `
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="wt-${p.id}"
+               ${state.hiddenWidgets.has(p.id) ? '' : 'checked'}>
+        <label class="form-check-label small" for="wt-${p.id}">${p.label}</label>
+      </div>
+    `).join('');
+    return `
+      <div class="mt-2 mb-1 small text-uppercase text-muted fw-bold">${g}</div>
+      ${rows}
+    `;
+  }).join('');
 
   for (const p of applicable) {
     const cb = document.getElementById(`wt-${p.id}`);

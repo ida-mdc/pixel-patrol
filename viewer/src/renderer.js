@@ -4,6 +4,7 @@ import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, 
 import { META_COLS, DIM_PATTERN } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
+import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 
 /**
  * Build a plugin context object.
@@ -134,18 +135,33 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     catch { return false; }
   });
 
+  const grouped = new Map();
   for (const plugin of activePlugins) {
-    const card = createCard(plugin.label, plugin.info);
-    container.appendChild(card);
-    const body = card.querySelector('.widget-card-body');
+    const grp = pluginGroup(plugin);
+    if (!grouped.has(grp)) grouped.set(grp, []);
+    grouped.get(grp).push(plugin);
+  }
+  const orderedGroups = orderedGroupNames(activePlugins);
 
-    try {
-      await plugin.render(body, ctx);
-    } catch (err) {
-      body.innerHTML = `<div class="text-danger small p-2">
-        <strong>${plugin.id}</strong>: ${err.message}
-      </div>`;
-      console.error(`[viewer] plugin "${plugin.id}" error:`, err);
+  for (const groupName of orderedGroups) {
+    const title = document.createElement('h3');
+    title.className = 'my-3 text-primary';
+    title.textContent = groupName;
+    container.appendChild(title);
+
+    for (const plugin of grouped.get(groupName)) {
+      const card = createCard(plugin.label, plugin.info);
+      container.appendChild(card);
+      const body = card.querySelector('.widget-card-body');
+
+      try {
+        await plugin.render(body, ctx);
+      } catch (err) {
+        body.innerHTML = `<div class="text-danger small p-2">
+          <strong>${plugin.id}</strong>: ${err.message}
+        </div>`;
+        console.error(`[viewer] plugin "${plugin.id}" error:`, err);
+      }
     }
   }
 }
