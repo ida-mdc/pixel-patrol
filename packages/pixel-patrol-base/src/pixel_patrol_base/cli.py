@@ -221,5 +221,25 @@ def view(parquet_file: Path, port: int, no_browser: bool):
     serve_viewer(parquet_file, port=port, open_browser=not no_browser)
 
 
+@cli.command("build-viewer-html")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
+    required=True,
+    help="Output path for a single self-contained viewer HTML file.",
+)
+def build_viewer_html(output: Path):
+    """
+    Build a single-file static viewer HTML with bundled JS/CSS/assets and discovered extensions.
+
+    Share this HTML together with your parquet report file.
+    """
+    from pixel_patrol_base.viewer_pages import build_single_file_viewer_html
+
+    out = build_single_file_viewer_html(output)
+    click.echo(f"Single-file viewer written to: {out}")
+
+
 if __name__ == '__main__':
     cli()
