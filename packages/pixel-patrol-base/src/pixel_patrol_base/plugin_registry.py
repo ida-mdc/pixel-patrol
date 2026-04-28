@@ -1,5 +1,6 @@
 import importlib
 import logging
+from pathlib import Path
 from typing import Type, Union, List
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
@@ -54,6 +55,11 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
         except Exception as e:
             logger.error(f"Could not load plugin '{ep.name}': {e}")
     return res
+
+
+def get_viewer_extension_dir():
+    """Return the path to the bundled viewer extension directory."""
+    return Path(__file__).parent / "viewer"
 
 
 def register_processor_plugins():

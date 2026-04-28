@@ -1,0 +1,14 @@
+{
+  "name": "Pixel Patrol Base Plugins",
+  "plugins": [
+    "./plugin_summary.js",
+    "./plugin_file_stats.js",
+    "./plugin_sunburst.js",
+    "./plugin_metadata.js",
+    "./plugin_dim_size.js",
+    "./plugin_violin.js",
+    "./plugin_histogram.js",
+    "./plugin_mosaic.js",
+    "./plugin_stats_across_dims.js"
+  ]
+}
