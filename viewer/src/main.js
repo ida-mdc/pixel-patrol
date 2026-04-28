@@ -28,12 +28,22 @@ let authors     = null;
  */
 async function loadExternalPlugins() {
   const params = new URLSearchParams(window.location.search);
+  let bundledExtUrls = [];
+  try {
+    const res = await fetch('./pp_extension_urls.json', { cache: 'no-store' });
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json)) bundledExtUrls = json.filter(Boolean);
+    }
+  } catch {
+    // Optional for older deployments that do not ship this file.
+  }
 
   // ?extension=<url> or window.__PP_EXTENSION_URLS (injected by local server)
   // Manifest format: { "plugins": ["./a.js", "./b.js"] }
   // Relative URLs are resolved against the manifest's own URL.
   const pageExtUrls   = Array.isArray(window.__PP_EXTENSION_URLS) ? window.__PP_EXTENSION_URLS : [];
-  const extensionUrls = [...pageExtUrls, ...params.getAll('extension').filter(Boolean)];
+  const extensionUrls = [...bundledExtUrls, ...pageExtUrls, ...params.getAll('extension').filter(Boolean)];
   const urls = (
     await Promise.all(extensionUrls.map(async extUrl => {
       try {

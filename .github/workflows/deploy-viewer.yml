@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'viewer/**'
+      - 'packages/**'
+      - '.github/workflows/deploy-viewer.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,23 +25,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: viewer/package-lock.json
+          python-version: "3.12"
 
-      - name: Install dependencies
-        working-directory: viewer
-        run: npm ci
+      - name: Install runtime packages for extension discovery
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            -e packages/pixel-patrol-base \
+            -e packages/pixel-patrol-loader-bio \
+            -e packages/pixel-patrol-image
 
-      - name: Build
-        working-directory: viewer
-        run: npm run build
+      - name: Assemble static site from bundled viewer + discovered extensions
+        run: python -c "from pixel_patrol_base.viewer_pages import build_github_pages_site; build_github_pages_site('gh-pages-site')"
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: viewer/dist
+          path: gh-pages-site
 
   deploy:
     needs: build

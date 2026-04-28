@@ -44,7 +44,7 @@ pixel_patrol_base_processing_builtins = "pixel_patrol_base.plugin_registry:regis
 pixel_patrol_base_widget_builtins = "pixel_patrol_base.plugin_registry:register_widget_plugins"
 
 [project.entry-points."pixel_patrol.viewer_extensions"]
-pixel_patrol_base_viewer = "pixel_patrol_base.plugin_registry:get_viewer_extension_dir"
+pixel_patrol_base_viewer = "pixel_patrol_base.viewer_extensions:get_viewer_extension_dir"
 
 [dependency-groups]
 dev = [
