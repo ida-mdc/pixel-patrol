@@ -8,12 +8,9 @@ Steps
 -----
 1. Process the diary Markdown files with the custom loader and processor.
    The processor adds ``positivity_factor`` and other columns to the parquet.
-2. Serve the parquet with the static viewer, loading this folder as the
-   extension.  The server reads ``extension.json`` to discover the plugin JS
-   files and serves them alongside the viewer.
-
-This folder can also be hosted remotely (e.g. GitHub Pages) and linked via
-``?extension=<url>`` without any Python server involved.
+2. Serve the parquet with the static viewer.  The server auto-discovers viewer
+   extensions from installed packages (``pixel_patrol.viewer_extensions``
+   entry-point group) and loads the JS plugins bundled with this package.
 
 Usage
 -----
@@ -42,4 +39,4 @@ if __name__ == "__main__":
     project = add_paths(project, ["2024", "2025"])
     project = process_files(project)
 
-    serve_viewer(output, extension=HERE / "viewer")
+    serve_viewer(output)
