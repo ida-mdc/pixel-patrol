@@ -33,27 +33,10 @@
  *   ctx.totalRows            → total rows in file
  */
 
-import summary          from './plugins/summary.js';
-import fileStats        from './plugins/file-stats.js';
-import sunburst         from './plugins/sunburst.js';
-import metadata         from './plugins/metadata.js';
-import dimSize          from './plugins/dim-size.js';
-import violinPlugins        from './plugins/violin.js';
-import histogram            from './plugins/histogram.js';
-import statsAcrossDimsPlugins from './plugins/stats-across-dims.js';
-import mosaic           from './plugins/mosaic.js';
-
-const BUILTIN_PLUGINS = [
-  summary,
-  fileStats,
-  sunburst,
-  metadata,
-  dimSize,
-  ...violinPlugins,
-  ...statsAcrossDimsPlugins,
-  histogram,
-  mosaic,
-];
+// Built-in plugins are now loaded at runtime from installed Python packages
+// (pixel_patrol.viewer_extensions entry-point group) rather than bundled here.
+// This means plugin JS files can be edited without rebuilding the viewer.
+const BUILTIN_PLUGINS = [];
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
@@ -85,16 +68,17 @@ export const registry = {
   },
 
   /**
-   * Dynamically import a plugin from url and register it.
-   * The module must export the plugin object as its default export.
-   * Returns the registered plugin object.
+   * Dynamically import one or more plugins from url and register them.
+   * The module's default export may be a single plugin object or an array.
+   * Returns the array of registered plugin objects.
    */
   async loadFromUrl(url) {
     // @vite-ignore tells Vite not to analyse this dynamic import statically.
-    const mod    = await import(/* @vite-ignore */ url);
-    const plugin = mod.default ?? mod;
-    this.register(plugin);
-    return plugin;
+    const mod      = await import(/* @vite-ignore */ url);
+    const exported = mod.default ?? mod;
+    const plugins  = Array.isArray(exported) ? exported : [exported];
+    plugins.forEach(p => this.register(p));
+    return plugins;
   },
 
   /**

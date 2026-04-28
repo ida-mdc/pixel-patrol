@@ -1,5 +1,7 @@
-import { buildColorMap } from './colors.js';
-import { buildWhere, q, sample } from './sql.js';
+import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
+import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
+import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, LEGEND, LAYOUT } from './plot-utils.js';
+import { META_COLS, DIM_PATTERN } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 
@@ -53,11 +55,42 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
      * groupCol (if set) is always included as __group__.
      */
     async querySample(cols, n = 5000) {
-      const gcExpr  = state.groupCol ? `${q(state.groupCol)} AS __group__, ` : `'all' AS __group__, `;
-      const colList = cols.map(q).join(', ');
+      const gcExpr  = state.groupCol ? `${_q(state.groupCol)} AS __group__, ` : `'all' AS __group__, `;
+      const colList = cols.map(_q).join(', ');
       const sql     = `SELECT ${gcExpr}${colList} FROM pp_data ${where} ${sample(n)}`;
       return this.queryRows(sql);
     },
+
+    /** SQL helper: safely double-quote an identifier. */
+    sql: {
+      q:         _q,
+      andWhere,
+      sample,
+      groupCol:  () => _groupCol(state),
+      groupExpr: () => _groupExpr(state),
+    },
+
+    /** Color helpers pre-bound to the current colorMap. */
+    color: {
+      group:    (g) => _groupColor(colorMap, g),
+      hexToRgba,
+    },
+
+    /** Plotly plot helpers (mirror of plot-utils.js). */
+    plot: {
+      append:     appendPlot,
+      appendMany: appendPlots,
+      niceName,
+      escapeHtml,
+      bargap,
+      flexGrid:   createFlexGrid,
+      LEGEND,
+      LAYOUT,
+    },
+
+    /** Schema constants (column lists, patterns). */
+    META_COLS,
+    DIM_PATTERN,
   };
 }
 
@@ -75,7 +108,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const where = buildWhere(state.filter);
 
   // Fetch distinct groups and filtered count in parallel.
-  const gcExpr = state.groupCol ? q(state.groupCol) : `'all'`;
+  const gcExpr = state.groupCol ? _q(state.groupCol) : `'all'`;
   const [groupResult, countResult] = await Promise.all([
     conn.query(
       `SELECT DISTINCT ${gcExpr} AS g FROM pp_data ${where} ORDER BY 1 LIMIT 50`,

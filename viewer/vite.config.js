@@ -26,6 +26,11 @@ function syncToPythonPackage() {
 }
 
 export default defineConfig({
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+  },
+
   // Relative base so the built output works from any subdirectory or
   // file:// as well as GitHub Pages (which may serve from /repo-name/).
   base: './',
@@ -55,5 +60,7 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    // Allow Vitest to import plugin files from sibling packages directory.
+    fs: { allow: ['..'] },
   },
 });

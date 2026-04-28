@@ -216,6 +216,7 @@ function afterLoad() {
 }
 
 async function doRender() {
+  if (!conn || !schema) return;  // data not loaded yet (e.g. plugin registered during boot)
   try {
     await renderAll(registry.plugins, conn, schema, state, totalRows);
     writeUrlParams(state);
