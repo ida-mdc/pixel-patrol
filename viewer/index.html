@@ -65,6 +65,11 @@
       <div class="card border-0">
         <div class="card-body p-0">
 
+          <div id="sidebar-frozen-banner" class="alert alert-secondary py-2 px-2 mb-3 d-none small">
+            <div class="fw-semibold mb-1">Offline snapshot</div>
+            <div id="sidebar-frozen-body"></div>
+          </div>
+
           <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Color Palette</label>
           <select id="palette-selector" class="form-select form-select-sm mb-3"></select>
 
@@ -111,6 +116,9 @@
           <hr class="my-2"/>
           <button id="export-csv-btn" class="btn btn-outline-secondary btn-sm w-100">
             <i class="bi bi-download me-1"></i>Export CSV
+          </button>
+          <button id="export-baked-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2">
+            <i class="bi bi-file-earmark-code me-1"></i>Export static HTML snapshot…
           </button>
           <div id="filtered-info" class="text-muted small mt-2 text-center"></div>
 
