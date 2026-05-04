@@ -2,6 +2,7 @@ import { state, setState, resetState, emit } from './state.js';
 import { BLOB_COLS } from './schema.js';
 import { getPaletteNames } from './colors.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { formatFrozenSidebarHtml } from './export-snapshot.js';
 
 /**
  * Wire up all sidebar controls for a loaded schema.
@@ -12,8 +13,12 @@ import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
  * @param {number}   totalRows
  * @param {object[]} plugins  — all registered plugins (for widget toggles)
  * @param {Function} onExportCsv
+ * @param {object}   [opts]
+ * @param {boolean}  [opts.sidebarLocked]
+ * @param {object}   [opts.frozenSidebar]  — payload from buildFrozenSidebarPayload
+ * @param {Function} [opts.onExportBakedHtml] — baked static HTML snapshot
  */
-export function initControls(schema, totalRows, plugins, onExportCsv) {
+export function initControls(schema, totalRows, plugins, onExportCsv, opts = {}) {
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -79,8 +84,39 @@ export function initControls(schema, totalRows, plugins, onExportCsv) {
   // ── Export CSV ────────────────────────────────────────────────────────
   el('export-csv-btn').onclick = onExportCsv;
 
+  const bakedBtn = el('export-baked-btn');
+  if (bakedBtn) {
+    bakedBtn.onclick = opts.onExportBakedHtml ?? (() => {});
+    bakedBtn.disabled = !opts.onExportBakedHtml;
+  }
+
   // ── Row count display ─────────────────────────────────────────────────
   el('row-count-badge').textContent = `${totalRows.toLocaleString()} records`;
+
+  if (opts.sidebarLocked && opts.frozenSidebar) {
+    const banner = el('sidebar-frozen-banner');
+    const bodyEl = el('sidebar-frozen-body');
+    if (banner && bodyEl) {
+      banner.classList.remove('d-none');
+      bodyEl.innerHTML = formatFrozenSidebarHtml(opts.frozenSidebar);
+    }
+
+    paletteEl.disabled = true;
+    groupEl.disabled   = true;
+    el('filter-column').disabled = true;
+    el('filter-op').disabled     = true;
+    el('filter-value').disabled  = true;
+    if (sigCb) sigCb.disabled = true;
+
+    el('dimension-controls')?.querySelectorAll('select').forEach(sel => { sel.disabled = true; });
+
+    el('apply-btn').style.display = 'none';
+    el('reset-btn').style.display = 'none';
+
+    el('widget-toggles')?.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.disabled = true; });
+
+    if (bakedBtn) bakedBtn.style.display = 'none';
+  }
 }
 
 /** Update the filtered row count shown in the header badge and sidebar. */

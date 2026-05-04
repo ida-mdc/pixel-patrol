@@ -8,6 +8,7 @@ import { state, on } from './state.js';
 import { buildWhere } from './sql.js';
 import { getPaletteNames } from './colors.js';
 import { readUrlParams, writeUrlParams } from './url-params.js';
+import { exportBakedHtml } from './export-snapshot.js';
 
 // ── Module-level handles ──────────────────────────────────────────────────────
 let db          = null;
@@ -16,6 +17,9 @@ let schema      = null;
 let totalRows   = 0;
 let projectName = null;
 let authors     = null;
+
+/** Serialize render passes so concurrent triggers cannot interleave (duplicate widgets / stale cards). */
+let renderQueue = Promise.resolve();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -80,10 +84,9 @@ async function boot() {
   on('render', doRender);
   registry.onAdd(doRender);
 
-  await loadExternalPlugins();
-
   // ── Server mode: native DuckDB via local Python server ──────────────────────
   if (SERVER_MODE) {
+    await loadExternalPlugins();
     setLoading('Connecting to local server…');
     conn = makeServerConn();
     try {
@@ -91,7 +94,7 @@ async function boot() {
       projectName ??= window.__PP_PROJECT_NAME ?? null;
       authors     ??= window.__PP_AUTHORS      ?? null;
 
-      hideFileOpenControlsForServerMode();
+      hideFileOpenControls();
       document.getElementById('current-filename').textContent =
         window.__PP_FILENAME ?? 'data.parquet';
       hideLoading();
@@ -101,6 +104,16 @@ async function boot() {
     }
     return;
   }
+
+  // ── Unpacked offline ZIP (viewer_dist layout + snapshot.parquet + __PP_SNAPSHOT_BUNDLE)
+  if (window.__PP_SNAPSHOT_BUNDLE) {
+    await loadExternalPlugins();
+    await bootWasmOfflineSnapshot();
+    attachWasmFileUi();
+    return;
+  }
+
+  await loadExternalPlugins();
 
   // ── WASM mode: DuckDB WASM in the browser ────────────────────────────────────
   setLoading('Initialising DuckDB…');
@@ -122,22 +135,51 @@ async function boot() {
     showWelcome();
   }
 
-  // Clicking the brand name returns to the welcome screen.
+  attachWasmFileUi();
+}
+
+function attachWasmFileUi() {
   document.getElementById('topbar-brand').addEventListener('click', () => {
+    if (state.sidebarLocked) return;
     showWelcome();
   });
 
-  // File input handlers (top bar + welcome screen).
   document.getElementById('file-input-welcome').addEventListener('change', e => {
     const files = Array.from(e.target.files ?? []);
-    e.target.value = '';          // reset so the same file can be re-opened
+    e.target.value = '';
     if (files.length) openFiles(files);
   });
   document.getElementById('file-input-top').addEventListener('change', e => {
     const files = Array.from(e.target.files ?? []);
-    e.target.value = '';          // reset so the same file can be re-opened
+    e.target.value = '';
     if (files.length) openFiles(files);
   });
+}
+
+async function bootWasmOfflineSnapshot() {
+  setLoading('Initialising DuckDB…');
+  try {
+    ({ db, conn } = await initDuckDB());
+  } catch (err) {
+    showFatalError('Failed to initialise DuckDB WASM', err);
+    return;
+  }
+
+  const bundle = window.__PP_SNAPSHOT_BUNDLE;
+  const snapUrl = new URL(bundle.parquetFile, window.location.href).href;
+
+  setLoading('Loading snapshot…');
+  try {
+    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, snapUrl, null));
+  } catch (err) {
+    showFatalError('Failed to load snapshot parquet', err, loadErrorHint(err));
+    return;
+  }
+
+  document.getElementById('current-filename').textContent = bundle.parquetFile;
+  hideFileOpenControls();
+  hideLoading();
+  afterLoad({ snapshotBundle: bundle });
 }
 
 // ── Open data ─────────────────────────────────────────────────────────────────
@@ -189,14 +231,33 @@ function loadErrorHint(err) {
 
 // ── After data is loaded ───────────────────────────────────────────────────────
 
-function afterLoad() {
-  // 1. Set schema defaults into state.
-  state.dimensions   = {};
-  state.groupCol     = schema.defaultGroupCol ?? null;
-  state.hiddenWidgets = new Set();
+function applySnapshotBundle(bundle) {
+  const rs = bundle.renderState ?? {};
+  state.palette          = rs.palette ?? state.palette;
+  state.groupCol         = rs.groupCol !== undefined ? rs.groupCol : state.groupCol;
+  state.filter           = { col: '', op: '', val: '' };
+  state.dimensions       = {};
+  state.showSignificance = !!rs.showSignificance;
+  state.hiddenWidgets    = new Set(Array.isArray(rs.hiddenWidgets) ? rs.hiddenWidgets : []);
+  state.sidebarLocked    = true;
+}
 
-  // 2. Overlay URL params where valid.
-  const urlParams = readUrlParams();
+function afterLoad(options = {}) {
+  const snapshotBundle = options.snapshotBundle;
+
+  // 1. Set schema defaults into state.
+  state.dimensions      = {};
+  state.groupCol        = schema.defaultGroupCol ?? null;
+  state.hiddenWidgets   = new Set();
+  state.sidebarLocked   = false;
+  state.filter          = { col: '', op: '', val: '' };
+
+  if (snapshotBundle) {
+    applySnapshotBundle(snapshotBundle);
+  }
+
+  // 2. Overlay URL params where valid (skipped for offline snapshots).
+  const urlParams = snapshotBundle ? {} : readUrlParams();
   if (urlParams.palette && getPaletteNames().includes(urlParams.palette)) {
     state.palette = urlParams.palette;
   }
@@ -210,7 +271,11 @@ function afterLoad() {
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
-  initControls(schema, totalRows, registry.plugins, handleExportCsv);
+  initControls(schema, totalRows, registry.plugins, handleExportCsv, {
+    sidebarLocked: state.sidebarLocked,
+    frozenSidebar: snapshotBundle?.frozenSidebar,
+    onExportBakedHtml: state.sidebarLocked ? undefined : handleExportBakedHtml,
+  });
 
   const nameEl = document.getElementById('project-name');
   if (nameEl) {
@@ -233,17 +298,36 @@ function afterLoad() {
   doRender();
 }
 
-async function doRender() {
-  if (!conn || !schema) return;  // data not loaded yet (e.g. plugin registered during boot)
-  try {
-    await renderAll(registry.plugins, conn, schema, state, totalRows);
-    writeUrlParams(state);
-  } catch (err) {
-    console.error('[viewer] renderAll error:', err);
-  }
+function doRender() {
+  renderQueue = renderQueue.catch(() => {}).then(async () => {
+    if (!conn || !schema) return;
+    try {
+      await renderAll(registry.plugins, conn, schema, state, totalRows);
+      if (!state.sidebarLocked) writeUrlParams(state);
+    } catch (err) {
+      console.error('[viewer] renderAll error:', err);
+    }
+  });
 }
 
 // ── Export CSV ────────────────────────────────────────────────────────────────
+
+async function handleExportBakedHtml() {
+  if (state.sidebarLocked) return;
+  try {
+    setLoading('Building HTML snapshot…');
+    const html = await exportBakedHtml(state, schema, registry.plugins);
+    const blob = new Blob([html], { type: 'text/html' });
+    const raw = document.getElementById('current-filename')?.textContent ?? 'report';
+    const base = raw.replace(/\.[^/.]+$/, '').replace(/[^\w.-]+/g, '_').trim().slice(0, 80) || 'report';
+    triggerDownload(blob, `${base}-snapshot.html`);
+  } catch (err) {
+    console.error('[viewer] baked HTML export error:', err);
+    alert(`HTML snapshot failed: ${err?.message ?? err}`);
+  } finally {
+    hideLoading();
+  }
+}
 
 async function handleExportCsv() {
   try {
@@ -308,7 +392,7 @@ function showApp() {
   document.getElementById('main-app').style.display       = 'flex';
 }
 
-function hideFileOpenControlsForServerMode() {
+function hideFileOpenControls() {
   document.querySelector('label[for="file-input-welcome"]')?.style.setProperty('display', 'none');
   document.querySelector('label[for="file-input-top"]')?.style.setProperty('display', 'none');
   document.getElementById('open-file-top-btn')?.style.setProperty('display', 'none');

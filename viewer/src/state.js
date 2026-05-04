@@ -13,6 +13,8 @@ export const state = {
   dimensions:       {},       // { dimLetter: idx }   e.g. { t: '0', c: '1' }
   showSignificance: false,
   hiddenWidgets:    new Set(), // set of plugin IDs to hide
+  /** Offline snapshot bundle: sidebar is read-only and URL sync is disabled */
+  sidebarLocked:    false,
 };
 
 const listeners = {};
@@ -42,5 +44,6 @@ export function resetState(defaultGroupCol) {
   state.dimensions       = {};
   state.showSignificance = false;
   state.hiddenWidgets    = new Set();
+  state.sidebarLocked    = false;
   emit('query');
 }
