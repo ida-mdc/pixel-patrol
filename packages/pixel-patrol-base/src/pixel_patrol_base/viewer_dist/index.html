@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="./icon.png"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
-  <script type="module" crossorigin src="./assets/index-DgF7AtcU.js"></script>
+  <script type="module" crossorigin src="./assets/index-CFGHr5Bs.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-BTTbenvT.css">
 </head>
 <body class="d-flex flex-column" style="min-height:100vh">
@@ -67,6 +67,11 @@
       <div class="card border-0">
         <div class="card-body p-0">
 
+          <div id="sidebar-frozen-banner" class="alert alert-secondary py-2 px-2 mb-3 d-none small">
+            <div class="fw-semibold mb-1">Offline snapshot</div>
+            <div id="sidebar-frozen-body"></div>
+          </div>
+
           <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Color Palette</label>
           <select id="palette-selector" class="form-select form-select-sm mb-3"></select>
 
@@ -113,6 +118,9 @@
           <hr class="my-2"/>
           <button id="export-csv-btn" class="btn btn-outline-secondary btn-sm w-100">
             <i class="bi bi-download me-1"></i>Export CSV
+          </button>
+          <button id="export-baked-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2">
+            <i class="bi bi-file-earmark-code me-1"></i>Export static HTML snapshot…
           </button>
           <div id="filtered-info" class="text-muted small mt-2 text-center"></div>
 
