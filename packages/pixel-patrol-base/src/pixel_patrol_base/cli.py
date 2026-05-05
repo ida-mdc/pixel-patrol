@@ -225,20 +225,32 @@ def view(parquet_file: Path, port: int, no_browser: bool):
 @click.option(
     "--output",
     "-o",
-    type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
+    type=click.Path(exists=False, file_okay=True, dir_okay=True, writable=True, path_type=Path),
     required=True,
-    help="Output path for a single self-contained viewer HTML file.",
+    help=(
+        "Output target. Use a .html/.htm path for a single self-contained file, "
+        "or a directory path to generate a full static site folder."
+    ),
 )
 def build_viewer_html(output: Path):
     """
-    Build a single-file static viewer HTML with bundled JS/CSS/assets and discovered extensions.
+    Build static viewer output from the installed web viewer bundle.
 
-    Share this HTML together with your parquet report file.
+    If OUTPUT ends in .html/.htm, writes a single self-contained HTML file.
+    Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
-    from pixel_patrol_base.viewer_pages import build_single_file_viewer_html
+    from pixel_patrol_base.viewer_pages import (
+        build_github_pages_site,
+        build_single_file_viewer_html,
+    )
 
-    out = build_single_file_viewer_html(output)
-    click.echo(f"Single-file viewer written to: {out}")
+    if output.suffix.lower() in {".html", ".htm"}:
+        out = build_single_file_viewer_html(output)
+        click.echo(f"Single-file viewer written to: {out}")
+        return
+
+    out_dir = build_github_pages_site(output)
+    click.echo(f"Static viewer site written to: {out_dir}")
 
 
 if __name__ == '__main__':
