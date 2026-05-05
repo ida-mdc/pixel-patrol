@@ -43,6 +43,33 @@ def _inject_extension_urls(index_html: Path, urls: list[str]) -> None:
 
 
 def _inline_local_assets(html: str, dist_dir: Path) -> str:
+    asset_data_url_map: dict[str, str] = {}
+    assets_dir = dist_dir / "assets"
+    if assets_dir.is_dir():
+        for asset_path in assets_dir.rglob("*"):
+            if not asset_path.is_file():
+                continue
+            rel = asset_path.relative_to(dist_dir).as_posix()
+            name = asset_path.name
+            data_url = _file_to_data_url(asset_path)
+            # Support the common path forms emitted by bundlers/runtime code.
+            asset_data_url_map[f"./{rel}"] = data_url
+            asset_data_url_map[rel] = data_url
+            asset_data_url_map[f"/{rel}"] = data_url
+            # Some runtime chunks reference emitted assets by basename from
+            # document root (e.g. "/duckdb-...worker.js"). Cover those too.
+            asset_data_url_map[f"./{name}"] = data_url
+            asset_data_url_map[name] = data_url
+            asset_data_url_map[f"/{name}"] = data_url
+
+    def inline_js_asset_urls(code: str) -> str:
+        # Preserve import.meta.url behavior by replacing runtime-resolved asset
+        # paths (worker/wasm/etc.) with direct data URLs before embedding.
+        for rel, data_url in asset_data_url_map.items():
+            code = code.replace(f'"{rel}"', f'"{data_url}"')
+            code = code.replace(f"'{rel}'", f"'{data_url}'")
+        return code
+
     def repl_script(match: re.Match[str]) -> str:
         attrs = match.group("attrs")
         src = match.group("src")
@@ -52,6 +79,7 @@ def _inline_local_assets(html: str, dist_dir: Path) -> str:
         if not path.is_file():
             return match.group(0)
         code = path.read_text(encoding="utf-8")
+        code = inline_js_asset_urls(code)
         return f"<script{attrs}>{code}</script>"
 
     def repl_style(match: re.Match[str]) -> str:
