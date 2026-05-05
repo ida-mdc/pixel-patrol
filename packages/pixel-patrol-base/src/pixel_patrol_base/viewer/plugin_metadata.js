@@ -99,12 +99,6 @@ export default {
         }
       }
   
-      for (const [dim, indices] of Object.entries(ctx.schema.dimensionInfo)) {
-        invariants.push({
-          Property: `Dimension ${dim.toUpperCase()}`,
-          Value:    `${indices[0]}–${indices[indices.length - 1]} (${indices.length} steps)`,
-        });
-      }
   
       if (invariants.length) {
         const h = document.createElement('h6');
