@@ -53,6 +53,7 @@ export function buildWhere(filter) {
  *   andWhere('WHERE "x" = \'1\'', '"ext" IS NOT NULL') → 'WHERE "x" = \'1\' AND "ext" IS NOT NULL'
  */
 export function andWhere(where, condition) {
+  if (!condition) return where;
   return where ? `${where} AND ${condition}` : `WHERE ${condition}`;
 }
 

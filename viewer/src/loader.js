@@ -1,4 +1,6 @@
 import * as duckdb from '@duckdb/duckdb-wasm';
+import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
+import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import { detectSchema, pickDefaultGroupCol } from './schema.js';
 import { q } from './sql.js';
 
@@ -20,18 +22,18 @@ function pickRowIdColumnFromSchema(allCols) {
   return null;
 }
 
-/** Initialise DuckDB WASM using the jsDelivr CDN bundles (mvp single-threaded bundle). */
+/** Initialise DuckDB WASM using locally bundled files (avoids CDN version mismatches). */
 export async function initDuckDB() {
-  const BUNDLES = duckdb.getJsDelivrBundles();
-  const bundle  = BUNDLES.mvp;
+  const absWorkerUrl = new URL(duckdbMvpWorkerUrl, location.href).href;
+  const absWasmUrl   = new URL(duckdbMvpWasmUrl,   location.href).href;
 
   const workerUrl = URL.createObjectURL(
-    new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }),
+    new Blob([`importScripts("${absWorkerUrl}");`], { type: 'text/javascript' }),
   );
   const worker = new Worker(workerUrl);
   const logger = new duckdb.VoidLogger();
   const db     = new duckdb.AsyncDuckDB(logger, worker);
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  await db.instantiate(absWasmUrl, null);
   URL.revokeObjectURL(workerUrl);
 
   const conn = await db.connect();
@@ -159,7 +161,7 @@ async function filterGroupColsByCardinality(conn, cols) {
   if (!cols.length) return [];
   // Sample 10 000 rows — enough to reliably detect 2–12 unique values without
   // fetching every column chunk from a remote file.
-  const exprs = cols.map(c => `APPROX_COUNT_DISTINCT(${q(c)}) AS ${q(c)}`).join(', ');
+  const exprs = cols.map(c => `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`).join(', ');
   try {
     const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data LIMIT 10000)`);
     const first = res.toArray()[0];

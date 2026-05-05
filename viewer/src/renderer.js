@@ -92,7 +92,32 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
     /** Schema constants (column lists, patterns). */
     META_COLS,
     DIM_PATTERN,
+
+    /** Data utilities shared across plugins. */
+    data: { extractBinary },
   };
+}
+
+/**
+ * Decode an Arrow binary/list cell into a JS numeric array.
+ * Handles typed arrays, BigInt arrays, Arrow list vectors, and plain arrays.
+ */
+function extractBinary(val) {
+  if (!val) return null;
+  if (val instanceof Uint8Array)    return val;
+  if (val instanceof Int32Array)    return val;
+  if (val instanceof Float32Array)  return val;
+  if (val instanceof Float64Array)  return val;
+  if (val instanceof BigInt64Array)  return Array.from(val, v => Number(v));
+  if (val instanceof BigUint64Array) return Array.from(val, v => Number(v));
+  if (Array.isArray(val)) return val;
+  if (typeof val.toArray === 'function') {
+    const arr = val.toArray();
+    if (arr instanceof BigInt64Array || arr instanceof BigUint64Array) return Array.from(arr, v => Number(v));
+    return arr;
+  }
+  if (val.values) return val.values;
+  return null;
 }
 
 /**
@@ -105,7 +130,21 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
  * @param {object}   state
  * @param {number}   totalRows
  */
+/** Prefer first occurrence if the registry ever lists the same id twice. */
+function dedupePluginsById(plugins) {
+  const out = [];
+  const seen = new Set();
+  for (const p of plugins) {
+    if (!p?.id || seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
 export async function renderAll(plugins, conn, schema, state, totalRows) {
+  plugins = dedupePluginsById(plugins);
+
   const where = buildWhere(state.filter);
 
   // Fetch distinct groups and filtered count in parallel.
