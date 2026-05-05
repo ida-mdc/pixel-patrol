@@ -77,6 +77,8 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     }
   }
 
+  ctx.plot.renderDomGroupLegend?.(container);
+
   const plotJobs  = [];
   const minColPx  = 180;
   const tableWrap = document.createElement('div');
@@ -198,3 +200,4 @@ function detectDimMetricGroups(cols) {
       return { base, letter, items: [...items].sort((a, b) => a.idx - b.idx) };
     });
 }
+

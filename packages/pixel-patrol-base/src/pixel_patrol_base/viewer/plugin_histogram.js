@@ -96,7 +96,7 @@ export default {
 
 async function renderHistogram(container, ctx, { mode, selectedGroups, selectedFile, hasRange }) {
   const { q, sample, groupExpr: geFn } = ctx.sql;
-  const { append: appendPlot, LEGEND } = ctx.plot;
+  const { append: appendPlot, plotlyLegendConfig } = ctx.plot;
   const gcExpr   = geFn();
   const rangeSel = hasRange ? ', "histogram_min", "histogram_max"' : '';
 
@@ -161,7 +161,7 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
     xaxis: { title: mode === 'native' ? 'Pixel value' : 'Intensity (0–255)' },
     yaxis: { title: 'Normalized Count' },
     bargap: 0, height: 500, showlegend: showLegend,
-    ...(showLegend ? { legend: LEGEND } : {}),
+    ...(showLegend ? { legend: plotlyLegendConfig } : {}),
   });
 }
 

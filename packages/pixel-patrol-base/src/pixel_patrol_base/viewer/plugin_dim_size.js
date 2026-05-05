@@ -19,7 +19,7 @@ export default {
   async render(container, ctx) {
     try {
       const { q, sample, groupCol: gcFn } = ctx.sql;
-      const { append: appendPlot, niceName, LEGEND } = ctx.plot;
+      const { append: appendPlot, niceName, plotlyLegendConfig } = ctx.plot;
       const gcExpr   = gcFn();
       const sizeCols = ctx.schema.allCols.filter(c => c.endsWith('_size') && !c.startsWith('__'));
   
@@ -82,7 +82,8 @@ export default {
             appendPlot(container, traces, {
               title: { text: 'Distribution of X and Y Dimension Sizes' },
               xaxis: { title: 'X size (pixels)' }, yaxis: { title: 'Y size (pixels)' },
-              showlegend: ctx.groups.length > 1, legend: LEGEND,
+              showlegend: ctx.groups.length > 1,
+              legend: { ...plotlyLegendConfig, itemsizing: 'constant' },
             }, 'margin-bottom:24px');
           }
         } else {
@@ -157,7 +158,7 @@ export default {
           if (!traces.length) continue;
           appendPlot(wrap, traces, {
             title: { text: niceName(col), font: { size: 12 } }, yaxis: { title: 'pixels' },
-            xaxis: { title: '' }, height: 280, margin: { l: 44, r: 10, t: 36, b: 40 },
+            xaxis: { title: ctx.plot.groupingLabel(''), type: 'category' }, height: 280, margin: { l: 44, r: 10, t: 36, b: 40 },
           }, 'flex:0 0 280px;min-width:220px;margin-bottom:16px');
         }
       }
