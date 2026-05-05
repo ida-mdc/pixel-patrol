@@ -155,7 +155,7 @@ export default {
   },
 };
 
-function renderGroupedBars(container, { categories, groups, getValue, title, xLabel, yLabel, showLegend = false }, ctx) {
+function renderGroupedBars(container, { categories, groups, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
   const traces = groups.map(g => ({
     type:   'bar',
     name:   g,
@@ -172,7 +172,7 @@ function renderGroupedBars(container, { categories, groups, getValue, title, xLa
     yaxis:      { title: yLabel },
     height:     400,
     showlegend: showLegend && groups.length > 1,
-    ...(showLegend && groups.length > 1 ? { legend: ctx.plot.LEGEND } : {}),
+    ...(showLegend && groups.length > 1 ? { legend: ctx.plot.plotlyLegendConfig } : {}),
   }, 'margin-bottom:24px');
 }
 

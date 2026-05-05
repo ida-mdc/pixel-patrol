@@ -40,6 +40,19 @@ export const LEGEND = {
   title:       null,
 };
 
+/** Build a grouping label from the selected group column. */
+export function groupingLabel(state, fallback = '') {
+  return state?.groupCol ? `${state.groupCol}` : fallback;
+}
+
+/** Return a legend config with grouping title applied. */
+export function legendWithGrouping(baseLegend, state, fallback = '') {
+  return {
+    ...baseLegend,
+    title: { text: groupingLabel(state, fallback) },
+  };
+}
+
 // Applied to every chart — never show the mode-bar, always be responsive.
 const CHART_CONFIG = { responsive: true, displayModeBar: false };
 
@@ -149,4 +162,33 @@ export function createFlexGrid(container, plotsPerRow, gap = '15px') {
   wrap.style.cssText = `display:flex;flex-wrap:wrap;gap:${gap};width:100%`;
   container.appendChild(wrap);
   return { wrap, flexBasisPct };
+}
+
+/**
+ * Append a compact DOM color legend for the current groups.
+ * Supports optional grouping header using the selected group column.
+ */
+export function appendGroupLegend(
+  container,
+  groups,
+  colorFn,
+  { state = null, minGroups = 2 } = {},
+) {
+  if ((groups?.length ?? 0) < minGroups) return;
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:13px;font-weight:600;margin-top:8px;margin-bottom:6px';
+  title.textContent = groupingLabel(state, '');
+  container.appendChild(title);
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:12px';
+  for (const g of groups) {
+    const item   = document.createElement('span');
+    item.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:0.85rem';
+    const swatch = document.createElement('span');
+    swatch.style.cssText = `display:inline-block;width:12px;height:12px;border-radius:2px;flex-shrink:0;background:${colorFn(g)}`;
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(String(g)));
+    div.appendChild(item);
+  }
+  container.appendChild(div);
 }

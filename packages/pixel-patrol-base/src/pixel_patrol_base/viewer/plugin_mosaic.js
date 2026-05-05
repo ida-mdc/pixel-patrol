@@ -239,18 +239,12 @@ async function renderMosaic(container, ctx, sortCol, displayMode = DISPLAY_NORM,
   };
   canvas.onmouseleave = () => { tip.style.display = 'none'; };
 
-  const presentGroups = [...new Set(items.map(it => it.group))].sort();
+  const presentSet = new Set(items.map(it => it.group));
+  const presentGroups = ctx.groups.filter(g => presentSet.has(g));
   if (presentGroups.length > 1) {
-    const legend = document.createElement('div');
-    legend.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;margin-top:8px';
-    for (const g of presentGroups) {
-      const item = document.createElement('div');
-      item.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px';
-      const c = ctx.color.group(g);
-      item.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${c}"></span>${escapeHtml(g)}`;
-      legend.appendChild(item);
-    }
-    container.appendChild(legend);
+    ctx.plot.renderDomGroupLegend?.(container, {
+      groups: presentGroups,
+    });
   }
 
   if (n === MAX_IMGS && ctx.filteredCount > MAX_IMGS) {

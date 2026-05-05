@@ -63,6 +63,7 @@ export default {
         margin: { l: 0, r: 0, t: 30, b: 0 },
         height: 550,
       });
+      ctx.plot.renderDomGroupLegend?.(container);
     
     } catch {
       container.innerHTML = '<div class="no-data">Failed to load data.</div>';
@@ -185,3 +186,4 @@ function findCommonRoot(paths, sep) {
   if (!common.length) return '';
   return (hasLeadingSlash ? sep : '') + common.join(sep);
 }
+

@@ -84,7 +84,8 @@ async function renderViolins(container, ctx, filterMetric) {
     return;
   }
 
-  const groups = [...new Set(rows.map(r => String(r.__group__)))].sort();
+  const rowGroups = new Set(rows.map(r => String(r.__group__)));
+  const groups = ctx.groups.filter(g => rowGroups.has(g));
   const toPlot = [], noVariance = [];
   for (const metric of metrics) {
     const vals = rows.map(r => r[metric]).filter(v => v != null).map(Number);
@@ -126,7 +127,10 @@ async function renderViolins(container, ctx, filterMetric) {
       });
 
       const outerDiv = appendPlot(wrap, traces, {
-        title: { text: title }, yaxis: { title: label }, xaxis: { title: '' }, showlegend: false,
+        title: { text: title },
+        yaxis: { title: label },
+        xaxis: { title: ctx.plot.groupingLabel ? ctx.plot.groupingLabel('') : '', type: 'category' },
+        showlegend: false,
       }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
 
       if (showSig) {

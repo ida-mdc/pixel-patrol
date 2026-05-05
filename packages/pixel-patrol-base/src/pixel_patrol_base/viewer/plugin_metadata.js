@@ -21,7 +21,7 @@ export default {
   async render(container, ctx) {
     try {
       const { q, groupCol: gcFn, andWhere } = ctx.sql;
-      const { append: appendPlot, niceName, LEGEND } = ctx.plot;
+      const { append: appendPlot, niceName } = ctx.plot;
   
       for (const col of DIST_COLS) {
         if (!ctx.schema.allCols.includes(col)) continue;
@@ -72,7 +72,7 @@ export default {
           xaxis:      { title: label, type: 'category' },
           yaxis:      { title: 'Count' },
           showlegend: groups.length > 1,
-          ...(groups.length > 1 ? { legend: LEGEND } : {}),
+          ...(groups.length > 1 ? { legend: ctx.plot.plotlyLegendConfig } : {}),
         }, 'margin-bottom:24px');
       }
   

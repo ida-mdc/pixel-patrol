@@ -1,6 +1,6 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
-import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
 import { META_COLS, DIM_PATTERN } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
@@ -23,6 +23,8 @@ import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
  * @param {number} totalRows
  */
 function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, totalRows) {
+  const legend = legendWithGrouping(LEGEND, state, '');
+
   return {
     schema,
     state,
@@ -79,13 +81,20 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
 
     /** Plotly plot helpers (mirror of plot-utils.js). */
     plot: {
-      append:     appendPlot,
-      appendMany: appendPlots,
+      append:      appendPlot,
+      appendMany:  appendPlots,
       niceName,
       escapeHtml,
       bargap,
-      flexGrid:   createFlexGrid,
-      LEGEND,
+      flexGrid:    createFlexGrid,
+      renderDomGroupLegend: (container, opts = {}) => appendGroupLegend(
+        container,
+        opts.groups ?? groups,
+        opts.colorFn ?? (g => _groupColor(colorMap, g)),
+        { state, minGroups: opts.minGroups ?? 2 },
+      ),
+      groupingLabel: (fallback = '') => groupingLabel(state, fallback),
+      plotlyLegendConfig: legend,
       LAYOUT,
     },
 
@@ -156,7 +165,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     conn.query(`SELECT COUNT(*) AS n FROM pp_data ${where}`),
   ]);
 
-  const groups       = groupResult.toArray().map(r => String(r.g));
+  const groups = sortGroups(groupResult.toArray().map(r => String(r.g)));
   const filteredCount = Number(countResult.toArray()[0].n);
   const colorMap     = buildColorMap(groups, state.palette);
 
@@ -254,6 +263,12 @@ function renderInfoHtml(text) {
     if (bullets.length) html += `<ul>${bullets.map(l => `<li>${mdInline(l.replace(/^\s*-\s*/, ''))}</li>`).join('')}</ul>`;
   }
   return html;
+}
+
+function sortGroups(groups) {
+  const allNumeric = groups.length > 0 && groups.every(g => g !== '' && !isNaN(Number(g)));
+  if (allNumeric) return [...groups].sort((a, b) => Number(a) - Number(b));
+  return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function mdInline(t) {
