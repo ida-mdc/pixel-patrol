@@ -87,7 +87,7 @@ async function boot() {
   // ── Server mode: native DuckDB via local Python server ──────────────────────
   if (SERVER_MODE) {
     await loadExternalPlugins();
-    setLoading('Connecting to local server…');
+    setLoading('Loading report data…');
     conn = makeServerConn();
     try {
       ({ schema, totalRows, projectName, authors } = await finishLoad(conn));
