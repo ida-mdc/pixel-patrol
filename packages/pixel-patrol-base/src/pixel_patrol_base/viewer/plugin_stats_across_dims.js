@@ -53,24 +53,27 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     return;
   }
 
-  const allCols  = [...new Set(Object.values(byMetric).flat().flatMap(g => g.items.map(i => i.col)))];
-  const selParts = allCols.flatMap((c, i) => [
-    `AVG(${q(c)})                       AS m_${i}`,
-    `COALESCE(STDDEV_SAMP(${q(c)}), 0)  AS s_${i}`,
-    `COUNT(${q(c)})                      AS n_${i}`,
-  ]);
-
-  const groupRows = await ctx.queryRows(`
-    SELECT ${gcExpr} AS __group__, ${selParts.join(', ')}
-    FROM pp_data ${ctx.where} GROUP BY 1
-  `);
-  const colIdx    = Object.fromEntries(allCols.map((c, i) => [c, i]));
+  const allCols   = [...new Set(Object.values(byMetric).flat().flatMap(g => g.items.map(i => i.col)))];
   const colLookup = Object.fromEntries(allCols.map(c => [c, []]));
-  for (const row of groupRows) {
-    const grp = String(row.__group__);
-    for (const col of allCols) {
-      const i = colIdx[col];
-      colLookup[col].push({ __group__: grp, y_mean: Number(row[`m_${i}`] ?? 0), y_std: Number(row[`s_${i}`] ?? 0), n: Number(row[`n_${i}`] ?? 0) });
+
+  const BATCH_SIZE = 50;
+  for (let bStart = 0; bStart < allCols.length; bStart += BATCH_SIZE) {
+    const batch = allCols.slice(bStart, bStart + BATCH_SIZE);
+    const bParts = batch.flatMap((c, i) => [
+      `AVG(${q(c)})                       AS m_${i}`,
+      `COALESCE(STDDEV_SAMP(${q(c)}), 0)  AS s_${i}`,
+      `COUNT(${q(c)})                      AS n_${i}`,
+    ]);
+    const bRows = await ctx.queryRows(`
+      SELECT ${gcExpr} AS __group__, ${bParts.join(', ')}
+      FROM pp_data ${ctx.where} GROUP BY 1
+    `);
+    for (const row of bRows) {
+      const grp = String(row.__group__);
+      for (let i = 0; i < batch.length; i++) {
+        const col = batch[i];
+        colLookup[col].push({ __group__: grp, y_mean: Number(row[`m_${i}`] ?? 0), y_std: Number(row[`s_${i}`] ?? 0), n: Number(row[`n_${i}`] ?? 0) });
+      }
     }
   }
 
@@ -118,7 +121,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   const STATS_DIMS_LAYOUT = {
     ...LAYOUT,
     showlegend: false,
-    xaxis: { showgrid: false, zeroline: false, showline: true, mirror: true, ticks: 'outside', title: null, tickmode: 'linear', tick0: 0, dtick: 1, tickformat: 'd' },
+    xaxis: { showgrid: false, zeroline: false, showline: true, mirror: true, ticks: 'outside', title: null, tickformat: 'd' },
     yaxis: { showgrid: false, zeroline: false, showline: true, mirror: true, ticks: 'outside', title: null },
   };
 
