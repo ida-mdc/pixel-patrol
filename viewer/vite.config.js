@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { cpSync, rmSync, existsSync } from 'fs';
+import { cpSync, rmSync, existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // After a production build, sync the output into the Python package so that
@@ -8,6 +8,27 @@ const VIEWER_DIST_IN_PKG = resolve(
   __dirname,
   '../packages/pixel-patrol-base/src/pixel_patrol_base/viewer_dist',
 );
+
+// DuckDB WASM npm packages reference .map files that are never included in the
+// published package. Strip the sourceMappingURL comment in the load hook (before
+// Vite tries to read the missing .map file) so the dev server doesn't warn.
+function stripMissingSourcemaps() {
+  return {
+    name: 'strip-missing-sourcemaps',
+    load(id) {
+      const path = id.split('?')[0];
+      if (path.includes('@duckdb') && path.endsWith('.js')) {
+        try {
+          const code = readFileSync(path, 'utf8');
+          return { code: code.replace(/\/\/# sourceMappingURL=\S+\.map\s*$/m, ''), map: null };
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    },
+  };
+}
 
 function syncToPythonPackage() {
   return {
@@ -40,7 +61,7 @@ export default defineConfig({
     exclude: ['@duckdb/duckdb-wasm'],
   },
 
-  plugins: [syncToPythonPackage()],
+  plugins: [stripMissingSourcemaps(), syncToPythonPackage()],
 
   build: {
     target: 'es2022',
