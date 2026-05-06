@@ -82,7 +82,6 @@ def _get_rectangle_polygon_shape_from_bounds(bounds: rasterio.coords.BoundingBox
 def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
 
-    metadata["band_count"] = img.count
     if img.crs:
         metadata["crs_epsg"] = img.crs.to_epsg(confidence_threshold=70)
         metadata["crs_str"] = img.crs.to_string()
@@ -110,10 +109,10 @@ def _extract_metadata(img: rasterio.DatasetReader) -> Dict[str, Any]:
         metadata["dim_order"] = "CYX"
         metadata["dim_names"] = ["C", "Y", "X"]
         metadata["shape"] = [img.count, img.height, img.width]
+    metadata["X_size"] = img.height
+    metadata["Y_size"] = img.width
+    metadata["C_size"] = img.count  # band count
     metadata["num_pixels"] = np.prod(metadata["shape"])
-    metadata["X_size"] = metadata["height"] = img.height
-    metadata["Y_size"] = metadata["width"] = img.width
-
 
     if img.bounds and img.crs:
         bound_dict_lat_lon = _get_rectangle_polygon_shape_from_bounds(bounds=img.bounds, img_crs=img.crs)
