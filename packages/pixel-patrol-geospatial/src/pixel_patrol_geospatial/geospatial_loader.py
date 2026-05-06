@@ -136,7 +136,6 @@ class GeoImageLoader(PixelPatrolLoader):
     NAME = "geospatial"
     OUTPUT_SCHEMA = {"latitude": float,
                      "longitude": float,
-                     "band_count": int,
                      "crs_epsg": rasterio.crs.CRS,
                      "crs_str": str,
                      "nodata_value": Optional[float],
@@ -144,9 +143,6 @@ class GeoImageLoader(PixelPatrolLoader):
                      "dim_names": List[str],
                      "shape": List[int],
                      "num_pixels": int,
-                     "X_size": int,
-                     "Y_size": int,
-                     "width": int, "height": int,
                      "dtype": Optional,
                      "rasterio_valid_data_count": int,
                      "rasterio_invalid_data_count": int,

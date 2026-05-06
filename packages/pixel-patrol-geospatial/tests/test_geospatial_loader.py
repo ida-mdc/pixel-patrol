@@ -33,7 +33,8 @@ class TestGeoImageLoader:
             assert record
             for out_field in GeoImageLoader.OUTPUT_SCHEMA:
                 assert out_field in record.meta
-            expected_fields = set(GeoImageLoader.OUTPUT_SCHEMA) | {"ndim"}
+            default_fields = {"ndim", "X_size", "Y_size", "C_size"}
+            expected_fields = set(GeoImageLoader.OUTPUT_SCHEMA) | default_fields
             assert set(record.meta.keys()) == expected_fields
 
 @pytest.mark.parametrize(
