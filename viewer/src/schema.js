@@ -1,11 +1,14 @@
 // Ported from report/src/components/schema.js — no Observable dependencies.
+import { FILE_ROW_NUMBER } from './constants.js';
 
+// Columns that contain binary data. Must correspond to actual Arrow binary types!!
+// TODO: maybe 'histogram_min', 'histogram_max', should be excluded in another way - they are numeric but not metrics.
 export const BLOB_COLS = new Set([
   'thumbnail', 'histogram_counts', 'histogram_min', 'histogram_max',
 ]);
 
 export const SKIP_METRIC_COLS = new Set([
-  'row_index', 'file_row_number', 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
+  'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
   'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size', 'S_size',
   'size_bytes',
 ]);

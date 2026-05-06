@@ -1,3 +1,5 @@
+import { DEFAULT_PALETTE } from './constants.js';
+
 /**
  * Minimal pub/sub state store.
  *
@@ -7,7 +9,7 @@
  */
 
 export const state = {
-  palette:          'tab10',
+  palette:          DEFAULT_PALETTE,
   groupCol:         null,     // string|null
   filter:           { col: '', op: '', val: '' },
   dimensions:       {},       // { dimLetter: idx }   e.g. { t: '0', c: '1' }
@@ -38,7 +40,7 @@ export function setState(patch, event = null) {
 }
 
 export function resetState(defaultGroupCol) {
-  state.palette          = 'tab10';
+  state.palette          = DEFAULT_PALETTE;
   state.groupCol         = defaultGroupCol;
   state.filter           = { col: '', op: '', val: '' };
   state.dimensions       = {};

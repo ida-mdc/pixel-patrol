@@ -1,3 +1,5 @@
+import { GROUP_ALL, GROUP_COL_ALIAS } from './constants.js';
+
 /**
  * SQL helpers.
  *
@@ -79,7 +81,7 @@ export function sample(n) {
  * Use this when you write ` AS __group__` yourself in the query.
  */
 export function groupCol(state) {
-  return state.groupCol ? q(state.groupCol) : `'all'`;
+  return state.groupCol ? q(state.groupCol) : `'${GROUP_ALL}'`;
 }
 
 /**
@@ -88,5 +90,5 @@ export function groupCol(state) {
  * Use this in SELECT lists directly.
  */
 export function groupExpr(state) {
-  return `${groupCol(state)} AS __group__`;
+  return `${groupCol(state)} AS ${GROUP_COL_ALIAS}`;
 }

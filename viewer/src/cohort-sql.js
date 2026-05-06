@@ -4,10 +4,11 @@
  */
 
 import { buildWhere, andWhere, q } from './sql.js';
+import { FILE_ROW_NUMBER } from './constants.js';
 
 export function resolveCohortJoinColumn(schema) {
   if (!schema?.isLongFormat) return null;
-  const joinCol = (schema.rowIdColumn && schema.rowIdColumn !== 'file_row_number')
+  const joinCol = (schema.rowIdColumn && schema.rowIdColumn !== FILE_ROW_NUMBER)
     ? schema.rowIdColumn
     : (schema.allCols.includes('path') ? 'path' : null);
   return joinCol;

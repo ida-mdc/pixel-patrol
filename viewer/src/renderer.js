@@ -1,4 +1,5 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
+import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
 import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
 import { META_COLS, DIM_PATTERN } from './schema.js';
@@ -58,7 +59,7 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
      * groupCol (if set) is always included as __group__.
      */
     async querySample(cols, n = 5000) {
-      const gcExpr  = state.groupCol ? `${_q(state.groupCol)} AS __group__, ` : `'all' AS __group__, `;
+      const gcExpr  = state.groupCol ? `${_q(state.groupCol)} AS ${GROUP_COL_ALIAS}, ` : `'${GROUP_ALL}' AS ${GROUP_COL_ALIAS}, `;
       const colList = cols.map(_q).join(', ');
       const sql     = `SELECT ${gcExpr}${colList} FROM pp_data ${where} ${sample(n)}`;
       return this.queryRows(sql);
@@ -157,7 +158,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const where = buildWhere(state.filter);
 
   // Fetch distinct groups and filtered count in parallel.
-  const gcExpr = state.groupCol ? _q(state.groupCol) : `'all'`;
+  const gcExpr = state.groupCol ? _q(state.groupCol) : `'${GROUP_ALL}'`;
   const [groupResult, countResult] = await Promise.all([
     conn.query(
       `SELECT DISTINCT ${gcExpr} AS g FROM pp_data ${where} ORDER BY 1 LIMIT 50`,
@@ -175,7 +176,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     conn, schema, state, colorMap, where, groups, filteredCount, totalRows,
   );
 
-  const container = document.getElementById('widget-container');
+  const container = document.getElementById(WIDGET_CONTAINER_ID);
   container.innerHTML = '';
 
   const activePlugins = plugins.filter(p => {
