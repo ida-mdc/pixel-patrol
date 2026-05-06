@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 import importlib.resources
+from urllib.parse import urlencode
 
 # ---------------------------------------------------------------------------
 # Installed extension discovery
@@ -163,9 +164,11 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self._send_static_head(path)
 
     def do_GET(self) -> None:
-        path = self.path.split("?")[0]
+        path, _, query_string = self.path.partition("?")
         if path == "/data.parquet":
             self._serve_parquet(self.parquet_path)
+        elif path == "/api/export-parquet":
+            self._handle_export_parquet(query_string)
         elif path.startswith("/extension/"):
             self._serve_extension_file(path)
         else:
@@ -216,6 +219,51 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         except Exception as exc:
             self._send_error_text(400, str(exc))
+
+
+    # ------------------------------------------------------------------
+    # /api/export-parquet  — filtered parquet download with metadata
+    # ------------------------------------------------------------------
+
+    def _handle_export_parquet(self, query_string: str) -> None:
+        import tempfile
+        import urllib.parse
+        from pixel_patrol_base.io.parquet_io import reattach_parquet_metadata
+
+        try:
+            params = urllib.parse.parse_qs(query_string)
+            where = params.get("where", [""])[0]
+
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
+                tmp_path = f.name
+
+            sql = (
+                f"COPY ("
+                f"  SELECT * EXCLUDE (file_row_number) FROM pp_data {where}"
+                f") TO '{tmp_path}' "
+                f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
+            )
+            with self.query_lock:
+                self.duck_conn.execute(sql)
+
+            reattach_parquet_metadata(Path(tmp_path), self.parquet_path)
+
+            data = Path(tmp_path).read_bytes()
+            Path(tmp_path).unlink(missing_ok=True)
+
+            stem = self.parquet_path.stem
+            filename = f"{stem}_filtered.parquet" if where else f"{stem}.parquet"
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+
+        except Exception as exc:
+            self._send_error_text(500, f"Parquet export failed: {exc}")
 
     def _send_error_text(self, code: int, msg: str) -> None:
         body = msg.encode()
@@ -382,6 +430,12 @@ def serve_viewer(
     open_browser:  bool           = True,
     dist_dir:      Optional[Path] = None,
     extension:     Optional[Path] = None,
+    group_col: Optional[str] = None,
+    filter_by: Optional[dict] = None,
+    dimensions: Optional[dict] = None,
+    widgets_excluded: Optional[set] = None,
+    is_show_significance: bool = False,
+    palette: Optional[str] = None,
 ) -> None:
     """
     Start a local HTTP server and (optionally) open the viewer in the browser.
@@ -402,6 +456,8 @@ def serve_viewer(
         packages (``pixel_patrol.viewer_extensions`` entry-point group).
         Mirrors the ``?extension=<url>`` URL parameter used when the viewer is
         hosted remotely.
+    group_col, filter_by, dimensions, widgets_excluded, is_show_significance, palette:
+        Initial viewer state, encoded into the viewer URL as query parameters.
     """
     parquet_path = Path(parquet_path).resolve()
     if not parquet_path.exists():
@@ -449,7 +505,15 @@ def serve_viewer(
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         chosen_port = int(server.server_address[1])
 
-    viewer_url = f"http://127.0.0.1:{chosen_port}/"
+    qs = build_viewer_url_params(
+        group_col=group_col,
+        filter_by=filter_by,
+        dimensions=dimensions,
+        widgets_excluded=widgets_excluded,
+        is_show_significance=is_show_significance,
+        palette=palette,
+    )
+    viewer_url = f"http://127.0.0.1:{chosen_port}/{'?' + qs if qs else ''}"
 
     click.echo(f"Viewer URL       : {viewer_url}")
     click.echo("Press Ctrl+C to stop.\n")
@@ -495,3 +559,45 @@ _MIME = {
 
 def _mime(suffix: str) -> str:
     return _MIME.get(suffix.lower(), "application/octet-stream")
+
+
+def build_viewer_url_params(
+    group_col: Optional[str] = None,
+    filter_by: Optional[dict] = None,
+    dimensions: Optional[dict] = None,
+    widgets_excluded: Optional[set] = None,
+    is_show_significance: bool = False,
+    palette: Optional[str] = None,
+) -> str:
+    """
+    Build a URL query string encoding viewer state.
+    Matches the param names in viewer/src/url-params.js.
+    Returns an empty string when no state is set.
+    """
+
+    params = {}
+
+    if group_col:
+        params["group"] = group_col
+
+    if filter_by:
+        col = next(iter(filter_by))
+        params["fc"] = col
+        params["fo"] = filter_by[col]["op"]
+        params["fv"] = filter_by[col]["value"]
+
+    if dimensions:
+        # {"t": "0", "c": "1"} → "t0.c1"
+        params["dims"] = ".".join(f"{k}{v}" for k, v in dimensions.items())
+
+    if is_show_significance:
+        params["sig"] = "1"
+
+    if palette and palette != "tab10":
+        params["palette"] = palette
+
+    if widgets_excluded:
+        params["hidden"] = ".".join(sorted(widgets_excluded))
+
+    return urlencode(params)
+

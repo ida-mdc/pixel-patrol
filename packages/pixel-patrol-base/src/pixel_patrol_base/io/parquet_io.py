@@ -65,15 +65,9 @@ def save_parquet(
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
-    footer_meta = metadata.to_parquet_meta()
     table = df.to_arrow()
-    existing_meta = table.schema.metadata or {}
-    encoded = {k.encode(): v.encode() for k, v in footer_meta.items()}
-    table = table.replace_schema_metadata({**existing_meta, **encoded})
-    kwargs = {"compression": "zstd"}
-    if row_group_size is not None:
-        kwargs["row_group_size"] = row_group_size
-    pq.write_table(table, dest, **kwargs)
+    _write_with_metadata(table, dest, metadata.to_parquet_meta(), row_group_size)
+
     logger.info("Parquet IO: Saved '%s' to '%s'.", metadata.project_name, dest)
 
 
@@ -116,6 +110,7 @@ def load_parquet(src: Path) -> Tuple[pl.DataFrame, ProjectMetadata]:
     return records_df, metadata
 
 
+### TODO: DELETE ONCE dashboard is removed.
 def resolve_report_source(
     source: Union["Project", Path],  # type: ignore[name-defined]
 ) -> Tuple[pl.DataFrame, ProjectMetadata]:
@@ -134,18 +129,37 @@ def resolve_report_source(
     raise TypeError(f"Expected Project or Path, got {type(source)}")
 
 
+### TODO: DELETE ONCE dashboard is removed.
 def to_parquet_bytes(df: pl.DataFrame, metadata: ProjectMetadata) -> bytes:
-    """Serialise to in-memory bytes for browser download. No disk I/O."""
     buf = io.BytesIO()
-    _write_with_metadata(df, metadata, buf)
+    table = df.to_arrow()
+    _write_with_metadata(table, buf, metadata.to_parquet_meta())
     return buf.getvalue()
 
 
-def _write_with_metadata(df: pl.DataFrame, metadata: ProjectMetadata, dest, row_group_size: Optional[int] = None) -> None:
-    """Write df to dest (Path or BytesIO) with metadata in the parquet footer."""
-    table = df.to_arrow()
+def reattach_parquet_metadata(target: Path, source: Path) -> None:
+    """
+    Copy KV footer metadata from source onto target parquet, in-place.
+    Used after DuckDB COPY TO strips the original metadata.
+    """
+    source_raw = pq.read_metadata(source).metadata or {}
+    table      = pq.read_table(target)
+    _write_with_metadata(table, target, source_raw)
+
+
+def _write_with_metadata(
+    table,
+    dest,
+    metadata_dict: dict,          # raw {bytes: bytes} or {str: str}
+    row_group_size: Optional[int] = None,
+) -> None:
     existing = table.schema.metadata or {}
-    encoded = {k.encode(): v.encode() for k, v in metadata.to_parquet_meta().items()}
+    # normalise to bytes keys/values
+    encoded  = {
+        (k if isinstance(k, bytes) else k.encode()):
+        (v if isinstance(v, bytes) else v.encode())
+        for k, v in metadata_dict.items()
+    }
     table = table.replace_schema_metadata({**existing, **encoded})
     kwargs = {"compression": "zstd"}
     if row_group_size is not None:

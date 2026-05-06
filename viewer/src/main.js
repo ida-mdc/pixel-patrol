@@ -271,7 +271,8 @@ function afterLoad(options = {}) {
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
-  initControls(schema, totalRows, registry.plugins, handleExportCsv, {
+  initControls(schema, totalRows, registry.plugins, handleExportCsv,
+    SERVER_MODE ? handleExportParquet : null, {
     sidebarLocked: state.sidebarLocked,
     frozenSidebar: snapshotBundle?.frozenSidebar,
     onExportBakedHtml: state.sidebarLocked ? undefined : handleExportBakedHtml,
@@ -343,6 +344,19 @@ async function handleExportCsv() {
     triggerDownload(blob, 'pixel_patrol_export.csv');
   } catch (err) {
     console.error('[viewer] CSV export error:', err);
+  }
+}
+
+async function handleExportParquet() {
+  try {
+    const where = buildWhere(state.filter);
+    const qs    = where ? `?where=${encodeURIComponent(where)}` : '';
+    const resp  = await fetch(`/api/export-parquet${qs}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    const blob  = await resp.blob();
+    triggerDownload(blob, document.getElementById('current-filename').textContent.replace('.parquet', '_filtered.parquet'));
+  } catch (err) {
+    console.error('[viewer] Parquet export error:', err);
   }
 }
 

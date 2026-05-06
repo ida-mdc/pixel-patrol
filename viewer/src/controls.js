@@ -18,7 +18,7 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
  * @param {object}   [opts.frozenSidebar]  — payload from buildFrozenSidebarPayload
  * @param {Function} [opts.onExportBakedHtml] — baked static HTML snapshot
  */
-export function initControls(schema, totalRows, plugins, onExportCsv, opts = {}) {
+export function initControls(schema, totalRows, plugins, onExportCsv, onExportParquet, opts = {}) {
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -83,6 +83,13 @@ export function initControls(schema, totalRows, plugins, onExportCsv, opts = {})
 
   // ── Export CSV ────────────────────────────────────────────────────────
   el('export-csv-btn').onclick = onExportCsv;
+
+  // ── Export Parquet (server mode only) ────────────────────────────────
+  const parquetBtn = el('export-parquet-btn');
+  if (parquetBtn) {
+    parquetBtn.style.display = onExportParquet ? '' : 'none';
+    parquetBtn.onclick = onExportParquet ?? (() => {});
+  }
 
   const bakedBtn = el('export-baked-btn');
   if (bakedBtn) {

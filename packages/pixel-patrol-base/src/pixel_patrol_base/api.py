@@ -6,10 +6,9 @@ import polars as pl
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
-from pixel_patrol_base.core.report_config import ReportConfig
 from pixel_patrol_base.io.parquet_io import load_parquet
-from pixel_patrol_base.report.dashboard_app import prepare_app
-from pixel_patrol_base.report.html_export import export_html_from_dashboard
+from pixel_patrol_base.viewer_pages import build_single_file_viewer_html, build_github_pages_site
+from pixel_patrol_base.viewer_server import serve_viewer
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +60,7 @@ def process_files(
                                     Defaults to "all".
         processing_max_workers:     Thread-pool size. None = default.
         records_flush_every_n:      Flush intermediate results to disk every N records.
+        parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
         authors:                    Free-form authors string embedded in the parquet metadata.
 
@@ -83,100 +83,88 @@ def process_files(
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
 
-def show_report(
-    source: Union[Project, Path],
-    host: str = "127.0.0.1",
-    port: int = None,
-    debug: bool = False,
-    cmap: Optional[str] = None,
-    widgets_included: Optional[Set[str]] = None,
-    widgets_excluded: Optional[Set[str]] = None,
-    group_col: Optional[str] = None,
-    filter_by: Optional[Dict] = None,
-    dimensions: Optional[Dict[str, str]] = None,
-    is_show_significance: bool = False,
+def view(
+        source: Union[Project, Path],
+        port: int = 8052,
+        open_browser: bool = True,
+        group_col: Optional[str] = None,
+        filter_by: Optional[Dict] = None,
+        dimensions: Optional[Dict[str, str]] = None,
+        widgets_excluded: Optional[Set[str]] = None,
+        is_show_significance: bool = False,
+        palette: Optional[str] = None,
 ) -> None:
     """
-    Launch the interactive report dashboard.
+    Open a parquet file in the Pixel Patrol viewer backed by a local Python server.
 
     Args:
-        source:                 A processed Project or path to a saved .parquet file.
-        host:                   Host address for the server.
-        port:                   Port number for the server.
-        debug:                  Enable Flask debug mode. Note: use_reloader is always False to
-                                prevent the script being executed twice.
-        cmap:                   Colormap name for visualizations.
-        widgets_included:       Only show these widgets (by NAME). If set, widgets_excluded is ignored.
-        widgets_excluded:       Exclude these widgets (by NAME).
-        group_col:              Column name to group by.
-        filter_by:              Filter dict, e.g. {"file_extension": {"op": "in", "value": "tif, png"}}.
-        dimensions:             Dimension filters, e.g. {"T": "0", "Z": "1"}.
-        is_show_significance:   Whether to show statistical significance annotations.
-    """
-    report_config = ReportConfig.from_kwargs(
-        cmap=cmap, widgets_included=widgets_included, widgets_excluded=widgets_excluded,
-        group_col=group_col, filter_by=filter_by, dimensions=dimensions,
-        is_show_significance=is_show_significance,
-    )
-    app = prepare_app(source, report_config)
-    logger.info("API Call: Showing report.")
-    app.run(debug=debug, host=host, port=port, use_reloader=False)
-
-
-def export_html_report(
-    source: Union[Project, Path],
-    output_path: Union[str, Path],
-    host: str = "127.0.0.1",
-    port: int = None,
-    timeout: int = 120,
-    cmap: Optional[str] = None,
-    widgets_included: Optional[Set[str]] = None,
-    widgets_excluded: Optional[Set[str]] = None,
-    group_col: Optional[str] = None,
-    filter_by: Optional[Dict] = None,
-    dimensions: Optional[Dict[str, str]] = None,
-    is_show_significance: bool = False,
-) -> None:
-    """
-    Export the report dashboard as a static HTML file via headless browser automation.
-
-    Args:
-        source:                 A processed Project or path to a saved .parquet file.
-        output_path:            Path where the HTML file should be saved.
-        host:                   Host address for the temporary server.
-        port:                   Port for the temporary server (None = auto-assign).
-        timeout:                Maximum seconds to wait for export.
-        cmap:                   Colormap name for visualizations.
-        widgets_included:       Only show these widgets (by NAME). If set, widgets_excluded is ignored.
-        widgets_excluded:       Exclude these widgets (by NAME).
-        group_col:              Column name to group by.
-        filter_by:              Filter dict, e.g. {"file_extension": {"op": "in", "value": "tif, png"}}.
-        dimensions:             Dimension filters, e.g. {"T": "0", "Z": "1"}.
-        is_show_significance:   Whether to show statistical significance annotations.
-    Raises:
-        ImportError: If Playwright is not installed
-        RuntimeError: If the export fails
+        source:               A processed Project or path to a .parquet file.
+        port:                 Port for the local server (default 8052).
+        open_browser:         Open the viewer in the default browser (default True).
+        group_col:            Column to group by on first load.
+        filter_by:            Initial filter, e.g. {"file_extension": {"op": "in", "value": "tif,png"}}.
+        dimensions:           Dimension selections, e.g. {"t": "0", "z": "1"}.
+        widgets_excluded:     Set of plugin IDs to hide, e.g. {"histogram", "summary"}.
+        is_show_significance: Show statistical significance brackets.
+        palette:              Color palette name (default "tab10").
 
     Example:
         >>> from pixel_patrol_base import api
-        >>> api.export_html_report(
-        ...     "pathA/my_project.parquet",
-        ...     "pathB/report.html",
-        ...     widgets_excluded={"DatasetHistogram"},
-        ...     group_col="size_readable",
-        ...     filter_by={"file_extension": {"op": "in", "value": "tif, png"}},
+        >>> api.view(
+        ...     "my_project.parquet",
+        ...     group_col="file_extension",
+        ...     filter_by={"file_extension": {"op": "in", "value": "tif,png"}},
+        ...     dimensions={"t": "0"},
+        ...     widgets_excluded={"histogram"},
         ... )
     """
-    output_path = Path(output_path)
-    report_config = ReportConfig.from_kwargs(
-        cmap=cmap, widgets_included=widgets_included, widgets_excluded=widgets_excluded,
-        group_col=group_col, filter_by=filter_by, dimensions=dimensions,
+
+    path = _resolve_parquet_path(source)
+    serve_viewer(
+        path,
+        port=port,
+        open_browser=open_browser,
+        group_col=group_col,
+        filter_by=filter_by,
+        dimensions=dimensions,
+        widgets_excluded=widgets_excluded,
         is_show_significance=is_show_significance,
+        palette=palette,
     )
-    app = prepare_app(source, report_config)
-    logger.info(f"API Call: Exporting HTML report to '{output_path}'.")
-    export_html_from_dashboard(app, output_path, host=host, port=port, timeout=timeout)
-    logger.info(f"API Call: HTML export completed successfully: '{output_path}'.")
+
+
+def build_viewer(output: Union[str, Path]) -> Path:
+    """
+    Build a static viewer from the installed web viewer bundle.
+
+    If OUTPUT ends in .html or .htm, writes a single self-contained HTML file
+    with all JS/CSS/extensions inlined — share it alongside your .parquet file.
+
+    Otherwise OUTPUT is treated as a directory and a GitHub Pages-style site
+    is written there (index.html + assets + extensions folders) — deploy to
+    any static host and open with a ?data= URL pointing to your parquet.
+
+    Args:
+        output: Path to a .html file or a directory.
+
+    Returns:
+        Path to the written file or directory.
+
+    Examples:
+        >>> from pixel_patrol_base import api
+        >>> api.build_viewer("viewer.html")        # single file
+        # OR
+        >>> api.build_viewer("gh-pages-out/")      # site folder
+    """
+
+    output = Path(output)
+    if output.suffix.lower() in {".html", ".htm"}:
+        out = build_single_file_viewer_html(output)
+        logger.info(f"API Call: Single-file viewer written to '{out}'.")
+    else:
+        out = build_github_pages_site(output)
+        logger.info(f"API Call: Viewer site written to '{out}'.")
+    return out
 
 
 def load(src: Path) -> tuple:
@@ -204,3 +192,22 @@ def get_paths(project: Project) -> List[Path]:
 
 def get_records_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_records_df()
+
+
+def _resolve_parquet_path(source: Union[Project, Path, str]) -> Path:
+    if isinstance(source, Project):
+        p = source.get_output_path()
+        if p is None:
+            raise ValueError(
+                "Project has no output path. "
+                "Pass an explicit parquet path or call process_files() first."
+            )
+        path = Path(p).resolve()
+    else:
+        path = Path(source).resolve()
+
+    if not path.exists():
+        raise FileNotFoundError(f"Parquet file not found: {path}")
+    if path.suffix.lower() != ".parquet":
+        raise ValueError(f"Expected a .parquet file, got: {path}")
+    return path
