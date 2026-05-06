@@ -1,3 +1,5 @@
+import { WIDGET_CONTAINER_ID, ID_WELCOME_SCREEN, ID_MAIN_APP, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP } from './constants.js';
+
 const FILTER_OP_LABEL = {
   contains: 'contains',
   not_contains: 'does not contain',
@@ -161,11 +163,11 @@ export async function exportBakedHtml(state, schema, plugins) {
 
   // Strip scripts and non-content chrome
   doc.querySelectorAll('script[type="module"], script[src]').forEach(s => s.remove());
-  ['welcome-screen', 'loading-overlay', 'sidebar-backdrop'].forEach(id => doc.getElementById(id)?.remove());
+  [ID_WELCOME_SCREEN, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP].forEach(id => doc.getElementById(id)?.remove());
   doc.querySelectorAll('input[type="file"]').forEach(el => el.remove());
 
   // Ensure main app is visible
-  const mainApp = doc.getElementById('main-app');
+  const mainApp = doc.getElementById(ID_MAIN_APP);
   if (mainApp) mainApp.style.display = 'flex';
 
   // Populate and show the frozen settings banner
@@ -184,7 +186,7 @@ export async function exportBakedHtml(state, schema, plugins) {
   }
 
   // Disable interactive controls inside widgets
-  doc.querySelectorAll('#widget-container select, #widget-container input, #widget-container button')
+  doc.querySelectorAll(`#${WIDGET_CONTAINER_ID} select, #${WIDGET_CONTAINER_ID} input, #${WIDGET_CONTAINER_ID} button`)
     .forEach(el => { el.disabled = true; });
 
   // Fix Plotly SVG stacking and hide modebar

@@ -3,6 +3,7 @@ import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.work
 import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import { detectSchema, pickDefaultGroupCol } from './schema.js';
 import { q } from './sql.js';
+import { FILE_ROW_NUMBER } from './constants.js';
 
 const MAX_UNIQUE_GROUP = 12; // Match Dash app (pixel-patrol-base)
 
@@ -12,7 +13,7 @@ const MAX_UNIQUE_GROUP = 12; // Match Dash app (pixel-patrol-base)
  */
 const ROW_ID_COL_CANDIDATES = [
   'row_index', '_row_index', 'record_idx', '__row_index',
-  'file_row_number',
+  FILE_ROW_NUMBER,
 ];
 
 function pickRowIdColumnFromSchema(allCols) {

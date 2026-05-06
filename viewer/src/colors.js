@@ -1,4 +1,5 @@
 import chroma from 'chroma-js';
+import { DEFAULT_PALETTE } from './constants.js';
 
 // ── matplotlib/D3 tab10 & tab20 ───────────────────────────────────────────────
 // Same palette as matplotlib's default (tab10/tab20) and D3 schemeCategory10/20.
@@ -79,11 +80,11 @@ export function getColors(paletteName, n) {
   try {
     return chroma.scale(paletteName).colors(n);
   } catch {
-    return _fixedColors('tab10', n);
+    return _fixedColors(DEFAULT_PALETTE, n);
   }
 }
 
-export function buildColorMap(groups, palette = 'tab10') {
+export function buildColorMap(groups, palette = DEFAULT_PALETTE) {
   const colors = getColors(palette, groups.length);
   const map = {};
   groups.forEach((g, i) => { map[String(g)] = colors[i]; });

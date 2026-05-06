@@ -1,3 +1,5 @@
+import { DEFAULT_PALETTE } from './constants.js';
+
 /**
  * URL parameter serialisation / deserialisation for viewer state.
  * Uses history.replaceState — no page reloads, no extra history entries.
@@ -16,7 +18,7 @@
 export function writeUrlParams(state) {
   const params = new URLSearchParams(window.location.search);
 
-  setOrDelete(params, 'palette', state.palette !== 'tab10' ? state.palette : null);
+  setOrDelete(params, 'palette', state.palette !== DEFAULT_PALETTE ? state.palette : null);
   setOrDelete(params, 'group',   state.groupCol || null);
 
   const { col, op, val } = state.filter ?? {};

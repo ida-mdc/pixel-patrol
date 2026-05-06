@@ -9,6 +9,7 @@ import { buildWhere } from './sql.js';
 import { getPaletteNames } from './colors.js';
 import { readUrlParams, writeUrlParams } from './url-params.js';
 import { exportBakedHtml } from './export-snapshot.js';
+import { ID_WELCOME_SCREEN, ID_MAIN_APP, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP } from './constants.js';
 
 // ── Module-level handles ──────────────────────────────────────────────────────
 let db          = null;
@@ -381,7 +382,7 @@ function triggerDownload(blob, filename) {
 
 function setLoading(msg) {
   document.getElementById('loading-text').textContent = msg;
-  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById(ID_LOADING_OVERLAY).style.display = 'flex';
 }
 
 function setLoadingProgress(pct, msg) {
@@ -393,17 +394,17 @@ function setLoadingProgress(pct, msg) {
 function hideLoading() {
   const bar = document.getElementById('loading-progress');
   if (bar) { bar.style.display = 'none'; bar.value = 0; }
-  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById(ID_LOADING_OVERLAY).style.display = 'none';
 }
 
 function showWelcome() {
-  document.getElementById('welcome-screen').style.display = 'flex';
-  document.getElementById('main-app').style.display       = 'none';
+  document.getElementById(ID_WELCOME_SCREEN).style.display = 'flex';
+  document.getElementById(ID_MAIN_APP).style.display       = 'none';
 }
 
 function showApp() {
-  document.getElementById('welcome-screen').style.display = 'none';
-  document.getElementById('main-app').style.display       = 'flex';
+  document.getElementById(ID_WELCOME_SCREEN).style.display = 'none';
+  document.getElementById(ID_MAIN_APP).style.display       = 'flex';
 }
 
 function hideFileOpenControls() {
@@ -435,7 +436,7 @@ function showFatalError(message, err, hint = null) {
   `;
 
   // Insert into the welcome screen's flex container without destroying it.
-  const ws = document.getElementById('welcome-screen');
+  const ws = document.getElementById(ID_WELCOME_SCREEN);
   ws.style.position = 'relative';
   ws.appendChild(banner);
 }
@@ -445,7 +446,7 @@ function showFatalError(message, err, hint = null) {
 (function initSidebarToggle() {
   const toggle   = document.getElementById('sidebar-toggle');
   const sidebar  = document.getElementById('sidebar');
-  const backdrop = document.getElementById('sidebar-backdrop');
+  const backdrop = document.getElementById(ID_SIDEBAR_BACKDROP);
 
   function setSidebarOpen(open) {
     sidebar.classList.toggle('sidebar-open', open);
