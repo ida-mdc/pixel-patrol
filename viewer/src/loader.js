@@ -128,9 +128,21 @@ export async function finishLoad(conn, parquetPath = null) {
   // Match Dash rules: any non-blob column with 2 ≤ n_unique ≤ 12 is a group option.
   // Run cardinality on all non-blob columns — same approach as Dash's _find_candidate_columns.
   const candidateCols = schema.allCols.filter(c => !schema.blobCols.includes(c));
+
   schema.groupCols = await filterGroupColsByCardinality(conn, candidateCols);
 
+  // Always include any URL-param group col if it exists in the parquet.
+  const urlGroup = new URLSearchParams(window.location.search).get('group');
+  if (urlGroup && schema.allCols.includes(urlGroup) && !schema.groupCols.includes(urlGroup)) {
+    schema.groupCols.push(urlGroup);
+  }
+
   schema.defaultGroupCol = pickDefaultGroupCol(schema.allCols, schema.groupCols);
+
+  // Always include the default group col too.
+  if (schema.defaultGroupCol && !schema.groupCols.includes(schema.defaultGroupCol)) {
+    schema.groupCols.push(schema.defaultGroupCol);
+  }
 
   const { projectName, authors } = parquetPath
     ? await _readParquetMeta(conn, parquetPath)
