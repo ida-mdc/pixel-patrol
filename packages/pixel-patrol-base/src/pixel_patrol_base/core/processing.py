@@ -849,6 +849,13 @@ class _RecordsAccumulator:
                 .otherwise(pl.col("type"))
                 .alias("type")
             )
+        cols_to_drop = [
+            col for col in final_df.columns
+            if final_df[col].is_null().all()
+            or (final_df[col].dtype == pl.Utf8 and (final_df[col].is_null() | (final_df[col] == "")).all())
+        ]
+        if cols_to_drop:
+            final_df = final_df.drop(cols_to_drop)
         try:
             final_df = optimize_dtypes(final_df)
         except Exception as exc:
