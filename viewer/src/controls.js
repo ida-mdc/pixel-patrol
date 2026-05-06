@@ -24,7 +24,7 @@ export function initControls(schema, totalRows, plugins, onExportCsv, onExportPa
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
   paletteEl.value = state.palette;
   paletteEl.onchange = () => {
-    setState({ palette: paletteEl.value }, 'render');
+    state.palette = paletteEl.value;
   };
 
   // ── Group By ─────────────────────────────────────────────────────────

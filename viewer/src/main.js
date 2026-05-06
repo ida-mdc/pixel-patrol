@@ -269,7 +269,6 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
-  if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
   initControls(schema, totalRows, registry.plugins, handleExportCsv,

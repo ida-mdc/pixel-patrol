@@ -40,12 +40,10 @@ export function setState(patch, event = null) {
 }
 
 export function resetState(defaultGroupCol) {
-  state.palette          = DEFAULT_PALETTE;
+  state.palette          = 'tab10';
   state.groupCol         = defaultGroupCol;
   state.filter           = { col: '', op: '', val: '' };
   state.dimensions       = {};
   state.showSignificance = false;
-  state.hiddenWidgets    = new Set();
-  state.sidebarLocked    = false;
   emit('query');
 }
