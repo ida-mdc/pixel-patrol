@@ -58,7 +58,7 @@ def safe_hist_range(x: da.Array | np.ndarray) -> Tuple[float, float, float]:
     return min_val, max_val, max_adj
 
 
-def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
+def _hist_func(arr: da.Array | np.ndarray, bins: int, nodata_value=None) -> Dict[str, Any]:
     """
     Calculates a histogram on a Dask or NumPy array.
     For Dask arrays this uses Dask's histogram to avoid pulling the full chunk into memory.
@@ -74,6 +74,11 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
     else:
         nan_count = int(np.sum(np.isnan(arr)))
 
+    if nodata_value and isinstance(arr, da.Array):
+        nodata_count = int(da.compute(da.sum(arr == nodata_value))[0])
+    else:
+        nodata_count = int(np.sum(arr == nodata_value))
+
     # Compute min/max and adjusted upper bound with shared helper
     min_val, max_val, max_adj_val = safe_hist_range(arr)
 
@@ -87,7 +92,7 @@ def _hist_func(arr: da.Array | np.ndarray, bins: int) -> Dict[str, Any]:
         counts_np, _ = np.histogram(arr, bins=bins, range=(min_val, max_adj_val))
         counts_arr = np.asarray(counts_np, dtype=np.int64)
 
-    return {"counts": counts_arr, "min": min_val, "max": max_val, "nan_count": nan_count}
+    return {"counts": counts_arr, "min": min_val, "max": max_val, "nan_count": nan_count, "nodata_count": nodata_count}
 
 
 class HistogramProcessor:
@@ -105,12 +110,14 @@ class HistogramProcessor:
         "histogram_min": np.float32,
         "histogram_max": np.float32,
         "histogram_nan_count": np.uint32,
+        "histogram_nodata_count": np.uint32,
     }
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^histogram_counts_.*$", (np.int32, HISTOGRAM_BINS)),
         (r"^histogram_min_.*$", np.float32),
         (r"^histogram_max_.*$", np.float32),
         (r"^histogram_nan_count_.*$", np.uint32),
+        (r"^histogram_nodata_count_.*$", np.uint32),
     ]
 
     def run(self, art: Record) -> ProcessResult:
@@ -120,6 +127,7 @@ class HistogramProcessor:
         """
         data = art.data
         dim_order = art.dim_order
+        nodata_value = art.meta.get("nodata_value", None)
 
         # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
         if getattr(data, "size", 0) == 0:
@@ -128,6 +136,7 @@ class HistogramProcessor:
                 "histogram_min":       0.0,
                 "histogram_max":       0.0,
                 "histogram_nan_count": np.uint32(0),
+                "histogram_nodata_count": np.uint32(0),
             }
 
         # Metric functions operate on 2D numpy planes provided by apply_gufunc.
@@ -138,7 +147,7 @@ class HistogramProcessor:
             pid = id(plane)
             if getattr(_thread_local, "last_id", None) != pid:
                 _thread_local.last_id = pid
-                _thread_local.last_result = _hist_func(plane, bins=256)
+                _thread_local.last_result = _hist_func(plane, bins=256, nodata_value=nodata_value)
             return _thread_local.last_result
 
         def _counts_fn(plane: np.ndarray):
@@ -153,12 +162,16 @@ class HistogramProcessor:
         def _nan_count_fn(plane: np.ndarray):
             return _compute_once(plane)["nan_count"]
 
+        def _nodata_count_fn(plane: np.ndarray):
+            return _compute_once(plane)["nodata_count"]
+
 
         metrics = {
             "histogram_counts": _counts_fn,
             "histogram_min": _min_fn,
             "histogram_max": _max_fn,
             "histogram_nan_count": _nan_count_fn,
+            "histogram_nodata_count": _nodata_count_fn,
         }
 
         # Aggregators: sum counts per-bin, and take min/max for boundaries
@@ -167,6 +180,7 @@ class HistogramProcessor:
             "histogram_min": np.min,
             "histogram_max": np.max,
             "histogram_nan_count": np.sum,
+            "histogram_nodata_count": np.sum,
         }
 
         result = calculate_sliced_stats(data, dim_order, metrics, aggregators)

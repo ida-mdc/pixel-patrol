@@ -1,0 +1,41 @@
+[project]
+name = "pixel_patrol_geospatial"
+version = "0.1.0"
+description = "Extension of pixel patrol for geospatial rasterdata based on rasterio."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pixel_patrol_base>=0.1.0",
+    "dask",
+    "numpy",
+    "rasterio",
+    "polars",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_geospatial"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+geo_extension_loaders = "pixel_patrol_geospatial.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+geo_extension_processors = "pixel_patrol_geospatial.plugin_registry:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.widget_plugins"]
+geo_extension_widgets = "pixel_patrol_geospatial.plugin_registry:register_widget_plugins"
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../../packages/pixel-patrol-base" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+]

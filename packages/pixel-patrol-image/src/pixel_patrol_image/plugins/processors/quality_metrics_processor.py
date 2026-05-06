@@ -100,7 +100,9 @@ def _check_ringing_records_2d(image: np.ndarray) -> float:
     image = _prepare_2d_image(image)
     if image is None:
         return float(np.nan)
-    normalized_image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    normalized_image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
+    np.nan_to_num(normalized_image, nan=0, copy=False) # otherwise astype(int) emits a RuntimeWarning
+    normalized_image = normalized_image.astype(np.uint8)
     edges = cv2.Canny(normalized_image, 50, 150)
     if np.sum(edges) == 0:
         return 0.0
