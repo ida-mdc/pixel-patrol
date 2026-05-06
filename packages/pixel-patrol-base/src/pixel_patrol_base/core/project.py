@@ -193,6 +193,9 @@ class Project:
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
 
+    def get_output_path(self) -> Path:
+        return self.output_path
+
 
 def _resolve_extensions(
         proposed: Union[Set[str], str],
