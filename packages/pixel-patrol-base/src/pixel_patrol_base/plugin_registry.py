@@ -2,25 +2,14 @@ import importlib
 import logging
 from typing import Type, Union, List
 
-from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
+from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
 from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
-from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_histograms import DatasetHistogramWidget
-from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats import DatasetStatsWidget
-from pixel_patrol_base.plugins.widgets.dataset_stats.dataset_stats_across_dims import DatasetStatsAcrossDimensionsWidget
-from pixel_patrol_base.plugins.widgets.file_stats.file_stats import FileStatisticsWidget
-from pixel_patrol_base.plugins.widgets.metadata.data_type import DataTypeWidget
-from pixel_patrol_base.plugins.widgets.metadata.dim_order import DimOrderWidget
-from pixel_patrol_base.plugins.widgets.metadata.dim_size import DimSizeWidget
-from pixel_patrol_base.plugins.widgets.summary.dataframe import DataFrameWidget
-from pixel_patrol_base.plugins.widgets.summary.file_summary import FileSummaryWidget
-from pixel_patrol_base.plugins.widgets.summary.sunburst import FileSunburstWidget
-from pixel_patrol_base.plugins.widgets.visualization.image_mosaic import ImageMosaicWidget
 
 logger = logging.getLogger(__name__)
 
-PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
+PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor]]
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
@@ -34,12 +23,6 @@ def discover_processor_plugins() -> List[PixelPatrolProcessor]:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.processor_plugins")
     initialized_plugins = [plugin() for plugin in plugins]
     logger.info(f'Discovered processor plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
-    return initialized_plugins
-
-def discover_widget_plugins() -> List[PixelPatrolWidget]:
-    plugins = discover_plugins_from_entrypoints("pixel_patrol.widget_plugins")
-    initialized_plugins = [plugin() for plugin in plugins]
-    logger.info(f'Discovered widget plugins: {", ".join([plugin.NAME for plugin in initialized_plugins])}')
     return initialized_plugins
 
 
@@ -62,18 +45,3 @@ def register_processor_plugins():
         HistogramProcessor,
     ]
 
-def register_widget_plugins():
-    return [
-        FileStatisticsWidget,
-        FileSummaryWidget,
-        DataFrameWidget,
-        FileSunburstWidget,
-
-        DataTypeWidget,
-        DimOrderWidget,
-        DimSizeWidget,
-        ImageMosaicWidget,
-        DatasetStatsWidget,
-        DatasetStatsAcrossDimensionsWidget,
-        DatasetHistogramWidget,
-    ]
