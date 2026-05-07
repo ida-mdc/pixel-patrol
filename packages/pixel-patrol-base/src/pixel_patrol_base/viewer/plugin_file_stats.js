@@ -158,7 +158,7 @@ export default {
 function renderGroupedBars(container, { categories, groups, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
   const traces = groups.map(g => ({
     type:   'bar',
-    name:   g,
+    name:   ctx.groupLabel(g),
     x:      categories,
     y:      categories.map(cat => getValue(cat, g)),
     marker: { color: ctx.color.group(g) },

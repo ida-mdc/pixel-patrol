@@ -56,7 +56,7 @@ export default {
   
         const traces = groups.map(g => ({
           type:   'bar',
-          name:   g,
+          name:   ctx.groupLabel(g),
           x:      cats,
           y:      cats.map(cat => {
             const r = rows.find(r => String(r.__cat__) === cat && String(r.__group__) === g);

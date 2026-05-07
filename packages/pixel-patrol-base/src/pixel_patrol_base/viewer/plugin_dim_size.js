@@ -72,7 +72,7 @@ export default {
               const gRows = xyRows.filter(r => String(r.__group__) === g);
               if (!gRows.length) return null;
               return {
-                type: 'scatter', mode: 'markers', name: g,
+                type: 'scatter', mode: 'markers', name: ctx.groupLabel(g),
                 x: gRows.map(r => Number(r.x)), y: gRows.map(r => Number(r.y)),
                 marker: { size: gRows.map(r => Number(r.bubble_size)), sizeref, sizemode: 'area', color: ctx.color.group(g), line: { width: 1, color: 'white' } },
                 hovertemplate: `<b>${g}</b><br>X: %{x} px<br>Y: %{y} px<br>Count: %{text}<extra></extra>`,
@@ -150,7 +150,7 @@ export default {
             const vals = validRows.filter(r => String(r.__group__) === g).map(r => Number(r[col]));
             if (!vals.length) return null;
             return {
-              type: 'violin', y: vals, name: g, box: { visible: true }, meanline: { visible: false },
+              type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: false },
               points: vals.length < 500 ? 'all' : 'outliers', pointpos: 0, jitter: 0.3,
               marker: { color: ctx.color.group(g), size: 3 }, line: { color: ctx.color.group(g) }, showlegend: false,
             };

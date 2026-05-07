@@ -42,7 +42,7 @@ export default {
         </div>
       `;
   
-      const groupOpts = ctx.groups.map(g => `<option value="${g}">${g}</option>`).join('');
+      const groupOpts = ctx.groups.map(g => `<option value="${g}">${ctx.groupLabel(g)}</option>`).join('');
       controlsDiv.innerHTML += `
         <div style="max-width:360px;flex:1 1 240px">
           <div style="font-weight:600;margin-bottom:6px">Select specific groups to compare (optional):</div>
@@ -134,7 +134,7 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
     const nBins = sums.length;
     const ys    = Array.from(sums, v => total > 0 ? v / total : 0);
     const xs    = histXAxis(mode, nBins, min, max);
-    return { type: 'scatter', mode: 'lines', name: String(g), x: xs, y: ys, fill: 'tozeroy', opacity: 0.6, line: { color: ctx.color.group(g), width: 2 } };
+    return { type: 'scatter', mode: 'lines', name: ctx.groupLabel(String(g)), x: xs, y: ys, fill: 'tozeroy', opacity: 0.6, line: { color: ctx.color.group(g), width: 2 } };
   });
 
   if (selectedFile && hasRange) {

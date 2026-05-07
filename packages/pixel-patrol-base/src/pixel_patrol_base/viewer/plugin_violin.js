@@ -119,7 +119,7 @@ async function renderViolins(container, ctx, filterMetric) {
         const vals       = groupData[g];
         const showPoints = vals.length < 1000 ? 'all' : 'outliers';
         return {
-          type: 'violin', y: vals, name: g, box: { visible: true }, meanline: { visible: true },
+          type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: true },
           points: showPoints, pointpos: 0, opacity: 0.9,
           marker: { color: ctx.color.group(g), line: { width: 1, color: 'black' } },
           hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
