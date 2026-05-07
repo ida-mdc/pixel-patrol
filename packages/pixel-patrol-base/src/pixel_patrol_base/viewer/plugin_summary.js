@@ -58,14 +58,15 @@ export default {
         bargap:     bargap(groups.length),
       };
   
+      const groupDisplayLabels = groups.map(g => ctx.groupLabel(g));
       appendPlots(container, [
         {
-          traces: [{ type: 'bar', x: groups, y: rows.map(r => Number(r.file_count)), marker: { color: colors } }],
+          traces: [{ type: 'bar', x: groupDisplayLabels, y: rows.map(r => Number(r.file_count)), marker: { color: colors } }],
           layout: { ...barLayout, title: { text: 'File Count per Group' }, xaxis: { title: prettiedGroupLabel, type: 'category' }, yaxis: { title: 'Number of files' } },
           divStyle: 'flex:1 1 320px',
         },
         {
-          traces: [{ type: 'bar', x: groups, y: rows.map(r => Number(r.total_size_mb)), marker: { color: colors } }],
+          traces: [{ type: 'bar', x: groupDisplayLabels, y: rows.map(r => Number(r.total_size_mb)), marker: { color: colors } }],
           layout: { ...barLayout, title: { text: 'Total Size per Group (MB)' }, xaxis: { title: prettiedGroupLabel, type: 'category' }, yaxis: { title: 'Size (MB)' } },
           divStyle: 'flex:1 1 320px',
         },

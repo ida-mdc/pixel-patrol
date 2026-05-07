@@ -172,7 +172,7 @@ export function appendGroupLegend(
   container,
   groups,
   colorFn,
-  { state = null, minGroups = 2 } = {},
+  { state = null, minGroups = 2, labelFn = null } = {},
 ) {
   if ((groups?.length ?? 0) < minGroups) return;
   const title = document.createElement('div');
@@ -187,7 +187,7 @@ export function appendGroupLegend(
     const swatch = document.createElement('span');
     swatch.style.cssText = `display:inline-block;width:12px;height:12px;border-radius:2px;flex-shrink:0;background:${colorFn(g)}`;
     item.appendChild(swatch);
-    item.appendChild(document.createTextNode(String(g)));
+    item.appendChild(document.createTextNode(labelFn ? labelFn(g) : String(g)));
     div.appendChild(item);
   }
   container.appendChild(div);

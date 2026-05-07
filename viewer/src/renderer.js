@@ -6,6 +6,7 @@ import { META_COLS, DIM_PATTERN } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { buildGroupLabels } from './group-labels.js';
 
 /**
  * Build a plugin context object.
@@ -22,9 +23,18 @@ import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
  * @param {string[]} groups   distinct group values (already fetched)
  * @param {number} filteredCount
  * @param {number} totalRows
+ *
+ * Additional fields available on ctx:
+ * @property {Record<string,string>} groupLabels  maps each original group value to a
+ *   shortened display label (e.g. ".../ dataset_A" instead of a long file path).
+ *   Use for Plotly trace names and axis tick labels — never for SQL.
+ * @property {(g: string) => string} groupLabel  convenience wrapper:
+ *   returns ctx.groupLabels[g] ?? String(g). Falls back to the raw value
+ *   if no mapping exists (e.g. for groups discovered after ctx was built).
  */
 function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, totalRows) {
   const legend = legendWithGrouping(LEGEND, state, '');
+  const groupLabels = buildGroupLabels(groups);
 
   return {
     schema,
@@ -32,6 +42,8 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
     colorMap,
     where,
     groups,
+    groupLabels,
+    groupLabel: (g) => groupLabels[g] ?? String(g),
     filteredCount,
     totalRows,
 
@@ -92,7 +104,7 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
         container,
         opts.groups ?? groups,
         opts.colorFn ?? (g => _groupColor(colorMap, g)),
-        { state, minGroups: opts.minGroups ?? 2 },
+        { state, minGroups: opts.minGroups ?? 2, labelFn: opts.labelFn ?? ((g) => groupLabels[g] ?? String(g)) },
       ),
       groupingLabel: (fallback = '') => groupingLabel(state, fallback),
       plotlyLegendConfig: legend,
