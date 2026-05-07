@@ -46,8 +46,8 @@ def cli():
                    'If not specified, all supported extensions will be used.')
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Name of pixel patrol configuration, will be displayed next to the tool name.')
-@click.option('--authors', type=str, default="",
-              help='Optional: Authors of this project (free-form, e.g., "ella, deborah").')
+@click.option('--description', type=str, default="",
+              help='Optional: Description of this project (free-form, e.g., "Authors: Annona Buddha and Banana Java").')
 @click.option('--processors-include', multiple=True, type=str,
               help='Only use these processors (e.g., basic-stats). Can be specified multiple times. If specified, --processors-exclude is ignored.')
 @click.option('--processors-exclude', multiple=True, type=str,
@@ -56,7 +56,7 @@ def cli():
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
-              flavor: str, authors: str,
+              flavor: str, description: str,
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None):
     """
@@ -93,7 +93,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         flavor=flavor or None,
-        authors=authors or None,
+        description=description or None,
         parquet_row_group_size=parquet_row_group_size,
     )
 

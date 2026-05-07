@@ -44,7 +44,7 @@ def process_files(
         parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
         flavor: Optional[str] = None,
-        authors: Optional[str] = None,
+        description: Optional[str] = None,
 ) -> Project:
     """
     Process files in the project.
@@ -62,7 +62,7 @@ def process_files(
         records_flush_every_n:      Flush intermediate results to disk every N records.
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
-        authors:                    Free-form authors string embedded in the parquet metadata.
+        description:                Free-form description string embedded in the parquet metadata.
 
     Returns:
         The project with processed records_df.
@@ -76,7 +76,7 @@ def process_files(
         parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",
-            authors=authors or "",
+            description=description or "",
         ),
     )
     logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")

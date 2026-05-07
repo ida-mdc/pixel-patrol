@@ -16,8 +16,8 @@ let db          = null;
 let conn        = null;
 let schema      = null;
 let totalRows   = 0;
-let projectName = null;
-let authors     = null;
+let projectName  = null;
+let description  = null;
 
 /** Serialize render passes so concurrent triggers cannot interleave (duplicate widgets / stale cards). */
 let renderQueue = Promise.resolve();
@@ -91,9 +91,9 @@ async function boot() {
     setLoading('Loading report data…');
     conn = makeServerConn();
     try {
-      ({ schema, totalRows, projectName, authors } = await finishLoad(conn));
-      projectName ??= window.__PP_PROJECT_NAME ?? null;
-      authors     ??= window.__PP_AUTHORS      ?? null;
+      ({ schema, totalRows, projectName, description } = await finishLoad(conn));
+      projectName  ??= window.__PP_PROJECT_NAME  ?? null;
+      description  ??= window.__PP_DESCRIPTION   ?? null;
 
       hideFileOpenControls();
       document.getElementById('current-filename').textContent =
@@ -171,7 +171,7 @@ async function bootWasmOfflineSnapshot() {
 
   setLoading('Loading snapshot…');
   try {
-    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, snapUrl, null));
+    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, snapUrl, null));
   } catch (err) {
     showFatalError('Failed to load snapshot parquet', err, loadErrorHint(err));
     return;
@@ -189,7 +189,7 @@ async function openUrl(url) {
   const filename = url.split('/').pop();
   setLoading(`Downloading ${filename}…`);
   try {
-    ({ schema, totalRows, projectName, authors } = await loadFromUrl(db, conn, url, (loaded, total) => {
+    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, url, (loaded, total) => {
       if (total > 0) {
         const pct = Math.round(loaded / total * 100);
         setLoadingProgress(pct, `Downloading ${filename}… ${pct}%`);
@@ -207,7 +207,7 @@ async function openFiles(files) {
   const file = files[0];
   setLoading(`Loading ${file.name}…`);
   try {
-    ({ schema, totalRows, projectName, authors } = await loadFromFile(db, conn, file));
+    ({ schema, totalRows, projectName, description } = await loadFromFile(db, conn, file));
     document.getElementById('current-filename').textContent = file.name;
     hideLoading();
     afterLoad();
@@ -269,6 +269,7 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
+  if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
   initControls(schema, totalRows, registry.plugins, handleExportCsv,
@@ -287,11 +288,11 @@ function afterLoad(options = {}) {
       title.textContent = projectName;
       nameEl.appendChild(title);
     }
-    if (authors) {
-      const auth = document.createElement('span');
-      auth.className   = 'project-authors';
-      auth.textContent = authors;
-      nameEl.appendChild(auth);
+    if (description) {
+      const desc = document.createElement('span');
+      desc.className   = 'project-description';
+      desc.textContent = description;
+      nameEl.appendChild(desc);
     }
   }
 

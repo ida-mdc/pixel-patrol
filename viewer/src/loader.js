@@ -144,29 +144,29 @@ export async function finishLoad(conn, parquetPath = null) {
     schema.groupCols.push(schema.defaultGroupCol);
   }
 
-  const { projectName, authors } = parquetPath
+  const { projectName, description } = parquetPath
     ? await _readParquetMeta(conn, parquetPath)
-    : { projectName: null, authors: null };
+    : { projectName: null, description: null };
 
-  return { schema, totalRows, projectName, authors };
+  return { schema, totalRows, projectName, description };
 }
 
-/** Read pp_project_name and pp_authors from the parquet file's KV metadata footer. */
+/** Read pp_project_name and pp_description from the parquet file's KV metadata footer. */
 async function _readParquetMeta(conn, path) {
   try {
     const p   = path.replace(/'/g, "''");
     const res = await conn.query(
       `SELECT decode(key)::VARCHAR AS k, decode(value)::VARCHAR AS v
        FROM parquet_kv_metadata('${p}')
-       WHERE decode(key)::VARCHAR IN ('pp_project_name', 'pp_authors')`,
+       WHERE decode(key)::VARCHAR IN ('pp_project_name', 'pp_description')`,
     );
     const meta = Object.fromEntries(res.toArray().map(r => [String(r.k), String(r.v)]));
     return {
-      projectName: meta.pp_project_name || null,
-      authors:     meta.pp_authors     || null,
+      projectName: meta.pp_project_name  || null,
+      description: meta.pp_description   || null,
     };
   } catch {
-    return { projectName: null, authors: null };
+    return { projectName: null, description: null };
   }
 }
 

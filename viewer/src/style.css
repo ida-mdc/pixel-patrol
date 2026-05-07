@@ -85,7 +85,7 @@ body { background: #f8f9fa; }
 
 #project-name { display: flex; flex-direction: column; gap: 2px; }
 .project-title   { font-size: 20px; font-weight: 600; color: #212529; }
-.project-authors { font-size: 13px; color: #6c757d; }
+.project-description { font-size: 13px; color: #6c757d; }
 
 /* ── Widget cards ── */
 .widget-card {
