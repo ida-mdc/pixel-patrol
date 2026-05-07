@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { cpSync, rmSync, existsSync, readFileSync } from 'fs';
+import { cpSync, rmSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // After a production build, sync the output into the Python package so that
@@ -34,7 +34,6 @@ function syncToPythonPackage() {
   return {
     name: 'sync-viewer-dist',
     closeBundle() {
-      if (!existsSync(VIEWER_DIST_IN_PKG)) return;
       try {
         rmSync(VIEWER_DIST_IN_PKG,  { recursive: true, force: true });
         cpSync(resolve(__dirname, 'dist'), VIEWER_DIST_IN_PKG, { recursive: true });
