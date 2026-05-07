@@ -14,18 +14,18 @@ def main():
     project = api.create_project("Configured Project", base_dir=base_path, loader=loader, output_path=output_path)
     api.add_paths(project, paths)
 
-    api.process_files(project, processors_included={"basic-stats"})
+    api.process_files(project) #, processors_included={"basic-stats"})
 
-    # --- Report: exclude specific widgets ---
+    # --- View: exclude specific widgets ---
     # Other options:
-    #   widgets_included={"FileSummaryWidget", "DataFrameWidget"}  — include instead of exclude
     #   group_col="imported_path_short"                            — group by column
     #   filter_by={"file_extension": {"op": "in", "value": "tif, png"}}
     #   dimensions={"T": "0", "Z": "1"}                           — filter by dimensions
-    api.show_report(
+    #   palette="viridis"                                          — color palette
+    api.view(
         project,
-        cmap="viridis",
-        widgets_excluded={"image-mosaic-widget"},
+        palette="viridis",
+        widgets_excluded={"mosaic", "metadata"},
     )
 
 
