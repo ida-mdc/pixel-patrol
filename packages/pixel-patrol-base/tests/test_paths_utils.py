@@ -41,8 +41,8 @@ def test_find_common_base_same_paths():
     assert result.rstrip("/\\") == expected.rstrip("/\\")
 
 
-def test_find_common_base_common_base_is_root():
-    """Test finding common base when the common base is the root directory."""
+def test_find_common_base_intermediate_dir():
+    """Test finding common base when paths diverge below a shared intermediate directory."""
     paths = [str(Path("/a/b/c/file1.txt")), str(Path("/a/b/d/file2.txt"))]
     expected = str(Path("/a/b")) + str(Path().anchor or "/")
     expected = expected.replace("//", "/").replace("\\\\", "\\")
