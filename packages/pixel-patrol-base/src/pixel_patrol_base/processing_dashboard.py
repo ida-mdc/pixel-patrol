@@ -4,7 +4,7 @@ Dash app for configuring and monitoring Pixel Patrol processing.
 This app provides a web interface to:
 1. Configure processing parameters (equivalent to CLI process command)
 2. Monitor processing progress in real-time
-3. Launch the report dashboard after processing completes
+3. Open the JS viewer after processing completes
 """
 import threading
 from pathlib import Path
@@ -19,15 +19,39 @@ import webbrowser
 import time
 
 from pixel_patrol_base import api
-from pixel_patrol_base.report.factory import create_info_icon
 
 import logging
 from collections import deque
 
 logger = logging.getLogger(__name__)
 
-# Use the same assets folder as the report dashboard
-ASSETS_DIR = (Path(__file__).parent / "report" / "assets").resolve()
+ASSETS_DIR = (Path(__file__).parent / "processing_assets").resolve()
+
+
+def create_info_icon(widget_id: str, help_text: str):
+    """Creates a standardised info icon that reveals a popover on hover/click."""
+    if not help_text:
+        return None
+    target_id = f"info-target-{widget_id}"
+    return html.Div(
+        [
+            html.I(
+                className="bi bi-info-circle-fill",
+                id=target_id,
+                style={"cursor": "pointer", "color": "#6c757d", "fontSize": "1.6rem", "marginLeft": "8px"},
+            ),
+            dbc.Popover(
+                [
+                    dbc.PopoverHeader("Info"),
+                    dbc.PopoverBody(dcc.Markdown(help_text, style={"marginBottom": 0, "fontSize": "1.4rem"})),
+                ],
+                target=target_id,
+                trigger="legacy",
+                placement="left",
+            ),
+        ],
+        className="d-flex align-items-center",
+    )
 
 # Update progress every 500 ms
 PROGRESS_UPDATE_INTERVAL_MS = 500
@@ -245,9 +269,9 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     "And PixelPatrol tries to extract rich data from those files - e.g. for images metadata and image data is processed.\n\n"
                                                                     "When processing finishes, Pixel Patrol saves a **parquet file** in the Output Directory. "
                                                                     "This file contains all processed data and project metadata needed to generate the Pixel Patrol report.\n\n"
-                                                                    "You can open the report later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
-                                                                    "`pixel-patrol report /path/to/output.parquet`\n\n"
-                                                                    "Or launch the report directly from this page once processing completes."
+                                                                    "You can open the viewer later from a **terminal** where Pixel Patrol is available (e.g., your venv is activated):\n\n"
+                                                                    "`pixel-patrol view /path/to/output.parquet`\n\n"
+                                                                    "Or open the viewer directly from this page once processing completes."
                                                                 ),
                                                             ),
                                                             width="auto",
@@ -687,7 +711,7 @@ def _register_callbacks(app: Dash):
         if status == "completed" and output_parquet:
             action_buttons.append(
                 dbc.Button(
-                    "Launch Report Dashboard",
+                    "Open in Viewer",
                     id="launch-report-btn",
                     color="success",
                     size="lg",
@@ -746,7 +770,7 @@ def _register_callbacks(app: Dash):
         prevent_initial_call=True,
     )
     def launch_report(n_clicks, state):
-        """Launch the report dashboard in a new thread."""
+        """Open the processed parquet in the JS viewer in a new thread."""
         if n_clicks:
             output_parquet = state.get("output_parquet")
             if output_parquet:
@@ -956,26 +980,8 @@ def _run_processing(
 
 
 def _launch_report_app(parquet_path: str):
-    """Launch the report dashboard app in a subprocess."""
-    import subprocess
-    import sys
-    import socket
-    import hashlib
-
-    def is_port_in_use(port: int) -> bool:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(('127.0.0.1', port))
-                return False
-            except OSError:
-                return True
-
-    def find_free_port(start_port: int = 8050, max_attempts: int = 20) -> int:
-        for i in range(max_attempts):
-            port = start_port + i
-            if not is_port_in_use(port):
-                return port
-        return start_port
+    """Open the parquet file in the JS viewer (serve_viewer)."""
+    from pixel_patrol_base.viewer_server import serve_viewer
 
     try:
         file_path = Path(parquet_path)
@@ -985,43 +991,16 @@ def _launch_report_app(parquet_path: str):
         if not file_path.exists():
             raise FileNotFoundError(f"Output file does not exist: {file_path}")
 
-        path_hash = hashlib.md5(str(file_path).encode()).hexdigest()
-        port_offset = int(path_hash[:2], 16) % 100
-        base_port = 8050
-        report_port = find_free_port(base_port + port_offset, max_attempts=10)
+        logger.info(f"Launching viewer for: {file_path}")
+        update_processing_state(message=f"Viewer launching for {file_path.name}…")
 
-        logger.info(f"Launching report on port {report_port} from: {file_path}")
+        # serve_viewer blocks until Ctrl-C; runs in a daemon thread so it
+        # shuts down automatically when the processing dashboard exits.
+        serve_viewer(file_path, port=8052, open_browser=True)
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "pixel_patrol_base.cli",
-            "report",
-            str(file_path),
-            "--port",
-            str(report_port),
-        ]
-
-        logger.info(f"Executing command: {' '.join(cmd)}")
-
-        process = subprocess.Popen(
-            cmd,
-            stdout=None,
-            stderr=None,
-            cwd=None,
-        )
-
-        logger.info(f"Report process started with PID {process.pid}")
-
-        time.sleep(2)
-        webbrowser.open(f"http://127.0.0.1:{report_port}/")
-
-        update_processing_state(
-            message=f"Report dashboard launching on http://127.0.0.1:{report_port}/ from {file_path.name}",
-        )
     except Exception as e:
-        logger.exception(f"Error launching report app for {parquet_path}")
+        logger.exception(f"Error launching viewer for {parquet_path}")
         update_processing_state(
             status="error",
-            error=f"Failed to launch report: {str(e)}",
+            error=f"Failed to launch viewer: {str(e)}",
         )
