@@ -16,27 +16,29 @@ export default {
       const { groupCol: gcFn, andWhere } = ctx.sql;
       const gcExpr = gcFn();
   
+      const pathWhere = andWhere(ctx.where, '"path" IS NOT NULL');
+
       const countRow = (await ctx.queryRows(`
-        SELECT COUNT(*)::BIGINT AS n
-        FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}
+        SELECT COUNT(DISTINCT "path")::BIGINT AS n
+        FROM pp_data ${pathWhere}
       `))[0];
       const numFiles    = Number(countRow?.n ?? 0);
       const foldersOnly = numFiles > MAX_FILES_FOR_SUNBURST;
-  
+
       const rows = foldersOnly
         ? await ctx.queryRows(`
             SELECT
               regexp_extract("path"::VARCHAR, '^(.*)/[^/]+$', 1) AS path,
               ${gcExpr} AS __group__,
-              COUNT(*)::INTEGER AS __n__
-            FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}
+              COUNT(DISTINCT "path")::INTEGER AS __n__
+            FROM pp_data ${pathWhere}
             GROUP BY 1, 2
           `)
         : await ctx.queryRows(`
-            SELECT "path" AS path, ${gcExpr} AS __group__
-            FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}
+            SELECT DISTINCT "path" AS path, ${gcExpr} AS __group__
+            FROM pp_data ${pathWhere}
           `);
-  
+
       if (!rows.length) {
         container.innerHTML = '<div class="no-data">No path data available.</div>';
         return;
