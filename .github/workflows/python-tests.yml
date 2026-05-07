@@ -42,6 +42,17 @@ jobs:
       - name: Install package dependencies
         run: uv pip install -e .
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build JS viewer
+        working-directory: viewer
+        run: |
+          npm install
+          npm run build
+
       - name: Check key package versions
         run: |
           echo "--- All installed packages (check bioio, zarr, imageio, dask versions) ---"
