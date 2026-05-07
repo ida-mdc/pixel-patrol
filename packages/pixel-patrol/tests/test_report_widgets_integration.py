@@ -41,7 +41,7 @@ class _SmokeCtx:
 def _running_viewer_server(parquet_path):
     """Start the static viewer server in-process and yield its URL."""
     dist_dir = find_viewer_dist()
-    duck_conn, project_name, authors = _setup_duckdb(parquet_path)
+    duck_conn, project_name, description = _setup_duckdb(parquet_path)
     query_lock = threading.Lock()
 
     handler = type(
@@ -53,7 +53,7 @@ def _running_viewer_server(parquet_path):
             "duck_conn": duck_conn,
             "query_lock": query_lock,
             "project_name": project_name,
-            "authors": authors,
+            "description": description,
             "extension_dirs": [],
         },
     )

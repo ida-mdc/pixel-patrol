@@ -23,7 +23,7 @@ def _get_package_version() -> str:
 class ProjectMetadata:
     project_name: str = "Imported Project"
     flavor: str = ""
-    authors: str = ""       # free-form, e.g. "ella, deborah"
+    description: str = ""   # free-form, e.g. "Authors: Annona Buddha and Banana Java"
     version: str = field(default_factory=_get_package_version)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     base_dir: Optional[str] = None          # stored for future project reconstruction
@@ -34,7 +34,7 @@ class ProjectMetadata:
         return {
             "pp_project_name": self.project_name,
             "pp_flavor":       self.flavor,
-            "pp_authors":      self.authors,
+            "pp_description":  self.description,
             "pp_version":      self.version,
             "pp_created_at":   self.created_at,
             "pp_base_dir":     self.base_dir or "",
@@ -55,7 +55,7 @@ class ProjectMetadata:
         return cls(
             project_name=meta.get("pp_project_name", "Imported Project"),
             flavor=meta.get("pp_flavor", ""),
-            authors=meta.get("pp_authors", ""),
+            description=meta.get("pp_description", ""),
             version=meta.get("pp_version", ""),
             created_at=meta.get("pp_created_at", ""),
             base_dir=raw_base if raw_base else None,

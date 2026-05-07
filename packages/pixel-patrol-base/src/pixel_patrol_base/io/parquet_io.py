@@ -1,6 +1,6 @@
 """
 Project persistence via a single parquet file.
-Provenance metadata (project name, flavor, authors, base_dir, paths, etc.) is stored in the parquet footer
+Provenance metadata (project name, flavor, description, base_dir, paths, etc.) is stored in the parquet footer
 """
 
 from __future__ import annotations
@@ -104,8 +104,8 @@ def load_parquet(src: Path) -> Tuple[pl.DataFrame, ProjectMetadata]:
         records_df = pl.DataFrame()
 
     logger.info(
-        "Parquet IO: Loaded '%s' (flavor=%s, authors=%s) from '%s'.",
-        metadata.project_name, metadata.flavor, metadata.authors, src,
+        "Parquet IO: Loaded '%s' (flavor=%s, description=%s) from '%s'.",
+        metadata.project_name, metadata.flavor, metadata.description, src,
     )
     return records_df, metadata
 

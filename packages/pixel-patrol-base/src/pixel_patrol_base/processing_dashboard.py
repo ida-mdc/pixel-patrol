@@ -423,13 +423,13 @@ def _create_layout(app: Dash) -> html.Div:
                                                                     dbc.Col(
                                                                         [
                                                                             dbc.Label(
-                                                                                "Authors",
-                                                                                html_for="authors",
+                                                                                "Description",
+                                                                                html_for="description",
                                                                             ),
                                                                             dbc.Input(
-                                                                                id="authors",
+                                                                                id="description",
                                                                                 type="text",
-                                                                                placeholder="e.g., ella, deborah",
+                                                                                placeholder='e.g., "Authors: Annona Buddha and Banana Java"',
                                                                             ),
                                                                         ],
                                                                         md=6,
@@ -532,7 +532,7 @@ def _register_callbacks(app: Dash):
             State("paths", "value"),
             State("file-extensions", "value"),
             State("flavor", "value"),
-            State("authors", "value"),
+            State("description", "value"),
         ],
     )
     def update_processing_state_callback(
@@ -545,7 +545,7 @@ def _register_callbacks(app: Dash):
         paths,
         file_extensions,
         flavor,
-        authors,
+        description,
     ):
         """Handle start button click and progress updates."""
         ctx = callback_context
@@ -589,7 +589,7 @@ def _register_callbacks(app: Dash):
                     paths,
                     file_extensions,
                     flavor or "",
-                    authors or "",
+                    description or "",
                 ),
                 daemon=True,
             )
@@ -816,7 +816,7 @@ def _run_processing(
     paths: Optional[str],
     file_extensions: Optional[str],
     flavor: str,
-    authors: str,
+    description: str,
 ):
     """Run processing in background thread."""
     try:
@@ -908,7 +908,7 @@ def _run_processing(
             progress_callback=progress_callback,
             selected_file_extensions=extensions,
             flavor=flavor,
-            authors=authors,
+            description=description,
         )
 
         # Update progress after processing
