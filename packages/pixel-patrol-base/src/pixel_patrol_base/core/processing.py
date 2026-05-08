@@ -15,10 +15,6 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import walk_filesystem
-from pixel_patrol_base.plugin_registry import (
-    discover_processor_plugins,
-    discover_loader,
-)
 from pixel_patrol_base.utils.df_utils import (
     normalize_file_extension,
     postprocess_basic_file_metadata_df,
@@ -56,6 +52,7 @@ def _process_worker_initializer(loader_id: Optional[str], processor_classes: Lis
         loader_id: Optional string identifier for the loader to use.
         processor_classes: List of PixelPatrolProcessor classes to instantiate.
     """
+    from pixel_patrol_base.plugin_registry import discover_loader
     global _PROCESS_WORKER_CONTEXT
     loader_instance = discover_loader(loader_id) if loader_id else None
     processors = [cls() for cls in processor_classes]
@@ -274,6 +271,7 @@ def _build_deep_record_df(
 
     config = processing_config or ProcessingConfig()
     total = basic.height
+    from pixel_patrol_base.plugin_registry import discover_processor_plugins
     processors = discover_processor_plugins()
     
     if processing_config:

@@ -1,15 +1,17 @@
-import importlib
-import logging
-from typing import Type, Union, List
+from __future__ import annotations
 
-from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
-from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
-from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
+import importlib
+import importlib.metadata
+import logging
+from typing import TYPE_CHECKING, Type, Union, List
+
+if TYPE_CHECKING:
+    from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
 
 logger = logging.getLogger(__name__)
 
-PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor]]
+if TYPE_CHECKING:
+    PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
@@ -39,6 +41,9 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
     return res
 
 def register_processor_plugins():
+    from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
+    from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
+    from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
     return [
         BasicStatsProcessor,
         ThumbnailProcessor,

@@ -7,7 +7,6 @@ import polars as pl
 from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.plugin_registry import discover_loader
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy, resolve_parquet_output_path
 from pixel_patrol_base.io.parquet_io import save_parquet
 
@@ -27,6 +26,7 @@ class Project:
             logger.info(f"Project Core: No output_path specified; inferring: '{output_path}'.")
         self.output_path: Path = resolve_parquet_output_path(output_path)
 
+        from pixel_patrol_base.plugin_registry import discover_loader
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
         self.records_flush_dir: Optional[Path] = None

@@ -11,6 +11,7 @@ from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
 import pixel_patrol_base.core.project as project_module
+import pixel_patrol_base.plugin_registry as plugin_registry_module
 
 
 class DummyLoader:
@@ -150,7 +151,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 1}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
     df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
@@ -172,8 +173,8 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 5}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -202,7 +203,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 7}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FailingProcessPoolExecutor)
     monkeypatch.setattr(processing, "ThreadPoolExecutor", FakeThreadPoolExecutor)
 
@@ -238,8 +239,8 @@ def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 33}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutorWithFailure)
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -270,7 +271,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process(per_file_props),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
     df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
@@ -390,7 +391,7 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
         ]
 
     monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_multi)
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1])
     df = processing._build_deep_record_df(basic_df, DummyLoader())
