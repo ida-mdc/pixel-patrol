@@ -26,7 +26,9 @@ class TestThumbnailProcessor:
     def _run(self, data: np.ndarray, dim_order: str, meta: dict | None = None):
         m = {"dim_order": dim_order, **(meta or {})}
         record = record_from(da.from_array(data), m)
-        return ThumbnailProcessor().run(record)
+        rows = ThumbnailProcessor().run(record)
+        assert rows[0]["obs_level"] == 0
+        return rows[0]
 
     def _thumbnail(self, data, dim_order, meta=None) -> bytes:
         return self._run(data, dim_order, meta)["thumbnail"]
