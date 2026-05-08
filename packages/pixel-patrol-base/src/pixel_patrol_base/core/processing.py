@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import shutil
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
@@ -29,6 +30,9 @@ from pixel_patrol_base.io.parquet_io import write_chunk
 
 
 logger = logging.getLogger(__name__)
+
+# Time-based progress logging for batch/processor work (useful in non-TTY logs like Slurm).
+_PROGRESS_LOG_SECONDS = float(os.environ.get("PIXEL_PATROL_PROGRESS_LOG_SECONDS", "60"))
 
 # Global per-process context for worker initializers
 _PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
@@ -416,13 +420,50 @@ def _build_deep_record_df(
         return accumulator.finalize()
 
 
+def _row_coord_key(row: Dict) -> tuple:
+    """Canonical coordinate tuple used to match rows from different processors."""
+    dim_items = tuple(sorted((k, row.get(k)) for k in row if k.startswith("dim_")))
+    return (row.get("obs_level"),) + dim_items
+
+
+def _merge_long_rows(existing: List[Dict], incoming: List[Dict]) -> List[Dict]:
+    """Merge two lists of row dicts by coordinate key (obs_level + dim_* fields).
+
+    Rows with matching coordinates are merged in place (incoming fields added to the
+    existing row).  Unmatched incoming rows are appended.  This allows two processors
+    that both return a long-format list — e.g. raster-image and channel-colocalization —
+    to share the same rollup tree without one overwriting the other.
+    """
+    by_key: Dict[tuple, Dict] = {_row_coord_key(r): r for r in existing}
+    result = list(existing)
+    for r in incoming:
+        key = _row_coord_key(r)
+        if key in by_key:
+            by_key[key].update(r)
+        else:
+            result.append(r)
+    return result
+
+
 def _extract_record_properties(
     rcd,
     processors: List[PixelPatrolProcessor],
     show_progress: bool,
-) -> Dict:
-    """Run all matching processors on a single Record and return merged properties."""
-    extracted: Dict = dict(rcd.meta)
+) -> List[Dict]:
+    """Run all matching processors on a single Record.
+
+    Returns a list of long-format row dicts.  Three routing rules apply:
+
+    - A processor returning a ``list`` provides the long-format rows.
+    - A processor with ``GLOBAL_ONLY = True`` returning a ``dict`` has its
+      fields merged only into the global row (obs_level=0).  Use this for
+      outputs that are expensive per-image and meaningless for sub-tiles
+      (e.g. thumbnails).
+    - Any other ``dict`` return is merged into every row as scalar metadata.
+    """
+    scalar: Dict     = dict(rcd.meta)
+    global_only: Dict = {}
+    long_rows: Optional[List[Dict]] = None
 
     processor_iter: Iterable[PixelPatrolProcessor]
     if show_progress:
@@ -437,20 +478,58 @@ def _extract_record_properties(
     else:
         processor_iter = processors
 
+    record_path = getattr(rcd, "source_path", None) or getattr(rcd, "path", None) or "unknown"
+    last_heartbeat = time.perf_counter()
+
     for P in processor_iter:
         if not is_record_matching_processor(rcd, P.INPUT):
             continue
+        proc_name = getattr(P, "NAME", P.__class__.__name__)
+        t0 = time.perf_counter()
+        # Emit a periodic heartbeat so long-running processor calls still produce output.
+        if _PROGRESS_LOG_SECONDS > 0 and (t0 - last_heartbeat) >= _PROGRESS_LOG_SECONDS:
+            logger.info("Processing Core: still working on record %s ...", record_path)
+            last_heartbeat = t0
         try:
+            logger.info("Processing Core: start processor=%s record=%s", proc_name, record_path)
             out = P.run(rcd)
-            extracted.update(out)
-        except (RuntimeError, ValueError, TypeError):
+            dt = time.perf_counter() - t0
+            logger.info(
+                "Processing Core: done processor=%s record=%s (%.2fs)",
+                proc_name,
+                record_path,
+                dt,
+            )
+            if isinstance(out, list):
+                if out:  # empty list means "nothing to add" — don't discard prior rows
+                    long_rows = _merge_long_rows(long_rows, out) if long_rows is not None else out
+            elif getattr(P, "GLOBAL_ONLY", False):
+                global_only.update(out)
+            else:
+                scalar.update(out)
+        except RuntimeError as err:
+            logger.warning(
+                "Processor %s skipped for record %s: %s",
+                getattr(P, "NAME", P.__class__.__name__),
+                getattr(rcd, "source_path", "unknown"),
+                err,
+            )
+        except (ValueError, TypeError):
             logger.exception(
                 "Processor %s failed for record %s",
                 getattr(P, "NAME", P.__class__.__name__),
                 getattr(rcd, "source_path", "unknown"),
             )
 
-    return extracted
+    if long_rows is not None:
+        rows = [{**scalar, **row} for row in long_rows]
+        if global_only:
+            for row in rows:
+                if row.get("obs_level") == 0:
+                    row.update(global_only)
+                    break
+        return rows
+    return [{**scalar, **global_only}]
 
 
 def load_and_process_records_from_file(
@@ -492,9 +571,8 @@ def load_and_process_records_from_file(
 
     if isinstance(result, dict):
         # Multi-image file: show progress over sub-images
-        items = result.items()
         items = tqdm(
-            items,
+            result.items(),
             desc="  Processing sub-images",
             unit="img",
             leave=False,
@@ -510,13 +588,12 @@ def load_and_process_records_from_file(
                     loader.NAME, child_id, file_path,
                 )
                 continue
-            props = _extract_record_properties(rcd, processors, False)
-            props["child_id"] = child_id
-            result_list.append(props)
+            rows = _extract_record_properties(rcd, processors, False)
+            for row in rows:
+                row["child_id"] = child_id
+            result_list.extend(rows)
     else:
-        result_list.append(
-            _extract_record_properties(result, processors, show_processor_progress)
-        )
+        result_list.extend(_extract_record_properties(result, processors, show_processor_progress))
 
     return result_list
 

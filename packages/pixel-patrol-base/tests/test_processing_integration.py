@@ -7,6 +7,7 @@ from typing import List, Optional
 import polars as pl
 
 from pixel_patrol_base.core import processing
+from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
 import pixel_patrol_base.core.project as project_module
@@ -400,6 +401,42 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
     assert set(df["width"].to_list()) == {10, 20}
     assert df["path"].to_list() == [str(p1), str(p1)]
 
+
+
+def test_extract_record_properties_skips_runtime_error_processor():
+    class RecordStub:
+        def __init__(self):
+            self.meta = {"a": 1}
+            self.source_path = "dummy"
+            self.dim_order = "YX"
+            self.kind = "intensity"
+            self.capabilities = {"spatial-2d"}
+
+    class RuntimeSkipProcessor:
+        NAME = "runtime-skip"
+        INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+
+        @staticmethod
+        def run(_):
+            raise RuntimeError("skip in never-materialize mode")
+
+    class GoodProcessor:
+        NAME = "good"
+        INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+
+        @staticmethod
+        def run(_):
+            return {"ok": 1}
+
+    r = RecordStub()
+    rows = processing._extract_record_properties(
+        r,
+        [RuntimeSkipProcessor(), GoodProcessor()],
+        show_progress=False,
+    )
+    assert isinstance(rows, list) and len(rows) == 1
+    assert rows[0]["a"] == 1
+    assert rows[0]["ok"] == 1
 
 
 def test_cleanup_partial_batches_dir(tmp_path):
