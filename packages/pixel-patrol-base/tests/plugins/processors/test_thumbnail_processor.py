@@ -139,7 +139,7 @@ class TestThumbnailProcessor:
         data = np.array([[]], dtype=np.uint8)
         dask_data = da.from_array(data, chunks=(1, 1))
         record = record_from(dask_data, {"dim_order": "YX"})
-        result = ThumbnailProcessor().run(record)
+        result = self._run(data, "YX")
         assert result["thumbnail"] is None
 
     def test_single_pixel(self):

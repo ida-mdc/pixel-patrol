@@ -15,10 +15,7 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import walk_filesystem
-from pixel_patrol_base.plugin_registry import (
-    discover_processor_plugins,
-    discover_loader,
-)
+from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import (
     normalize_file_extension,
     postprocess_basic_file_metadata_df,
