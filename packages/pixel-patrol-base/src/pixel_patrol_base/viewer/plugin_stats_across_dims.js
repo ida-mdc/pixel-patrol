@@ -293,60 +293,25 @@ export default [
 ];
 
 function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
-  const groupRows = new Map();
-  for (const r of agg) {
-    const key = String(r.__group__);
-    if (!groupRows.has(key)) groupRows.set(key, []);
-    groupRows.get(key).push(r);
-  }
-  const presentGroups = ctx.groups.filter(g => groupRows.has(String(g)));
-  const FAST_MODE_GROUP_THRESHOLD = 12;
-  const fastMode = presentGroups.length > FAST_MODE_GROUP_THRESHOLD;
-
   const traces = [];
-  for (const g of presentGroups) {
-    const gRows = (groupRows.get(String(g)) ?? []).slice().sort((a, b) => a.x - b.x);
+  for (const g of ctx.groups) {
+    const gRows  = agg.filter(r => String(r.__group__) === g).sort((a, b) => a.x - b.x);
     if (!gRows.length) continue;
     const color  = ctx.color.group(g);
     const xVals  = gRows.map(r => r.x);
     const yMean  = gRows.map(r => r.y_mean);
     const yStd   = gRows.map(r => r.y_std ?? 0);
     const ns     = gRows.map(r => r.n);
-    const sizes  = fastMode
-      ? ns.map(() => 5)
-      : ns.map(n => Math.max(4, Math.min(12, 3 + 3 * Math.log10(Math.max(n, 1)))));
-    const hover  = gRows.map((r, i) =>
-      `${g}<br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br>n=${ns[i]}`
+    const yUpper = yMean.map((m, i) => m + yStd[i]);
+    const yLower = yMean.map((m, i) => m - yStd[i]);
+    const sizes  = ns.map(n => Math.max(4, Math.min(12, 3 + 3 * Math.log10(Math.max(n, 1)))));
+    const hover  = gRows.map((r, i) => `<b>${g}</b><br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br><b>n=${ns[i]}</b>`);
+    const rgba   = ctx.color.hexToRgba(color, 0.2);
+    traces.push(
+      { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
+      { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
+      { type:'scatter', mode:'lines+markers', name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
     );
-
-    if (!fastMode) {
-      const yUpper = yMean.map((m, i) => m + yStd[i]);
-      const yLower = yMean.map((m, i) => m - yStd[i]);
-      const rgba   = ctx.color.hexToRgba(color, 0.2);
-      traces.push(
-        { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
-        { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
-      );
-    }
-
-    traces.push({
-      type: fastMode ? 'scattergl' : 'scatter',
-      mode: 'lines+markers',
-      name: g,
-      x: xVals,
-      y: yMean,
-      line: { width: fastMode ? 1.5 : 2, color },
-      marker: { size: sizes, color, line: { width: fastMode ? 0 : 1, color: 'white' } },
-      hovertemplate: '%{text}<extra></extra>',
-      text: hover,
-    });
-  }
-
-  if (fastMode) {
-    const note = document.createElement('div');
-    note.style.cssText = 'font-size:0.75rem;color:#6c757d;margin:0 0 4px 2px';
-    note.textContent = `Fast render mode: ${presentGroups.length} groups (std bands hidden)`;
-    container.appendChild(note);
   }
   appendPlot(container, traces, { ...STATS_DIMS_LAYOUT, margin: { l:36, r:8, t:8, b:28 }, height: 140 });
 }
