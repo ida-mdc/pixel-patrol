@@ -18,8 +18,6 @@ export const META_COLS = [
   'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ];
 
-export const DIM_PATTERN = /(_[a-z]\d+)+$/;
-
 export const KNOWN_GROUP_COLS = new Set([
   'imported_path_short', 'folder_top', 'report_group', 'group', 'file_extension',
   'dtype', 'dim_order', 'channel', 'modality', 'condition', 'batch',
@@ -28,86 +26,92 @@ export const KNOWN_GROUP_COLS = new Set([
   'common_base',
 ]);
 
-const HIGH_CARD_RE = /^(path|name|filename|filepath|full_path|imported_path|uuid|id|hash|md5|sha\d*|url|uri|description|comment|notes?)$/i;
+// dim_t, dim_c, dim_z … columns in the long format
+const DIM_COL_RE = /^dim_([a-z])$/;
+
+// Columns that are infrastructure for the long format, not metrics
+const LONG_FORMAT_COLS = new Set(['obs_level']);
 
 /**
  * Detect schema from an array of {name, type} column descriptors.
  * `type` is the string from Arrow's field type (e.g. "Float64", "Utf8", "Int32").
  *
+ * Long-format files have dim_t/dim_c/... nullable int columns + obs_level.
+ *
  * @returns {{
  *   metricCols: string[],
- *   dimMetricCols: string[],
+ *   dimCols: string[],
  *   groupCols: string[],
- *   dimensionInfo: Object.<string, string[]>,
+ *   dimensionInfo: Object.<string, number[]>,
  *   defaultGroupCol: string|null,
  *   allCols: string[],
  *   blobCols: string[],
+ *   isLongFormat: boolean,
+ *   allTable: string,
  * }}
  */
 export function detectSchema(columns) {
-  const metricCols = [];
-  const dimMetricCols = [];
-  const groupCols = [];
-  const dims = {};
-  const blobCols = [];
-  const allCols = [];
+  const metricCols    = [];
+  const dimCols       = [];   // long-format: ['dim_t', 'dim_c', …]
+  const groupCols     = [];
+  const blobCols      = [];
+  const allCols       = [];
+
+  const isLongFormat  = columns.some(c => c.name === 'obs_level');
+  if (!isLongFormat) {
+    throw new Error('Unsupported schema: obs_level column is required (long-format only).');
+  }
 
   for (const { name, type } of columns) {
-    allCols.push(name);
-
     if (BLOB_COLS.has(name)) {
       blobCols.push(name);
+      allCols.push(name);
       continue;
     }
 
+    // Skip long-format infrastructure columns from metric/group/allCols
+    if (LONG_FORMAT_COLS.has(name)) continue;
+
     const isNumeric = /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
-    const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp)/i.test(type);
-    const isDim     = DIM_PATTERN.test(name);
+    const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
+    const isDimCol  = DIM_COL_RE.test(name); // long format: dim_t, dim_c, …
+
+    // dim_* columns in long format: track but don't add to allCols/metricCols
+    if (isDimCol) {
+      dimCols.push(name);
+      continue;
+    }
+
+    allCols.push(name);
 
     if (isNumeric && !SKIP_METRIC_COLS.has(name)) {
-      if (!isDim) {
-        metricCols.push(name);
-      } else {
-        // Numeric columns with dimension suffixes (e.g. mean_intensity_t0, laplacian_variance_c1)
-        dimMetricCols.push(name);
-      }
+      metricCols.push(name);
     }
 
-    if (!isDim && !SKIP_METRIC_COLS.has(name)) {
+    if (!SKIP_METRIC_COLS.has(name)) {
       if (KNOWN_GROUP_COLS.has(name)) {
         groupCols.push(name);
-      } else if (isString && !HIGH_CARD_RE.test(name)) {
+      } else if (isString) {
         groupCols.push(name);
       }
-    }
-
-    // Collect dimension letter → indices
-    const re = /_([a-z])(\d+)/g;
-    let m;
-    while ((m = re.exec(name)) !== null) {
-      const d = m[1], idx = m[2];
-      if (!dims[d]) dims[d] = new Set();
-      dims[d].add(idx);
     }
   }
 
   const dimensionInfo = {};
-  for (const [d, vals] of Object.entries(dims)) {
-    if (vals.size > 1) {
-      dimensionInfo[d] = [...vals].sort((a, b) => parseInt(a) - parseInt(b));
-    }
-  }
+  // Long-format dimensionInfo is populated later in finishLoad() via a DB query.
 
-  // Ensure canonical grouping columns are always offered when present.
-  // Some exports may store these with non-primitive Arrow types (e.g. Dictionary),
-  // which can bypass the heuristics above.
   for (const mustHave of ['imported_path_short', 'folder_top', 'report_group', 'common_base']) {
     if (allCols.includes(mustHave) && !groupCols.includes(mustHave)) {
       groupCols.push(mustHave);
     }
   }
 
-  return { metricCols, dimMetricCols, groupCols, dimensionInfo, allCols, blobCols };
+  return {
+    metricCols, dimCols,
+    groupCols, dimensionInfo, allCols, blobCols,
+    isLongFormat,
+    allTable: 'pp_all',
+  };
 }
 
 /**

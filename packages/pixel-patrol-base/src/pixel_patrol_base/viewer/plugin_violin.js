@@ -8,9 +8,6 @@ const QUALITY_METRIC_BASES = new Set([
   'laplacian_variance', 'tenengrad', 'brenner', 'noise_std', 'blocking_records', 'ringing_records',
 ]);
 
-// Matches schema.js DIM_PATTERN
-const DIM_PATTERN = /(_[a-z]\d+)+$/;
-
 function matchesBases(col, bases) {
   for (const base of bases) {
     if (col === base || col.startsWith(base + '_')) return true;
@@ -66,6 +63,33 @@ async function renderViolins(container, ctx, filterMetric) {
     return;
   }
 
+  // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
+  const dimFilters = Object.entries(ctx.state.dimensions ?? {})
+    .map(([letter, idxRaw]) => {
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx)) return null;
+      return `${q(`dim_${letter}`)} = ${idx}`;
+    })
+    .filter(Boolean);
+  const activeDims = ctx.state.dimensions ?? {};
+  const xSelected = activeDims.x !== undefined;
+  const ySelected = activeDims.y !== undefined;
+  // obs_level matches RasterImageDaskProcessor grouping depth: global → 0,
+  // one dim fixed → 1, two dims fixed → 2, …
+  const longObsLevel = dimFilters.length === 0 ? 0 : dimFilters.length;
+  const sourceTable = 'pp_all';
+  const whereParts = [];
+  const baseWhere = ctx.userWhere ? ctx.userWhere.replace(/^\s*WHERE\s+/i, '') : '';
+  if (baseWhere) whereParts.push(baseWhere);
+  whereParts.push(`obs_level = ${longObsLevel}`);
+  whereParts.push(...dimFilters);
+  // For tiled datasets, there can be many rows per file at (x,y) tile level.
+  // This widget is intended to show per-image (non-spatial) distributions by default,
+  // so exclude spatial rows unless the user explicitly slices on x/y.
+  if (ctx.schema?.dimCols?.includes('dim_x') && !xSelected) whereParts.push(`${q('dim_x')} IS NULL`);
+  if (ctx.schema?.dimCols?.includes('dim_y') && !ySelected) whereParts.push(`${q('dim_y')} IS NULL`);
+  const combinedWhere = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
   const gc  = gcFn();
   const sql = `
     WITH ranked AS (
@@ -73,7 +97,7 @@ async function renderViolins(container, ctx, filterMetric) {
              ${metrics.map(q).join(', ')},
              ROW_NUMBER() OVER (PARTITION BY ${gc} ORDER BY random()) AS __rn__,
              COUNT(*)     OVER (PARTITION BY ${gc}) AS __group_size__
-      FROM pp_data ${ctx.where}
+      FROM ${sourceTable} ${combinedWhere}
     )
     SELECT * EXCLUDE (__rn__) FROM ranked WHERE __rn__ <= ${VIOLIN_MAX_POINTS}
   `;
@@ -88,7 +112,11 @@ async function renderViolins(container, ctx, filterMetric) {
   const groups = ctx.groups.filter(g => rowGroups.has(g));
   const toPlot = [], noVariance = [];
   for (const metric of metrics) {
-    const vals = rows.map(r => r[metric]).filter(v => v != null).map(Number);
+    const vals = rows
+      .map(r => r[metric])
+      .filter(v => v != null)
+      .map(Number)
+      .filter(Number.isFinite);
     if (!vals.length) continue;
     if (new Set(vals).size <= 1) noVariance.push({ metric, value: vals[0] });
     else toPlot.push(metric);
@@ -112,7 +140,12 @@ async function renderViolins(container, ctx, filterMetric) {
 
       const groupData = {};
       for (const g of groups) {
-        groupData[g] = rows.filter(r => String(r.__group__) === g).map(r => r[metric]).filter(v => v != null).map(Number);
+        groupData[g] = rows
+          .filter(r => String(r.__group__) === g)
+          .map(r => r[metric])
+          .filter(v => v != null)
+          .map(Number)
+          .filter(Number.isFinite);
       }
 
       const traces = groups.map(g => {
@@ -161,7 +194,7 @@ function makeViolinPlugin(id, label, info, filterMetric) {
   return {
     id, label, info, group: 'Dataset Stats',
     requires(schema) {
-      return schema.metricCols.some(filterMetric) || (schema.dimMetricCols ?? []).some(filterMetric);
+      return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
     async render(container, ctx) {
       try {
@@ -179,21 +212,9 @@ export default [
 ];
 
 function resolveMetrics(schema, dimensions) {
-  const dimEntries = Object.entries(dimensions);
-  const fromMetricCols = schema.metricCols.filter(col => {
-    if (!DIM_PATTERN.test(col)) return true;
-    for (const [letter, idx] of dimEntries) {
-      const m = new RegExp(`_${letter}(\\d+)`).exec(col);
-      if (m && m[1] !== String(idx)) return false;
-    }
-    return true;
-  });
-  const fromDimMetricCols = (schema.dimMetricCols ?? []).filter(col => {
-    const tokens = [...col.matchAll(/_([a-z])(\d+)/g)];
-    return tokens.length > 0 &&
-      tokens.every(([, letter, idx]) => dimensions[letter] !== undefined && String(dimensions[letter]) === idx);
-  });
-  return [...fromMetricCols, ...fromDimMetricCols];
+  if (!schema.isLongFormat) return [];
+  // Long format keeps metrics as base columns; dim filtering is row-based via dim_* + obs_level.
+  return schema.metricCols;
 }
 
 // ── Statistical significance (Mann-Whitney U, Bonferroni corrected) ────────────

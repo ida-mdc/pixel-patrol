@@ -1,8 +1,9 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
+import { buildScopedWhere } from './cohort-sql.js';
 import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
-import { META_COLS, DIM_PATTERN } from './schema.js';
+import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
@@ -19,7 +20,8 @@ import { buildGroupLabels } from './group-labels.js';
  * @param {object} schema     detected schema
  * @param {object} state      current UI state
  * @param {object} colorMap   {group: hex}
- * @param {string} where      SQL WHERE fragment (or '')
+ * @param {string} where      File-scope SQL WHERE fragment (or '')
+ * @param {string} userWhere  User filter SQL WHERE fragment (or '')
  * @param {string[]} groups   distinct group values (already fetched)
  * @param {number} filteredCount
  * @param {number} totalRows
@@ -32,7 +34,7 @@ import { buildGroupLabels } from './group-labels.js';
  *   returns ctx.groupLabels[g] ?? String(g). Falls back to the raw value
  *   if no mapping exists (e.g. for groups discovered after ctx was built).
  */
-function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, totalRows) {
+function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows) {
   const legend = legendWithGrouping(LEGEND, state, '');
   const groupLabels = buildGroupLabels(groups);
 
@@ -41,6 +43,7 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
     state,
     colorMap,
     where,
+    userWhere,
     groups,
     groupLabels,
     groupLabel: (g) => groupLabels[g] ?? String(g),
@@ -113,7 +116,6 @@ function buildCtx(conn, schema, state, colorMap, where, groups, filteredCount, t
 
     /** Schema constants (column lists, patterns). */
     META_COLS,
-    DIM_PATTERN,
 
     /** Data utilities shared across plugins. */
     data: { extractBinary },
@@ -167,7 +169,8 @@ function dedupePluginsById(plugins) {
 export async function renderAll(plugins, conn, schema, state, totalRows) {
   plugins = dedupePluginsById(plugins);
 
-  const where = buildWhere(state.filter);
+  const userWhere = buildWhere(state.filter);
+  const where = buildScopedWhere(schema, state);
 
   // Fetch distinct groups and filtered count in parallel.
   const gcExpr = state.groupCol ? _q(state.groupCol) : `'${GROUP_ALL}'`;
@@ -185,7 +188,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   updateFilteredInfo(filteredCount, totalRows);
 
   const ctx = buildCtx(
-    conn, schema, state, colorMap, where, groups, filteredCount, totalRows,
+    conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows,
   );
 
   const container = document.getElementById(WIDGET_CONTAINER_ID);
