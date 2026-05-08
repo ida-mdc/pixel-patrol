@@ -21,122 +21,261 @@ const QUALITY_INFO = [
   '- depth-dependent quality changes (Z)',
 ].join('\n');
 
+// X and Y are spatial tile coordinates. When querying non-spatial dims we
+// exclude tile rows (which carry dim_x/dim_y alongside dim_c etc.) so that
+// only the clean per-slice aggregated rows are scanned — the main speedup.
+const SPATIAL_LETTERS = new Set(['x', 'y']);
+
 async function renderAcrossDims(container, ctx, filterMetric) {
-  const { q, groupCol: gcFn } = ctx.sql;
-  const { append: appendPlot, niceName, LAYOUT } = ctx.plot;
-
-  const allGroups      = detectDimMetricGroups(ctx.schema.dimMetricCols ?? []);
-  const gcExpr         = gcFn();
-  const activeDims     = ctx.state.dimensions ?? {};
-  const filteredGroups = allGroups.filter(({ letter, items }) => {
-    if (activeDims[letter] !== undefined) return false;
-    for (const item of items) {
-      for (const [d, idx] of Object.entries(item.allDims)) {
-        if (d !== letter && activeDims[d] !== undefined && String(activeDims[d]) !== String(idx)) return false;
-      }
-    }
-    return true;
-  });
-
-  const byMetric = {};
-  for (const g of filteredGroups) {
-    if (!filterMetric(g.base)) continue;
-    if (!byMetric[g.base]) byMetric[g.base] = [];
-    byMetric[g.base].push(g);
+  const renderStartMs = performance.now();
+  if (!ctx.schema.isLongFormat) {
+    container.innerHTML = '<div class="no-data">This widget requires long-format data.</div>';
+    return;
   }
+  const { q, groupCol: gcFn } = ctx.sql;
+  const { append: appendPlot, niceName, escapeHtml, LAYOUT } = ctx.plot;
 
-  const metrics    = Object.keys(byMetric).sort();
-  const dimLetters = [...new Set(Object.values(byMetric).flat().map(g => g.letter))].sort();
+  const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric).sort();
+  const activeDims = ctx.state.dimensions ?? {};
+  // Non-spatial slice queries use obs_level = 1 (single leading dim coordinate).
+  // Spatial strip queries must NOT filter obs_level: datasets often mix dim_orders
+  // (YX vs CYX vs TCYX in one parquet) while dimensionInfo unions every letter that
+  // appears anywhere — obs_level would be wrong per row class. Tile rows always have
+  // both dim_x and dim_y; strip aggregates have exactly one spatial coord set.
+  const dimLetters = Object.keys(ctx.schema.dimensionInfo ?? {})
+    .filter(letter => activeDims[letter] === undefined)
+    .sort();
 
   if (!metrics.length || !dimLetters.length) {
     container.innerHTML = '<div class="no-data">No dimension slices found with the current filter.</div>';
     return;
   }
 
-  const allCols   = [...new Set(Object.values(byMetric).flat().flatMap(g => g.items.map(i => i.col)))];
-  const colLookup = Object.fromEntries(allCols.map(c => [c, []]));
+  const baseWhere = ctx.userWhere ? ctx.userWhere.replace(/^\s*WHERE\s+/i, '') : '';
+  const gcExpr   = gcFn();
+  const minColPx = 180;
+  const plotJobs = [];
+  const fixedDims = Object.entries(activeDims)
+    .map(([letter, idxRaw]) => [letter, Number(idxRaw)])
+    .filter(([, idx]) => Number.isFinite(idx));
 
-  const BATCH_SIZE = 50;
-  for (let bStart = 0; bStart < allCols.length; bStart += BATCH_SIZE) {
-    const batch = allCols.slice(bStart, bStart + BATCH_SIZE);
-    const bParts = batch.flatMap((c, i) => [
-      `AVG(${q(c)})                       AS m_${i}`,
-      `COALESCE(STDDEV_SAMP(${q(c)}), 0)  AS s_${i}`,
-      `COUNT(${q(c)})                      AS n_${i}`,
-    ]);
-    const bRows = await ctx.queryRows(`
-      SELECT ${gcExpr} AS __group__, ${bParts.join(', ')}
-      FROM pp_data ${ctx.where} GROUP BY 1
-    `);
-    for (const row of bRows) {
-      const grp = String(row.__group__);
-      for (let i = 0; i < batch.length; i++) {
-        const col = batch[i];
-        colLookup[col].push({ __group__: grp, y_mean: Number(row[`m_${i}`] ?? 0), y_std: Number(row[`s_${i}`] ?? 0), n: Number(row[`n_${i}`] ?? 0) });
+  const dimAggMap = {};
+  for (const varyingLetter of dimLetters) {
+    const dimStartMs = performance.now();
+    const whereParts = [];
+    if (baseWhere) whereParts.push(baseWhere);
+    const relevantLetters = new Set([varyingLetter]);
+    for (const [letter, idx] of fixedDims) {
+      whereParts.push(`${q(`dim_${letter}`)} = ${idx}`);
+      relevantLetters.add(letter);
+    }
+    whereParts.push(`${q(`dim_${varyingLetter}`)} IS NOT NULL`);
+
+    // Restrict to pre-aggregated rows whenever possible:
+    // - non-spatial dims: use the pre-aggregated rows at the expected depth
+    //   (fixed dims + varying dim)
+    // - across X: use x-aggregate rows (dim_x set, dim_y NULL)
+    // - across Y: use y-aggregate rows (dim_y set, dim_x NULL)
+    if (!SPATIAL_LETTERS.has(varyingLetter)) {
+      // obs_level matches the number of fixed dims plus the varying dim.
+      // Example: varying 'c' with y fixed → obs_level = 2.
+      whereParts.push(`obs_level = ${fixedDims.length + 1}`);
+      for (const dimCol of (ctx.schema.dimCols ?? [])) {
+        const letter = dimCol.replace(/^dim_/, '');
+        // Only force spatial dims to NULL if they aren't explicitly fixed.
+        if (SPATIAL_LETTERS.has(letter) && !relevantLetters.has(letter)) {
+          whereParts.push(`${q(dimCol)} IS NULL`);
+        }
+      }
+    } else if (varyingLetter === 'x') {
+      // Only require dim_y NULL if Y isn't explicitly fixed.
+      if (!relevantLetters.has('y')) whereParts.push(`${q('dim_y')} IS NULL`);
+    } else if (varyingLetter === 'y') {
+      // Only require dim_x NULL if X isn't explicitly fixed.
+      if (!relevantLetters.has('x')) whereParts.push(`${q('dim_x')} IS NULL`);
+    }
+
+    // For spatial strips (across x/y), avoid mixing multiple aggregated row classes.
+    // Long-format parquet can contain many derived rows (tile rows, x-strip aggregates,
+    // y-strip aggregates, higher-level aggregates with extra dims set, etc.). If we
+    // don't constrain the "other" dimensions to NULL, we end up pooling values from
+    // different slices into one x (or y) bin, producing an apparent distribution
+    // even when there's only one source file per group.
+    //
+    // So: unless a dim is explicitly fixed in the sidebar (or is the varying dim),
+    // require it to be NULL for the rows we aggregate.
+    for (const dimCol of (ctx.schema.dimCols ?? [])) {
+      const letter = dimCol.replace(/^dim_/, '');
+      if (!relevantLetters.has(letter)) {
+        whereParts.push(`${q(dimCol)} IS NULL`);
       }
     }
-  }
 
-  ctx.plot.renderDomGroupLegend?.(container);
+    const aggExprs = metrics.flatMap((metric, i) => {
+      const mq = q(metric);
+      return [
+        `AVG(${mq}) AS m_${i}`,
+        `COALESCE(STDDEV_SAMP(${mq}), 0) AS s_${i}`,
+        `COUNT(${mq}) AS n_${i}`,
+      ];
+    }).join(',\n               ');
 
-  const plotJobs  = [];
-  const minColPx  = 180;
-  const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
-  const table = document.createElement('table');
-  table.style.cssText = `border-collapse:collapse;table-layout:fixed;width:100%;min-width:${dimLetters.length * minColPx}px`;
+    const rows = await ctx.queryRows(`
+      SELECT ${gcExpr} AS __group__,
+             ${q(`dim_${varyingLetter}`)} AS x,
+             ${aggExprs}
+      FROM pp_all
+      WHERE ${whereParts.join(' AND ')}
+      GROUP BY 1, 2
+      ORDER BY 2
+    `);
+    const dimQueryMs = performance.now() - dimStartMs;
 
-  const thead = table.createTHead();
-  const hRow  = thead.insertRow();
-  for (let ci = 0; ci < dimLetters.length; ci++) {
-    const th = document.createElement('th');
-    th.style.cssText = `padding:8px 12px;text-align:left;border-bottom:2px solid #dee2e6;font-weight:600;background:${COL_BG[ci % 2]};${ci > 0 ? 'border-left:1px solid #dee2e6;' : ''}`;
-    th.textContent = `Across '${dimLetters[ci].toUpperCase()}' slices`;
-    hRow.appendChild(th);
-  }
-
-  const tbody = table.createTBody();
-  for (const metric of metrics) {
-    const titleRow  = tbody.insertRow();
-    const titleCell = titleRow.insertCell();
-    titleCell.colSpan = dimLetters.length;
-    titleCell.style.cssText = 'font-weight:500;font-size:0.95rem;color:#343a40;padding:5px 10px;border-top:1px solid #e9ecef;background:#f8f9fa';
-    titleCell.textContent = niceName(metric);
-
-    const plotRow = tbody.insertRow();
-    for (let ci = 0; ci < dimLetters.length; ci++) {
-      const cell = plotRow.insertCell();
-      cell.style.cssText = `padding:4px;vertical-align:top;background:${COL_BG[ci % 2]};${ci > 0 ? 'border-left:1px solid #dee2e6;' : ''}`;
-      const match = byMetric[metric]?.find(g => g.letter === dimLetters[ci]);
-      if (!match || match.items.length < 2) { cell.innerHTML = '<div style="text-align:center;color:#6c757d;padding:15px">N/A</div>'; continue; }
-      const agg = match.items.flatMap(item =>
-        (colLookup[item.col] ?? []).map(row => ({ __group__: row.__group__, x: item.idx, y_mean: row.y_mean, y_std: row.y_std, n: row.n }))
-      );
-      if (!agg.length) { cell.innerHTML = '<div style="text-align:center;color:#6c757d;padding:15px">No data</div>'; continue; }
-      plotJobs.push({ cell, agg });
+    const byMetric = Object.fromEntries(metrics.map(m => [m, []]));
+    for (const r of rows) {
+      const x = Number(r.x);
+      if (!Number.isFinite(x)) continue;
+      const group = String(r.__group__);
+      for (let i = 0; i < metrics.length; i++) {
+        const n = Number(r[`n_${i}`] ?? 0);
+        if (n <= 0) continue;
+        byMetric[metrics[i]].push({
+          __group__: group,
+          x,
+          y_mean: Number(r[`m_${i}`] ?? 0),
+          y_std:  Number(r[`s_${i}`] ?? 0),
+          n,
+        });
+      }
     }
+    dimAggMap[varyingLetter] = byMetric;
+    console.info(
+      `[stats-across-dims] dim=${varyingLetter} query_ms=${dimQueryMs.toFixed(1)} rows=${rows.length} where="${whereParts.join(' AND ')}"`,
+    );
   }
 
-  tableWrap.appendChild(table);
-  container.appendChild(tableWrap);
+  const dimLettersVisible = dimLetters.filter((letter) => {
+    const bm = dimAggMap[letter];
+    if (!bm) return false;
+    return metrics.some((m) => (bm[m] ?? []).some((r) => Number.isFinite(r.x)));
+  });
+
+  if (!dimLettersVisible.length) {
+    container.innerHTML =
+      '<div class="no-data">No dimension slices found with plottable data for the current filter.</div>';
+    return;
+  }
+
+  // Group color legend — shared across all plots in this widget
+  if (ctx.groups.length > 1) {
+    const legendDiv = document.createElement('div');
+    legendDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:0.85rem;align-items:center';
+    for (const g of ctx.groups) {
+      const color = ctx.color.group(g);
+      const item  = document.createElement('span');
+      item.style.cssText = 'display:flex;align-items:center;gap:5px';
+      item.innerHTML = `<span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${color}"></span>${escapeHtml(String(g))}`;
+      legendDiv.appendChild(item);
+    }
+    container.appendChild(legendDiv);
+  }
+
+  const controls = document.createElement('div');
+  controls.style.cssText = 'display:flex;align-items:center;gap:8px;margin:6px 0 10px 0';
+  controls.innerHTML = `
+    <label for="stats-across-metric" style="font-weight:600;font-size:0.9rem;margin:0">Metric:</label>
+    <select id="stats-across-metric" class="form-select form-select-sm" style="width:auto;min-width:220px">
+      ${metrics.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(niceName(m))}</option>`).join('')}
+      <option value="__all__" selected>All metrics</option>
+    </select>
+  `;
+  container.appendChild(controls);
+  const metricSelect = controls.querySelector('#stats-across-metric');
+
+  const tableHost = document.createElement('div');
+  container.appendChild(tableHost);
 
   const STATS_DIMS_LAYOUT = {
     ...LAYOUT,
     showlegend: false,
-    xaxis: { showgrid: false, zeroline: false, showline: true, mirror: true, ticks: 'outside', title: null, tickformat: 'd' },
+    xaxis: {
+      showgrid: false,
+      zeroline: false,
+      showline: true,
+      mirror: true,
+      ticks: 'outside',
+      title: null,
+      tickmode: 'auto',
+      nticks: 8,
+      tickformat: 'd',
+    },
     yaxis: { showgrid: false, zeroline: false, showline: true, mirror: true, ticks: 'outside', title: null },
   };
 
-  for (const { cell, agg } of plotJobs) {
-    renderAggScatter(cell, agg, ctx, STATS_DIMS_LAYOUT, appendPlot);
+  function renderMetricGrid(selectedMetric) {
+    tableHost.innerHTML = '';
+    plotJobs.length = 0;
+    const metricsToRender = selectedMetric === '__all__' ? metrics : [selectedMetric];
+
+    const tableWrap = document.createElement('div');
+    tableWrap.style.overflowX = 'auto';
+    const table = document.createElement('table');
+    table.style.cssText = `border-collapse:collapse;table-layout:fixed;width:100%;min-width:${dimLettersVisible.length * minColPx}px`;
+
+    const thead = table.createTHead();
+    const hRow = thead.insertRow();
+    for (let ci = 0; ci < dimLettersVisible.length; ci++) {
+      const th = document.createElement('th');
+      th.style.cssText = `padding:8px 12px;text-align:left;border-bottom:2px solid #dee2e6;font-weight:600;background:${COL_BG[ci % 2]};${ci > 0 ? 'border-left:1px solid #dee2e6;' : ''}`;
+      th.textContent = `Across '${dimLettersVisible[ci].toUpperCase()}' slices`;
+      hRow.appendChild(th);
+    }
+
+    const tbody = table.createTBody();
+    for (const metric of metricsToRender) {
+      const titleRow = tbody.insertRow();
+      const titleCell = titleRow.insertCell();
+      titleCell.colSpan = dimLettersVisible.length;
+      titleCell.style.cssText = 'font-weight:500;font-size:0.95rem;color:#343a40;padding:5px 10px;border-top:1px solid #e9ecef;background:#f8f9fa';
+      titleCell.textContent = niceName(metric);
+
+      const plotRow = tbody.insertRow();
+      for (let ci = 0; ci < dimLettersVisible.length; ci++) {
+        const varyingLetter = dimLettersVisible[ci];
+        const cell = plotRow.insertCell();
+        cell.style.cssText = `padding:4px;vertical-align:top;background:${COL_BG[ci % 2]};${ci > 0 ? 'border-left:1px solid #dee2e6;' : ''}`;
+        const rows = (dimAggMap[varyingLetter]?.[metric] ?? [])
+          .filter(r => Number.isFinite(r.x));
+        if (!rows.length) {
+          cell.innerHTML = '<div style="text-align:center;color:#6c757d;padding:15px">No data</div>';
+          continue;
+        }
+        plotJobs.push({ cell, agg: rows });
+      }
+    }
+
+    tableWrap.appendChild(table);
+    tableHost.appendChild(tableWrap);
+    for (const { cell, agg } of plotJobs) {
+      renderAggScatter(cell, agg, ctx, STATS_DIMS_LAYOUT, appendPlot);
+    }
   }
+
+  metricSelect.addEventListener('change', () => {
+    renderMetricGrid(metricSelect.value || metrics[0]);
+  });
+  renderMetricGrid('__all__');
+  const totalMs = performance.now() - renderStartMs;
+  console.info(
+    `[stats-across-dims] total_render_ms=${totalMs.toFixed(1)} metrics=${metrics.length} dims_visible=${dimLettersVisible.length} initial_plots=${plotJobs.length}`,
+  );
 }
 
 function makeAcrossDimsPlugin(id, label, info, filterMetric) {
   return {
     id, label, info, group: 'Dataset Stats',
     requires(schema) {
-      return detectDimMetricGroups(schema.dimMetricCols ?? []).some(g => filterMetric(g.base));
+      return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
     async render(container, ctx) {
       try {
@@ -154,50 +293,60 @@ export default [
 ];
 
 function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
+  const groupRows = new Map();
+  for (const r of agg) {
+    const key = String(r.__group__);
+    if (!groupRows.has(key)) groupRows.set(key, []);
+    groupRows.get(key).push(r);
+  }
+  const presentGroups = ctx.groups.filter(g => groupRows.has(String(g)));
+  const FAST_MODE_GROUP_THRESHOLD = 12;
+  const fastMode = presentGroups.length > FAST_MODE_GROUP_THRESHOLD;
+
   const traces = [];
-  for (const g of ctx.groups) {
-    const gRows  = agg.filter(r => String(r.__group__) === g).sort((a, b) => a.x - b.x);
+  for (const g of presentGroups) {
+    const gRows = (groupRows.get(String(g)) ?? []).slice().sort((a, b) => a.x - b.x);
     if (!gRows.length) continue;
     const color  = ctx.color.group(g);
     const xVals  = gRows.map(r => r.x);
     const yMean  = gRows.map(r => r.y_mean);
     const yStd   = gRows.map(r => r.y_std ?? 0);
     const ns     = gRows.map(r => r.n);
-    const yUpper = yMean.map((m, i) => m + yStd[i]);
-    const yLower = yMean.map((m, i) => m - yStd[i]);
-    const sizes  = ns.map(n => Math.max(4, Math.min(12, 3 + 3 * Math.log10(Math.max(n, 1)))));
-    const hover  = gRows.map((r, i) => `<b>${g}</b><br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br><b>n=${ns[i]}</b>`);
-    const rgba   = ctx.color.hexToRgba(color, 0.2);
-    traces.push(
-      { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
-      { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
-      { type:'scatter', mode:'lines+markers', name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
+    const sizes  = fastMode
+      ? ns.map(() => 5)
+      : ns.map(n => Math.max(4, Math.min(12, 3 + 3 * Math.log10(Math.max(n, 1)))));
+    const hover  = gRows.map((r, i) =>
+      `${g}<br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br>n=${ns[i]}`
     );
+
+    if (!fastMode) {
+      const yUpper = yMean.map((m, i) => m + yStd[i]);
+      const yLower = yMean.map((m, i) => m - yStd[i]);
+      const rgba   = ctx.color.hexToRgba(color, 0.2);
+      traces.push(
+        { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
+        { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
+      );
+    }
+
+    traces.push({
+      type: fastMode ? 'scattergl' : 'scatter',
+      mode: 'lines+markers',
+      name: g,
+      x: xVals,
+      y: yMean,
+      line: { width: fastMode ? 1.5 : 2, color },
+      marker: { size: sizes, color, line: { width: fastMode ? 0 : 1, color: 'white' } },
+      hovertemplate: '%{text}<extra></extra>',
+      text: hover,
+    });
+  }
+
+  if (fastMode) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:0.75rem;color:#6c757d;margin:0 0 4px 2px';
+    note.textContent = `Fast render mode: ${presentGroups.length} groups (std bands hidden)`;
+    container.appendChild(note);
   }
   appendPlot(container, traces, { ...STATS_DIMS_LAYOUT, margin: { l:36, r:8, t:8, b:28 }, height: 140 });
 }
-
-function detectDimMetricGroups(cols) {
-  const DIM_TOKEN = /_([a-z])(\d+)/g;
-  const map = {};
-  for (const col of cols) {
-    const tokens = [...col.matchAll(DIM_TOKEN)];
-    if (!tokens.length) continue;
-    const base = col.replace(/_[a-z]\d+/g, '');
-    if (!base) continue;
-    const allDims = {};
-    for (const t of tokens) allDims[t[1]] = parseInt(t[2]);
-    for (const [letter, idx] of Object.entries(allDims)) {
-      const key = `${base}|${letter}`;
-      if (!map[key]) map[key] = [];
-      map[key].push({ col, base, letter, idx, allDims });
-    }
-  }
-  return Object.entries(map)
-    .filter(([, items]) => new Set(items.map(i => i.idx)).size >= 2)
-    .map(([key, items]) => {
-      const [base, letter] = key.split('|');
-      return { base, letter, items: [...items].sort((a, b) => a.idx - b.idx) };
-    });
-}
-
