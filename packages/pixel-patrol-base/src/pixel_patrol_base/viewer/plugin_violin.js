@@ -3,9 +3,13 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA
+// Matches the default PIXEL_PATROL_METRICS_QUALITY group (intensity-independent metrics).
+// Legacy gradient metrics (tenengrad, laplacian_variance, brenner) are kept here so that
+// datasets built with PIXEL_PATROL_METRICS_GRADIENT_FOCUS=1 still appear in this widget.
 const QUALITY_METRIC_BASES = new Set([
-  'laplacian_variance', 'tenengrad', 'brenner', 'noise_std', 'blocking_records', 'ringing_records',
+  'michelson_contrast', 'mscn_variance', 'local_std_ratio',
+  'laplacian_variance', 'tenengrad', 'brenner',
+  'noise_std', 'blocking_records', 'ringing_records',
 ]);
 
 function matchesBases(col, bases) {
@@ -39,14 +43,23 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Visualizes **image quality metrics** as violin plots across groups.',
-  '', 'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
-  '', '**Metrics**',
-  '- **Laplacian variance** – Edge-based sharpness estimate. Higher values indicate a sharper image.',
-  '- **Tenengrad** – Focus measure based on Sobel gradients; captures overall edge strength.',
-  '- **Brenner** – Measures fine structural detail using pixel intensity differences.',
-  '- **Noise std** – Estimated pixel-level noise standard deviation; higher noise reduces clarity.',
-  '- **Blocking records** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
-  '- **Ringing records** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
+  '', 'All metrics are invariant to both additive intensity offsets (camera background) and',
+  'multiplicative scaling (gain, fluorophore concentration), making them comparable across',
+  'images acquired under different conditions.',
+  '', 'Use these plots to spot outliers, compare image sets, and detect quality differences.',
+  '', '**Default metrics**',
+  '- **Michelson contrast** – Mean local intensity range (3×3 window) divided by tile std.',
+  '  Higher = more local contrast; lower = blurry or uniform tiles.',
+  '- **MSCN variance** – Variance of locally-normalised pixel values (BRISQUE/NIQE framework).',
+  '  Captures texture richness independent of background level.',
+  '- **Local std ratio** – Mean local std divided by tile std.',
+  '  Approaches 1 for sharp structured tiles; lower for smooth or out-of-focus tiles.',
+  '', '**Legacy metrics** (enabled via `PIXEL_PATROL_METRICS_GRADIENT_FOCUS=1`)',
+  '- **Laplacian variance**, **Tenengrad**, **Brenner** – Gradient-based focus measures,',
+  '  normalised by tile variance. Useful for within-image comparisons.',
+  '', '**Compression artifact metrics** (enabled via `PIXEL_PATROL_METRICS_COMPRESSION=1`)',
+  '- **Blocking records** – Strength of JPEG-style block boundary artifacts.',
+  '- **Ringing records** – High-frequency oscillation artifacts near edges.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
