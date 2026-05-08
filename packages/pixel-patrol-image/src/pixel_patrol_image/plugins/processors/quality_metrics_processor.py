@@ -126,20 +126,7 @@ class QualityMetricsProcessor:
     INPUT = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT = "features"
 
-    # Table schema (static + dynamic)
     OUTPUT_SCHEMA: Dict[str, Any] = {name: np.float32 for name in _column_fn_registry().keys()}
-    OUTPUT_SCHEMA_PATTERNS: List[Tuple[str, Any]] = [
-        (rf"^(?:{name})_[a-zA-Z]\d+(_[a-zA-Z]\d+)*$", np.float32)
-        for name in _column_fn_registry().keys()
-    ]
 
-    def run(self, art: Record) -> Dict[str, float]:
-        dim_order = art.dim_order
-        registry = _column_fn_registry()
-        result = calculate_np_array_stats(art.data, dim_order, registry)
-        return validate_processor_output(
-            result,
-            self.OUTPUT_SCHEMA,
-            self.OUTPUT_SCHEMA_PATTERNS,
-            processor_name=self.NAME
-        )
+    def run(self, art: Record):
+        return calculate_np_array_stats(art.data, art.dim_order, _column_fn_registry())
