@@ -97,6 +97,7 @@ export default {
 async function renderHistogram(container, ctx, { mode, selectedGroups, selectedFile, hasRange }) {
   const { q, sample, groupExpr: geFn } = ctx.sql;
   const { append: appendPlot, plotlyLegendConfig } = ctx.plot;
+  const { extractBinary } = ctx.data;
   const gcExpr   = geFn();
   const rangeSel = hasRange ? ', "histogram_min", "histogram_max"' : '';
 
@@ -128,6 +129,10 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
   }
 
   const visibleGroups = (selectedGroups.length ? selectedGroups : ctx.groups).filter(g => groupData[g]);
+  if (!visibleGroups.length) {
+    container.innerHTML = '<div class="no-data">No histogram data available for the current filter.</div>';
+    return;
+  }
   const traces = visibleGroups.map(g => {
     const { sums, count, min, max } = groupData[g];
     const total = sums.reduce((s, v) => s + v, 0);
@@ -147,7 +152,7 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
         const total = counts.reduce((s, v) => s + v, 0);
         const minV  = Number(row.histogram_min), maxV = Number(row.histogram_max);
         const nBins = counts.length;
-        const ys    = Array.from(counts, v => total > 0 ? v / total : 0);
+        const ys    = Array.from(counts, v => total > 0 ? Math.max(0, v / total) : 0);
         const xs    = histXAxis(mode, nBins, minV, maxV);
         const width = xs[1] - xs[0];
         traces.unshift({ type: 'bar', name: `File: ${selectedFile.split('/').pop()}`, x: xs, y: ys, width: Array(nBins).fill(width), marker: { color: 'black' }, opacity: 0.3 });
@@ -158,7 +163,11 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
   const showLegend = visibleGroups.length > 1 || !!selectedFile;
   appendPlot(container, traces, {
     title: { text: 'Intensity Histograms (averaged per group)' },
-    xaxis: { title: mode === 'native' ? 'Pixel value' : 'Intensity (0–255)' },
+    xaxis: {
+      title: mode === 'native'
+        ? 'Pixel value'
+        : 'Normalized intensity (0–255)',
+    },
     yaxis: { title: 'Normalized Count' },
     bargap: 0, height: 500, showlegend: showLegend,
     ...(showLegend ? { legend: plotlyLegendConfig } : {}),
@@ -171,20 +180,3 @@ function histXAxis(mode, nBins, min, max) {
     : Array.from({ length: nBins }, (_, i) => (i / nBins) * 255);
 }
 
-function extractBinary(val) {
-  if (!val) return null;
-  if (val instanceof Uint8Array)    return val;
-  if (val instanceof Int32Array)    return val;
-  if (val instanceof Float32Array)  return val;
-  if (val instanceof Float64Array)  return val;
-  if (val instanceof BigInt64Array) return Array.from(val, v => Number(v));
-  if (val instanceof BigUint64Array) return Array.from(val, v => Number(v));
-  if (Array.isArray(val)) return val;
-  if (typeof val.toArray === 'function') {
-    const arr = val.toArray();
-    if (arr instanceof BigInt64Array || arr instanceof BigUint64Array) return Array.from(arr, v => Number(v));
-    return arr;
-  }
-  if (val.values) return val.values;
-  return null;
-}
