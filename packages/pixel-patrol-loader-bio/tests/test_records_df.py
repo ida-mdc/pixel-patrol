@@ -317,6 +317,7 @@ def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
         processing_config=ProcessingConfig(selected_file_extensions={"png"}),
     )
     assert isinstance(df, pl.DataFrame)
+    df = df.filter(pl.col("obs_level") == 0)
     paths = df["path"].to_list()
     assert sorted(Path(p).name for p in paths) == ["full.png", "zero.png"]
 
@@ -333,10 +334,10 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     for t in range(t_size):
         for c in range(c_size):
             for z in range(z_size):
-                arr[t, c, z, ...] = (t*z_size + z)*10 + c*5
+                arr[t, c, z, ...] = (t * z_size + z) * 10 + c * 5
 
     path = tmp_path / "5d.tif"
-    tifffile.imwrite(str(path), arr, photometric='minisblack')
+    tifffile.imwrite(str(path), arr, photometric="minisblack")
 
     df = build_records_df(
         bases=[tmp_path],
@@ -375,10 +376,17 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
         block_vals = [(t * z_size + z) * 10 + c * 5 for c in range(c_size) for z in range(z_size)]
         assert mean_single(1, t=t) == pytest.approx(sum(block_vals) / len(block_vals))
 
+                # Per-T (aggregated over C and Z)
+    for t in range(t_size):
+        vals = [(t * z_size + z) * 10 + c * 5 for c in range(c_size) for z in range(z_size)]
+        assert mean_at(dim_t=t, dim_c=None, dim_z=None) == pytest.approx(sum(vals) / len(vals))
+
+        # Per-C (aggregated over T and Z)
     for c in range(c_size):
         block_vals = [(t * z_size + z) * 10 + c * 5 for t in range(t_size) for z in range(z_size)]
         assert mean_single(1, c=c) == pytest.approx(sum(block_vals) / len(block_vals))
 
+        # Per-Z (aggregated over T and C)
     for z in range(z_size):
         block_vals = [(t * z_size + z) * 10 + c * 5 for t in range(t_size) for c in range(c_size)]
         assert mean_single(1, z=z) == pytest.approx(sum(block_vals) / len(block_vals))
@@ -403,6 +411,7 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
         processing_config=ProcessingConfig(selected_file_extensions={"png"}),
     )
 
+    df = df.filter(pl.col("obs_level") == 0)
     assert "mean_intensity" in df.columns
     raw_gray = np.mean(arr)
     expected_gray = np.uint8(raw_gray)

@@ -86,7 +86,7 @@ def test_all_image_files_load_and_standardize(
     standard_dim_order: str
 ):
     """
-    Ensure all image files can be loaded by bioio, standardized, and a thumbnail generated.
+    Ensure all image files can be loaded by bioio.
     """
     file_name = image_file_path.name
     result = load_and_process_records_from_file(image_file_path, loader=loader, processors=processors)
