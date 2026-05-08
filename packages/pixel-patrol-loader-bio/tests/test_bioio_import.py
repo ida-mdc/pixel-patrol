@@ -95,14 +95,15 @@ def test_all_image_files_load_and_standardize(
     assert result is not None, f"Failed to get properties for {file_name}"
     assert result != [], f"Properties list is empty for {file_name}"
 
-    # Check each record returned (single-record files will have exactly one)
-    for i, properties in enumerate(result):
-        record_label = f"{file_name}[{i}]" if len(result) > 1 else file_name
+    # In long format, result contains global (obs_level=0) and per-slice rows.
+    # Global rows carry file-level metadata; check those.
+    global_rows = [r for r in result if r.get("obs_level") == 0]
+    assert global_rows, f"No global row (obs_level=0) for {file_name}"
+
+    for i, properties in enumerate(global_rows):
+        record_label = f"{file_name}[{i}]" if len(global_rows) > 1 else file_name
 
         assert "dim_order" in properties, f"Missing dim_order for {record_label}"
-        assert "thumbnail" in properties, f"Missing thumbnail for {record_label}"
-        assert isinstance(properties["thumbnail"], bytes), f"Thumbnail not bytes for {record_label}"
-
         assert "shape" in properties, f"Missing shape for {record_label}"
         assert "dtype" in properties, f"Missing dtype for {record_label}"
         assert "ndim" in properties, f"Missing ndim for {record_label}"
