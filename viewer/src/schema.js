@@ -5,12 +5,16 @@ import { FILE_ROW_NUMBER } from './constants.js';
 // TODO: maybe 'histogram_min', 'histogram_max', should be excluded in another way - they are numeric but not metrics.
 export const BLOB_COLS = new Set([
   'thumbnail', 'histogram_counts', 'histogram_min', 'histogram_max',
+  'coloc_pearson_r', 'coloc_ssim',
+  'coloc_ssim_luminance', 'coloc_ssim_contrast', 'coloc_ssim_structure',
 ]);
 
 export const SKIP_METRIC_COLS = new Set([
   'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
   'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size', 'S_size',
   'size_bytes',
+  // Co-localisation scalar — a count, not a plottable metric.
+  'coloc_n_channels',
 ]);
 
 export const META_COLS = [

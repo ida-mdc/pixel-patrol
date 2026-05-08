@@ -9,6 +9,7 @@
     "./plugin_violin.js",
     "./plugin_histogram.js",
     "./plugin_mosaic.js",
-    "./plugin_stats_across_dims.js"
+    "./plugin_stats_across_dims.js",
+    "./plugin_colocalization.js"
   ]
 }
