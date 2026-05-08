@@ -391,7 +391,7 @@ def main() -> int:
         "--processor",
         type=str,
         default=None,
-        help="Processors only: select a specific processor NAME (e.g. HistogramProcessor). Default: all.",
+        help="Processors only: select a specific processor NAME (e.g. RasterImageDaskProcessor). Default: all.",
     )
     args = ap.parse_args()
 

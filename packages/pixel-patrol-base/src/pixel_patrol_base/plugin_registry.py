@@ -41,12 +41,5 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
     return res
 
 def register_processor_plugins():
-    from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
-    from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
-    from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
-    return [
-        BasicStatsProcessor,
-        ThumbnailProcessor,
-        HistogramProcessor,
-    ]
+    return []
 

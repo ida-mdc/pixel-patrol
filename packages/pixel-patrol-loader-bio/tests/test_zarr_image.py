@@ -87,7 +87,7 @@ def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path, loader):
 
     assert isinstance(result, list)
     assert len(result) >= 1, "Expected at least one record from zarr loading"
-    metadata = result[0]
+    metadata = [res for res in result if res["obs_level"] == 0][0]
 
     assert isinstance(metadata, dict)
 
