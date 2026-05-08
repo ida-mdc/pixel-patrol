@@ -102,7 +102,7 @@ def find_viewer_dist() -> Path:
 
 def _setup_duckdb(parquet_path: Path):
     """
-    Open a native DuckDB connection with pp_data pre-registered as a view.
+    Open a native DuckDB connection with pp_all and pp_data pre-registered as views.
     Returns (conn, project_name | None, description | None).
     """
     import duckdb
@@ -110,10 +110,18 @@ def _setup_duckdb(parquet_path: Path):
     conn = duckdb.connect()
     escaped = str(parquet_path).replace("'", "''")
     conn.execute(
-        f"CREATE VIEW pp_data AS "
+        f"CREATE VIEW pp_all AS "
         f"SELECT *, row_number() OVER () - 1 AS file_row_number "
         f"FROM read_parquet('{escaped}')"
     )
+    has_obs_level = conn.execute(
+        "SELECT COUNT(*) > 0 FROM information_schema.columns "
+        "WHERE table_name = 'pp_all' AND column_name = 'obs_level'"
+    ).fetchone()[0]
+    if has_obs_level:
+        conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all WHERE obs_level = 0")
+    else:
+        conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all")
 
     project_name, description = _read_parquet_meta(conn, escaped)
     return conn, project_name, description
