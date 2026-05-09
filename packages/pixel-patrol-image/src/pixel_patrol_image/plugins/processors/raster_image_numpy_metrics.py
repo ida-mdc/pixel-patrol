@@ -24,7 +24,7 @@ def fold_to_tiles(
     py, px = (ts - h % ts) % ts, (ts - w % ts) % ts
     if py or px:
         if not np.issubdtype(block.dtype, np.floating):
-            block = block.astype(np.float64, copy=False)
+            block = block.astype(np.float32, copy=False)
         pad = [(0, 0)] * (block.ndim - 2) + [(0, py), (0, px)]
         block = np.pad(block, pad, constant_values=np.nan)
         mask = np.pad(mask, pad, constant_values=False)
@@ -227,7 +227,8 @@ def calc_blocking(arr: np.ndarray, _mask=None, _ctx=None) -> np.ndarray:
     lead = arr.shape[:-2]
     h, w = arr.shape[-2], arr.shape[-1]
     if h <= 8 or w <= 8:
-        return np.full(lead, np.nan, dtype=np.float64)
+        dt = arr.dtype if np.issubdtype(arr.dtype, np.floating) else np.float32
+        return np.full(lead, np.nan, dtype=dt)
 
     # Column boundaries: pixel at position 7 (last of block) vs. pixel at position 8 (first of next block)
     col_before_boundary = arr[..., :, 7::8]
@@ -240,7 +241,8 @@ def calc_blocking(arr: np.ndarray, _mask=None, _ctx=None) -> np.ndarray:
     n_row_pairs = min(row_before_boundary.shape[-2], row_after_boundary.shape[-2])
 
     if n_col_pairs == 0 or n_row_pairs == 0:
-        return np.full(lead, np.nan, dtype=np.float64)
+        dt = arr.dtype if np.issubdtype(arr.dtype, np.floating) else np.float32
+        return np.full(lead, np.nan, dtype=dt)
 
     col_jumps = np.abs(col_before_boundary[..., :n_col_pairs] - col_after_boundary[..., :n_col_pairs])
     row_jumps = np.abs(row_before_boundary[..., :n_row_pairs, :] - row_after_boundary[..., :n_row_pairs, :])

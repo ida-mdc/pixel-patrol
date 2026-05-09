@@ -14,6 +14,7 @@ _log = logging.getLogger(__name__)
 _BAR_MIN_BLOCKS = 10
 
 RASTER_TILE_ROWS_ENV_VAR = "PIXEL_PATROL_RASTER_XY_TILE_METRICS"
+ITER_Y_ROWS_ENV_VAR = "PIXEL_PATROL_ITER_Y_ROWS"
 
 
 def rechunk_for_tiling(arr: da.Array, s_tile: int) -> da.Array:
@@ -54,13 +55,23 @@ def iter_blocks(
 ) -> Generator[Tuple[tuple, np.ndarray], None, None]:
     """Yield (block_index, numpy_array) for every rechunked block.
 
-    All XY blocks for one non-spatial slice are computed together so dask can
-    deduplicate shared source-chunk reads and amortize scheduler overhead.
+    All X-blocks within one Y-row are computed together so dask can deduplicate
+    shared source-chunk reads within that row and amortise scheduler overhead.
+    Processing one Y-row at a time caps peak memory at n_x_blocks × block_size
+    rather than n_x_blocks × n_y_blocks × block_size, which matters when many
+    XY chunks cover a large spatial extent.
     Block memory is bounded by the xy_chunk cap applied in rechunk_for_tiling.
+
+    Set PIXEL_PATROL_ITER_Y_ROWS (default 1) to compute multiple Y-rows per
+    ``da.compute`` call — trades higher peak RAM for fewer passes over large
+    source chunks on disk (often 2–4 is enough).
     """
     total = int(np.prod(arr.numblocks)) if getattr(arr, "numblocks", None) else 0
     ns_numblocks = arr.numblocks[:ns_ndim]
-    all_xy_bidx = list(np.ndindex(*arr.numblocks[ns_ndim:]))
+    # Y dimension is at axis ns_ndim; X dimension is the last axis.
+    all_y_bidx = list(np.ndindex(*arr.numblocks[ns_ndim:-1]))
+    all_x_bidx = list(np.ndindex(*arr.numblocks[-1:]))
+    y_rows_batch = max(1, int(os.environ.get(ITER_Y_ROWS_ENV_VAR, "1")))
 
     pbar = None
     if total >= _BAR_MIN_BLOCKS:
@@ -73,21 +84,31 @@ def iter_blocks(
 
     try:
         for ns_b_idx in np.ndindex(*ns_numblocks):
-            dask_blocks = [arr.blocks[ns_b_idx + xy] for xy in all_xy_bidx]
-            computed = da.compute(*dask_blocks)
-            for xy_b_idx, block_np in zip(all_xy_bidx, computed):
-                yield ns_b_idx + xy_b_idx, block_np
-                done += 1
-                if pbar is not None:
-                    pbar.update(1)
-                if logger_seconds > 0 and (time.perf_counter() - last_log) >= logger_seconds:
-                    elapsed = time.perf_counter() - t_run0
-                    rate = done / max(time.perf_counter() - t_start, 1e-6)
-                    eta_str = (f", ETA ~{(total - done) / rate / 60:.1f} min"
-                               if done < total else "")
-                    _log.info("iter_blocks: processed %d/%d (elapsed %.1fs%s)",
-                              done, total, elapsed, eta_str)
-                    last_log = time.perf_counter()
+            for y_start in range(0, len(all_y_bidx), y_rows_batch):
+                y_slice = all_y_bidx[y_start : y_start + y_rows_batch]
+                dask_blocks = [
+                    arr.blocks[ns_b_idx + y_b_idx + x_b_idx]
+                    for y_b_idx in y_slice
+                    for x_b_idx in all_x_bidx
+                ]
+                computed = da.compute(*dask_blocks)
+                off = 0
+                for y_b_idx in y_slice:
+                    for x_b_idx in all_x_bidx:
+                        block_np = computed[off]
+                        off += 1
+                        yield ns_b_idx + y_b_idx + x_b_idx, block_np
+                        done += 1
+                        if pbar is not None:
+                            pbar.update(1)
+                        if logger_seconds > 0 and (time.perf_counter() - last_log) >= logger_seconds:
+                            elapsed = time.perf_counter() - t_run0
+                            rate = done / max(time.perf_counter() - t_start, 1e-6)
+                            eta_str = (f", ETA ~{(total - done) / rate / 60:.1f} min"
+                                       if done < total else "")
+                            _log.info("iter_blocks: processed %d/%d (elapsed %.1fs%s)",
+                                      done, total, elapsed, eta_str)
+                            last_log = time.perf_counter()
     finally:
         if pbar is not None:
             pbar.close()
