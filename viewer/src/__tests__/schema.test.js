@@ -7,6 +7,19 @@ function cols(obj) {
 }
 
 describe('detectSchema', () => {
+  it('excludes DuckDB list/array types from metricCols (AVG/STDDEV invalid)', () => {
+    const { metricCols } = detectSchema(cols({
+      obs_level: 'BIGINT',
+      dim_c: 'BIGINT',
+      mean_intensity: 'DOUBLE',
+      shape: 'BIGINT[]',
+      vec: 'DOUBLE[]',
+    }));
+    expect(metricCols).toContain('mean_intensity');
+    expect(metricCols).not.toContain('shape');
+    expect(metricCols).not.toContain('vec');
+  });
+
   it('classifies numeric columns as metricCols', () => {
     const { metricCols } = detectSchema(cols({
       mean_intensity: 'Float64',
