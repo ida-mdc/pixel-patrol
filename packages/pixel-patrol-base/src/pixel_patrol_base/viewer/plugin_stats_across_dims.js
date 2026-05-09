@@ -39,13 +39,16 @@ async function renderAcrossDims(container, ctx, filterMetric) {
 
   const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric).sort();
   const activeDims = ctx.state.dimensions ?? {};
+  const dimColsPresent = new Set(ctx.schema.dimCols ?? []);
+  const hasDimCol = (letter) => dimColsPresent.has(`dim_${letter}`);
   // Non-spatial slice queries use obs_level = 1 (single leading dim coordinate).
   // Spatial strip queries must NOT filter obs_level: datasets often mix dim_orders
   // (YX vs CYX vs TCYX in one parquet) while dimensionInfo unions every letter that
   // appears anywhere — obs_level would be wrong per row class. Tile rows always have
   // both dim_x and dim_y; strip aggregates have exactly one spatial coord set.
   const dimLetters = Object.keys(ctx.schema.dimensionInfo ?? {})
-    .filter(letter => activeDims[letter] === undefined)
+    .filter((letter) => activeDims[letter] === undefined)
+    .filter(hasDimCol)
     .sort();
 
   if (!metrics.length || !dimLetters.length) {
@@ -65,13 +68,16 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   for (const varyingLetter of dimLetters) {
     const dimStartMs = performance.now();
     const whereParts = [];
-    if (baseWhere) whereParts.push(baseWhere);
+    const pushWhere = (clause) => {
+      if (clause && !whereParts.includes(clause)) whereParts.push(clause);
+    };
+    if (baseWhere) pushWhere(baseWhere);
     const relevantLetters = new Set([varyingLetter]);
     for (const [letter, idx] of fixedDims) {
-      whereParts.push(`${q(`dim_${letter}`)} = ${idx}`);
+      pushWhere(`${q(`dim_${letter}`)} = ${idx}`);
       relevantLetters.add(letter);
     }
-    whereParts.push(`${q(`dim_${varyingLetter}`)} IS NOT NULL`);
+    pushWhere(`${q(`dim_${varyingLetter}`)} IS NOT NULL`);
 
     // Restrict to pre-aggregated rows whenever possible:
     // - non-spatial dims: use the pre-aggregated rows at the expected depth
@@ -81,20 +87,19 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     if (!SPATIAL_LETTERS.has(varyingLetter)) {
       // obs_level matches the number of fixed dims plus the varying dim.
       // Example: varying 'c' with y fixed → obs_level = 2.
-      whereParts.push(`obs_level = ${fixedDims.length + 1}`);
+      pushWhere(`obs_level = ${fixedDims.length + 1}`);
       for (const dimCol of (ctx.schema.dimCols ?? [])) {
         const letter = dimCol.replace(/^dim_/, '');
         // Only force spatial dims to NULL if they aren't explicitly fixed.
         if (SPATIAL_LETTERS.has(letter) && !relevantLetters.has(letter)) {
-          whereParts.push(`${q(dimCol)} IS NULL`);
+          pushWhere(`${q(dimCol)} IS NULL`);
         }
       }
     } else if (varyingLetter === 'x') {
-      // Only require dim_y NULL if Y isn't explicitly fixed.
-      if (!relevantLetters.has('y')) whereParts.push(`${q('dim_y')} IS NULL`);
+      // X-strip rows use dim_y NULL only when that column exists in this dataset.
+      if (!relevantLetters.has('y') && hasDimCol('y')) pushWhere(`${q('dim_y')} IS NULL`);
     } else if (varyingLetter === 'y') {
-      // Only require dim_x NULL if X isn't explicitly fixed.
-      if (!relevantLetters.has('x')) whereParts.push(`${q('dim_x')} IS NULL`);
+      if (!relevantLetters.has('x') && hasDimCol('x')) pushWhere(`${q('dim_x')} IS NULL`);
     }
 
     // For spatial strips (across x/y), avoid mixing multiple aggregated row classes.
@@ -109,7 +114,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     for (const dimCol of (ctx.schema.dimCols ?? [])) {
       const letter = dimCol.replace(/^dim_/, '');
       if (!relevantLetters.has(letter)) {
-        whereParts.push(`${q(dimCol)} IS NULL`);
+        pushWhere(`${q(dimCol)} IS NULL`);
       }
     }
 
@@ -282,8 +287,18 @@ function makeAcrossDimsPlugin(id, label, info, filterMetric) {
     async render(container, ctx) {
       try {
         await renderAcrossDims(container, ctx, filterMetric);
-      } catch {
-        container.innerHTML = '<div class="no-data">Failed to load data.</div>';
+      } catch (err) {
+        console.error(`[stats-across-dims:${id}]`, err);
+        const wrap = document.createElement('div');
+        wrap.className = 'no-data';
+        wrap.textContent = 'Failed to load data.';
+        const detail = document.createElement('div');
+        detail.className = 'small text-muted mt-1';
+        detail.style.whiteSpace = 'pre-wrap';
+        detail.textContent = err?.message ? String(err.message) : String(err);
+        wrap.appendChild(detail);
+        container.innerHTML = '';
+        container.appendChild(wrap);
       }
     },
   };
