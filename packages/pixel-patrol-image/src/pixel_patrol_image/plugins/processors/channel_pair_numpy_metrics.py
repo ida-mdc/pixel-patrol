@@ -38,15 +38,36 @@ def joint_stats_tile(
     """Per-tile means, stds, and covariance for two channel arrays.
 
     c1, c2 must have identical shape (..., tile_h, tile_w).
+    Uses one centering pass per channel (same math as separate nanmean/nanstd calls).
     """
     with np.errstate(all="ignore"):
-        mu1 = np.nanmean(c1, axis=axes)
-        mu2 = np.nanmean(c2, axis=axes)
-        d1 = c1 - np.nanmean(c1, axis=axes, keepdims=True)
-        d2 = c2 - np.nanmean(c2, axis=axes, keepdims=True)
+        mu1_kd = np.nanmean(c1, axis=axes, keepdims=True)
+        mu2_kd = np.nanmean(c2, axis=axes, keepdims=True)
+        d1 = c1 - mu1_kd
+        d2 = c2 - mu2_kd
+        mu1 = np.squeeze(mu1_kd, axis=axes)
+        mu2 = np.squeeze(mu2_kd, axis=axes)
         cov = np.nanmean(d1 * d2, axis=axes)
-        std1 = np.nanstd(c1, axis=axes)
-        std2 = np.nanstd(c2, axis=axes)
+        std1 = np.sqrt(np.nanmean(d1 * d1, axis=axes))
+        std2 = np.sqrt(np.nanmean(d2 * d2, axis=axes))
+    return JointTileStats(mu1, mu2, std1, std2, cov)
+
+
+def joint_stats_tile_from_centered(
+    mu1: np.ndarray,
+    mu2: np.ndarray,
+    std1: np.ndarray,
+    std2: np.ndarray,
+    d1: np.ndarray,
+    d2: np.ndarray,
+    axes: Tuple[int, int] = (-2, -1),
+) -> JointTileStats:
+    """Build JointTileStats when each channel is already mean-centered in ``d*``.
+
+    ``mu*`` and ``std*`` must match ``nanmean`` / ``nanstd(ddof=0)`` of the original tiles.
+    """
+    with np.errstate(all="ignore"):
+        cov = np.nanmean(d1 * d2, axis=axes)
     return JointTileStats(mu1, mu2, std1, std2, cov)
 
 

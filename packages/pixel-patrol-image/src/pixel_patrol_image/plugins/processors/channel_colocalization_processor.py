@@ -16,7 +16,7 @@ import numpy as np
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_image.plugins.processors.channel_pair_numpy_metrics import (
-    joint_stats_tile,
+    joint_stats_tile_from_centered,
     pearson_r_from_stats,
     ssim_from_stats,
 )
@@ -133,29 +133,36 @@ def _process_coloc_block(
     # Non-C non-spatial leading shape: block_np.shape[1:-2]
     ns_shape = block_np.shape[1:-2]
 
-    # Fold each channel into sub-tiles once.
-    tiled_channels = []
+    # Fold each channel once; keep float32 for SIMD footprint (Pearson / SSIM stable enough).
+    channel_prep: List[Dict[str, np.ndarray]] = []
     mask_ref = None
     for ci in range(n_c):
-        c_block = block_np[ci].astype(np.float64)          # (ns..., Y_block, X_block)
-        tiled, mask = fold_to_tiles(c_block, s_tile)       # (n_planes, n_ty, n_tx, ts, ts)
-        tiled_channels.append(tiled)
+        c_block = np.asarray(block_np[ci], dtype=np.float32)   # (ns..., Y_block, X_block)
+        tiled, mask = fold_to_tiles(c_block, s_tile)           # (n_planes, n_ty, n_tx, ts, ts)
         if mask_ref is None:
             mask_ref = mask
+        with np.errstate(all="ignore"):
+            mu_kd = np.nanmean(tiled, axis=axes, keepdims=True)
+            d = tiled - mu_kd
+            mu = np.squeeze(mu_kd, axis=axes)
+            std = np.sqrt(np.nanmean(d * d, axis=axes))
+            c_min = np.nanmin(tiled, axis=axes)
+            c_max = np.nanmax(tiled, axis=axes)
+        channel_prep.append({"mu": mu, "std": std, "d": d, "c_min": c_min, "c_max": c_max})
 
     valid = np.any(mask_ref, axis=axes)                     # (n_planes, n_ty, n_tx)
 
-    # Compute pair stats for all (plane, ty, tx) in one vectorised pass — no re-read.
+    # Pair stats: only covariance uses both channels; means/stds/min/max were precomputed.
     stats_per_pair = []
     for ci, cj in pair_list:
-        stats = joint_stats_tile(tiled_channels[ci], tiled_channels[cj], axes)
+        pi, pj = channel_prep[ci], channel_prep[cj]
+        stats = joint_stats_tile_from_centered(
+            pi["mu"], pj["mu"], pi["std"], pj["std"], pi["d"], pj["d"], axes,
+        )
         r_val = pearson_r_from_stats(stats)
         with np.errstate(all="ignore"):
-            c_max = np.maximum(np.nanmax(tiled_channels[ci], axis=axes),
-                               np.nanmax(tiled_channels[cj], axis=axes))
-            c_min = np.minimum(np.nanmin(tiled_channels[ci], axis=axes),
-                               np.nanmin(tiled_channels[cj], axis=axes))
-        lum, con, struct, ssim_val = ssim_from_stats(stats, c_max - c_min)
+            dyn_range = np.maximum(pi["c_max"], pj["c_max"]) - np.minimum(pi["c_min"], pj["c_min"])
+        lum, con, struct, ssim_val = ssim_from_stats(stats, dyn_range)
         stats_per_pair.append({
             "coloc_pearson_r":      r_val,
             "coloc_ssim":           ssim_val,
