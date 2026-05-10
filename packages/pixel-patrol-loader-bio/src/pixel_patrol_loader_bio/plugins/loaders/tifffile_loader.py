@@ -119,18 +119,58 @@ def _extract_metadata(
     return meta
 
 
+def _pick_largest_zarr_array(group: zarr.Group) -> zarr.Array:
+    """Prefer the largest numeric array in a group (typical full-resolution pyramid level)."""
+    best: Optional[zarr.Array] = None
+    best_n = -1
+    for _, node in group.arrays():
+        if not isinstance(node, zarr.Array):
+            continue
+        n = int(np.prod(node.shape))
+        if n > best_n:
+            best_n = n
+            best = node
+    if best is None:
+        raise ValueError("Zarr group contains no arrays")
+    return best
+
+
+def _zarr_store_to_array(store: Any) -> zarr.Array:
+    """Open a tifffile Zarr store and return a single :class:`zarr.Array` for ``dask.array.from_zarr``."""
+    node = zarr.open(store, mode="r")
+    if isinstance(node, zarr.Array):
+        return node
+    if isinstance(node, zarr.Group):
+        attrs = dict(node.attrs or {})
+        paths: List[str] = []
+        for d in attrs.get("multiscales", [{}])[0].get("datasets", []):
+            if isinstance(d, dict) and d.get("path"):
+                paths.append(str(d["path"]))
+        for p in paths + ["0", "base"]:
+            if p in node:
+                child = node[p]
+                if isinstance(child, zarr.Array):
+                    return child
+        return _pick_largest_zarr_array(node)
+    raise TypeError(f"Unsupported Zarr node type: {type(node)!r}")
+
+
 def _dask_from_series(series: tifffile.TiffPageSeries) -> da.Array:
-    try:
-        store = series.aszarr()
-        za = zarr.open(store, mode="r")
-        return da.from_zarr(za)
-    except Exception as e:
-        logger.warning(
-            "tifffile aszarr/Zarr failed (%s); falling back to in-memory array + Dask auto chunks.",
-            e,
-        )
-        arr = series.asarray()
-        return da.from_array(np.asarray(arr), chunks="auto")
+    """Prefer ``aszarr(level=0)`` so pyramid OME-TIFF yields one array, not a multi-res Group."""
+    last_err: Optional[BaseException] = None
+    for mk_store in (lambda: series.aszarr(level=0), lambda: series.aszarr()):
+        try:
+            za = _zarr_store_to_array(mk_store())
+            return da.from_zarr(za)
+        except Exception as e:
+            last_err = e
+            continue
+    logger.warning(
+        "tifffile aszarr/Zarr failed (%s); falling back to in-memory array + Dask auto chunks.",
+        last_err,
+    )
+    arr = series.asarray()
+    return da.from_array(np.asarray(arr), chunks="auto")
 
 
 class TifffileLoader:
