@@ -1,12 +1,8 @@
 const INFO = [
   'Shows **channel co-localisation metrics** for every pair of channels (C axis).',
   '',
-  '**Pearson r matrix** — upper-triangle heatmap. **SSIM matrix** — same layout, Blues',
-  'colorscale. Both support group dropdown and side-by-side comparison.',
-  '',
-  '**Pearson r plot** — one line per group, pairs sorted by overall Pearson r.',
-  '**SSIM plot** — one line per group, pairs sorted by overall SSIM composite.',
-  'Shaded bands show ±1 std dev when n > 1.',
+  'Values are first averaged **within each group** (ignoring NaNs), then summarised across groups.',
+  'Channel pairs in the line plots are ordered by the pooled mean across groups.',
   '',
   '**Metrics** (one value per pair in combinations order)',
   '- **Pearson r** — Co-localisation score [−1, 1], invariant to offset and scale.',
@@ -129,34 +125,87 @@ async function renderColoc(container, ctx) {
     }
   }
 
-  const pearsonAcc = metricAcc['coloc_pearson_r'];
-  const ssimAcc    = metricAcc['coloc_ssim'];
+  const pearsonAcc  = metricAcc['coloc_pearson_r'];
+  const ssimAcc     = metricAcc['coloc_ssim'];
+  const structAcc   = metricAcc['coloc_ssim_structure'];
+  const contrastAcc = metricAcc['coloc_ssim_contrast'];
+  const lumAcc      = metricAcc['coloc_ssim_luminance'];
 
-  const pearsonGlobal = pairs.map((_, pi) => nanMean(groups.flatMap(g => pearsonAcc[g][pi])));
-  const ssimGlobal    = pairs.map((_, pi) => nanMean(groups.flatMap(g => ssimAcc[g][pi])));
+  const pearsonGlobal  = pairs.map((_, pi) => nanMean(groups.flatMap(g => pearsonAcc[g][pi])));
+  const ssimGlobal     = pairs.map((_, pi) => nanMean(groups.flatMap(g => ssimAcc[g][pi])));
+  const structGlobal   = pairs.map((_, pi) => nanMean(groups.flatMap(g => structAcc[g][pi])));
+  const contrastGlobal = pairs.map((_, pi) => nanMean(groups.flatMap(g => contrastAcc[g][pi])));
+  const lumGlobal      = pairs.map((_, pi) => nanMean(groups.flatMap(g => lumAcc[g][pi])));
 
   const pearsonSortIdx = pairs.map((_, i) => i)
     .sort((a, b) => (pearsonGlobal[b] ?? -Infinity) - (pearsonGlobal[a] ?? -Infinity));
   const ssimSortIdx = pairs.map((_, i) => i)
     .sort((a, b) => (ssimGlobal[b] ?? -Infinity) - (ssimGlobal[a] ?? -Infinity));
+  const structSortIdx = pairs.map((_, i) => i)
+    .sort((a, b) => (structGlobal[b] ?? -Infinity) - (structGlobal[a] ?? -Infinity));
+  const contrastSortIdx = pairs.map((_, i) => i)
+    .sort((a, b) => (contrastGlobal[b] ?? -Infinity) - (contrastGlobal[a] ?? -Infinity));
+  const lumSortIdx = pairs.map((_, i) => i)
+    .sort((a, b) => (lumGlobal[b] ?? -Infinity) - (lumGlobal[a] ?? -Infinity));
 
-  // ── Heatmaps ──────────────────────────────────────────────────────────────
-  renderSection(container, 'Pearson r — Channel Pair Matrix');
+  renderWidgetIntro(container);
+
+  renderSection(container, 'Pearson r — Channel Pair Matrix',
+    'Pearson correlation measures whether two channels vary together within the same tiles. '
+    + '+1 indicates strong positive co-variation, −1 indicates strong inverse co-variation, '
+    + 'and 0 indicates no linear relationship. Values are aggregated by taking the mean of '
+    + 'finite per-row values within each group.');
   renderHeatmapSection(container, ctx, groups, pairs, chLabels, maxNC,
     pearsonAcc, pearsonGlobal, HEATMAP_PEARSON);
 
-  renderSection(container, 'SSIM — Channel Pair Matrix');
+  renderSection(container, 'Pearson r',
+    'Pairs are ordered by the mean Pearson r pooled across all groups (finite values only). '
+    + 'Within each group, the plotted value for a pair is the mean of finite per-row values.');
+  renderStrengthPlot(container, ctx, groups, pearsonAcc, pearsonSortIdx,
+    pairs, 'Pearson r', [-1, 1], true);
+
+  renderSection(container, 'SSIM — Channel Pair Matrix',
+    'SSIM (structural similarity index) is a composite score in [0, 1] combining luminance, '
+    + 'contrast, and structure terms. 1 means the channels look structurally identical within '
+    + 'tiles; values near 0 indicate strong dissimilarity. Values are aggregated by taking the '
+    + 'mean of finite per-row values within each group.');
   renderHeatmapSection(container, ctx, groups, pairs, chLabels, maxNC,
     ssimAcc, ssimGlobal, HEATMAP_SSIM);
 
-  // ── Strength plots ────────────────────────────────────────────────────────
-  renderSection(container, 'Pearson r by Channel Pair');
-  renderStrengthPlot(container, ctx, groups, pearsonAcc, pearsonSortIdx,
-    pairs, "Pearson r", [-1, 1], true);
-
-  renderSection(container, 'SSIM by Channel Pair');
+  renderSection(container, 'SSIM (composite)',
+    'Pairs are ordered by the mean SSIM pooled across all groups (finite values only). '
+    + 'Within each group, the plotted value for a pair is the mean of finite per-row values.');
   renderStrengthPlot(container, ctx, groups, ssimAcc, ssimSortIdx,
-    pairs, 'SSIM', null, true);
+    pairs, 'SSIM', [0, 1], false);
+
+  renderSection(container, 'SSIM structure',
+    'Structure is the correlation-like component of SSIM (often similar to Pearson r). '
+    + 'Pairs are ordered by the mean structure pooled across all groups. Within each group, '
+    + 'values are the mean of finite per-row structure scores.');
+  renderStrengthPlot(container, ctx, groups, structAcc, structSortIdx,
+    pairs, 'SSIM structure', [-1, 1], true);
+
+  renderSection(container, 'SSIM contrast',
+    'Contrast measures whether the channels have a similar intensity spread (variance) within tiles. '
+    + 'Pairs are ordered by the mean contrast pooled across all groups. Within each group, values '
+    + 'are the mean of finite per-row contrast scores.');
+  renderStrengthPlot(container, ctx, groups, contrastAcc, contrastSortIdx,
+    pairs, 'SSIM contrast', [0, 1], false);
+
+  renderSection(container, 'SSIM luminance',
+    'Luminance measures whether channels have a similar mean intensity within tiles. In fluorescence data '
+    + 'this can reflect bleed-through or shared background, but it is not a general “quality” measure because '
+    + 'different labels can have inherently different brightness. Pairs are ordered by the mean luminance pooled '
+    + 'across all groups. Within each group, values are the mean of finite per-row luminance scores.');
+  renderStrengthPlot(container, ctx, groups, lumAcc, lumSortIdx,
+    pairs, 'SSIM luminance', [0, 1], false);
+
+  renderSection(container, 'Largest between-group differences',
+    'To highlight where groups disagree most, we rank channel pairs by the spread of group means '
+    + '(max − min across groups). Each group mean is computed as the mean of finite per-row values. '
+    + 'The tables list the top pairs by Pearson r spread and by SSIM spread, and include the SSIM '
+    + 'components per group for context.');
+  renderDiffTables(container, ctx, groups, pairs, pearsonAcc, ssimAcc, structAcc, contrastAcc, lumAcc, 5);
 }
 
 // ── Strength plot ─────────────────────────────────────────────────────────────
@@ -197,16 +246,244 @@ function renderStrengthPlot(container, ctx, groups, acc, sortIdx, pairs, yTitle,
   }, 'margin-bottom:20px');
 }
 
+// ── Difference tables ─────────────────────────────────────────────────────────
+
+function groupMeanForPair(acc, g, pi) {
+  return nanMean(acc[g]?.[pi] ?? []);
+}
+
+function groupRangeOfMeans(acc, groups, pi) {
+  const vals = groups.map(g => groupMeanForPair(acc, g, pi)).filter(Number.isFinite);
+  if (!vals.length) return null;
+  return Math.max(...vals) - Math.min(...vals);
+}
+
+function fmtNum(v, digits = 3) {
+  return Number.isFinite(v) ? Number(v).toFixed(digits) : '–';
+}
+
+function renderDiffTables(container, ctx, groups, pairs, pearsonAcc, ssimAcc, structAcc, contrastAcc, lumAcc, topN = 5) {
+  if (groups.length < 2) {
+    const p = document.createElement('p');
+    p.className = 'small text-muted';
+    p.style.cssText = 'margin:0 0 12px;max-width:52rem';
+    p.textContent = 'Between-group difference tables require at least two groups.';
+    container.appendChild(p);
+    return;
+  }
+
+  container.appendChild(buildColorLegend());
+
+  const rankBy = (acc) => pairs
+    .map((_, pi) => ({ pi, delta: groupRangeOfMeans(acc, groups, pi) }))
+    .filter(o => o.delta != null)
+    .sort((a, b) => (b.delta ?? -Infinity) - (a.delta ?? -Infinity))
+    .slice(0, topN);
+
+  const pearsonTop = rankBy(pearsonAcc);
+  const ssimTop    = rankBy(ssimAcc);
+
+  container.appendChild(buildDiffTable(
+    'Top pairs by Pearson r spread (max − min across groups)',
+    pearsonTop,
+    { primaryAcc: pearsonAcc, primaryLabel: 'r' },
+  ));
+  container.appendChild(buildDiffTable(
+    'Top pairs by SSIM spread (max − min across groups)',
+    ssimTop,
+    { primaryAcc: ssimAcc, primaryLabel: 'SSIM' },
+  ));
+
+  function buildColorLegend() {
+    const wrap = document.createElement('div');
+    wrap.className = 'small text-muted';
+    wrap.style.cssText = 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 10px';
+
+    const title = document.createElement('span');
+    title.style.fontWeight = '600';
+    title.textContent = 'Cell color:';
+    wrap.appendChild(title);
+
+    wrap.appendChild(legendItem('rgba(25, 135, 84, 0.35)', 'Above across-group average'));
+    wrap.appendChild(legendItem('rgba(220, 53, 69, 0.35)', 'Below across-group average'));
+
+    return wrap;
+  }
+
+  function legendItem(color, label) {
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:center;gap:8px';
+    const sw = document.createElement('span');
+    sw.style.cssText =
+      `display:inline-block;width:14px;height:14px;border-radius:3px;` +
+      `border:1px solid #ddd;background:${color}`;
+    const t = document.createElement('span');
+    t.textContent = label;
+    item.append(sw, t);
+    return item;
+  }
+
+  function buildDiffTable(title, rows, primary) {
+    const card = document.createElement('div');
+    card.style.cssText = 'margin:0 0 14px';
+    const h = document.createElement('div');
+    h.className = 'small';
+    h.style.cssText = 'font-weight:600;margin:0 0 6px';
+    h.textContent = title;
+    card.appendChild(h);
+
+    if (!rows.length) {
+      const p = document.createElement('p');
+      p.className = 'small text-muted';
+      p.style.margin = '0 0 12px';
+      p.textContent = 'No finite values available for ranking with the current filter.';
+      card.appendChild(p);
+      return card;
+    }
+
+    const tableWrap = document.createElement('div');
+    tableWrap.style.cssText = 'overflow:auto;border:1px solid #eee;border-radius:6px';
+    const tbl = document.createElement('table');
+    tbl.className = 'table table-sm mb-0';
+    tbl.style.cssText = 'min-width:760px';
+
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    const cols = ['Pair', 'Δ', 'Group', 'r', 'SSIM', 'structure', 'contrast', 'luminance'];
+    cols.forEach(c => {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = c;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    tbl.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (const { pi, delta } of rows) {
+      const pair = pairLabel(...pairs[pi]);
+      const perMetricStats = metricStatsForPair(pi);
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
+        const tr = document.createElement('tr');
+        // Dark (not thick) separators so they stay visible on colored cells.
+        if (gi === 0) tr.style.borderTop = '1px solid #888';
+        if (gi === groups.length - 1) tr.style.borderBottom = '1px solid #888';
+        if (gi === 0) {
+          const tdPair = document.createElement('td');
+          tdPair.rowSpan = groups.length;
+          tdPair.style.fontWeight = '600';
+          tdPair.textContent = pair;
+          tr.appendChild(tdPair);
+
+          const tdD = document.createElement('td');
+          tdD.rowSpan = groups.length;
+          tdD.textContent = fmtNum(delta, 3);
+          tr.appendChild(tdD);
+        }
+
+        // Don't color the group name cell (keep it readable).
+        const tdG = document.createElement('td');
+        tdG.textContent = ctx.groupLabel ? ctx.groupLabel(g) : String(g);
+        tr.appendChild(tdG);
+
+        const rVal   = groupMeanForPair(pearsonAcc, g, pi);
+        const sVal   = groupMeanForPair(ssimAcc, g, pi);
+        const stVal  = groupMeanForPair(structAcc, g, pi);
+        const cVal   = groupMeanForPair(contrastAcc, g, pi);
+        const lVal   = groupMeanForPair(lumAcc, g, pi);
+
+        tr.appendChild(signTd(fmtNum(rVal, 3),  rVal,  perMetricStats.r.avg));
+        tr.appendChild(signTd(fmtNum(sVal, 3),  sVal,  perMetricStats.SSIM.avg));
+        tr.appendChild(signTd(fmtNum(stVal, 3), stVal, perMetricStats.structure.avg));
+        tr.appendChild(signTd(fmtNum(cVal, 3),  cVal,  perMetricStats.contrast.avg));
+        tr.appendChild(signTd(fmtNum(lVal, 3),  lVal,  perMetricStats.luminance.avg));
+
+        tbody.appendChild(tr);
+      }
+    }
+    tbl.appendChild(tbody);
+    tableWrap.appendChild(tbl);
+    card.appendChild(tableWrap);
+    return card;
+  }
+
+  function td(text) {
+    const el = document.createElement('td');
+    el.textContent = text;
+    return el;
+  }
+
+  function signTd(text, v, avg) {
+    const el = document.createElement('td');
+    el.textContent = text;
+    if (!Number.isFinite(v) || !Number.isFinite(avg)) return el;
+
+    const delta = v - avg;
+    el.style.background = delta >= 0
+      ? 'rgba(25, 135, 84, 0.14)'   // green
+      : 'rgba(220, 53, 69, 0.14)';  // red
+    return el;
+  }
+
+  function metricStatsForPair(pi) {
+    const statsFor = (acc) => {
+      const vals = groups.map(g => groupMeanForPair(acc, g, pi)).filter(Number.isFinite);
+      if (!vals.length) return { avg: null, range: null };
+      const avg = vals.reduce((s, x) => s + x, 0) / vals.length;
+      return { avg };
+    };
+    return {
+      r: statsFor(pearsonAcc),
+      SSIM: statsFor(ssimAcc),
+      structure: statsFor(structAcc),
+      contrast: statsFor(contrastAcc),
+      luminance: statsFor(lumAcc),
+    };
+  }
+}
+
 // ── Heatmap helpers ───────────────────────────────────────────────────────────
 
+/** Diverging Pearson r: −1 strong cool → 0 neutral → +1 strong warm (fixed domain). */
+const COLORSCALE_PEARSON_DIVERGING = [
+  [0, 'rgb(49, 54, 149)'],
+  [0.35, 'rgb(146, 197, 222)'],
+  [0.5, 'rgb(247, 247, 247)'],
+  [0.65, 'rgb(252, 174, 97)'],
+  [1, 'rgb(179, 0, 49)'],
+];
+
 const HEATMAP_PEARSON = {
-  colorscale: 'RdBu', reversescale: true, zmin: -1, zmax: 1,
-  colorbar: { thickness: 12, len: 0.75, title: { text: 'r', side: 'right' } },
+  colorscale: COLORSCALE_PEARSON_DIVERGING,
+  reversescale: false,
+  zmin: -1,
+  zmax: 1,
+  colorbar: {
+    thickness: 12,
+    len: 0.75,
+    title: { text: 'r', side: 'right' },
+    tickmode: 'array',
+    tickvals: [-1, 0, 1],
+    ticktext: ['−1', '0', '+1'],
+  },
   hoverLabel: 'r',
 };
+
+/** Sequential SSIM composite: 0 = dissimilar → 1 = identical. */
 const HEATMAP_SSIM = {
-  colorscale: 'RdBu', reversescale: true, zmin: -1, zmax: 1,
-  colorbar: { thickness: 12, len: 0.75, title: { text: 'SSIM', side: 'right' } },
+  colorscale: 'Viridis',
+  reversescale: false,
+  zmin: 0,
+  zmax: 1,
+  colorbar: {
+    thickness: 12,
+    len: 0.75,
+    title: { text: 'SSIM', side: 'right' },
+    tickmode: 'array',
+    tickvals: [0, 1],
+    ticktext: ['0', '1'],
+  },
   hoverLabel: 'SSIM',
 };
 
@@ -298,11 +575,31 @@ function renderHeatmapSection(container, ctx, groups, pairs, chLabels, maxNC, ac
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 
-function renderSection(container, title) {
+function renderWidgetIntro(container) {
+  const p = document.createElement('p');
+  p.className = 'small text-muted';
+  p.style.cssText = 'margin:0 0 18px;line-height:1.45;max-width:52rem';
+  p.textContent =
+    'Visualisations below summarise channel co-localisation for the current report rows '
+    + 'and filters. Metrics were computed between channel pairs from image tiles and '
+    + 'stored as arrays on each row; the viewer averages finite values across matching '
+    + 'observations (per group or pooled). A difference table highlights channel pairs '
+    + 'with the largest between-group spread (max − min across group means).';
+  container.appendChild(p);
+}
+
+function renderSection(container, title, caption = null) {
   const h = document.createElement('h5');
   h.textContent = title;
-  h.style.cssText = 'margin:24px 0 10px;font-size:14px';
+  h.style.cssText = 'margin:24px 0 8px;font-size:14px';
   container.appendChild(h);
+  if (caption) {
+    const p = document.createElement('p');
+    p.className = 'small text-muted';
+    p.style.cssText = 'margin:-4px 0 12px;line-height:1.45;max-width:52rem';
+    p.textContent = caption;
+    container.appendChild(p);
+  }
 }
 
 function escHtml(s) {
