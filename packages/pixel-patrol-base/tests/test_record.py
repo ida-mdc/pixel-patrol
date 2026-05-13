@@ -62,9 +62,9 @@ def test_meta_names_wrong_types_ignored():
     assert order == "ABC"
     assert names == ["dimA", "dimB", "dimC"]
 
-def test_meta_order_non_alpha():
+def test_meta_order_non_alpha_chars_preserved():
     a = StubArr((2, 3))
-    meta = {"dim_order": "T1", "ndim": 2}  # non-alpha → ignore
+    meta = {"dim_order": "T1", "ndim": 2}  # non-alpha chars are preserved as-is
     record = record_from(a, meta)
     names = record.dim_names
     order = record.dim_order

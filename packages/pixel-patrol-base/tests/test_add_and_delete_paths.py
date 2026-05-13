@@ -179,8 +179,11 @@ def test_add_paths_empty_input_preserves_current_paths(project_instance: Project
     assert updated_project.paths == initial_paths
 
     # Test when specific paths are present
-    api.add_paths(project_instance, project_instance.base_dir / "subdir_x")
-    initial_paths = project_instance.paths.copy()  # Should be [base_dir / "subdir_x"]
+    subdir_x = project_instance.base_dir / "subdir_x"
+    subdir_x.mkdir()
+    api.add_paths(project_instance, subdir_x)
+    assert project_instance.paths == [subdir_x.resolve()]  # confirm subdir_x was actually added
+    initial_paths = project_instance.paths.copy()
     updated_project = api.add_paths(project_instance, [])
     assert updated_project.paths == initial_paths
 

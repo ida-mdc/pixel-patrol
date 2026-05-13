@@ -61,7 +61,7 @@ def test_load_parquet_round_trip(tmp_path: Path):
     metadata = ProjectMetadata(
         project_name="round_trip",
         flavor="test_flavor",
-        authors="alice, bob",
+        description="Authors: alice, bob",
     )
     dest = tmp_path / "round_trip.parquet"
     save_parquet(df, dest, metadata)
@@ -74,7 +74,7 @@ def test_load_parquet_round_trip(tmp_path: Path):
     assert loaded_df["col2"].to_list() == ["a", "b"]
     assert loaded_meta.project_name == "round_trip"
     assert loaded_meta.flavor == "test_flavor"
-    assert loaded_meta.authors == "alice, bob"
+    assert loaded_meta.description == "Authors: alice, bob"
 
 
 def test_load_parquet_preserves_metadata_fields(tmp_path: Path):
@@ -82,7 +82,7 @@ def test_load_parquet_preserves_metadata_fields(tmp_path: Path):
     metadata = ProjectMetadata(
         project_name="full_meta",
         flavor="my_flavor",
-        authors="deborah",
+        description="Authors: deborah",
         base_dir="/some/path",
         paths=["/some/path/a", "/some/path/b"],
     )
@@ -94,7 +94,7 @@ def test_load_parquet_preserves_metadata_fields(tmp_path: Path):
 
     assert loaded_meta.project_name == "full_meta"
     assert loaded_meta.flavor == "my_flavor"
-    assert loaded_meta.authors == "deborah"
+    assert loaded_meta.description == "Authors: deborah"
     assert loaded_meta.base_dir == "/some/path"
     assert loaded_meta.paths == ["/some/path/a", "/some/path/b"]
     assert loaded_meta.version != ""  # auto-populated
@@ -128,18 +128,18 @@ def test_project_process_saves_parquet(project_with_all_data: Project, tmp_path:
     """process_records saves a parquet with metadata in output_dir."""
     # project_with_all_data already ran process_records via conftest
     # Check that a parquet exists in output_dir
-    if project_with_all_data.output_path:
-        assert project_with_all_data.output_path.exists()
+    assert project_with_all_data.output_path is not None
+    assert project_with_all_data.output_path.exists()
 
-        loaded_df, loaded_meta = load_parquet(project_with_all_data.output_path)
-        assert loaded_df.height == project_with_all_data.records_df.height
-        assert loaded_meta.project_name == project_with_all_data.name
+    loaded_df, loaded_meta = load_parquet(project_with_all_data.output_path)
+    assert loaded_df.height == project_with_all_data.records_df.height
+    assert loaded_meta.project_name == project_with_all_data.name
 
 
 def test_api_load_returns_df_and_metadata(tmp_path: Path):
     """api.load returns (records_df, metadata) tuple."""
     df = pl.DataFrame({"path": ["/a/b.png"], "size": [100]})
-    metadata = ProjectMetadata(project_name="api_load_test", authors="tester")
+    metadata = ProjectMetadata(project_name="api_load_test", description="Authors: tester")
     dest = tmp_path / "api_test.parquet"
     save_parquet(df, dest, metadata)
 
@@ -147,7 +147,7 @@ def test_api_load_returns_df_and_metadata(tmp_path: Path):
 
     assert loaded_df.height == 1
     assert loaded_meta.project_name == "api_load_test"
-    assert loaded_meta.authors == "tester"
+    assert loaded_meta.description == "Authors: tester"
 
 
 def test_full_save_load_cycle_with_float_columns(tmp_path: Path):

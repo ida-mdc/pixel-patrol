@@ -39,7 +39,9 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
 
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
-            metadata[f"pixel_size_{ax}"] = getattr(img.physical_pixel_sizes, ax, None)
+            val = getattr(img.physical_pixel_sizes, ax, None)
+            if val is not None:
+                metadata[f"pixel_size_{ax}"] = val
 
     if hasattr(img, "channel_names"):
         metadata["channel_names"] = [str(c) for c in img.channel_names]

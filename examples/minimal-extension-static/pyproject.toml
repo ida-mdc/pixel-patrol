@@ -1,0 +1,27 @@
+[project]
+name = "markdown-diary-tracker-static"
+version = "0.1.0"
+description = "Static-viewer extension example for Pixel Patrol."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pixel_patrol_base>=0.1.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/markdown_diary_tracker_static"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+my_extension_loaders = "markdown_diary_tracker_static.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+my_extension_processors = "markdown_diary_tracker_static.plugin_registry:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.viewer_extensions"]
+my_extension_viewer = "markdown_diary_tracker_static.plugin_registry:get_viewer_extension_dir"
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../../packages/pixel-patrol-base", editable = true }
