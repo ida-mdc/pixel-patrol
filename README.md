@@ -1,4 +1,4 @@
-# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/prevalidation.png" width="80">  PixelPatrol 
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/prevalidation.png" width="80">  PixelPatrol 
 ### Scientific Dataset Quality Control and Data Exploration Tool
 
 <img src="packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80"> 
