@@ -3,7 +3,6 @@ const BASIC_METRIC_BASES = new Set([
 ]);
 const QUALITY_METRIC_BASES = new Set([
   'michelson_contrast', 'mscn_variance', 'local_std_ratio',
-  'laplacian_variance', 'tenengrad', 'brenner',
   'noise_std', 'blocking_records', 'ringing_records',
 ]);
 
@@ -21,6 +20,16 @@ const QUALITY_INFO = [
   '- drift in focus or noise over time (T)',
   '- channel-specific artifacts (C)',
   '- depth-dependent quality changes (Z)',
+  '',
+  '**Raster tile metrics** (from the `raster-image` processor when present):',
+  '- **Michelson contrast** (`michelson_contrast`) – Mean local intensity range inside a 3×3 window, divided by the tile standard deviation. Higher values mean stronger local contrast relative to overall tile variation.',
+  '- **MSCN variance** (`mscn_variance`) – Variance of mean-subtracted contrast-normalized pixels (local mean and std in 3×3). Captures texture and edge strength in a way that is insensitive to global brightness and offset.',
+  '- **Local std ratio** (`local_std_ratio`) – Mean of local 3×3 standard deviation divided by tile standard deviation. Often near 1 for noise-like tiles; lower when variation is concentrated in fewer sharp features.',
+  '',
+  '**Other quality signals** (when columns exist in the dataset):',
+  '- **Blocking** – Strength of periodic 8×8 block-boundary steps, as a proxy for block compression artifacts.',
+  '- **Ringing** – High-frequency residual energy (e.g. overshoot near edges), as a ringing / sharpening artifact proxy.',
+  '',
 ].join('\n');
 
 // X and Y are spatial tile coordinates. When querying non-spatial dims we
