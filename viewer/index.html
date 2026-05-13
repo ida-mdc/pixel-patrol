@@ -108,6 +108,14 @@
             </label>
           </div>
 
+          <div id="violin-granularity-wrap" class="mb-3 d-none">
+            <label class="form-label fw-bold mb-1 small text-uppercase text-muted" for="violin-granularity-select">Violin plots</label>
+            <select id="violin-granularity-select" class="form-select form-select-sm">
+              <option value="file">One point per file</option>
+              <option value="tile">One point per spatial tile</option>
+            </select>
+          </div>
+
           <div class="d-flex gap-2 mb-3">
             <button id="apply-btn" class="btn btn-primary flex-grow-1 btn-sm">Apply</button>
             <button id="reset-btn" class="btn btn-outline-secondary flex-grow-1 btn-sm">Reset</button>

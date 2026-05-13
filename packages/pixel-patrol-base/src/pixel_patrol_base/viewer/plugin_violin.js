@@ -4,11 +4,8 @@ const BASIC_METRIC_BASES = new Set([
 ]);
 
 // Matches the default PIXEL_PATROL_METRICS_QUALITY group (intensity-independent metrics).
-// Legacy gradient metrics (tenengrad, laplacian_variance, brenner) are kept here so that
-// datasets built with PIXEL_PATROL_METRICS_GRADIENT_FOCUS=1 still appear in this widget.
 const QUALITY_METRIC_BASES = new Set([
   'michelson_contrast', 'mscn_variance', 'local_std_ratio',
-  'laplacian_variance', 'tenengrad', 'brenner',
   'noise_std', 'blocking_records', 'ringing_records',
 ]);
 
@@ -19,8 +16,53 @@ function matchesBases(col, bases) {
   return false;
 }
 
-const VIOLIN_MAX_POINTS = 2000;
+function dimEqualityFilters(ctx, q) {
+  return Object.entries(ctx.state.dimensions ?? {})
+    .map(([letter, idxRaw]) => {
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx)) return null;
+      return `${q(`dim_${letter}`)} = ${idx}`;
+    })
+    .filter(Boolean);
+}
+
+/** @param {'file'|'tile'} granularity */
+function buildViolinWhereParts(ctx, q, granularity) {
+  const whereParts = [];
+  const baseWhere = ctx.userWhere ? ctx.userWhere.replace(/^\s*WHERE\s+/i, '') : '';
+  if (baseWhere) whereParts.push(baseWhere);
+
+  const dimFilters = dimEqualityFilters(ctx, q);
+  const activeDims = ctx.state.dimensions ?? {};
+  const xSelected = activeDims.x !== undefined;
+  const ySelected = activeDims.y !== undefined;
+
+  if (granularity === 'tile') {
+    whereParts.push(...dimFilters);
+    if (ctx.schema?.dimCols?.includes('dim_x')) whereParts.push(`${q('dim_x')} IS NOT NULL`);
+    if (ctx.schema?.dimCols?.includes('dim_y')) whereParts.push(`${q('dim_y')} IS NOT NULL`);
+    return whereParts;
+  }
+
+  const longObsLevel = dimFilters.length === 0 ? 0 : dimFilters.length;
+  whereParts.push(`obs_level = ${longObsLevel}`);
+  whereParts.push(...dimFilters);
+  if (ctx.schema?.dimCols?.includes('dim_x') && !xSelected) whereParts.push(`${q('dim_x')} IS NULL`);
+  if (ctx.schema?.dimCols?.includes('dim_y') && !ySelected) whereParts.push(`${q('dim_y')} IS NULL`);
+  return whereParts;
+}
+
+function violinsCombinedWhere(ctx, q, granularity) {
+  const parts = buildViolinWhereParts(ctx, q, granularity);
+  return parts.length ? `WHERE ${parts.join(' AND ')}` : '';
+}
+
 const MAX_METRICS       = 12;
+// If a group has more than this many rows, don't render individual points.
+// (Still show the violin + box; points become too slow/noisy at scale.)
+const MAX_POINTS_TO_RENDER = 5000;
+// Safety cap: avoid pulling arbitrarily large datasets into the browser.
+const MAX_ROWS_FOR_VIOLINS = 250_000;
 
 const SIGNIFICANCE_HELP = [
   '**Statistical Comparisons**',
@@ -37,7 +79,8 @@ const SIGNIFICANCE_HELP = [
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
   '', 'You can choose which statistic to plot and filter by image dimensions.',
-  '', 'In the plot each point is one image; the box shows the distribution per group.',
+  '', 'By default each point is one file (`obs_level = 0`). When the dataset contains spatial tiles,',
+  'use **Violin plots** in the sidebar to switch to **one point per spatial tile** so violins reflect within-image variation pooled across the group.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
@@ -54,14 +97,32 @@ const QUALITY_INFO = [
   '  Captures texture richness independent of background level.',
   '- **Local std ratio** – Mean local std divided by tile std.',
   '  Approaches 1 for sharp structured tiles; lower for smooth or out-of-focus tiles.',
-  '', '**Legacy metrics** (enabled via `PIXEL_PATROL_METRICS_GRADIENT_FOCUS=1`)',
-  '- **Laplacian variance**, **Tenengrad**, **Brenner** – Gradient-based focus measures,',
-  '  normalised by tile variance. Useful for within-image comparisons.',
   '', '**Compression artifact metrics** (enabled via `PIXEL_PATROL_METRICS_COMPRESSION=1`)',
   '- **Blocking records** – Strength of JPEG-style block boundary artifacts.',
   '- **Ringing records** – High-frequency oscillation artifacts near edges.',
+  '', 'When spatial tiling is present, use **Violin plots → One point per spatial tile** in the sidebar to pool tile-level metrics within each group.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
+
+async function fetchViolinRows(ctx, metrics, granularity, gcFn, geFn, q) {
+  const combinedWhere = violinsCombinedWhere(ctx, q, granularity);
+  const countRow = (await ctx.queryRows(`SELECT COUNT(*)::BIGINT AS n FROM pp_all ${combinedWhere}`))[0];
+  const n = Number(countRow?.n ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return [];
+  if (n > MAX_ROWS_FOR_VIOLINS) {
+    throw new Error(
+      `Too many rows to plot (${n.toLocaleString()}). ` +
+      `Please add filters (or choose file-level mode) to get under ${MAX_ROWS_FOR_VIOLINS.toLocaleString()} rows.`,
+    );
+  }
+
+  const sql = `
+    SELECT ${geFn()},
+           ${metrics.map(q).join(', ')}
+    FROM pp_all ${combinedWhere}
+  `;
+  return ctx.queryRows(sql);
+}
 
 async function renderViolins(container, ctx, filterMetric) {
   const { q, groupCol: gcFn, groupExpr: geFn } = ctx.sql;
@@ -76,131 +137,109 @@ async function renderViolins(container, ctx, filterMetric) {
     return;
   }
 
-  // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
-  const dimFilters = Object.entries(ctx.state.dimensions ?? {})
-    .map(([letter, idxRaw]) => {
-      const idx = Number(idxRaw);
-      if (!Number.isFinite(idx)) return null;
-      return `${q(`dim_${letter}`)} = ${idx}`;
-    })
-    .filter(Boolean);
-  const activeDims = ctx.state.dimensions ?? {};
-  const xSelected = activeDims.x !== undefined;
-  const ySelected = activeDims.y !== undefined;
-  // obs_level matches RasterImageDaskProcessor grouping depth: global → 0,
-  // one dim fixed → 1, two dims fixed → 2, …
-  const longObsLevel = dimFilters.length === 0 ? 0 : dimFilters.length;
-  const sourceTable = 'pp_all';
-  const whereParts = [];
-  const baseWhere = ctx.userWhere ? ctx.userWhere.replace(/^\s*WHERE\s+/i, '') : '';
-  if (baseWhere) whereParts.push(baseWhere);
-  whereParts.push(`obs_level = ${longObsLevel}`);
-  whereParts.push(...dimFilters);
-  // For tiled datasets, there can be many rows per file at (x,y) tile level.
-  // This widget is intended to show per-image (non-spatial) distributions by default,
-  // so exclude spatial rows unless the user explicitly slices on x/y.
-  if (ctx.schema?.dimCols?.includes('dim_x') && !xSelected) whereParts.push(`${q('dim_x')} IS NULL`);
-  if (ctx.schema?.dimCols?.includes('dim_y') && !ySelected) whereParts.push(`${q('dim_y')} IS NULL`);
-  const combinedWhere = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const dimCols = ctx.schema.dimCols ?? [];
+  const canTile = dimCols.includes('dim_x') && dimCols.includes('dim_y');
+  const granularity = canTile && ctx.state.violinGranularity === 'tile' ? 'tile' : 'file';
 
-  const gc  = gcFn();
-  const sql = `
-    WITH ranked AS (
-      SELECT ${geFn()},
-             ${metrics.map(q).join(', ')},
-             ROW_NUMBER() OVER (PARTITION BY ${gc} ORDER BY random()) AS __rn__,
-             COUNT(*)     OVER (PARTITION BY ${gc}) AS __group_size__
-      FROM ${sourceTable} ${combinedWhere}
-    )
-    SELECT * EXCLUDE (__rn__) FROM ranked WHERE __rn__ <= ${VIOLIN_MAX_POINTS}
-  `;
+  container.innerHTML = '';
+  const plotRoot = document.createElement('div');
+  container.appendChild(plotRoot);
 
-  const rows = await ctx.queryRows(sql);
-  if (!rows.length) {
-    container.innerHTML = '<div class="no-data">No rows match the current filter.</div>';
-    return;
-  }
+  const draw = async () => {
+    plotRoot.innerHTML = '';
+    let rows;
+    try {
+      rows = await fetchViolinRows(ctx, metrics, granularity, gcFn, geFn, q);
+    } catch (err) {
+      plotRoot.innerHTML = `<div class="no-data">${err?.message ? String(err.message) : 'Failed to load data.'}</div>`;
+      return;
+    }
+    if (!rows.length) {
+      plotRoot.innerHTML = '<div class="no-data">No rows match the current filter.</div>';
+      return;
+    }
 
-  const rowGroups = new Set(rows.map(r => String(r.__group__)));
-  const groups = ctx.groups.filter(g => rowGroups.has(g));
-  const toPlot = [], noVariance = [];
-  for (const metric of metrics) {
-    const vals = rows
-      .map(r => r[metric])
-      .filter(v => v != null)
-      .map(Number)
-      .filter(Number.isFinite);
-    if (!vals.length) continue;
-    if (new Set(vals).size <= 1) noVariance.push({ metric, value: vals[0] });
-    else toPlot.push(metric);
-  }
+    const rowGroups = new Set(rows.map(r => String(r.__group__)));
+    const groups = ctx.groups.filter(g => rowGroups.has(g));
+    const toPlot = [], noVariance = [];
+    for (const metric of metrics) {
+      const vals = rows
+        .map(r => r[metric])
+        .filter(v => v != null)
+        .map(Number)
+        .filter(Number.isFinite);
+      if (!vals.length) continue;
+      if (new Set(vals).size <= 1) noVariance.push({ metric, value: vals[0] });
+      else toPlot.push(metric);
+    }
 
-  const numGroups   = groups.length;
-  const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
-  const sampledGroups = new Set(
-    rows.filter(r => Number(r.__group_size__) > VIOLIN_MAX_POINTS).map(r => String(r.__group__))
-  );
-  const showSig = ctx.state.showSignificance && groups.length >= 2;
+    const numGroups = groups.length;
+    const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+    const showSig = ctx.state.showSignificance && groups.length >= 2;
 
-  if (toPlot.length) {
-    const { wrap, flexBasisPct } = createFlexGrid(container, plotsPerRow);
+    if (toPlot.length) {
+      const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
 
-    for (const metric of toPlot) {
-      const label     = niceName(metric);
-      const isSampled = sampledGroups.size > 0;
-      const title     = `Distribution of ${label}` +
-        (isSampled ? `<br><sup>sampled to ${VIOLIN_MAX_POINTS} per group</sup>` : '');
+      for (const metric of toPlot) {
+        const label = niceName(metric);
+        const subParts = [];
+        if (granularity === 'tile') subParts.push('one point per spatial tile');
+        const sub = subParts.length ? `<br><sup>${subParts.join('; ')}</sup>` : '';
+        const title = `Distribution of ${label}${sub}`;
 
-      const groupData = {};
-      for (const g of groups) {
-        groupData[g] = rows
-          .filter(r => String(r.__group__) === g)
-          .map(r => r[metric])
-          .filter(v => v != null)
-          .map(Number)
-          .filter(Number.isFinite);
-      }
+        const groupData = {};
+        for (const g of groups) {
+          groupData[g] = rows
+            .filter(r => String(r.__group__) === g)
+            .map(r => r[metric])
+            .filter(v => v != null)
+            .map(Number)
+            .filter(Number.isFinite);
+        }
 
-      const traces = groups.map(g => {
-        const vals       = groupData[g];
-        const showPoints = vals.length < 1000 ? 'all' : 'outliers';
-        return {
-          type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: true },
-          points: showPoints, pointpos: 0, opacity: 0.9,
-          marker: { color: ctx.color.group(g), line: { width: 1, color: 'black' } },
-          hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
-        };
-      });
+        const traces = groups.map(g => {
+          const vals = groupData[g];
+          const showPoints = vals.length <= MAX_POINTS_TO_RENDER ? 'all' : false;
+          return {
+            type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: true },
+            points: showPoints, pointpos: 0, opacity: 0.9,
+            marker: { color: ctx.color.group(g), line: { width: 1, color: 'black' } },
+            hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
+          };
+        });
 
-      const outerDiv = appendPlot(wrap, traces, {
-        title: { text: title },
-        yaxis: { title: label },
-        xaxis: { title: ctx.plot.groupingLabel ? ctx.plot.groupingLabel('') : '', type: 'category' },
-        showlegend: false,
-      }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
+        const outerDiv = appendPlot(wrap, traces, {
+          title: { text: title },
+          yaxis: { title: label },
+          xaxis: { title: ctx.plot.groupingLabel ? ctx.plot.groupingLabel('') : '', type: 'category' },
+          showlegend: false,
+        }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
 
-      if (showSig) {
-        const pairs = computeSignificancePairs(groups, groupData);
-        addSignificanceBrackets(outerDiv, pairs, groups);
+        if (showSig) {
+          const pairs = computeSignificancePairs(groups, groupData);
+          addSignificanceBrackets(outerDiv, pairs, groups);
+        }
       }
     }
-  }
 
-  if (noVariance.length) {
-    const hr = document.createElement('hr');
-    container.appendChild(hr);
-    const h = document.createElement('h6');
-    h.style.cssText = 'margin-top:20px;margin-bottom:12px';
-    h.textContent = 'Metrics with No Variance';
-    container.appendChild(h);
-    const table = document.createElement('table');
-    table.className = 'stat-table';
-    table.innerHTML = `
-      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-      <tbody>${noVariance.map(({ metric, value }) => `<tr><td>${niceName(metric)}</td><td>${Number(value).toFixed(4)}</td></tr>`).join('')}</tbody>
-    `;
-    container.appendChild(table);
-  }
+    if (noVariance.length) {
+      const hr = document.createElement('hr');
+      plotRoot.appendChild(hr);
+      const h = document.createElement('h6');
+      h.style.cssText = 'margin-top:20px;margin-bottom:12px';
+      h.textContent = 'Metrics with No Variance';
+      plotRoot.appendChild(h);
+      const table = document.createElement('table');
+      table.className = 'stat-table';
+      table.innerHTML = `
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>${noVariance.map(({ metric, value }) => `<tr><td>${niceName(metric)}</td><td>${Number(value).toFixed(4)}</td></tr>`).join('')}</tbody>
+      `;
+      plotRoot.appendChild(table);
+    }
+  };
+
+  await draw();
 }
 
 function makeViolinPlugin(id, label, info, filterMetric) {

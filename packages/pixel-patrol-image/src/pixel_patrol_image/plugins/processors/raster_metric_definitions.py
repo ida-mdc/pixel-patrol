@@ -31,9 +31,6 @@ class MetricNames(StrEnum):
     MICHELSON_CONTRAST = "michelson_contrast"
     MSCN_VARIANCE = "mscn_variance"
     LOCAL_STD_RATIO = "local_std_ratio"
-    TENENGRAD = "tenengrad"
-    LAPLACIAN_VARIANCE = "laplacian_variance"
-    BRENNER = "brenner"
     HISTOGRAM_MIN = "histogram_min"
     HISTOGRAM_MAX = "histogram_max"
     HISTOGRAM_NAN_COUNT = "histogram_nan_count"
@@ -142,20 +139,6 @@ RASTER_METRIC_ENV_GROUPS: Tuple[RasterMetricEnvGroup, ...] = (
         ),
         default_enabled=True,
     ),
-    # Legacy gradient-based focus metrics (Tenengrad, Laplacian variance, Brenner).
-    # Useful for within-image sharpness comparisons but not comparable across images
-    # with different overall brightness — see docs/image_quality_metrics.md.
-    RasterMetricEnvGroup(
-        "PIXEL_PATROL_METRICS_GRADIENT_FOCUS",
-        frozenset(
-            {
-                MetricNames.TENENGRAD,
-                MetricNames.LAPLACIAN_VARIANCE,
-                MetricNames.BRENNER,
-            }
-        ),
-        default_enabled=False,
-    ),
     RasterMetricEnvGroup(
         "PIXEL_PATROL_METRICS_HISTOGRAM",
         frozenset(
@@ -217,24 +200,6 @@ RASTER_METRIC_REGISTRY: Tuple[RasterMetricSpec, ...] = (
     ),
     RasterMetricSpec(
         name=MetricNames.LOCAL_STD_RATIO,
-        data_type=np.float32,
-        is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
-    ),
-    RasterMetricSpec(
-        name=MetricNames.TENENGRAD,
-        data_type=np.float32,
-        is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
-    ),
-    RasterMetricSpec(
-        name=MetricNames.LAPLACIAN_VARIANCE,
-        data_type=np.float32,
-        is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
-    ),
-    RasterMetricSpec(
-        name=MetricNames.BRENNER,
         data_type=np.float32,
         is_spatial=True,
         aggregate_rows=_scalar_rows_agg(np.nanmean),

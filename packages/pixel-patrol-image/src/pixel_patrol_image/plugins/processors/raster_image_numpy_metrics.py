@@ -66,9 +66,6 @@ class NumpyRasterBackend:
             case MetricNames.MICHELSON_CONTRAST: return michelson_contrast_tile(arr, axes)
             case MetricNames.MSCN_VARIANCE: return mscn_variance_tile(arr, axes)
             case MetricNames.LOCAL_STD_RATIO: return local_std_ratio_tile(arr, axes)
-            case MetricNames.TENENGRAD: return tenengrad_tile(arr, axes) / _tile_std_sq(arr, axes)
-            case MetricNames.LAPLACIAN_VARIANCE: return laplacian_variance_tile(arr, axes) / _tile_std_sq(arr, axes)
-            case MetricNames.BRENNER: return brenner_tile(arr, axes) / _tile_std_sq(arr, axes)
             case MetricNames.HISTOGRAM_NAN_COUNT: return np.sum(np.isnan(arr) & mask, axis=axes)
             case MetricNames.HISTOGRAM_COUNTS: return histogram_counts(arr, mask, ctx_list)
             case MetricNames.BLOCKING_INDEX: return calc_blocking(arr, mask, None)
@@ -196,25 +193,6 @@ def histogram_counts(
             h[:, :, 0] = np.sum(valid_mask, axis=(-2, -1))
         all_h.append(h)
     return np.array(all_h)
-
-
-def _tile_std_sq(arr: np.ndarray, axes: Tuple[int, int]) -> np.ndarray:
-    """Per-tile intensity variance, used to normalize gradient-based focus metrics.
-
-    Gradient and Laplacian values scale with local intensity variation, so dividing
-    by the tile variance (std²) gives dimensionless scores that are comparable across
-    images regardless of exposure level or background offset.
-
-    Using std² rather than mean² is essential for background-subtracted images: after
-    subtraction the tile mean is near zero, so mean² collapses to near zero and produces
-    huge outliers.  std² is unaffected by the DC offset and always reflects the true
-    signal amplitude.
-
-    Returns NaN for flat tiles (std == 0) — no gradients exist there, so the metric
-    is undefined.  nanmean in aggregation ignores these tiles automatically.
-    """
-    std_sq = np.nanstd(arr, axis=axes) ** 2
-    return np.where(std_sq > 0, std_sq, np.nan)
 
 
 def calc_blocking(arr: np.ndarray, _mask=None, _ctx=None) -> np.ndarray:
@@ -366,41 +344,3 @@ def local_std_ratio_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> n
     with np.errstate(all="ignore"):
         tile_std = np.nanstd(arr, axis=axes)
     return np.where(tile_std > 0, mean_local_std / tile_std, np.nan)
-
-
-def tenengrad_tile(reshaped: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> np.ndarray:
-    """Mean squared Sobel gradient magnitude as a sharpness measure (higher = sharper edges).
-
-    Uses the standard 3×3 Sobel operator, which combines a 2-pixel centered difference
-    in the gradient direction with a [1, 2, 1] smoothing pass in the perpendicular direction.
-    The smoothing suppresses pixel noise before measuring edge strength.
-
-    Sobel X kernel (horizontal gradient):   Sobel Y kernel (vertical gradient):
-        -1  0  +1                               -1  -2  -1
-        -2  0  +2                                0   0   0
-        -1  0  +1                               +1  +2  +1
-    """
-    Gx = (reshaped[..., :-2, 2:] - reshaped[..., :-2, :-2] +
-          2 * reshaped[..., 1:-1, 2:] - 2 * reshaped[..., 1:-1, :-2] +
-          reshaped[..., 2:, 2:] - reshaped[..., 2:, :-2])
-    Gy = (reshaped[..., 2:, :-2] - reshaped[..., :-2, :-2] +
-          2 * reshaped[..., 2:, 1:-1] - 2 * reshaped[..., :-2, 1:-1] +
-          reshaped[..., 2:, 2:] - reshaped[..., :-2, 2:])
-    return np.nanmean(Gx**2 + Gy**2, axis=axes)
-
-
-def laplacian_variance_tile(reshaped: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> np.ndarray:
-    """Spread of a neighborhood contrast operator related to fine detail."""
-    lap = (4 * reshaped[..., 1:-1, 1:-1]
-           - reshaped[..., 1:-1, :-2] - reshaped[..., 1:-1, 2:]
-           - reshaped[..., :-2, 1:-1] - reshaped[..., 2:, 1:-1])
-    return np.nanvar(lap, axis=axes)
-
-
-def brenner_tile(reshaped: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> np.ndarray:
-    """Classic focus measure from squared brightness gaps two pixels apart in horizontal and vertical directions."""
-    dx = reshaped[..., :, 2:] - reshaped[..., :, :-2]
-    dy = reshaped[..., 2:, :] - reshaped[..., :-2, :]
-    mx = np.nanmean(dx * dx, axis=axes)
-    my = np.nanmean(dy * dy, axis=axes)
-    return mx + my
