@@ -34,6 +34,14 @@ EOF
 )
 echo "=== Releasing v$VERSION ==="
 
+# ── build viewer ──────────────────────────────────────────────────────────────
+echo ""
+echo "=== Building JS viewer ==="
+cd "$REPO_ROOT/viewer"
+npm install
+npm run build
+cd "$REPO_ROOT"
+
 # ── build ─────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Building packages ==="
