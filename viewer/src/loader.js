@@ -122,7 +122,9 @@ export async function finishLoad(conn, parquetPath = null) {
 
   const hasObsLevel = columns.some(c => c.name === 'obs_level');
   if (!hasObsLevel) {
-    throw new Error('Unsupported schema: obs_level column is required (long-format only).');
+    const err = new Error('This file was created with an older version of PixelPatrol and is no longer supported.');
+    err.isOldFormat = true;
+    throw err;
   }
 
   if (parquetPath) {
