@@ -174,7 +174,7 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
         _make_fake_load_and_process({"width": 5}),
     )
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(plugin_registry_module, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])

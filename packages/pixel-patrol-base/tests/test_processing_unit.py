@@ -212,3 +212,27 @@ def test_extract_record_properties_obs_level_scalar_processor_fallback():
     assert len(rows) == 1
     assert rows[0]["obs_level"] == 0
     assert rows[0]["extra"] == 42
+
+
+# ---------------------------------------------------------------------------
+# _merge_long_rows
+# ---------------------------------------------------------------------------
+
+def test_merge_long_rows_matching_coords_merges_fields():
+    existing = [{"obs_level": 0, "mean": 1.0}, {"obs_level": 1, "dim_t": 0, "mean": 2.0}]
+    incoming = [{"obs_level": 0, "std": 0.5}, {"obs_level": 1, "dim_t": 0, "std": 0.1}]
+    result = processing._merge_long_rows(existing, incoming)
+    assert len(result) == 2
+    g = next(r for r in result if r["obs_level"] == 0)
+    assert g["mean"] == 1.0 and g["std"] == 0.5
+    s = next(r for r in result if r["obs_level"] == 1)
+    assert s["mean"] == 2.0 and s["std"] == 0.1
+
+
+def test_merge_long_rows_unmatched_incoming_appended():
+    existing = [{"obs_level": 0, "mean": 1.0}]
+    incoming = [{"obs_level": 1, "dim_t": 0, "mean": 2.0}]
+    result = processing._merge_long_rows(existing, incoming)
+    assert len(result) == 2
+
+
