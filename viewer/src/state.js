@@ -14,6 +14,8 @@ export const state = {
   filter:           { col: '', op: '', val: '' },
   dimensions:       {},       // { dimLetter: idx }   e.g. { t: '0', c: '1' }
   showSignificance: false,
+  /** Long-format violin widgets: 'file' (aggregates) vs 'tile' (one row per spatial tile). */
+  violinGranularity: 'file',
   hiddenWidgets:    new Set(), // set of plugin IDs to hide
   /** Offline snapshot bundle: sidebar is read-only and URL sync is disabled */
   sidebarLocked:    false,
@@ -45,5 +47,6 @@ export function resetState(defaultGroupCol) {
   state.filter           = { col: '', op: '', val: '' };
   state.dimensions       = {};
   state.showSignificance = false;
+  state.violinGranularity = 'file';
   emit('query');
 }

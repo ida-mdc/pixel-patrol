@@ -30,12 +30,20 @@ export function buildFrozenSidebarPayload(state, schema, plugins) {
     }
   });
 
+  const dimCols = schema.dimCols ?? [];
+  const violinTilesApplicable = dimCols.includes('dim_x') && dimCols.includes('dim_y');
+  let violinLine = null;
+  if (violinTilesApplicable) {
+    violinLine = state.violinGranularity === 'tile' ? 'One point per spatial tile' : 'One point per file';
+  }
+
   return {
     palette:        state.palette,
     groupBy:        state.groupCol,
     dimensionsLine: dims || null,
     filterLine,
     significance:   !!state.showSignificance,
+    violinLine,
     widgetsLine:    visible.map(p => p.label).join(', ') || '(none)',
   };
 }
@@ -47,6 +55,7 @@ export function formatFrozenSidebarHtml(frozen) {
     ['Dimensions',  frozen.dimensionsLine ?? 'All'],
     ['Row filter',  frozen.filterLine ?? 'None'],
     ['Significance', frozen.significance ? 'On' : 'Off'],
+    ...(frozen.violinLine != null ? [['Violin plots', frozen.violinLine]] : []),
     ['Widgets',     frozen.widgetsLine],
   ];
   return rows.map(([k, v]) => `<div class="mb-1"><span class="text-muted">${k}:</span> ${escapeHtml(String(v))}</div>`).join('');

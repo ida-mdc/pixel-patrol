@@ -25,7 +25,7 @@
  *   ctx.queryRows(sql)       → plain JS objects (binary cols as Uint8Array)
  *   ctx.querySample(cols, n) → sampled scalar query shorthand
  *   ctx.schema               → { metricCols, groupCols, dimensionInfo, allCols, blobCols }
- *   ctx.state                → { palette, groupCol, filter, dimensions }
+ *   ctx.state                → { palette, groupCol, filter, dimensions, showSignificance, violinGranularity, … }
  *   ctx.colorMap             → { groupValue: hexColor }
  *   ctx.where                → SQL WHERE fragment (or '')
  *   ctx.groups               → distinct group values

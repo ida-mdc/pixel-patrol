@@ -105,6 +105,11 @@ async function renderColoc(container, ctx) {
   const pairs    = allPairs(maxNC);
   const chLabels = Array.from({ length: maxNC }, (_, i) => `C${i}`);
   const groups   = ctx.groups.filter(g => arrowRows.some(r => String(r.__group__) === g));
+  if (!groups.length) {
+    container.innerHTML =
+      '<div class="no-data">No group values overlap the loaded co-localisation rows.</div>';
+    return;
+  }
 
   // metricAcc[metric][group][pairIdx] = [per-file values]
   const metricAcc = Object.fromEntries(METRIC_KEYS.map(mk => [
@@ -215,6 +220,14 @@ function renderStrengthPlot(container, ctx, groups, acc, sortIdx, pairs, yTitle,
   const tickAngle = xLabels.length > 6 ? -45 : 0;
   const traces    = [];
 
+  if (!groups.length) {
+    const d = document.createElement('div');
+    d.className = 'small text-muted';
+    d.textContent = 'No groups to plot.';
+    container.appendChild(d);
+    return;
+  }
+
   for (const g of groups) {
     const color    = ctx.color.group(g);
     const fillRgba = hexToRgba(color, 0.15);
@@ -238,12 +251,24 @@ function renderStrengthPlot(container, ctx, groups, acc, sortIdx, pairs, yTitle,
     });
   }
 
+  const anyFiniteY = traces.some(
+    (t) => t.y && Array.isArray(t.y) && t.y.some((v) => Number.isFinite(v)),
+  );
+  if (!anyFiniteY) {
+    const d = document.createElement('div');
+    d.className = 'small text-muted';
+    d.textContent = 'No finite values to plot for this metric with the current filter.';
+    container.appendChild(d);
+    return;
+  }
+
   ctx.plot.append(container, traces, {
     yaxis: { title: yTitle, ...(yRange ? { range: yRange } : {}), zeroline, zerolinecolor: '#ccc' },
-    xaxis: { title: 'Channel pair', tickangle: tickAngle },
+    xaxis: { title: 'Channel pair', tickangle: tickAngle, type: 'category' },
     legend: { orientation: 'h', y: -0.25 },
     margin: { t: 20, b: tickAngle ? 100 : 60 },
-  }, 'margin-bottom:20px');
+    height: 320,
+  }, 'margin-bottom:20px;min-height:280px');
 }
 
 // ── Difference tables ─────────────────────────────────────────────────────────
@@ -463,9 +488,9 @@ const HEATMAP_PEARSON = {
     thickness: 12,
     len: 0.75,
     title: { text: 'r', side: 'right' },
-    tickmode: 'array',
-    tickvals: [-1, 0, 1],
-    ticktext: ['−1', '0', '+1'],
+    tickmode: 'linear',
+    tick0: -1,
+    dtick: 1,
   },
   hoverLabel: 'r',
 };
@@ -480,9 +505,9 @@ const HEATMAP_SSIM = {
     thickness: 12,
     len: 0.75,
     title: { text: 'SSIM', side: 'right' },
-    tickmode: 'array',
-    tickvals: [0, 1],
-    ticktext: ['0', '1'],
+    tickmode: 'linear',
+    tick0: 0,
+    dtick: 0.25,
   },
   hoverLabel: 'SSIM',
 };
@@ -498,6 +523,10 @@ function buildHeatmapZ(pairs, maxNC, pairMeans) {
   return { z, text };
 }
 
+function heatmapMeansHaveFinite(means) {
+  return means.some((m) => m != null && Number.isFinite(m));
+}
+
 function heatmapTrace(pairs, maxNC, chLabels, means, opts) {
   const { z, text } = buildHeatmapZ(pairs, maxNC, means);
   return {
@@ -511,11 +540,14 @@ function heatmapTrace(pairs, maxNC, chLabels, means, opts) {
 }
 
 function heatmapLayout(title) {
+  // Avoid yaxis.scaleanchor on heatmaps: Plotly can throw "ax.dtick error: Infinity"
+  // when matching aspect to an x-axis with unresolved size (e.g. flex layout).
   return {
     title: { text: title, font: { size: 13 } },
     margin: { t: 36, l: 44, r: 60, b: 44 },
-    xaxis: { constrain: 'domain', side: 'bottom' },
-    yaxis: { constrain: 'domain', scaleanchor: 'x', autorange: 'reversed' },
+    height: 400,
+    xaxis: { constrain: 'domain', side: 'bottom', type: 'category' },
+    yaxis: { constrain: 'domain', autorange: 'reversed', type: 'category' },
   };
 }
 
@@ -548,16 +580,31 @@ function renderHeatmapSection(container, ctx, groups, pairs, chLabels, maxNC, ac
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px';
         matDiv.appendChild(wrap);
-        for (const g of groups)
-          ctx.plot.append(wrap, [heatmapTrace(pairs, maxNC, chLabels, meansFor(g), opts)],
+        for (const g of groups) {
+          const m = meansFor(g);
+          if (!heatmapMeansHaveFinite(m)) {
+            const d = document.createElement('div');
+            d.className = 'small text-muted';
+            d.style.cssText = 'padding:12px;flex:1 1 200px';
+            d.textContent = `No finite values for group ${String(g)}.`;
+            wrap.appendChild(d);
+            continue;
+          }
+          ctx.plot.append(wrap, [heatmapTrace(pairs, maxNC, chLabels, m, opts)],
             heatmapLayout(String(g)),
-            `flex:0 0 ${pct}%;min-width:200px;box-sizing:border-box;margin-bottom:20px`);
+            `flex:0 0 ${pct}%;min-width:260px;min-height:420px;box-sizing:border-box;margin-bottom:20px`);
+        }
       } else {
         const g     = sel.value === '__all__' ? null : sel.value;
         const means = g ? meansFor(g) : gMeans;
+        if (!heatmapMeansHaveFinite(means)) {
+          matDiv.innerHTML =
+            '<div class="small text-muted" style="padding:12px">No finite values for this heatmap with the current filter.</div>';
+          return;
+        }
         ctx.plot.append(matDiv, [heatmapTrace(pairs, maxNC, chLabels, means, opts)],
           heatmapLayout(g ? String(g) : 'All groups (mean)'),
-          'max-width:440px;margin-bottom:20px');
+          'max-width:440px;min-width:280px;min-height:420px;margin-bottom:20px');
       }
     };
     sel.addEventListener('change', refresh);
@@ -565,11 +612,19 @@ function renderHeatmapSection(container, ctx, groups, pairs, chLabels, maxNC, ac
     refresh();
   } else {
     const means  = groups.length === 1 ? meansFor(groups[0]) : gMeans;
+    if (!heatmapMeansHaveFinite(means)) {
+      const d = document.createElement('div');
+      d.className = 'small text-muted';
+      d.style.cssText = 'padding:12px';
+      d.textContent = 'No finite values for this heatmap with the current filter.';
+      container.appendChild(d);
+      return;
+    }
     const title  = groups.length === 1 ? String(groups[0]) : 'All';
     const matDiv = document.createElement('div');
     container.appendChild(matDiv);
     ctx.plot.append(matDiv, [heatmapTrace(pairs, maxNC, chLabels, means, opts)],
-      heatmapLayout(title), 'max-width:440px;margin-bottom:20px');
+      heatmapLayout(title), 'max-width:440px;min-width:280px;min-height:420px;margin-bottom:20px');
   }
 }
 

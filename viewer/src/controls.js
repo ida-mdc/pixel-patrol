@@ -51,6 +51,21 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
   const sigCb = el('show-significance-cb');
   if (sigCb) sigCb.checked = state.showSignificance;
 
+  const violinWrap = el('violin-granularity-wrap');
+  const violinSel = el('violin-granularity-select');
+  const dimCols = schema.dimCols ?? [];
+  const violinTilesApplicable = dimCols.includes('dim_x') && dimCols.includes('dim_y');
+  if (violinWrap && violinSel) {
+    violinWrap.classList.toggle('d-none', !violinTilesApplicable);
+    if (violinTilesApplicable) {
+      violinSel.value = state.violinGranularity === 'tile' ? 'tile' : 'file';
+      violinSel.onchange = () => {
+        state.violinGranularity = violinSel.value === 'tile' ? 'tile' : 'file';
+        emit('render');
+      };
+    }
+  }
+
   // ── Widget toggles ────────────────────────────────────────────────────
   buildWidgetToggles(plugins, schema);
 
@@ -78,6 +93,8 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     // Sync DOM after reset
     groupEl.value      = state.groupCol ?? '';
     paletteEl.value    = state.palette;
+    const violinSelReset = el('violin-granularity-select');
+    if (violinSelReset) violinSelReset.value = 'file';
     buildWidgetToggles(plugins, schema);
   };
 
@@ -107,6 +124,8 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('filter-op').disabled     = true;
     el('filter-value').disabled  = true;
     if (sigCb) sigCb.disabled = true;
+    const violinLocked = el('violin-granularity-select');
+    if (violinLocked) violinLocked.disabled = true;
 
     el('dimension-controls')?.querySelectorAll('select').forEach(sel => { sel.disabled = true; });
 

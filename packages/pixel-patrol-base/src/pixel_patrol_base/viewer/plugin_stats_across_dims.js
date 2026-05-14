@@ -16,7 +16,9 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Shows how **image quality metrics** change across (e.g. T, C, Z, S) slices.',
-  '', 'Use this view to detect:',
+  'Each point is the mean metric value for that slice (shaded band: ±1 std across files in the group).',
+  '',
+  'Use this view to detect:',
   '- drift in focus or noise over time (T)',
   '- channel-specific artifacts (C)',
   '- depth-dependent quality changes (Z)',

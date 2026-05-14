@@ -10,6 +10,7 @@ import { DEFAULT_PALETTE } from './constants.js';
  *   fc/fo/fv  — filter column / operator / value
  *   dims      — active dimensions, e.g. "c0.t1"  (dot-separated, no encoding needed)
  *   sig       — "1" when significance brackets enabled
+ *   vgran     — violin granularity: "tile" (omit when "file", the default)
  *   hidden    — dot-separated hidden widget IDs  (dot-separated, no encoding needed)
  *   extension — URL of a JSON extension manifest (repeatable); manifest format:
  *               { "plugins": ["./a.js", "./b.js"] }  (relative URLs resolved from manifest)
@@ -31,6 +32,7 @@ export function writeUrlParams(state) {
   const dimStr = Object.entries(state.dimensions ?? {}).map(([l, i]) => `${l}${i}`).join('.');
   setOrDelete(params, 'dims',   dimStr || null);
   setOrDelete(params, 'sig',    state.showSignificance ? '1' : null);
+  setOrDelete(params, 'vgran',  state.violinGranularity === 'tile' ? 'tile' : null);
   setOrDelete(params, 'hidden', state.hiddenWidgets?.size > 0
     ? [...state.hiddenWidgets].sort().join('.') : null);
 
@@ -58,6 +60,8 @@ export function readUrlParams() {
   }
 
   if (params.has('sig'))    out.showSignificance = params.get('sig') === '1';
+  const vgran = params.get('vgran');
+  if (vgran === 'tile' || vgran === 'file') out.violinGranularity = vgran;
   if (params.has('hidden')) out.hiddenWidgets = new Set(params.get('hidden').split('.').filter(Boolean));
 
   return out;

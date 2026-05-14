@@ -243,6 +243,9 @@ function applySnapshotBundle(bundle) {
   state.filter           = { col: '', op: '', val: '' };
   state.dimensions       = {};
   state.showSignificance = !!rs.showSignificance;
+  if (rs.violinGranularity === 'tile' || rs.violinGranularity === 'file') {
+    state.violinGranularity = rs.violinGranularity;
+  }
   state.hiddenWidgets    = new Set(Array.isArray(rs.hiddenWidgets) ? rs.hiddenWidgets : []);
   state.sidebarLocked    = true;
 }
@@ -256,6 +259,7 @@ function afterLoad(options = {}) {
   state.hiddenWidgets   = new Set();
   state.sidebarLocked   = false;
   state.filter          = { col: '', op: '', val: '' };
+  state.violinGranularity = 'file';
 
   if (snapshotBundle) {
     applySnapshotBundle(snapshotBundle);
@@ -273,6 +277,7 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
+  if (urlParams.violinGranularity) state.violinGranularity = urlParams.violinGranularity;
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).

@@ -14,7 +14,7 @@ def main():
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
 
     # Load data using the 'bioio' loader plugin
-    loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
+    loader = 'tifffile'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
 
     # --- Step 2: create a project ---
     project = api.create_project("Quickstart Simple", base_dir=base_path, loader=loader, output_path=output_path)

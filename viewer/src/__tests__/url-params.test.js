@@ -66,6 +66,21 @@ describe('readUrlParams', () => {
     expect(hiddenWidgets.has('widget-a')).toBe(true);
     expect(hiddenWidgets.has('widget-b')).toBe(true);
   });
+
+  it('reads vgran=tile', () => {
+    history.pushState({}, '', '?vgran=tile');
+    expect(readUrlParams().violinGranularity).toBe('tile');
+  });
+
+  it('reads vgran=file', () => {
+    history.pushState({}, '', '?vgran=file');
+    expect(readUrlParams().violinGranularity).toBe('file');
+  });
+
+  it('ignores invalid vgran', () => {
+    history.pushState({}, '', '?vgran=nope');
+    expect(readUrlParams().violinGranularity).toBeUndefined();
+  });
 });
 
 describe('writeUrlParams', () => {
@@ -126,6 +141,19 @@ describe('writeUrlParams', () => {
     expect(window.location.search).not.toContain('hidden');
   });
 
+  it('writes vgran=tile when violinGranularity is tile', () => {
+    writeUrlParams({
+      palette: 'tab10',
+      groupCol: null,
+      filter: { col: '', op: '', val: '' },
+      dimensions: {},
+      showSignificance: false,
+      hiddenWidgets: new Set(),
+      violinGranularity: 'tile',
+    });
+    expect(window.location.search).toContain('vgran=tile');
+  });
+
   it('round-trips through writeUrlParams → readUrlParams', () => {
     const state = {
       palette: 'plasma',
@@ -133,6 +161,7 @@ describe('writeUrlParams', () => {
       filter: { col: 'size', op: 'gt', val: '100' },
       dimensions: { c: '0', t: '1' },
       showSignificance: true,
+      violinGranularity: 'tile',
       hiddenWidgets: new Set(['w1', 'w2']),
     };
     writeUrlParams(state);
@@ -143,6 +172,7 @@ describe('writeUrlParams', () => {
     expect(read.filter).toEqual({ col: 'size', op: 'gt', val: '100' });
     expect(read.dimensions).toEqual({ c: '0', t: '1' });
     expect(read.showSignificance).toBe(true);
+    expect(read.violinGranularity).toBe('tile');
     expect(read.hiddenWidgets).toEqual(new Set(['w1', 'w2']));
   });
 });
