@@ -13,7 +13,8 @@ def main():
     project = api.create_project("plankton", base_path, loader="bioio", output_path=output_path)
     api.add_paths(project, paths)
 
-    api.process_files(project, processing_max_workers=20, description="Authors: pixel-patrol-team")
+    api.process_files(project, processing_max_workers=5, description=(f"Original dataset: https://hdl.handle.net/1912/7350 - WHOI-Plankton\n"
+                                                                        f"Manipulation by: pixel-patrol-team"))
 
     api.view(project)
 
