@@ -12,9 +12,6 @@ from pixel_patrol_image.plugins.processors.quality_metrics_processor import (
     _check_blocking_records_2d,
     _check_ringing_records_2d,
 )
-from pixel_patrol_base.core.feature_schema import validate_processor_output
-
-
 def _row(rows, **dims):
     obs = len(dims)
     for r in rows:

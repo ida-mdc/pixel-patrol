@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import logging
-from typing import TYPE_CHECKING, Type, Union, List
+from typing import TYPE_CHECKING, List, Type, Union
 
 from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
 from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
@@ -11,11 +11,9 @@ from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailPr
 
 if TYPE_CHECKING:
     from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
+    PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
 
 def discover_loader(loader_id: str) -> PixelPatrolLoader:
     plugins = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
