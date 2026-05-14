@@ -8,7 +8,6 @@ import numpy as np
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_np_array_stats
-from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
 

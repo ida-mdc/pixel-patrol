@@ -5,9 +5,7 @@ import numpy as np
 
 from pixel_patrol_base.config import SPRITE_SIZE
 from pixel_patrol_base.core.record import Record
-from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.specs import RecordSpec
-from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
 
