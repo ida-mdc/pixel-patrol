@@ -452,6 +452,7 @@ def _extract_record_properties(
     as scalar metadata.
     """
     scalar: Dict = dict(rcd.meta)
+    scalar.setdefault("obs_level", 0)
     long_rows: Optional[List[Dict]] = None
 
     processor_iter: Iterable[PixelPatrolProcessor]
