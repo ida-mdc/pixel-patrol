@@ -240,14 +240,16 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         try:
             params = urllib.parse.parse_qs(query_string)
-            where = params.get("where", [""])[0]
+            where  = params.get("where", [""])[0]
+            scope  = params.get("scope", ["summary"])[0]
+            table  = "pp_all" if scope == "full" else "pp_data"
 
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
                 tmp_path = f.name
 
             sql = (
                 f"COPY ("
-                f"  SELECT * EXCLUDE (file_row_number) FROM pp_data {where}"
+                f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
                 f") TO '{tmp_path}' "
                 f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
             )
@@ -260,7 +262,12 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             Path(tmp_path).unlink(missing_ok=True)
 
             stem = self.parquet_path.stem
-            filename = f"{stem}_filtered.parquet" if where else f"{stem}.parquet"
+            if scope == "full":
+                filename = f"{stem}_full.parquet"
+            elif where:
+                filename = f"{stem}_filtered.parquet"
+            else:
+                filename = f"{stem}.parquet"
 
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")

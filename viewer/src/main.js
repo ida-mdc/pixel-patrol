@@ -5,7 +5,8 @@ import { initControls } from './controls.js';
 import { renderAll } from './renderer.js';
 import { registry } from './plugin-registry.js';
 import { state, on } from './state.js';
-import { buildWhere } from './sql.js';
+import { buildWhere, andWhere } from './sql.js';
+import { buildScopedWhere } from './cohort-sql.js';
 import { getPaletteNames } from './colors.js';
 import { readUrlParams, writeUrlParams } from './url-params.js';
 import { exportBakedHtml } from './export-snapshot.js';
@@ -101,7 +102,7 @@ async function boot() {
       hideLoading();
       afterLoad();
     } catch (err) {
-      showFatalError('Failed to connect to local server', err);
+      showFatalError('Failed to load report', err, loadErrorHint(err));
     }
     return;
   }
@@ -221,6 +222,9 @@ async function openFiles(files) {
  * incompatibility (old report generated with an earlier Pixel Patrol version).
  */
 function loadErrorHint(err) {
+  if (err?.isOldFormat) {
+    return 'Please re-run <code>pixel-patrol process</code> to regenerate the report with the current format.';
+  }
   const msg = String(err?.message ?? err).toLowerCase();
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
@@ -272,8 +276,8 @@ function afterLoad(options = {}) {
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
-  initControls(schema, totalRows, registry.plugins, handleExportCsv,
-    SERVER_MODE ? handleExportParquet : null, {
+  initControls(schema, totalRows, registry.plugins, handleExport,
+    SERVER_MODE, {
     sidebarLocked: state.sidebarLocked,
     frozenSidebar: snapshotBundle?.frozenSidebar,
     onExportBakedHtml: state.sidebarLocked ? undefined : handleExportBakedHtml,
@@ -331,34 +335,56 @@ async function handleExportBakedHtml() {
   }
 }
 
-async function handleExportCsv() {
-  try {
-    // COPY … TO is not available in WASM; use JSON serialisation instead.
-    const rows  = await conn.query(`SELECT * FROM pp_data ${buildWhere(state.filter)} LIMIT 100000`);
-    const json  = rows.toArray().map(r => r.toJSON());
-    const cols  = Object.keys(json[0] ?? {});
-    const lines = [
-      cols.join(','),
-      ...json.map(r => cols.map(c => csvCell(r[c])).join(',')),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    triggerDownload(blob, 'pixel_patrol_export.csv');
-  } catch (err) {
-    console.error('[viewer] CSV export error:', err);
+async function handleExport(format, scope) {
+  const table = scope === 'full' ? 'pp_all' : 'pp_data';
+  // Summary queries go against pp_data → use cohort-aware scoped WHERE.
+  // Full queries go against pp_all → apply dim_* = N OR IS NULL directly.
+  const where = scope === 'full'
+    ? andWhere(buildWhere(state.filter), buildFullDimFilter(state.dimensions))
+    : buildScopedWhere(schema, state);
+
+  if (format === 'csv') {
+    try {
+      // COPY … TO is not available in WASM; use JSON serialisation instead.
+      const rows = await conn.query(`SELECT * FROM ${table} ${where} LIMIT 100000`);
+      const json = rows.toArray().map(r => r.toJSON());
+      const cols = Object.keys(json[0] ?? {});
+      // Encode line-by-line to avoid building one giant string (RangeError risk).
+      const enc = new TextEncoder();
+      const chunks = [enc.encode(cols.join(',') + '\n')];
+      for (const r of json) chunks.push(enc.encode(cols.map(c => csvCell(r[c])).join(',') + '\n'));
+      const blob = new Blob(chunks, { type: 'text/csv' });
+      triggerDownload(blob, 'pixel_patrol_export.csv');
+    } catch (err) {
+      console.error('[viewer] CSV export error:', err);
+    }
+  } else {
+    try {
+      const params = new URLSearchParams();
+      if (where) params.set('where', where);
+      if (scope === 'full') params.set('scope', 'full');
+      const qs   = params.size ? `?${params}` : '';
+      const resp = await fetch(`/api/export-parquet${qs}`);
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const base = document.getElementById('current-filename').textContent.replace('.parquet', '');
+      const suffix = scope === 'full' ? '_full' : where ? '_filtered' : '';
+      triggerDownload(blob, `${base}${suffix}.parquet`);
+    } catch (err) {
+      console.error('[viewer] Parquet export error:', err);
+    }
   }
 }
 
-async function handleExportParquet() {
-  try {
-    const where = buildWhere(state.filter);
-    const qs    = where ? `?where=${encodeURIComponent(where)}` : '';
-    const resp  = await fetch(`/api/export-parquet${qs}`);
-    if (!resp.ok) throw new Error(await resp.text());
-    const blob  = await resp.blob();
-    triggerDownload(blob, document.getElementById('current-filename').textContent.replace('.parquet', '_filtered.parquet'));
-  } catch (err) {
-    console.error('[viewer] Parquet export error:', err);
-  }
+function buildFullDimFilter(dimensions) {
+  const parts = Object.entries(dimensions ?? {})
+    .map(([letter, idxRaw]) => {
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx)) return null;
+      return `("dim_${letter}" = ${idx} OR "dim_${letter}" IS NULL)`;
+    })
+    .filter(Boolean);
+  return parts.length ? parts.join(' AND ') : '';
 }
 
 function csvCell(v) {
