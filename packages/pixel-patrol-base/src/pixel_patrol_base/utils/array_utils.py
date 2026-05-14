@@ -44,7 +44,7 @@ def calculate_sliced_stats(
 
     xy_axes = tuple(dim_order.index(d) for d in NO_SLICE_AXES if d in dim_order)
     if len(xy_axes) != 2:
-        print("Warning: Array does not have both X and Y dimensions. Skipping.")
+        logger.warning("Array does not have both X and Y dimensions. Skipping.")
         return []
 
     loop_specs = [

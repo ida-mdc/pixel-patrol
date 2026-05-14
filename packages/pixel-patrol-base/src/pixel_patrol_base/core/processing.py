@@ -790,6 +790,35 @@ def _estimate_available_memory_bytes() -> Optional[int]:
         return None
 
 
+def _reorder_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Splice dim_* columns immediately after obs_level; move binary/list columns last.
+
+    Everything else stays in its natural insertion order, so loader and processor
+    columns appear where they already land without any hardcoded name lists.
+    """
+    blob_cols = [
+        c for c in df.columns
+        if df[c].dtype == pl.Binary or isinstance(df[c].dtype, (pl.List, pl.Array, pl.Struct))
+    ]
+    blob_set = set(blob_cols)
+    dim_cols = sorted(c for c in df.columns if c.startswith("dim_") and c not in blob_set)
+    dim_set = set(dim_cols)
+
+    ordered: list[str] = []
+    for c in df.columns:
+        if c in dim_set or c in blob_set:
+            continue
+        ordered.append(c)
+        if c == "obs_level":
+            ordered.extend(dim_cols)
+
+    if dim_set and "obs_level" not in df.columns:
+        ordered = dim_cols + ordered
+
+    ordered.extend(blob_cols)
+    return df.select(ordered)
+
+
 class _RecordsAccumulator:
     """Collect rows, batch-convert to Polars, and optionally flush to disk."""
 
@@ -914,6 +943,7 @@ class _RecordsAccumulator:
             final_df = optimize_dtypes(final_df)
         except Exception as exc:
             logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
+        final_df = _reorder_columns(final_df)
         return final_df
 
     def _flush_active_to_disk(self, force: bool) -> None:
