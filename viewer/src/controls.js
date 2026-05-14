@@ -12,13 +12,13 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
  * @param {object}   schema
  * @param {number}   totalRows
  * @param {object[]} plugins  — all registered plugins (for widget toggles)
- * @param {Function} onExportCsv
+ * @param {Function} onExport  — called with (format, scope) where format ∈ {'csv','parquet'} and scope ∈ {'summary','full'}
  * @param {object}   [opts]
  * @param {boolean}  [opts.sidebarLocked]
  * @param {object}   [opts.frozenSidebar]  — payload from buildFrozenSidebarPayload
  * @param {Function} [opts.onExportBakedHtml] — baked static HTML snapshot
  */
-export function initControls(schema, totalRows, plugins, onExportCsv, onExportParquet, opts = {}) {
+export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -81,15 +81,8 @@ export function initControls(schema, totalRows, plugins, onExportCsv, onExportPa
     buildWidgetToggles(plugins, schema);
   };
 
-  // ── Export CSV ────────────────────────────────────────────────────────
-  el('export-csv-btn').onclick = onExportCsv;
-
-  // ── Export Parquet (server mode only) ────────────────────────────────
-  const parquetBtn = el('export-parquet-btn');
-  if (parquetBtn) {
-    parquetBtn.style.display = onExportParquet ? '' : 'none';
-    parquetBtn.onclick = onExportParquet ?? (() => {});
-  }
+  // ── Export dropdown ───────────────────────────────────────────────────
+  buildExportControls(schema, onExport, !!canParquet);
 
   const bakedBtn = el('export-baked-btn');
   if (bakedBtn) {
@@ -229,4 +222,48 @@ function resetDimensions(dimensionInfo) {
     const selEl = document.getElementById(`dim-sel-${dim}`);
     if (selEl) selEl.value = '';
   }
+}
+
+const EXPORT_HINTS = {
+  'csv:summary':     'Only stats for full image - One row per image. Excludes thumbnail column.',
+  'csv:full':        'Full table - including rows of dim slice stats. Excludes thumbnail column.',
+  'parquet:summary': 'Only stats for full image - One row per image.',
+  'parquet:full':    'Full table - including rows of dim slice stats.',
+};
+
+function buildExportControls(schema, onExport, canParquet) {
+  const selectEl = el('export-select');
+  const hintEl   = el('export-hint');
+  const btnEl    = el('export-btn');
+  if (!selectEl || !btnEl) return;
+
+  const hasSlicing = (schema.dimCols ?? []).length > 0;
+
+  const options = [];
+  if (hasSlicing) {
+    options.push({ value: 'csv:summary',     label: 'CSV – summary' });
+    options.push({ value: 'csv:full',        label: 'CSV – full' });
+    if (canParquet) {
+      options.push({ value: 'parquet:summary', label: 'Parquet – summary' });
+      options.push({ value: 'parquet:full',    label: 'Parquet – full' });
+    }
+  } else {
+    options.push({ value: 'csv:summary',     label: 'CSV' });
+    if (canParquet) {
+      options.push({ value: 'parquet:summary', label: 'Parquet' });
+    }
+  }
+
+  selectEl.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+
+  function updateHint() {
+    hintEl.textContent = EXPORT_HINTS[selectEl.value] ?? '';
+  }
+  selectEl.onchange = updateHint;
+  updateHint();
+
+  btnEl.onclick = () => {
+    const [format, scope] = selectEl.value.split(':');
+    onExport(format, scope);
+  };
 }

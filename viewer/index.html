@@ -114,12 +114,14 @@
           </div>
 
           <hr class="my-2"/>
-          <button id="export-csv-btn" class="btn btn-outline-secondary btn-sm w-100">
-            <i class="bi bi-download me-1"></i>Export CSV
-          </button>
-          <button id="export-parquet-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" style="display:none">
-            <i class="bi bi-download me-1"></i>Export Parquet
-          </button>
+          <div class="d-flex gap-1">
+            <select id="export-select" class="form-select form-select-sm flex-grow-1"></select>
+            <button id="export-btn" type="button" class="btn btn-outline-secondary btn-sm px-2" title="Export">
+              <i class="bi bi-download"></i>
+            </button>
+          </div>
+          <div id="export-hint" class="text-muted mt-1" style="font-size:0.72rem;line-height:1.3"></div>
+          <div id="export-error" class="text-danger mt-1" style="font-size:0.72rem;line-height:1.3;display:none"></div>
           <button id="export-baked-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2">
             <i class="bi bi-file-earmark-code me-1"></i>Export static HTML snapshot…
           </button>
