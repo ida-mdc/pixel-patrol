@@ -31,6 +31,7 @@
  *   ctx.groups               → distinct group values
  *   ctx.filteredCount        → rows matching current filter
  *   ctx.totalRows            → total rows in file
+ *   ctx.data.extractBinary   → decode Arrow binary/list column to JS numeric array
  */
 
 // Built-in plugins are now loaded at runtime from installed Python packages

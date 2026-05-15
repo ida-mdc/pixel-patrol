@@ -344,49 +344,48 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
         processing_config=ProcessingConfig(selected_file_extensions={"tif"}),
     )
 
-    expected_cols = {
-        f"mean_intensity_t{t}_c{c}_z{z}"
-        for t in range(t_size) for z in range(z_size) for c in range(c_size)
-    }
-    assert expected_cols.issubset(set(df.columns))
+    # In long format, per-slice data is in separate rows with dim_* coordinates.
+    assert {"dim_t", "dim_c", "dim_z", "mean_intensity"}.issubset(set(df.columns))
 
-    actual = {col: df[col][0] for col in expected_cols}
+    def mean_at(t, c, z):
+        row = df.filter(
+            (pl.col("obs_level") == 3) &
+            (pl.col("dim_t") == t) &
+            (pl.col("dim_c") == c) &
+            (pl.col("dim_z") == z)
+        )
+        assert len(row) == 1, f"Expected 1 row for t={t} c={c} z={z}, got {len(row)}"
+        return row["mean_intensity"][0]
+
     for t in range(t_size):
         for z in range(z_size):
             for c in range(c_size):
-                key = f"mean_intensity_t{t}_c{c}_z{z}"
-                expected = (t*z_size + z)*10 + c*5
-                assert actual[key] == expected, f"{key} was {actual[key]}, expected {expected}"
+                expected = (t * z_size + z) * 10 + c * 5
+                assert mean_at(t, c, z) == expected, f"t={t} c={c} z={z}: expected {expected}"
+
+    def mean_single(obs, **dims):
+        mask = pl.col("obs_level") == obs
+        for k, v in dims.items():
+            mask = mask & (pl.col(f"dim_{k}") == v)
+        row = df.filter(mask)
+        assert len(row) == 1, f"Expected 1 row for obs={obs} dims={dims}"
+        return row["mean_intensity"][0]
 
     for t in range(t_size):
-        col = f"mean_intensity_t{t}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for c in range(c_size) for z in range(z_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
+        block_vals = [(t * z_size + z) * 10 + c * 5 for c in range(c_size) for z in range(z_size)]
+        assert mean_single(1, t=t) == pytest.approx(sum(block_vals) / len(block_vals))
 
     for c in range(c_size):
-        col = f"mean_intensity_c{c}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for t in range(t_size) for z in range(z_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
+        block_vals = [(t * z_size + z) * 10 + c * 5 for t in range(t_size) for z in range(z_size)]
+        assert mean_single(1, c=c) == pytest.approx(sum(block_vals) / len(block_vals))
 
     for z in range(z_size):
-        col = f"mean_intensity_z{z}"
-        assert col in df.columns
-        block_vals = [(t * z_size + z) * 10 + c * 5
-                      for t in range(t_size) for c in range(c_size)]
-        expected = sum(block_vals) / len(block_vals)
-        assert df[0, col] == expected
+        block_vals = [(t * z_size + z) * 10 + c * 5 for t in range(t_size) for c in range(c_size)]
+        assert mean_single(1, z=z) == pytest.approx(sum(block_vals) / len(block_vals))
 
-    assert "mean_intensity" in df.columns
     all_vals = [(t * z_size + z) * 10 + c * 5
                 for t in range(t_size) for c in range(c_size) for z in range(z_size)]
-    overall_expected = sum(all_vals) / len(all_vals)
-    assert df[0,"mean_intensity"] == overall_expected
+    assert mean_single(0) == pytest.approx(sum(all_vals) / len(all_vals))
 
 
 def test_full_records_df_handles_png_gray(tmp_path, loader):
@@ -407,4 +406,5 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
     assert "mean_intensity" in df.columns
     raw_gray = np.mean(arr)
     expected_gray = np.uint8(raw_gray)
-    assert df["mean_intensity"][0] == expected_gray
+    global_row = df.filter(pl.col("obs_level") == 0)["mean_intensity"][0]
+    assert global_row == expected_gray

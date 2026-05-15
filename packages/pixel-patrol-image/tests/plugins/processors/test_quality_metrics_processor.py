@@ -12,7 +12,12 @@ from pixel_patrol_image.plugins.processors.quality_metrics_processor import (
     _check_blocking_records_2d,
     _check_ringing_records_2d,
 )
-from pixel_patrol_base.core.feature_schema import validate_processor_output
+def _row(rows, **dims):
+    obs = len(dims)
+    for r in rows:
+        if r["obs_level"] == obs and all(r.get(f"dim_{k}") == v for k, v in dims.items()):
+            return r
+    raise KeyError(f"No row with obs_level={obs} dims={dims}")
 
 
 class TestQualityMetricsProcessor:
@@ -29,8 +34,8 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
-        
+        result = _row(processor.run(record))
+
         # Verify all expected keys are present
         assert "laplacian_variance" in result
         assert "tenengrad" in result
@@ -38,9 +43,10 @@ class TestQualityMetricsProcessor:
         assert "noise_std" in result
         assert "blocking_records" in result
         assert "ringing_records" in result
-        
+
         # Verify all values are floats
         for key, value in result.items():
+            if key in ("obs_level",): continue
             assert isinstance(value, (float, np.floating)) or np.isnan(value)
 
         assert result["laplacian_variance"] == pytest.approx(26.66666, rel=1e-5)
@@ -58,8 +64,8 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
-        
+        result = _row(processor.run(record))
+
         assert result["laplacian_variance"] == pytest.approx(0.0, abs=1e-5)
         assert np.isnan(result["tenengrad"])
         assert result["brenner"] == pytest.approx(0.0, abs=1e-5)
@@ -77,7 +83,7 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
+        result = _row(processor.run(record))
 
         assert result["laplacian_variance"] == 6502.5
         assert result["tenengrad"] == 102.0
@@ -94,11 +100,9 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
-        
-        # Should handle empty arrays gracefully
-        # All metrics should be NaN for empty images
-        for key in ["laplacian_variance", "tenengrad", "brenner", "noise_std", 
+        result = _row(processor.run(record))
+
+        for key in ["laplacian_variance", "tenengrad", "brenner", "noise_std",
                     "blocking_records", "ringing_records"]:
             if key in result:
                 assert np.isnan(result[key])
@@ -173,10 +177,8 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "YX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
-        
-        # Should handle boolean images (they get converted in the function)
-        # All metrics should be present, though some may be NaN
+        result = _row(processor.run(record))
+
         assert "laplacian_variance" in result
         assert "tenengrad" in result
         assert "brenner" in result
@@ -190,32 +192,10 @@ class TestQualityMetricsProcessor:
         record = record_from(dask_data, {"dim_order": "TCZYX"})
         processor = QualityMetricsProcessor()
         
-        result = processor.run(record)
-        
-        # Should have aggregated metrics
-        assert "laplacian_variance" in result
-        
-        # Should have metrics for various dimension combinations
-        assert any("laplacian_variance_t" in key for key in result.keys())
-        assert any("laplacian_variance_c" in key for key in result.keys())
-        assert any("laplacian_variance_z" in key for key in result.keys())
+        rows = processor.run(record)
 
-def test_schema_validation_and_casting():
-    """validate_processor_output should cast types and pass-through unknown keys."""
-    processor = QualityMetricsProcessor()
+        assert "laplacian_variance" in _row(rows)
+        assert any(r.get("dim_t") is not None for r in rows)
+        assert any(r.get("dim_c") is not None for r in rows)
+        assert any(r.get("dim_z") is not None for r in rows)
 
-    raw = {
-        "laplacian_variance": "3.14",   # string that should be cast to float
-        "some_unexpected_key": "abc",   # key not in schema should be passed through
-    }
-
-    validated = validate_processor_output(
-        raw,
-        processor.OUTPUT_SCHEMA,
-        processor.OUTPUT_SCHEMA_PATTERNS,
-        processor_name=processor.NAME
-    )
-
-    assert isinstance(validated["laplacian_variance"], (float, np.floating))
-    assert validated["laplacian_variance"] == pytest.approx(3.14)
-    assert validated["some_unexpected_key"] == "abc"

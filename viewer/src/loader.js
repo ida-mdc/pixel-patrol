@@ -111,25 +111,58 @@ export async function loadFromFile(db, conn, file) {
 }
 
 export async function finishLoad(conn, parquetPath = null) {
-  const [schemaResult, countResult] = await Promise.all([
-    conn.query(`SELECT * FROM pp_data LIMIT 0`),
-    conn.query(`SELECT COUNT(*) AS n FROM pp_data`),
-  ]);
+  // Step 1: get schema (before any view manipulation)
+  const schemaResult = await conn.query(
+    `SELECT column_name AS name, data_type AS type
+     FROM information_schema.columns
+     WHERE table_name = 'pp_data'
+     ORDER BY ordinal_position`,
+  );
+  const columns = schemaResult.toArray().map(r => ({ name: String(r.name), type: String(r.type) }));
 
-  const columns = schemaResult.schema.fields.map(f => ({
-    name: f.name,
-    type: f.type.toString(),
-  }));
+  const hasObsLevel = columns.some(c => c.name === 'obs_level');
+  if (!hasObsLevel) {
+    const err = new Error('This file was created with an older version of PixelPatrol and is no longer supported.');
+    err.isOldFormat = true;
+    throw err;
+  }
 
-  const totalRows = Number(countResult.toArray()[0].n);
-  const schema    = detectSchema(columns);
+  if (parquetPath) {
+    // Browser WASM: create pp_all (all rows) and pp_data (image rows)
+    const p = parquetPath.replace(/'/g, "''");
+    await conn.query(`CREATE OR REPLACE VIEW pp_all AS SELECT * FROM read_parquet('${p}', file_row_number = true)`);
+    // Materialize obs_level=0 rows as a TABLE so plugin queries hit an in-memory
+    // table rather than re-scanning the full parquet on every render.
+    await conn.query(`DROP VIEW IF EXISTS pp_data`);
+    await conn.query(`CREATE OR REPLACE TABLE pp_data AS SELECT * FROM pp_all WHERE obs_level = 0`);
+  }
+  // Server mode (parquetPath=null): pp_all and pp_data are already set up by the Python server.
+
+  const totalRows = Number((await conn.query(`SELECT COUNT(*) AS n FROM pp_data`)).toArray()[0].n);
+
+  const schema = detectSchema(columns);
   schema.rowIdColumn = pickRowIdColumnFromSchema(schema.allCols);
 
-  // Match Dash rules: any non-blob column with 2 ≤ n_unique ≤ 12 is a group option.
-  // Run cardinality on all non-blob columns — same approach as Dash's _find_candidate_columns.
-  const candidateCols = schema.allCols.filter(c => !schema.blobCols.includes(c));
+  // Populate dimensionInfo by querying distinct values from pp_all.
+  if (schema.dimCols.length > 0) {
+    for (const dimCol of schema.dimCols) {
+      try {
+        const res = await conn.query(
+          `SELECT DISTINCT ${q(dimCol)} AS v FROM pp_all WHERE ${q(dimCol)} IS NOT NULL ORDER BY v`,
+        );
+        const vals = res.toArray().map(r => Number(r.v));
+        if (vals.length > 0) {
+          const letter = dimCol.replace('dim_', '');
+          schema.dimensionInfo[letter] = vals;
+        }
+      } catch (e) {
+        console.warn(`[viewer] could not query distinct values for ${dimCol}:`, e);
+      }
+    }
+  }
 
-  schema.groupCols = await filterGroupColsByCardinality(conn, candidateCols);
+  // Cardinality-filter the schema-heuristic group candidates.
+  schema.groupCols = await filterGroupColsByCardinality(conn, schema.groupCols);
 
   // Always include any URL-param group col if it exists in the parquet.
   const urlGroup = new URLSearchParams(window.location.search).get('group');

@@ -5,11 +5,9 @@ import numpy as np
 import dask.array as da
 import threading
 
-from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.utils.array_utils import calculate_sliced_stats
-from pixel_patrol_base.core.feature_schema import validate_processor_output
 from pixel_patrol_base.config import HISTOGRAM_BINS
 
 logger = logging.getLogger(__name__)
@@ -106,14 +104,7 @@ class HistogramProcessor:
         "histogram_max": np.float32,
         "histogram_nan_count": np.uint32,
     }
-    OUTPUT_SCHEMA_PATTERNS = [
-        (r"^histogram_counts_.*$", (np.int32, HISTOGRAM_BINS)),
-        (r"^histogram_min_.*$", np.float32),
-        (r"^histogram_max_.*$", np.float32),
-        (r"^histogram_nan_count_.*$", np.uint32),
-    ]
-
-    def run(self, art: Record) -> ProcessResult:
+    def run(self, art: Record):
         """
         Calculates histograms for all levels of the dimensional hierarchy by using
         calculate_sliced_stats to vectorize per-slice computations instead of manual loops.
@@ -123,12 +114,11 @@ class HistogramProcessor:
 
         # For empty arrays, return zeroed counts and default 0..255 range so the image is visible in comparisons
         if getattr(data, "size", 0) == 0:
-            return {
-                "histogram_counts":    np.zeros(HISTOGRAM_BINS, dtype=np.int32),
-                "histogram_min":       0.0,
-                "histogram_max":       0.0,
-                "histogram_nan_count": np.uint32(0),
-            }
+            return [{"obs_level": 0,
+                     "histogram_counts":    np.zeros(HISTOGRAM_BINS, dtype=np.int32),
+                     "histogram_min":       0.0,
+                     "histogram_max":       0.0,
+                     "histogram_nan_count": np.uint32(0)}]
 
         # Metric functions operate on 2D numpy planes provided by apply_gufunc.
         # To avoid calling _hist_func three times per plane, compute once and reuse
@@ -169,10 +159,4 @@ class HistogramProcessor:
             "histogram_nan_count": np.sum,
         }
 
-        result = calculate_sliced_stats(data, dim_order, metrics, aggregators)
-        return validate_processor_output(
-            result,
-            self.OUTPUT_SCHEMA,
-            self.OUTPUT_SCHEMA_PATTERNS,
-            processor_name=self.NAME
-        )
+        return calculate_sliced_stats(data, dim_order, metrics, aggregators)

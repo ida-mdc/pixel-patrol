@@ -101,7 +101,7 @@ async function boot() {
       hideLoading();
       afterLoad();
     } catch (err) {
-      showFatalError('Failed to connect to local server', err);
+      showFatalError('Failed to load report', err, loadErrorHint(err));
     }
     return;
   }
@@ -221,6 +221,9 @@ async function openFiles(files) {
  * incompatibility (old report generated with an earlier Pixel Patrol version).
  */
 function loadErrorHint(err) {
+  if (err?.isOldFormat) {
+    return 'Please re-run <code>pixel-patrol process</code> to regenerate the report with the current format.';
+  }
   const msg = String(err?.message ?? err).toLowerCase();
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
@@ -272,8 +275,8 @@ function afterLoad(options = {}) {
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
 
   // 3. Init controls (syncs DOM from state).
-  initControls(schema, totalRows, registry.plugins, handleExportCsv,
-    SERVER_MODE ? handleExportParquet : null, {
+  initControls(schema, totalRows, registry.plugins, handleExport,
+    SERVER_MODE, {
     sidebarLocked: state.sidebarLocked,
     frozenSidebar: snapshotBundle?.frozenSidebar,
     onExportBakedHtml: state.sidebarLocked ? undefined : handleExportBakedHtml,
@@ -331,34 +334,110 @@ async function handleExportBakedHtml() {
   }
 }
 
-async function handleExportCsv() {
-  try {
-    // COPY … TO is not available in WASM; use JSON serialisation instead.
-    const rows  = await conn.query(`SELECT * FROM pp_data ${buildWhere(state.filter)} LIMIT 100000`);
-    const json  = rows.toArray().map(r => r.toJSON());
-    const cols  = Object.keys(json[0] ?? {});
-    const lines = [
-      cols.join(','),
-      ...json.map(r => cols.map(c => csvCell(r[c])).join(',')),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    triggerDownload(blob, 'pixel_patrol_export.csv');
-  } catch (err) {
-    console.error('[viewer] CSV export error:', err);
+function exportBaseName() {
+  const safe = projectName ? projectName.replace(/\s+/g, '_') : null;
+  return safe || document.getElementById('current-filename').textContent.replace('.parquet', '');
+}
+
+async function handleExport(format, scope) {
+  clearExportError();
+  const table      = scope === 'full' ? 'pp_all' : 'pp_data';
+  const where      = buildWhere(state.filter);
+  const isFiltered = !!where;
+
+  if (format === 'csv') {
+    await handleCsvExport(table, scope, where, isFiltered);
+  } else {
+    await handleParquetExport(scope, where, isFiltered);
   }
 }
 
-async function handleExportParquet() {
+// Yields Arrow RecordBatches one at a time.
+// Uses conn.send() (WASM) when available for true streaming; falls back to conn.query().
+async function* streamBatches(sql) {
+  if (typeof conn.send === 'function') {
+    const stream = await conn.send(sql);
+    for await (const batch of stream) yield batch;
+  } else {
+    const result = await conn.query(sql);
+    for (const batch of result.batches) yield batch;
+  }
+}
+
+async function handleCsvExport(table, scope, where, isFiltered) {
+  const thumbCols    = schema.allCols.filter(c => c.includes('thumbnail'));
+  const excludeSQL   = thumbCols.length ? `EXCLUDE (${thumbCols.map(c => `"${c}"`).join(', ')})` : '';
+  const filteredPart = isFiltered ? '_filtered' : '';
+  const filename     = `${exportBaseName()}_${scope}${filteredPart}.csv`;
+  const enc          = new TextEncoder();
+  const canFilePicker = typeof window.showSaveFilePicker === 'function';
+
+  let writable = null;
+  let chunks   = null;
+
   try {
-    const where = buildWhere(state.filter);
-    const qs    = where ? `?where=${encodeURIComponent(where)}` : '';
-    const resp  = await fetch(`/api/export-parquet${qs}`);
+    if (canFilePicker) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+      });
+      writable = await handle.createWritable();
+    } else {
+      chunks = [];
+    }
+
+    let cols = null;
+    for await (const batch of streamBatches(`SELECT * ${excludeSQL} FROM ${table} ${where}`)) {
+      if (cols === null) {
+        cols = batch.schema.fields.map(f => f.name);
+        const header = enc.encode(cols.join(',') + '\n');
+        writable ? await writable.write(header) : chunks.push(header);
+      }
+      for (const row of batch) {
+        const obj  = row.toJSON();
+        const line = enc.encode(cols.map(c => csvCell(obj[c])).join(',') + '\n');
+        writable ? await writable.write(line) : chunks.push(line);
+      }
+    }
+
+    if (writable) {
+      await writable.close();
+    } else {
+      triggerDownload(new Blob(chunks, { type: 'text/csv' }), filename);
+    }
+  } catch (err) {
+    if (writable) await writable.abort().catch(() => {});
+    if (err.name === 'AbortError') return; // user cancelled save dialog
+    console.error('[viewer] CSV export error:', err);
+    showExportError(`Export failed: ${err.message}`);
+  }
+}
+
+async function handleParquetExport(scope, where, isFiltered) {
+  try {
+    const params = new URLSearchParams();
+    if (scope === 'full') params.set('scope', 'full');
+    if (where)           params.set('where', where);
+    const qs   = params.size ? `?${params}` : '';
+    const resp = await fetch(`/api/export-parquet${qs}`);
     if (!resp.ok) throw new Error(await resp.text());
-    const blob  = await resp.blob();
-    triggerDownload(blob, document.getElementById('current-filename').textContent.replace('.parquet', '_filtered.parquet'));
+    const blob         = await resp.blob();
+    const filteredPart = isFiltered ? '_filtered' : '';
+    triggerDownload(blob, `${exportBaseName()}_${scope}${filteredPart}.parquet`);
   } catch (err) {
     console.error('[viewer] Parquet export error:', err);
+    showExportError(`Export failed: ${err.message}`);
   }
+}
+
+function showExportError(msg) {
+  const errEl = document.getElementById('export-error');
+  if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+}
+
+function clearExportError() {
+  const errEl = document.getElementById('export-error');
+  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
 }
 
 function csvCell(v) {

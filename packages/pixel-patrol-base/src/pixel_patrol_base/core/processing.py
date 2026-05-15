@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import shutil
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
 from pathlib import Path
@@ -14,10 +15,7 @@ import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import walk_filesystem
-from pixel_patrol_base.plugin_registry import (
-    discover_processor_plugins,
-    discover_loader,
-)
+from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import (
     normalize_file_extension,
     postprocess_basic_file_metadata_df,
@@ -416,13 +414,46 @@ def _build_deep_record_df(
         return accumulator.finalize()
 
 
+def _row_coord_key(row: Dict) -> tuple:
+    """Canonical coordinate tuple used to match rows from different processors."""
+    dim_items = tuple(sorted((k, row.get(k)) for k in row if k.startswith("dim_")))
+    return (row.get("obs_level"),) + dim_items
+
+
+def _merge_long_rows(existing: List[Dict], incoming: List[Dict]) -> List[Dict]:
+    """Merge two lists of row dicts by coordinate key (obs_level + dim_* fields).
+
+    Rows with matching coordinates are merged in place (incoming fields added to the
+    existing row).  Unmatched incoming rows are appended.  This allows two processors
+    that both return a long-format list — e.g. raster-image and channel-colocalization —
+    to share the same rollup tree without one overwriting the other.
+    """
+    by_key: Dict[tuple, Dict] = {_row_coord_key(r): r for r in existing}
+    result = list(existing)
+    for r in incoming:
+        key = _row_coord_key(r)
+        if key in by_key:
+            by_key[key].update(r)
+        else:
+            result.append(r)
+    return result
+
+
 def _extract_record_properties(
     rcd,
     processors: List[PixelPatrolProcessor],
     show_progress: bool,
-) -> Dict:
-    """Run all matching processors on a single Record and return merged properties."""
-    extracted: Dict = dict(rcd.meta)
+    file_path: Optional[Path] = None,
+) -> List[Dict]:
+    """Run all matching processors on a single Record.
+
+    Returns a list of long-format row dicts.  A processor returning a list
+    provides the long-format rows; any other return is merged into every row
+    as scalar metadata.
+    """
+    scalar: Dict = dict(rcd.meta)
+    scalar.setdefault("obs_level", 0)
+    long_rows: Optional[List[Dict]] = None
 
     processor_iter: Iterable[PixelPatrolProcessor]
     if show_progress:
@@ -437,20 +468,45 @@ def _extract_record_properties(
     else:
         processor_iter = processors
 
+    record_path = str(file_path) if file_path else "unknown"
+
     for P in processor_iter:
         if not is_record_matching_processor(rcd, P.INPUT):
             continue
+        proc_name = P.NAME
+        t0 = time.perf_counter()
         try:
+            logger.debug("Processing Core: start processor=%s record=%s", proc_name, record_path)
             out = P.run(rcd)
-            extracted.update(out)
-        except (RuntimeError, ValueError, TypeError):
+            dt = time.perf_counter() - t0
+            logger.debug(
+                "Processing Core: done processor=%s record=%s (%.2fs)",
+                proc_name,
+                record_path,
+                dt,
+            )
+            if isinstance(out, list):
+                if out:  # empty list means "nothing to add" — don't discard prior rows
+                    long_rows = _merge_long_rows(long_rows, out) if long_rows is not None else out
+            else:
+                scalar.update(out)
+        except RuntimeError as err:
+            logger.warning(
+                "Processor %s skipped for record %s: %s",
+                P.NAME,
+                record_path,
+                err,
+            )
+        except (ValueError, TypeError):
             logger.exception(
                 "Processor %s failed for record %s",
-                getattr(P, "NAME", P.__class__.__name__),
-                getattr(rcd, "source_path", "unknown"),
+                P.NAME,
+                record_path,
             )
 
-    return extracted
+    if long_rows is not None:
+        return [{**scalar, **row} for row in long_rows]
+    return [dict(scalar)]
 
 
 def load_and_process_records_from_file(
@@ -492,9 +548,8 @@ def load_and_process_records_from_file(
 
     if isinstance(result, dict):
         # Multi-image file: show progress over sub-images
-        items = result.items()
         items = tqdm(
-            items,
+            result.items(),
             desc="  Processing sub-images",
             unit="img",
             leave=False,
@@ -510,13 +565,12 @@ def load_and_process_records_from_file(
                     loader.NAME, child_id, file_path,
                 )
                 continue
-            props = _extract_record_properties(rcd, processors, False)
-            props["child_id"] = child_id
-            result_list.append(props)
+            rows = _extract_record_properties(rcd, processors, False, file_path)
+            for row in rows:
+                row["child_id"] = child_id
+            result_list.extend(rows)
     else:
-        result_list.append(
-            _extract_record_properties(result, processors, show_processor_progress)
-        )
+        result_list.extend(_extract_record_properties(result, processors, show_processor_progress, file_path))
 
     return result_list
 
@@ -736,6 +790,35 @@ def _estimate_available_memory_bytes() -> Optional[int]:
         return None
 
 
+def _reorder_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Splice dim_* columns immediately after obs_level; move binary/list columns last.
+
+    Everything else stays in its natural insertion order, so loader and processor
+    columns appear where they already land without any hardcoded name lists.
+    """
+    blob_cols = [
+        c for c in df.columns
+        if df[c].dtype == pl.Binary or isinstance(df[c].dtype, (pl.List, pl.Array, pl.Struct))
+    ]
+    blob_set = set(blob_cols)
+    dim_cols = sorted(c for c in df.columns if c.startswith("dim_") and c not in blob_set)
+    dim_set = set(dim_cols)
+
+    ordered: list[str] = []
+    for c in df.columns:
+        if c in dim_set or c in blob_set:
+            continue
+        ordered.append(c)
+        if c == "obs_level":
+            ordered.extend(dim_cols)
+
+    if dim_set and "obs_level" not in df.columns:
+        ordered = dim_cols + ordered
+
+    ordered.extend(blob_cols)
+    return df.select(ordered)
+
+
 class _RecordsAccumulator:
     """Collect rows, batch-convert to Polars, and optionally flush to disk."""
 
@@ -860,6 +943,7 @@ class _RecordsAccumulator:
             final_df = optimize_dtypes(final_df)
         except Exception as exc:
             logger.exception("Processing Core: dtype shrinking failed; continuing without dtype shrink: %s", exc)
+        final_df = _reorder_columns(final_df)
         return final_df
 
     def _flush_active_to_disk(self, force: bool) -> None:

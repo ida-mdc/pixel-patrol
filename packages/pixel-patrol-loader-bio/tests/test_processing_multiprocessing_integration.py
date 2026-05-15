@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, List
 import shutil
 
+import polars as pl
 import pytest
 
 from pixel_patrol_base.core.processing import build_records_df
@@ -70,7 +71,7 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
     )
 
     assert df is not None
-    assert df.height == len(copied)
+    assert df.filter(pl.col("obs_level") == 0).height == len(copied)
     assert "path" in df.columns
 
 
@@ -108,7 +109,7 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
     )
 
     assert df is not None
-    assert df.height == len(copied)
+    assert df.filter(pl.col("obs_level") == 0).height == len(copied)
     assert progress_calls, "progress_callback was not called"
     assert progress_calls[-1][0] == len(copied)
 
@@ -141,6 +142,6 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
     )
 
     assert df is not None
-    assert df.height == len(copied)
+    assert df.filter(pl.col("obs_level") == 0).height == len(copied)
     assert "mean_intensity" in df.columns
     assert any(val is not None for val in df["mean_intensity"].to_list())

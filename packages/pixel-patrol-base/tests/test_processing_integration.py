@@ -7,9 +7,11 @@ from typing import List, Optional
 import polars as pl
 
 from pixel_patrol_base.core import processing
+from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
 import pixel_patrol_base.core.project as project_module
+import pixel_patrol_base.plugin_registry as plugin_registry_module
 
 
 class DummyLoader:
@@ -149,7 +151,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 1}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
     df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
@@ -171,7 +173,7 @@ def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monke
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 5}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
 
@@ -201,7 +203,7 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 7}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FailingProcessPoolExecutor)
     monkeypatch.setattr(processing, "ThreadPoolExecutor", FakeThreadPoolExecutor)
 
@@ -237,8 +239,8 @@ def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process({"width": 33}),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutorWithFailure)
 
     basic_df = _basic_df_for_paths([p1, p2])
@@ -269,7 +271,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
         processing, "load_and_process_records_from_file",
         _make_fake_load_and_process(per_file_props),
     )
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
     df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
@@ -389,7 +391,7 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
         ]
 
     monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_multi)
-    monkeypatch.setattr(processing, "discover_processor_plugins", lambda: [])
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1])
     df = processing._build_deep_record_df(basic_df, DummyLoader())
@@ -400,6 +402,42 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
     assert set(df["width"].to_list()) == {10, 20}
     assert df["path"].to_list() == [str(p1), str(p1)]
 
+
+
+def test_extract_record_properties_skips_runtime_error_processor():
+    class RecordStub:
+        def __init__(self):
+            self.meta = {"a": 1}
+            self.source_path = "dummy"
+            self.dim_order = "YX"
+            self.kind = "intensity"
+            self.capabilities = {"spatial-2d"}
+
+    class RuntimeSkipProcessor:
+        NAME = "runtime-skip"
+        INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+
+        @staticmethod
+        def run(_):
+            raise RuntimeError("skip in never-materialize mode")
+
+    class GoodProcessor:
+        NAME = "good"
+        INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
+
+        @staticmethod
+        def run(_):
+            return {"ok": 1}
+
+    r = RecordStub()
+    rows = processing._extract_record_properties(
+        r,
+        [RuntimeSkipProcessor(), GoodProcessor()],
+        show_progress=False,
+    )
+    assert isinstance(rows, list) and len(rows) == 1
+    assert rows[0]["a"] == 1
+    assert rows[0]["ok"] == 1
 
 
 def test_cleanup_partial_batches_dir(tmp_path):
