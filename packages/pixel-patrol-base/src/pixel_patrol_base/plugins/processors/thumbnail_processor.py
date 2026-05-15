@@ -5,9 +5,7 @@ import numpy as np
 
 from pixel_patrol_base.config import SPRITE_SIZE
 from pixel_patrol_base.core.record import Record
-from pixel_patrol_base.core.contracts import ProcessResult
 from pixel_patrol_base.core.specs import RecordSpec
-from pixel_patrol_base.core.feature_schema import validate_processor_output
 
 logger = logging.getLogger(__name__)
 
@@ -170,15 +168,9 @@ class ThumbnailProcessor:
         "thumbnail_norm_max": float,
         "thumbnail_dtype":    str,
     }
-    OUTPUT_SCHEMA_PATTERNS = []
-
-    def run(self, art: Record) -> ProcessResult:
+    def run(self, art: Record):
         color_dim = _get_color_dim(art.capabilities)
         result_data = _generate_thumbnail(art.data, art.dim_order, color_dim)
         if result_data is None:
-            return {x:None for x in self.OUTPUT_SCHEMA}
-        return validate_processor_output(
-            {x:result_data[i] for i, x in enumerate(self.OUTPUT_SCHEMA)},
-            self.OUTPUT_SCHEMA,
-            processor_name=self.NAME,
-        )
+            return [{"obs_level": 0, **{x: None for x in self.OUTPUT_SCHEMA}}]
+        return [{"obs_level": 0, **{x: result_data[i] for i, x in enumerate(self.OUTPUT_SCHEMA)}}]

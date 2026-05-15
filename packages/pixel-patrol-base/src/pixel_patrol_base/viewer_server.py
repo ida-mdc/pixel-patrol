@@ -102,7 +102,7 @@ def find_viewer_dist() -> Path:
 
 def _setup_duckdb(parquet_path: Path):
     """
-    Open a native DuckDB connection with pp_data pre-registered as a view.
+    Open a native DuckDB connection with pp_all and pp_data pre-registered as views.
     Returns (conn, project_name | None, description | None).
     """
     import duckdb
@@ -110,10 +110,18 @@ def _setup_duckdb(parquet_path: Path):
     conn = duckdb.connect()
     escaped = str(parquet_path).replace("'", "''")
     conn.execute(
-        f"CREATE VIEW pp_data AS "
+        f"CREATE VIEW pp_all AS "
         f"SELECT *, row_number() OVER () - 1 AS file_row_number "
         f"FROM read_parquet('{escaped}')"
     )
+    has_obs_level = conn.execute(
+        "SELECT COUNT(*) > 0 FROM information_schema.columns "
+        "WHERE table_name = 'pp_all' AND column_name = 'obs_level'"
+    ).fetchone()[0]
+    if has_obs_level:
+        conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all WHERE obs_level = 0")
+    else:
+        conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all")
 
     project_name, description = _read_parquet_meta(conn, escaped)
     return conn, project_name, description
@@ -232,14 +240,16 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         try:
             params = urllib.parse.parse_qs(query_string)
-            where = params.get("where", [""])[0]
+            scope  = params.get("scope", ["summary"])[0]
+            where  = params.get("where", [""])[0]
+            table  = "pp_all" if scope == "full" else "pp_data"
 
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
                 tmp_path = f.name
 
             sql = (
                 f"COPY ("
-                f"  SELECT * EXCLUDE (file_row_number) FROM pp_data {where}"
+                f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
                 f") TO '{tmp_path}' "
                 f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
             )
@@ -252,7 +262,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             Path(tmp_path).unlink(missing_ok=True)
 
             stem = self.parquet_path.stem
-            filename = f"{stem}_filtered.parquet" if where else f"{stem}.parquet"
+            suffix = "_full" if scope == "full" else "_summary"
+            filename = f"{stem}{suffix}.parquet"
 
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")

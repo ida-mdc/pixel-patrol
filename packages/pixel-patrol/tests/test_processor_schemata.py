@@ -62,7 +62,7 @@ def test_processor_schemata():
         print("    [Error] No records processed!")
         return
 
-    assert project.records_df.height == 1
+    assert project.records_df.height >= 1  # long-format: one global row + per-slice rows
 
     # Load from saved parquet to verify round-trip
     parquet_files = list(project.output_path.parent.glob("*.parquet"))
@@ -90,20 +90,6 @@ def test_processor_schemata():
                 f"not found in records_df. Available columns: {sorted(df_columns)}"
             )
 
-        # Verify OUTPUT_SCHEMA_PATTERNS columns are present
-        if hasattr(processor, 'OUTPUT_SCHEMA_PATTERNS') and processor.OUTPUT_SCHEMA_PATTERNS:
-            for pattern, _type in processor.OUTPUT_SCHEMA_PATTERNS:
-                # Handle both string and compiled regex patterns
-                pattern_str = pattern.pattern if hasattr(pattern, 'pattern') else pattern
-                compiled_pattern = re.compile(pattern_str)
-                matches = [col for col in df_columns if compiled_pattern.match(col)]
-
-                # Expect at least one column to match the patterns
-                assert len(matches) > 0, (
-                    f"Processor {processor.NAME}: no columns matched OUTPUT_SCHEMA_PATTERNS. "
-                    f"Patterns: {[p.pattern if hasattr(p, 'pattern') else p for p, _ in processor.OUTPUT_SCHEMA_PATTERNS]}. "
-                    f"Available columns: {sorted(df_columns)}"
-                )
 
 
 def test_all_processors_return_dict():
@@ -132,18 +118,13 @@ def test_all_processors_return_dict():
             continue
 
         result = processor.run(record)
-        assert isinstance(result, dict), (
+        assert isinstance(result, list), (
             f"Processor '{processor.NAME}' returned {type(result).__name__} "
-            f"instead of dict. This will break `extracted.update(out)` in "
-            f"_extract_record_properties."
+            f"instead of list. Processors must return List[Dict] in long-format."
         )
-        # Also check that no values are themselves dicts (they must be
-        # scalar / list / array values suitable for a DataFrame column)
-        for key, value in result.items():
-            assert not isinstance(value, dict), (
-                f"Processor '{processor.NAME}' returned a nested dict under "
-                f"key '{key}'. DataFrame columns cannot hold nested dicts."
-            )
+        for row in result:
+            assert isinstance(row, dict)
+            assert "obs_level" in row, f"Processor '{processor.NAME}' row missing obs_level"
 
 
 

@@ -4,6 +4,8 @@ import polars as pl
 
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.record import Record
+from pixel_patrol_base.core.specs import RecordSpec
 
 
 def test_iter_indexed_batches_respects_batch_size():
@@ -148,3 +150,89 @@ def test_resolve_worker_count_respects_settings_and_total(monkeypatch):
     assert processing._resolve_worker_count(config, total_rows=6) == 6
     config2 = ProcessingConfig(processing_max_workers=4)
     assert processing._resolve_worker_count(config2, total_rows=6) == 4
+
+
+# ---------------------------------------------------------------------------
+# _extract_record_properties — obs_level guarantee
+# ---------------------------------------------------------------------------
+
+def _make_record(meta=None):
+    return Record(
+        data=None,
+        dim_order="YX",
+        dim_names=["Y", "X"],
+        kind="image/intensity",
+        meta=meta or {"path": "a.png"},
+        capabilities=set(),
+    )
+
+
+def test_extract_record_properties_obs_level_present_no_processors():
+    """obs_level=0 is injected even when no processor runs."""
+    rows = processing._extract_record_properties(_make_record(), [], show_progress=False)
+    assert len(rows) == 1
+    assert rows[0]["obs_level"] == 0
+
+
+def test_extract_record_properties_obs_level_present_when_processor_omits_it():
+    """obs_level defaults to 0 when a processor returns rows without obs_level."""
+    class _NoObsProc:
+        NAME = "no_obs"
+        INPUT = RecordSpec()
+        def run(self, rcd):
+            return [{"mean": 1.0}]
+
+    rows = processing._extract_record_properties(_make_record(), [_NoObsProc()], show_progress=False)
+    assert all("obs_level" in r for r in rows)
+    assert all(r["obs_level"] == 0 for r in rows)
+
+
+def test_extract_record_properties_obs_level_from_processor_wins():
+    """obs_level emitted by a processor overrides the default 0."""
+    class _SlicedProc:
+        NAME = "sliced"
+        INPUT = RecordSpec()
+        def run(self, rcd):
+            return [{"obs_level": 1, "mean": 0.5}, {"obs_level": 0, "mean": 1.0}]
+
+    rows = processing._extract_record_properties(_make_record(), [_SlicedProc()], show_progress=False)
+    levels = {r["obs_level"] for r in rows}
+    assert levels == {0, 1}
+
+
+def test_extract_record_properties_obs_level_scalar_processor_fallback():
+    """obs_level=0 is present when a scalar-return (legacy) processor doesn't set it."""
+    class _ScalarProc:
+        NAME = "scalar"
+        INPUT = RecordSpec()
+        def run(self, rcd):
+            return {"extra": 42}
+
+    rows = processing._extract_record_properties(_make_record(), [_ScalarProc()], show_progress=False)
+    assert len(rows) == 1
+    assert rows[0]["obs_level"] == 0
+    assert rows[0]["extra"] == 42
+
+
+# ---------------------------------------------------------------------------
+# _merge_long_rows
+# ---------------------------------------------------------------------------
+
+def test_merge_long_rows_matching_coords_merges_fields():
+    existing = [{"obs_level": 0, "mean": 1.0}, {"obs_level": 1, "dim_t": 0, "mean": 2.0}]
+    incoming = [{"obs_level": 0, "std": 0.5}, {"obs_level": 1, "dim_t": 0, "std": 0.1}]
+    result = processing._merge_long_rows(existing, incoming)
+    assert len(result) == 2
+    g = next(r for r in result if r["obs_level"] == 0)
+    assert g["mean"] == 1.0 and g["std"] == 0.5
+    s = next(r for r in result if r["obs_level"] == 1)
+    assert s["mean"] == 2.0 and s["std"] == 0.1
+
+
+def test_merge_long_rows_unmatched_incoming_appended():
+    existing = [{"obs_level": 0, "mean": 1.0}]
+    incoming = [{"obs_level": 1, "dim_t": 0, "mean": 2.0}]
+    result = processing._merge_long_rows(existing, incoming)
+    assert len(result) == 2
+
+
