@@ -76,8 +76,12 @@ export function detectSchema(columns) {
     // Skip long-format infrastructure columns from metric/group/allCols
     if (LONG_FORMAT_COLS.has(name)) continue;
 
-    const isNumeric = /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
-    const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
+    // Array/list columns (e.g. "BIGINT[]", "VARCHAR[]") must be excluded — DuckDB
+    // reports them with a type string that starts with the element type, causing them
+    // to be misclassified as numeric/string, which breaks aggregation queries.
+    const isArray   = /\[\]$/.test(type) || /^(array|list|struct|map)/i.test(type) || type.startsWith('"');
+    const isNumeric = !isArray && /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
+    const isString  = !isArray && /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
     const isDimCol  = DIM_COL_RE.test(name); // long format: dim_t, dim_c, …
 
     // dim_* columns in long format: track but don't add to allCols/metricCols
