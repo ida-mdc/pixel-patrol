@@ -2,9 +2,20 @@
 NumPy backend for raster tiles: XY fold layout + per-metric tile kernels.
 """
 
+import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+
+# NaN is used as a sentinel for padding pixels and uncomputable metrics.
+# Filling NaN into integer metric arrays is intentional — downstream code uses
+# nanmin/nanmax/nanmean and the mask to ignore these values.
+warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in cast",
+    category=RuntimeWarning,
+    module="numpy",
+)
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_image.plugins.processors.raster_metric_definitions import enabled_ctx_tile_fields, MetricNames
