@@ -298,6 +298,15 @@ def _build_deep_record_df(
     logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
                  total, len(batches), worker_count)
 
+    _tile_px = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
+    _chunk_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+    print(
+        f"  plan:   {total} file{'s' if total != 1 else ''}"
+        f"  ·  {len(batches)} task{'s' if len(batches) != 1 else ''}"
+        f"  ·  {batch_size} file{'s' if batch_size != 1 else ''}/task"
+        f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles"
+    )
+
     worker_fn = _BatchWorker(loader_name, processor_classes)
 
     def _force_exit(sig, frame):
