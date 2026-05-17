@@ -253,6 +253,167 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
             pass
 
 
+def _hpc_open_array_info(path: str, loader_name: str) -> Optional[tuple]:
+    """Open a file lazily (header only) and return (shape, dtype, dim_order_out), or None on failure."""
+    try:
+        loader = discover_loader(loader_name)
+        result = loader.load(path)
+        if result is None:
+            return None
+        record = result if not isinstance(result, dict) else next(iter(result.values()), None)
+        if record is None:
+            return None
+        import dask.array as _da
+        arr = _da.asarray(record.data)
+        dim_order = [d.upper() for d in record.dim_order]
+        y_ax, x_ax = dim_order.index('Y'), dim_order.index('X')
+        arr = _da.moveaxis(arr, [y_ax, x_ax], [-2, -1])
+        ns_dims = [d for d in dim_order if d not in ('Y', 'X')]
+        return arr.shape, arr.dtype, ns_dims + ['Y', 'X']
+    except Exception as exc:
+        logger.debug('hpc_open_array_info: %s — %s', path, exc)
+        return None
+
+
+def _hpc_build_tasks(
+    basic: pl.DataFrame,
+    loader_name: str,
+    target_mb: float,
+    slice_safe_classes: List[type],
+    non_slice_safe_classes: List[type],
+    max_files_per_batch: int = 50,
+) -> tuple:
+    """Route files into mixed task list. Small files batch; large files get a full-file task
+    (non-slice-safe processors) plus per-slice tasks (slice-safe processors).
+
+    Uses disk size as a cheap pre-filter; opens lazily only files that could be large.
+    Size threshold: half of target_mb on disk (conservative for compressed formats).
+    Returns (tasks, large_file_meta) where large_file_meta maps row_index to
+    (full_shape, dim_order_out) needed for post-gather accumulation.
+    """
+    from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
+
+    disk_threshold_bytes = target_mb * 1024 ** 2 * 0.5
+    tasks: List[Dict] = []
+    large_file_meta: Dict[int, tuple] = {}   # row_index → (full_shape, dim_order_out)
+    batch: List[_IndexedPath] = []
+    batch_size_mb = 0.0
+
+    def _flush():
+        if batch:
+            tasks.append({'type': 'batch', 'batch': batch[:]})
+
+    for row in basic.iter_rows(named=True):
+        path, row_index = row['path'], int(row['row_index'])
+        size_bytes = row.get('size_bytes') or 0
+
+        if size_bytes >= disk_threshold_bytes:
+            info = _hpc_open_array_info(path, loader_name)
+            if info is not None:
+                shape, dtype, dim_order_out = info
+                arr_mb = np.prod(shape) * dtype.itemsize / (1024 ** 2)
+                if arr_mb > target_mb:
+                    _flush(); batch.clear(); batch_size_mb = 0.0
+                    slices = _sp(shape, ''.join(dim_order_out), dtype, target_mb)
+                    large_file_meta[row_index] = (shape, dim_order_out)
+                    tasks.append({'type': 'full_file', 'row_index': row_index, 'path': path})
+                    for slc in slices:
+                        origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
+                        tasks.append({'type': 'slice', 'row_index': row_index, 'path': path,
+                                      'slc': slc, 'origin': origin, 'dim_order_out': dim_order_out,
+                                      'full_shape': shape})
+                    continue
+
+        batch.append(_IndexedPath(row_index, path))
+        batch_size_mb += size_bytes / (1024 ** 2)
+        if batch_size_mb >= target_mb or len(batch) >= max_files_per_batch:
+            _flush(); batch.clear(); batch_size_mb = 0.0
+
+    _flush()
+
+    n_batch = sum(1 for t in tasks if t['type'] == 'batch')
+    n_full = sum(1 for t in tasks if t['type'] == 'full_file')
+    n_slice = sum(1 for t in tasks if t['type'] == 'slice')
+    logger.debug('hpc_build_tasks: %d batch, %d full-file, %d slice tasks', n_batch, n_full, n_slice)
+    return tasks, large_file_meta
+
+
+class _HpcSliceWorker:
+    """Process one Z/T slice of a large file using slice-safe processors (raw tile rows only)."""
+
+    def __init__(self, loader_name: str):
+        self.loader_name = loader_name
+
+    def __call__(self, task: Dict) -> List[Dict]:
+        import dask
+        with dask.config.set(scheduler='synchronous'):
+            result = self._process(task)
+        gc.collect()
+        try:
+            import ctypes
+            ctypes.cdll.LoadLibrary("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+        return result
+
+    def _process(self, task: Dict) -> List[Dict]:
+        import dask.array as _da
+        timing: Dict = {'load': 0.0, 'n_files': 1}
+        rows: List[Dict] = []
+
+        t0 = time.perf_counter()
+        try:
+            loader = discover_loader(self.loader_name)
+            result = loader.load(task['path'])
+        except Exception as exc:
+            logger.info('hpc slice: loader failed %s: %s', task['path'], exc)
+            rows.append({'__timing__': timing})
+            return rows
+        finally:
+            timing['load'] += time.perf_counter() - t0
+
+        if result is None:
+            rows.append({'__timing__': timing})
+            return rows
+        record = result if not isinstance(result, dict) else next(iter(result.values()), None)
+        if record is None:
+            rows.append({'__timing__': timing})
+            return rows
+
+        arr = _da.asarray(record.data)
+        dim_order = [d.upper() for d in record.dim_order]
+        y_ax, x_ax = dim_order.index('Y'), dim_order.index('X')
+        arr = _da.moveaxis(arr, [y_ax, x_ax], [-2, -1])
+
+        t_proc = time.perf_counter()
+        try:
+            from pixel_patrol_image.plugins.processors.raster_image_dask_processor import (
+                collect_tile_rows as _collect, enabled_raster_metrics as _metrics, process_chunk as _pc,
+            )
+            from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
+            slc = task['slc']
+            origin = task['origin']
+            dim_order_out = list(task['dim_order_out'])
+            ns_dims = [d for d in dim_order_out if d not in ('Y', 'X')]
+            dim_names = [f'dim_{d.lower()}' for d in ns_dims] + ['dim_y', 'dim_x']
+            tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
+            sp_axes = tuple(range(arr.ndim - 2, arr.ndim))
+            chunk = arr[slc].compute()
+            s_min = chunk.min(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.min())
+            s_max = chunk.max(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.max())
+            metrics = _metrics()
+            tile_rows = _pc(chunk, origin, dim_names, tile_size, metrics, s_min, s_max)
+            for row in tile_rows:
+                row['__hpc_row_index__'] = task['row_index']
+            rows.extend(tile_rows)
+            timing['proc_raster-image'] = time.perf_counter() - t_proc
+        except Exception as exc:
+            logger.warning('hpc slice: raster processing failed %s: %s', task['path'], exc)
+
+        rows.append({'__timing__': timing})
+        return rows
+
+
 def _build_deep_record_df(
     basic: pl.DataFrame,
     loader_instance: PixelPatrolLoader,
@@ -286,28 +447,82 @@ def _build_deep_record_df(
     except (ImportError, ValueError):
         _using_distributed = False
 
-    # When using distributed, one task per file gives per-file visibility in the dashboard.
-    # For local bag execution, batching amortises pickle overhead.
-    batch_size = 1 if _using_distributed else _resolve_batch_size(worker_count, total)
+    slice_safe_classes = [cls for cls in processor_classes if getattr(cls, 'SLICE_SAFE', False)]
+    non_slice_safe_classes = [cls for cls in processor_classes if not getattr(cls, 'SLICE_SAFE', False)]
+
+    # Build HPC task plan when there are slice-safe processors and a loader is present.
+    # Opens large files lazily (header only) to get actual array memory size; small files
+    # are detected by disk size and batched without opening.
+    _hpc_tasks: Optional[List[Dict]] = None
+    _large_file_meta: Dict[int, tuple] = {}
+    if loader_name and slice_safe_classes:
+        try:
+            target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+            _hpc_tasks, _large_file_meta = _hpc_build_tasks(
+                basic, loader_name, target_mb, slice_safe_classes, non_slice_safe_classes,
+            )
+        except Exception as _exc:
+            logger.debug('hpc_build_tasks failed, falling back to regular batching: %s', _exc)
+            _hpc_tasks = None
+
+    _use_hpc = _hpc_tasks is not None and any(t['type'] == 'slice' for t in _hpc_tasks)
+
+    # When using distributed without HPC plan, one task per file; locally, batch to amortise overhead.
+    batch_size = 1 if (_using_distributed and not _use_hpc) else _resolve_batch_size(worker_count, total)
 
     accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
     if flush_dir:
         _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
 
-    batches = list(_iter_indexed_batches(basic, batch_size))
-    logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
-                 total, len(batches), worker_count)
-
     _tile_px = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
     _chunk_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
-    print(
-        f"  plan:   {total} file{'s' if total != 1 else ''}"
-        f"  ·  {len(batches)} task{'s' if len(batches) != 1 else ''}"
-        f"  ·  {batch_size} file{'s' if batch_size != 1 else ''}/task"
-        f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles"
-    )
 
-    worker_fn = _BatchWorker(loader_name, processor_classes)
+    if _use_hpc:
+        n_batch_t = sum(1 for t in _hpc_tasks if t['type'] == 'batch')
+        n_full_t  = sum(1 for t in _hpc_tasks if t['type'] == 'full_file')
+        n_slice_t = sum(1 for t in _hpc_tasks if t['type'] == 'slice')
+        parts = []
+        if n_batch_t: parts.append(f"{n_batch_t} batch")
+        if n_full_t:  parts.append(f"{n_full_t} full-file")
+        if n_slice_t: parts.append(f"{n_slice_t} slice")
+        print(f"  plan:   {total} file{'s' if total != 1 else ''}  →  {' + '.join(parts)} tasks"
+              f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles")
+        all_tasks = _hpc_tasks
+    else:
+        batches = list(_iter_indexed_batches(basic, batch_size))
+        logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
+                     total, len(batches), worker_count)
+        print(
+            f"  plan:   {total} file{'s' if total != 1 else ''}"
+            f"  ·  {len(batches)} task{'s' if len(batches) != 1 else ''}"
+            f"  ·  {batch_size} file{'s' if batch_size != 1 else ''}/task"
+            f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles"
+        )
+        all_tasks = [{'type': 'batch', 'batch': b} for b in batches]
+
+    # Unified dispatch worker: routes each task to the right handler.
+    class _DispatchWorker:
+        def __init__(self, ln, all_cls, non_ss_cls):
+            self.ln, self.all_cls, self.non_ss_cls = ln, all_cls, non_ss_cls
+
+        def __call__(self, task):
+            import dask
+            if task['type'] == 'slice':
+                return _HpcSliceWorker(self.ln)(task)
+            classes = self.non_ss_cls if task['type'] == 'full_file' else self.all_cls
+            items = [_IndexedPath(task['row_index'], task['path'])] if task['type'] == 'full_file' \
+                    else task['batch']
+            with dask.config.set(scheduler='synchronous'):
+                result = _process_file_batch(items, self.ln, classes)
+            gc.collect()
+            try:
+                import ctypes
+                ctypes.cdll.LoadLibrary("libc.so.6").malloc_trim(0)
+            except Exception:
+                pass
+            return result
+
+    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes)
 
     def _force_exit(sig, frame):
         raise SystemExit(1)
@@ -315,33 +530,28 @@ def _build_deep_record_df(
     t_wall_start = time.perf_counter()
     old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        bag = db.from_sequence(batches, npartitions=len(batches))
+        bag = db.from_sequence(all_tasks, npartitions=len(all_tasks))
         try:
             if not _using_distributed:
                 raise ValueError("no distributed client")
             from dask.distributed import get_client as _get_client, progress as _dist_progress
             _active_client = _get_client()
-            # One future per file — gives per-file visibility in the dashboard task stream.
-            futures = _active_client.map(worker_fn, batches)
+            futures = _active_client.map(worker_fn, all_tasks)
             _dist_progress(futures, notebook=False)
-            batch_results: List[List[Dict]] = _active_client.gather(futures)
+            all_results: List[List[Dict]] = _active_client.gather(futures)
         except (ImportError, ValueError):
-            # No distributed cluster — run locally.
             scheduler = 'synchronous' if worker_count == 1 else 'processes'
             compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
             try:
                 with ProgressBar(dt=1.0):
-                    batch_results = bag.map(worker_fn).compute(
-                        scheduler=scheduler, **compute_kwargs
-                    )
+                    all_results = bag.map(worker_fn).compute(scheduler=scheduler, **compute_kwargs)
             except Exception as exc:
                 logger.warning(
                     "Processing Core: parallel execution failed (%s). "
-                    "Try --max-workers to reduce parallelism. "
                     "Falling back to single-process execution.", exc,
                 )
                 with ProgressBar(dt=1.0):
-                    batch_results = bag.map(worker_fn).compute(scheduler='synchronous')
+                    all_results = bag.map(worker_fn).compute(scheduler='synchronous')
     except KeyboardInterrupt:
         signal.signal(signal.SIGINT, _force_exit)
         raise
@@ -350,26 +560,63 @@ def _build_deep_record_df(
 
     wall_s = time.perf_counter() - t_wall_start
 
-    # Aggregate timing sentinels returned by each batch worker.
+    # --- Post-gather: accumulate HPC slice rows, then merge and save ---
     all_timing: Dict[str, float] = {"load": 0.0, "n_files": 0}
+
+    # Collect raw tile rows from slice tasks and strip timing sentinels from all results.
+    raw_tile_rows_by_ridx: Dict[int, List[Dict]] = {}
+    cleaned_results: List[tuple] = []   # (task, deep_rows)
+
+    for task, raw_rows in zip(all_tasks, all_results):
+        if raw_rows and isinstance(raw_rows[-1], dict) and "__timing__" in raw_rows[-1]:
+            for k, v in raw_rows[-1]["__timing__"].items():
+                if isinstance(v, (int, float)):
+                    all_timing[k] = all_timing.get(k, 0.0) + v
+            rows = raw_rows[:-1]
+        else:
+            rows = list(raw_rows)
+
+        if task['type'] == 'slice':
+            for row in rows:
+                if "__hpc_row_index__" in row:
+                    raw_tile_rows_by_ridx.setdefault(row.pop("__hpc_row_index__"), []).append(row)
+        else:
+            cleaned_results.append((task, rows))
+
+    # Accumulate tile rows per large file (runs accumulate_power_set once for the whole file).
+    accumulated_by_ridx: Dict[int, List[Dict]] = {}
+    if raw_tile_rows_by_ridx:
+        try:
+            from pixel_patrol_image.plugins.processors.raster_image_dask_processor import (
+                accumulate_raster_tile_rows as _acc_rtr,
+            )
+            for ridx, tile_rows in raw_tile_rows_by_ridx.items():
+                shape, dim_order_out = _large_file_meta[ridx]
+                acc_rows = _acc_rtr(tile_rows, shape, dim_order_out)
+                for row in acc_rows:
+                    row['row_index'] = ridx
+                accumulated_by_ridx[ridx] = acc_rows
+        except ImportError:
+            logger.warning("pixel_patrol_image not available — raster slice results dropped")
+
     processed_count = 0
     with tqdm(total=total, desc="Saving results", unit="file",
               leave=True, colour="green", disable=progress_callback is not None) as progress:
-        for batch, raw_rows in zip(batches, batch_results):
-            # Strip the timing sentinel appended by _process_batch_locally.
-            if raw_rows and isinstance(raw_rows[-1], dict) and "__timing__" in raw_rows[-1]:
-                for k, v in raw_rows[-1]["__timing__"].items():
-                    if isinstance(v, (int, float)):
-                        all_timing[k] = all_timing.get(k, 0.0) + v
-                deep_rows = raw_rows[:-1]
+        for task, deep_rows in cleaned_results:
+            if task['type'] == 'full_file':
+                ridx = task['row_index']
+                if ridx in accumulated_by_ridx:
+                    deep_rows = _merge_long_rows(deep_rows, accumulated_by_ridx[ridx])
+                batch_items = [_IndexedPath(task['row_index'], task['path'])]
             else:
-                deep_rows = raw_rows
-            batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
+                batch_items = task['batch']
+
+            batch_df = _combine_batch_with_basic(basic, batch_items, deep_rows)
             accumulator.add_batch(batch_df)
-            progress.update(len(batch))
-            processed_count += len(batch)
+            progress.update(len(batch_items))
+            processed_count += len(batch_items)
             if progress_callback:
-                progress_callback(processed_count, total, Path(batch[-1].path))
+                progress_callback(processed_count, total, Path(batch_items[-1].path))
 
     from pixel_patrol_base.core.processing_summary import ProcessingSummary
     summary = ProcessingSummary(
@@ -378,9 +625,7 @@ def _build_deep_record_df(
         worker_count=worker_count,
         is_distributed=_using_distributed,
         load_cpu_s=all_timing.get("load", 0.0),
-        processor_cpu_s={
-            k[5:]: v for k, v in all_timing.items() if k.startswith("proc_")
-        },
+        processor_cpu_s={k[5:]: v for k, v in all_timing.items() if k.startswith("proc_")},
     )
 
     return accumulator.finalize(), summary

@@ -20,6 +20,66 @@ ITER_Y_ROWS_ENV_VAR = "PIXEL_PATROL_ITER_Y_ROWS"
 ATOMIC_DIMS = frozenset({'C', 'S'})
 
 
+def raster_slicing_plan(
+    shape: tuple,
+    dim_string: str,
+    dtype: np.dtype,
+    target_mb: float,
+) -> List[Tuple[slice, ...]]:
+    """Two-level slicing plan for raster-image: Z/T first, then Y (tile-aligned) if still too large.
+
+    ATOMIC_DIMS (C, S) and X are never split so colocalization always gets all channels.
+    Y is split as a secondary axis when a full C×X plane exceeds target_mb — the common
+    case for very large XY microscopy images (e.g. 40C × 50000 × 40000).
+    Y step is aligned to tile_size so tiles never cross strip boundaries.
+    """
+    tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
+    dims = {name: {'idx': i, 'size': shape[i]} for i, name in enumerate(dim_string)}
+
+    y_idx  = dims.get('Y', {}).get('idx')
+    y_size = dims.get('Y', {}).get('size', 1) if y_idx is not None else 1
+
+    # Bytes per one full C×Y×X plane (for Z/T step calculation and Y-split trigger)
+    cx_px = 1
+    for d, info in dims.items():
+        if d in ATOMIC_DIMS or d == 'X':
+            cx_px *= info['size']        # C × X (without Y)
+    bytes_per_plane = cx_px * y_size * dtype.itemsize
+
+    # Level 1: split along first non-atomic, non-spatial dim (Z or T)
+    splittable = [d for d in dim_string if d not in ATOMIC_DIMS and d not in ('X', 'Y')]
+    split_dim  = splittable[0] if splittable else None
+
+    if split_dim:
+        d_idx  = dims[split_dim]['idx']
+        d_size = dims[split_dim]['size']
+        z_step = max(1, int(target_mb * 1024 ** 2 // bytes_per_plane))
+        z_starts = list(range(0, d_size, z_step))
+    else:
+        d_idx, d_size, z_step = None, 1, None
+        z_starts = [None]
+
+    # Level 2: split Y (tile-aligned) when a full plane exceeds target_mb
+    bytes_per_tile_strip = cx_px * tile_size * dtype.itemsize
+    if bytes_per_plane > target_mb * 1024 ** 2 and y_idx is not None:
+        strips_per_task = max(1, int(target_mb * 1024 ** 2 // bytes_per_tile_strip))
+        y_step = strips_per_task * tile_size
+    else:
+        y_step = y_size  # no Y splitting needed
+
+    slices: List[Tuple[slice, ...]] = []
+    for z_start in z_starts:
+        for y_start in range(0, y_size, y_step):
+            slc = [slice(None)] * len(shape)
+            if d_idx is not None and z_start is not None:
+                slc[d_idx] = slice(z_start, min(z_start + z_step, d_size))
+            if y_step < y_size:
+                slc[y_idx] = slice(y_start, min(y_start + y_step, y_size))
+            slices.append(tuple(slc))
+
+    return slices or [tuple(slice(None) for _ in shape)]
+
+
 def slicing_plan(
     shape: tuple,
     dim_string: str,
