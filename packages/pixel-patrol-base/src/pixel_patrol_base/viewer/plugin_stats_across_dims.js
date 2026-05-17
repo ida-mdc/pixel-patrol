@@ -313,5 +313,7 @@ function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
       { type:'scatter', mode:'lines+markers', name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
     );
   }
-  appendPlot(container, traces, { ...STATS_DIMS_LAYOUT, margin: { l:36, r:8, t:8, b:28 }, height: 140 });
+  const allXVals = [...new Set(agg.map(r => r.x))].sort((a, b) => a - b);
+  const xaxisOverride = allXVals.length <= 8 ? { tickmode: 'array', tickvals: allXVals } : {};
+  appendPlot(container, traces, { ...STATS_DIMS_LAYOUT, xaxis: { ...STATS_DIMS_LAYOUT.xaxis, ...xaxisOverride }, margin: { l:36, r:8, t:8, b:28 }, height: 140 });
 }
