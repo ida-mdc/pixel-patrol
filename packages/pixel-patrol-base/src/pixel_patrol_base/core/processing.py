@@ -618,6 +618,21 @@ def _build_deep_record_df(
             if progress_callback:
                 progress_callback(processed_count, total, Path(batch_items[-1].path))
 
+    # Collect worker / node info from the distributed scheduler if available.
+    n_workers_actual = 0
+    worker_nodes: list = []
+    if _using_distributed:
+        try:
+            from dask.distributed import get_client as _get_client
+            _info = _get_client().scheduler_info().get('workers', {})
+            n_workers_actual = len(_info)
+            worker_nodes = sorted(set(
+                addr.split('//')[-1].split(':')[0]
+                for addr in _info.keys()
+            ))
+        except Exception:
+            pass
+
     from pixel_patrol_base.core.processing_summary import ProcessingSummary
     summary = ProcessingSummary(
         n_files=total,
@@ -626,6 +641,9 @@ def _build_deep_record_df(
         is_distributed=_using_distributed,
         load_cpu_s=all_timing.get("load", 0.0),
         processor_cpu_s={k[5:]: v for k, v in all_timing.items() if k.startswith("proc_")},
+        n_tasks=len(all_tasks),
+        n_workers_actual=n_workers_actual,
+        worker_nodes=worker_nodes,
     )
 
     return accumulator.finalize(), summary
