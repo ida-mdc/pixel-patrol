@@ -6,6 +6,8 @@ import signal
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
+
+import numpy as np
 from tqdm.auto import tqdm
 import gc
 
