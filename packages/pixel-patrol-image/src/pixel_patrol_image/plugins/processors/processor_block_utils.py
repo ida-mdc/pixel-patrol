@@ -16,6 +16,48 @@ _BAR_MIN_BLOCKS = 10
 RASTER_TILE_ROWS_ENV_VAR = "PIXEL_PATROL_RASTER_XY_TILE_METRICS"
 ITER_Y_ROWS_ENV_VAR = "PIXEL_PATROL_ITER_Y_ROWS"
 
+# Dimensions that must never be split across tasks (cross-channel math needs them whole).
+ATOMIC_DIMS = frozenset({'C', 'S'})
+
+
+def slicing_plan(
+    shape: tuple,
+    dim_string: str,
+    dtype: np.dtype,
+    target_mb: float,
+) -> List[Tuple[slice, ...]]:
+    """Return slice tuples that divide an array into ~target_mb chunks.
+
+    Atomic dims (C, S) and spatial dims (X, Y) are never split so each chunk
+    always contains a complete channel/sample stack and full XY planes.
+    The first remaining dim (typically Z or T) is divided to hit target_mb.
+    A single-element list with all-slice(None) is returned when no split is needed.
+    """
+    dims = {name: {'idx': i, 'size': shape[i]} for i, name in enumerate(dim_string)}
+    unit_px = 1
+    for d, info in dims.items():
+        if d in ATOMIC_DIMS or d in ('X', 'Y'):
+            unit_px *= info['size']
+    bytes_per_unit = unit_px * dtype.itemsize
+
+    splittable = [d for d in dim_string if d not in ATOMIC_DIMS and d not in ('X', 'Y')]
+    split_dim = splittable[0] if splittable else None
+
+    if not split_dim or bytes_per_unit == 0:
+        return [tuple(slice(None) for _ in shape)]
+
+    d_idx = dims[split_dim]['idx']
+    d_size = dims[split_dim]['size']
+    step = max(1, int(target_mb * 1024 ** 2 // bytes_per_unit))
+
+    slices = []
+    for start in range(0, d_size, step):
+        end = min(start + step, d_size)
+        slc = [slice(None)] * len(shape)
+        slc[d_idx] = slice(start, end)
+        slices.append(tuple(slc))
+    return slices
+
 
 def rechunk_for_tiling(arr: da.Array, s_tile: int) -> da.Array:
     """Rechunk arr so XY dimensions are aligned to a tile-multiple chunk size within memory budget.

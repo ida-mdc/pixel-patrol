@@ -100,6 +100,11 @@ def _extract_metadata(
     if not axes or not isinstance(axes, str):
         axes = _letters_for_axes(series.ndim)
     axes_u = axes.upper()
+    # tifffile assigns 'Q' to unrecognised non-spatial axes in plain TIFFs that
+    # have no explicit OME or ImageJ axis metadata.  For 3-D microscopy stacks
+    # (QYX / QXY) 'Q' is almost always the depth axis; rename it to 'Z'.
+    if 'Q' in axes_u and 'Z' not in axes_u:
+        axes_u = axes_u.replace('Q', 'Z')
 
     shape = tuple(int(x) for x in series.shape)
     meta: Dict[str, Any] = {

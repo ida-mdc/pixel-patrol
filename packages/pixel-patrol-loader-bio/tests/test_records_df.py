@@ -40,10 +40,10 @@ def test_build_records_df_from_file_system_no_images(tmp_path):
     paths = [non_image_dir]
     extensions = {"png", "jpg"}
 
-    with patch('pixel_patrol_base.core.processing._build_deep_record_df', return_value=pl.DataFrame()) as mock_get_deep_records_df:
-        records_df = build_records_df(paths,
-                                      loader="bioio",
-                                      processing_config=ProcessingConfig(selected_file_extensions=extensions))
+    with patch('pixel_patrol_base.core.processing._build_deep_record_df', return_value=(pl.DataFrame(), None)) as mock_get_deep_records_df:
+        records_df, _ = build_records_df(paths,
+                                         loader="bioio",
+                                         processing_config=ProcessingConfig(selected_file_extensions=extensions))
         assert records_df is None
         mock_get_deep_records_df.assert_not_called()
 
@@ -53,21 +53,21 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
     p2 = tmp_path / "img2.jpg"; p2.touch()
     paths = [p1, p2]
 
-    def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True):
+    def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True, timing_out=None):
         assert loader_inst.NAME == "bioio"
         return [{"width": 100, "height": 200}]
 
     monkeypatch.setattr("pixel_patrol_base.core.processing.load_and_process_records_from_file",
                         fake_load_and_process)
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args, **kwargs: 1)
 
     # Build a basic DataFrame expected by the processing core
     basic_df = pl.DataFrame({"path": paths}).with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
 
-    df = _build_deep_record_df(basic_df, loader)
+    df, _ = _build_deep_record_df(basic_df, loader)
 
     assert isinstance(df, pl.DataFrame)
     assert set(df.columns) == {"row_index", "path", "width", "height"}
@@ -159,7 +159,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_invalid = tmp_path / "invalid.png"
     p_invalid.touch()
 
-    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
+    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True, timing_out=None):
         if Path(file_path) == p_valid:
             return [{"width": 10, "height": 20}]
         return []
@@ -169,7 +169,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         fake_load_and_process
     )
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
+    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args, **kwargs: 1)
 
     basic_df = (
         pl.DataFrame({"path": [str(p_valid), str(p_invalid)]})
@@ -177,7 +177,7 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         .with_columns(pl.col("row_index").cast(pl.Int64))
     )
 
-    df = _build_deep_record_df(basic_df, loader_instance=loader)
+    df, _ = _build_deep_record_df(basic_df, loader_instance=loader)
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 2
@@ -207,14 +207,14 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
             pl.col("path")
             .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
             .alias("height"),
-        )
+        ), None
 
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
         fake_build_deep_record_df
     )
 
-    result = build_records_df(
+    result, _ = build_records_df(
         bases=[base],
         loader="bioio",
         processing_config=ProcessingConfig(selected_file_extensions={"png", "jpg"})
@@ -252,14 +252,14 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
             pl.col("path")
             .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
             .alias("height"),
-        )
+        ), None
 
     monkeypatch.setattr(
         "pixel_patrol_base.core.processing._build_deep_record_df",
         fake_build_deep_record_df
     )
 
-    result = build_records_df(
+    result, _ = build_records_df(
         bases=[base],
         loader="bioio",
         processing_config=ProcessingConfig(selected_file_extensions={"jpg", "png"}),
@@ -311,7 +311,7 @@ def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
     b = np.full((2,2,1), 255, dtype=np.uint8)
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[img_dir],
         loader=loader,
         processing_config=ProcessingConfig(selected_file_extensions={"png"}),
@@ -339,7 +339,7 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
     path = tmp_path / "5d.tif"
     tifffile.imwrite(str(path), arr, photometric="minisblack")
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
         processing_config=ProcessingConfig(selected_file_extensions={"tif"}),
@@ -405,7 +405,7 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
         processing_config=ProcessingConfig(selected_file_extensions={"png"}),

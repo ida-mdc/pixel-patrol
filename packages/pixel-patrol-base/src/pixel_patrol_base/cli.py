@@ -1,3 +1,4 @@
+import logging
 import os
 import webbrowser
 from pathlib import Path
@@ -14,6 +15,16 @@ from pixel_patrol_base.api import (
 )
 
 from pixel_patrol_base.processing_dashboard import create_processing_app
+
+
+def _configure_cli_logging() -> None:
+    """Suppress noisy third-party INFO logs; keep warnings and errors."""
+    logging.getLogger().setLevel(logging.WARNING)
+    for noisy in ("numexpr", "numexpr.utils", "botocore", "boto3", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    # Inherited by worker subprocesses — prevents numexpr from logging "detected N cores"
+    os.environ.setdefault("NUMEXPR_MAX_THREADS", str(os.cpu_count() or 1))
 
 
 @click.group()
@@ -56,55 +67,137 @@ def cli():
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
               help='Maximum number of processing workers. Use 1 to disable multiprocessing.')
+@click.option('--scheduler', type=str, default=None, show_default=True,
+              help='Dask distributed scheduler. Use "local" to start a LocalCluster in-process '
+                   '(with dashboard), or a scheduler address for HPC (e.g. tcp://host:8786).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None,
-              max_workers: int | None):
+              max_workers: int | None,
+              scheduler: str | None):
     """
-    Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
+    Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file.
+
+    Runs locally by default (parallel processes, RAM-based worker count).
+    Use --scheduler to enable dask.distributed:
+
+    \b
+      --scheduler local              start a LocalCluster in-process (shows dashboard URL)
+      --scheduler tcp://host:8786    connect to an existing HPC cluster
     """
+    _configure_cli_logging()
+
+    if scheduler:
+        # dask.config.set() is read by distributed when it initialises its logging
+        # during cluster/client creation — higher priority than distributed's defaults.
+        # The env vars are inherited by worker subprocesses (which ignore Python-level config).
+        import dask
+        dask.config.set({
+            "distributed.logging.distributed": "warning",
+            "distributed.logging.tornado": "critical",
+        })
+        os.environ.setdefault("DASK_DISTRIBUTED__LOGGING__DISTRIBUTED", "warning")
+        os.environ.setdefault("DASK_DISTRIBUTED__LOGGING__TORNADO", "critical")
+        try:
+            from dask.distributed import Client as _Client
+            if scheduler.lower() == 'local':
+                from dask.distributed import LocalCluster as _LocalCluster
+                from pixel_patrol_base.core.processing import _resolve_worker_count
+                from pixel_patrol_base.core.processing_config import ProcessingConfig
+                _target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+                _n = _resolve_worker_count(ProcessingConfig(processing_max_workers=max_workers), target_mb=_target_mb)
+                _cluster = _LocalCluster(n_workers=_n, threads_per_worker=1, memory_limit=0)
+                _dist_client = _Client(_cluster)
+            else:
+                _dist_client = _Client(scheduler)
+        except Exception as exc:
+            click.echo(f"Could not connect to scheduler '{scheduler}': {exc}", err=True)
+            raise SystemExit(1)
+
     base_directory = base_directory.resolve()
-
     if name is None:
-        name = base_directory.name # Use the name of the base directory
-        click.echo(f"Project name not provided, deriving from base directory: '{name}'")
-
-    click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
-    my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
-
-    if paths:
-        click.echo(f"Adding explicitly specified paths: {', '.join(paths)}. Resolution will be relative to '{base_directory}'")
-        add_paths(my_project, paths)
-    else:
-        # If no paths, we want to add the base directory itself.
-        click.echo(f"No --paths specified. Processing all images in '{base_directory}'.")
-        add_paths(my_project, base_directory)
-
-    selected_extensions = set(file_extensions) if file_extensions else "all"
+        name = base_directory.name
 
     output_path = Path(output).resolve()
     if output_path.suffix.lower() != ".parquet":
         output_path = output_path.with_suffix(".parquet")
-        click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
 
-    click.echo("Processing images...")
-    process_files(
-        my_project,
-        selected_file_extensions=selected_extensions,
-        processors_included=set(processors_include) if processors_include else None,
-        processors_excluded=set(processors_exclude) if processors_exclude else None,
-        processing_max_workers=max_workers,
-        flavor=flavor or None,
-        description=description or None,
-        parquet_row_group_size=parquet_row_group_size,
+    # Resolve processors for the summary line before creating the project
+    from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
+    if loader:
+        try:
+            discover_loader(loader)
+        except RuntimeError:
+            available = [p.NAME for p in discover_processor_plugins()]
+            # discover available loaders via entry points
+            import importlib.metadata
+            loader_eps = importlib.metadata.entry_points(group="pixel_patrol.loader_plugins")
+            loader_names: list[str] = []
+            for ep in loader_eps:
+                try:
+                    reg = ep.load()
+                    loader_names.extend(c.NAME for c in reg() if hasattr(c, "NAME"))
+                except Exception:
+                    pass
+            click.echo(f"Loader '{loader}' not found. Available loaders: {', '.join(sorted(loader_names)) or 'none'}")
+            raise SystemExit(1)
+
+    processors = discover_processor_plugins()
+    processor_names = ", ".join(p.NAME for p in processors) or "none"
+
+    click.echo(f"Processing '{name}'")
+    click.echo(f"  dir:        {base_directory}")
+    click.echo(f"  loader:     {loader or '(none — basic file info only)'}")
+    click.echo(f"  processors: {processor_names}")
+    from pixel_patrol_base.core.processing import _resolve_worker_count, _ram_worker_limit
+    from pixel_patrol_base.core.processing_config import ProcessingConfig
+    target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+    resolved_workers = _resolve_worker_count(
+        ProcessingConfig(processing_max_workers=max_workers), target_mb=target_mb
     )
+    try:
+        from dask.distributed import get_client as _get_client
+        _dist_client = _get_client()
+        click.echo(f"  scheduler:  distributed ({_dist_client.scheduler_info().get('address', '?')})  →  {output_path}")
+        if _dist_client.dashboard_link:
+            click.echo(f"  dashboard:  {_dist_client.dashboard_link}")
+    except (ImportError, ValueError):
+        if max_workers:
+            click.echo(f"  workers:    {resolved_workers} (explicit)  →  {output_path}")
+        else:
+            ram_limit = _ram_worker_limit(target_mb)
+            click.echo(f"  workers:    {resolved_workers} (RAM-based, limit={ram_limit} @ {target_mb:.0f} MB/worker)  →  {output_path}")
 
-    if Path(output).exists():
-        click.echo(f"Output saved to: '{output}'")
-    else:
-        click.echo(f"Processing complete. Expected output: '{output}'")
+    my_project = create_project(name, str(base_directory), loader=loader, output_path=output_path)
+    add_paths(my_project, paths if paths else base_directory)
+
+    selected_extensions = set(file_extensions) if file_extensions else "all"
+
+    try:
+        process_files(
+            my_project,
+            selected_file_extensions=selected_extensions,
+            processors_included=set(processors_include) if processors_include else None,
+            processors_excluded=set(processors_exclude) if processors_exclude else None,
+            processing_max_workers=max_workers,
+            flavor=flavor or None,
+            description=description or None,
+            parquet_row_group_size=parquet_row_group_size,
+        )
+    except KeyboardInterrupt:
+        click.echo("\nInterrupted.")
+        raise SystemExit(1)
+
+    if output_path.exists():
+        size_mb = output_path.stat().st_size / (1024 ** 2)
+        click.echo(f"Saved: {output_path}  ({size_mb:.1f} MB)")
+
+    summary_path = output_path.with_suffix(".summary.txt")
+    if summary_path.exists():
+        click.echo("")
+        click.echo(summary_path.read_text(encoding="utf-8"))
 
 
 @cli.command()

@@ -14,10 +14,10 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pyyaml>=6.0.2",
     "statsmodels>=0.14.4",
-    "dask>=2025.5.1",
+    "dask[distributed]>=2025.5.1",
+    "bokeh>=3.0",
     "duckdb>=1.2.0",
     "tqdm>=4.67.1",
-    "yaspin>=3.4.0",
 ]
 
 [tool.uv]

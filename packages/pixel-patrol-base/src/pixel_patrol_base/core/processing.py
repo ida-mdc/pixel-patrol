@@ -2,14 +2,15 @@ import logging
 import math
 import os
 import shutil
+import signal
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-import multiprocessing
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
 from tqdm.auto import tqdm
-from yaspin import yaspin
 import gc
+
+import dask.bag as db
+from dask.diagnostics import ProgressBar
 
 import polars as pl
 
@@ -28,56 +29,57 @@ from pixel_patrol_base.io.parquet_io import write_chunk
 
 logger = logging.getLogger(__name__)
 
-# Global per-process context for worker initializers
-_PROCESS_WORKER_CONTEXT: Dict[str, object] = {}
-
 
 class _IndexedPath(NamedTuple):
-    """Represents a file path with its associated row index in the dataset.
-
-    Args:
-        row_index (int): The index of the row in the dataset.
-                    path (str): The file system path to the file.
-    """
     row_index: int
     path: str
 
 
-def _process_worker_initializer(loader_id: Optional[str], processor_classes: List[type]) -> None:
-    """Initialize per-process loader and processor instances.
-    
-    Args:
-        loader_id: Optional string identifier for the loader to use.
-        processor_classes: List of PixelPatrolProcessor classes to instantiate.
-    """
-    global _PROCESS_WORKER_CONTEXT
-    loader_instance = discover_loader(loader_id) if loader_id else None
-    processors = [cls() for cls in processor_classes]
-    
-    _PROCESS_WORKER_CONTEXT = {
-        "loader": loader_instance,
-        "processors": processors,
-    }
-
-
-def _process_batch_in_worker(batch: List[_IndexedPath]) -> List[Dict[str, object]]:
-    """Worker entry point for processing a batch of indexed paths.
-
-    Args:
-        batch: A list of _IndexedPath items representing the current batch.
-    Returns:
-        A list of dictionaries containing the results from deep processing.
-    """
-    loader: Optional[PixelPatrolLoader] = _PROCESS_WORKER_CONTEXT.get("loader")
-    processors: List[PixelPatrolProcessor] = _PROCESS_WORKER_CONTEXT.get("processors", []) or []
-    if loader is None:
-        logger.warning(
-            "Processing Core: worker lacks loader; skipping batch of size %s",
-            len(batch),
-        )
+def _process_file_batch(
+    batch: List[_IndexedPath],
+    loader_name: Optional[str],
+    processor_classes: List[type],
+) -> List[Dict[str, object]]:
+    """Stateless bag worker: instantiate loader + processors and process a batch of files."""
+    try:
+        loader = discover_loader(loader_name) if loader_name else None
+        if loader is None:
+            logger.warning("Processing Core: no loader; skipping batch of %d file(s)", len(batch))
+            return []
+        processors = [cls() for cls in processor_classes]
+        return _process_batch_locally(batch, loader, processors, False)
+    except Exception:
+        logger.exception("Processing Core: batch failed (first path: %s)",
+                         batch[0].path if batch else "?")
         return []
 
-    return _process_batch_locally(batch, loader, processors, False)
+
+class _BatchWorker:
+    """Picklable callable for dask.distributed — avoids functools.partial serialisation issues."""
+
+    def __init__(self, loader_name: Optional[str], processor_classes: List[type]):
+        self.loader_name = loader_name
+        self.processor_classes = processor_classes
+
+    def __call__(self, batch: List[_IndexedPath]) -> List[Dict[str, object]]:
+        import dask
+        # Force synchronous scheduler for all internal da.compute() calls.
+        # This worker runs inside a distributed worker process; without this,
+        # internal dask computations (image loading, min/max) try to route back
+        # through the distributed scheduler, which fails because tifffile's
+        # internal locks cannot be serialised for network transport.
+        with dask.config.set(scheduler='synchronous'):
+            result = _process_file_batch(batch, self.loader_name, self.processor_classes)
+        # Python's allocator holds onto freed numpy pages rather than returning them
+        # to the OS, causing "unmanaged memory" to accumulate across batches.
+        # gc.collect removes cyclic references; malloc_trim releases the held pages.
+        gc.collect()
+        try:
+            import ctypes
+            ctypes.cdll.LoadLibrary("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+        return result
 
 
 PATHS_DF_EXPECTED_SCHEMA = {  # TODO: delete or rename - as paths_df is retired.
@@ -130,15 +132,20 @@ def _process_batch_locally(
         show_processor_progress: A boolean indicating whether to show progress during processing.
     Returns:
         A list of dictionaries containing the results from deep processing.
+        The last entry is always a ``{"__timing__": {...}}`` sentinel for aggregation.
     """
     deep_rows: List[Dict[str, object]] = []
+    timing: Dict[str, float] = {"load": 0.0, "n_files": 0}
     for item in batch:
         record_dicts = load_and_process_records_from_file(
-            Path(item.path), loader_instance, processors, show_processor_progress
+            Path(item.path), loader_instance, processors, show_processor_progress,
+            timing_out=timing,
         )
+        timing["n_files"] = timing.get("n_files", 0) + 1
         for record_dict in record_dicts:
             if record_dict:
                 deep_rows.append({"row_index": item.row_index, **record_dict})
+    deep_rows.append({"__timing__": timing})
     return deep_rows
 
 
@@ -252,166 +259,122 @@ def _build_deep_record_df(
     processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     flush_dir: Optional[Path] = None,
-) -> pl.DataFrame:
-    """Process each path (optionally in parallel) and build a Polars DataFrame.
-
-    Args:
-        basic: The basic Polars DataFrame with file paths and metadata.
-        loader_instance: An instance of PixelPatrolLoader to load files.
-        processing_config: Optional ProcessingConfig for processor selection.
-        progress_callback: Optional GUI callback for progress updates.
-    Returns:
-        A Polars DataFrame containing deep processed records, aka the results.
-    """
+) -> tuple[pl.DataFrame, object]:
     if basic.is_empty():
-        return pl.DataFrame([])
+        return pl.DataFrame([]), None
 
     config = processing_config or ProcessingConfig()
     total = basic.height
     processors = discover_processor_plugins()
-    
+
     if processing_config:
         if processing_config.processors_included:
             processors = [p for p in processors if p.NAME in processing_config.processors_included]
         elif processing_config.processors_excluded:
             processors = [p for p in processors if p.NAME not in processing_config.processors_excluded]
-    
+
     processor_classes = [proc.__class__ for proc in processors]
-
-    worker_count = _resolve_worker_count(config, total)
+    loader_name = getattr(loader_instance, "NAME", None)
+    target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+    worker_count = _resolve_worker_count(config, total, target_mb=target_mb)
     flush_threshold = _resolve_flush_threshold(total, config)
-    batch_size = _resolve_batch_size(worker_count, flush_threshold, total)
-    show_processor_progress = worker_count == 1
 
-    accumulator = _RecordsAccumulator(
-        flush_every_n=flush_threshold,
-        flush_dir=flush_dir,
+    try:
+        from dask.distributed import get_client as _get_client
+        _get_client()
+        _using_distributed = True
+    except (ImportError, ValueError):
+        _using_distributed = False
+
+    # When using distributed, one task per file gives per-file visibility in the dashboard.
+    # For local bag execution, batching amortises pickle overhead.
+    batch_size = 1 if _using_distributed else _resolve_batch_size(worker_count, total)
+
+    accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
+    if flush_dir:
+        _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
+
+    batches = list(_iter_indexed_batches(basic, batch_size))
+    logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
+                 total, len(batches), worker_count)
+
+    worker_fn = _BatchWorker(loader_name, processor_classes)
+
+    def _force_exit(sig, frame):
+        raise SystemExit(1)
+
+    t_wall_start = time.perf_counter()
+    old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        bag = db.from_sequence(batches, npartitions=len(batches))
+        try:
+            if not _using_distributed:
+                raise ValueError("no distributed client")
+            from dask.distributed import get_client as _get_client, progress as _dist_progress
+            _active_client = _get_client()
+            # One future per file — gives per-file visibility in the dashboard task stream.
+            futures = _active_client.map(worker_fn, batches)
+            _dist_progress(futures, notebook=False)
+            batch_results: List[List[Dict]] = _active_client.gather(futures)
+        except (ImportError, ValueError):
+            # No distributed cluster — run locally.
+            scheduler = 'synchronous' if worker_count == 1 else 'processes'
+            compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
+            try:
+                with ProgressBar(dt=1.0):
+                    batch_results = bag.map(worker_fn).compute(
+                        scheduler=scheduler, **compute_kwargs
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Processing Core: parallel execution failed (%s). "
+                    "Try --max-workers to reduce parallelism. "
+                    "Falling back to single-process execution.", exc,
+                )
+                with ProgressBar(dt=1.0):
+                    batch_results = bag.map(worker_fn).compute(scheduler='synchronous')
+    except KeyboardInterrupt:
+        signal.signal(signal.SIGINT, _force_exit)
+        raise
+    finally:
+        signal.signal(signal.SIGINT, old_handler)
+
+    wall_s = time.perf_counter() - t_wall_start
+
+    # Aggregate timing sentinels returned by each batch worker.
+    all_timing: Dict[str, float] = {"load": 0.0, "n_files": 0}
+    processed_count = 0
+    with tqdm(total=total, desc="Saving results", unit="file",
+              leave=True, colour="green", disable=progress_callback is not None) as progress:
+        for batch, raw_rows in zip(batches, batch_results):
+            # Strip the timing sentinel appended by _process_batch_locally.
+            if raw_rows and isinstance(raw_rows[-1], dict) and "__timing__" in raw_rows[-1]:
+                for k, v in raw_rows[-1]["__timing__"].items():
+                    if isinstance(v, (int, float)):
+                        all_timing[k] = all_timing.get(k, 0.0) + v
+                deep_rows = raw_rows[:-1]
+            else:
+                deep_rows = raw_rows
+            batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
+            accumulator.add_batch(batch_df)
+            progress.update(len(batch))
+            processed_count += len(batch)
+            if progress_callback:
+                progress_callback(processed_count, total, Path(batch[-1].path))
+
+    from pixel_patrol_base.core.processing_summary import ProcessingSummary
+    summary = ProcessingSummary(
+        n_files=total,
+        wall_s=wall_s,
+        worker_count=worker_count,
+        is_distributed=_using_distributed,
+        load_cpu_s=all_timing.get("load", 0.0),
+        processor_cpu_s={
+            k[5:]: v for k, v in all_timing.items() if k.startswith("proc_")
+        },
     )
 
-    processed_rows: Set[int] = set()
-
-    resume = False
-    if accumulator.flush_dir:
-        if resume:
-            # Resume: adopt existing partial chunks and skip already-processed files
-            processed_rows = accumulator.load_existing_chunks()
-        else:
-            # ensure fresh run
-            _cleanup_partial_chunks_dir(accumulator.flush_dir, cleanup_combined_parquet=False)
-
-    remaining = basic
-    if processed_rows:
-        # Select unprocessed rows by gathering their indices — avoids creating an intermediate Polars filter
-        unprocessed_indices = [i for i in range(total) if i not in processed_rows]
-        if not unprocessed_indices:
-            return pl.DataFrame([])
-        indices = pl.Series(unprocessed_indices, dtype=pl.UInt32)
-        remaining = basic.select(pl.all().gather(indices))
-    if remaining.is_empty():
-        return pl.DataFrame([])
-
-    remaining_count = remaining.height
-
-    processed_count = 0
-    with tqdm(
-        total=remaining_count,
-        desc="Processing files",
-        unit="file",
-        leave=True,
-        colour="green",
-        position=0,
-        disable=progress_callback is not None,
-    ) as progress:
-        if processed_rows:
-            logger.info(
-                "Processing Core: skipping %d already-processed files; resuming %d remaining files",
-                len(processed_rows),
-                remaining_count,
-            )
-
-        # Single core processing shortcut
-        if worker_count == 1:
-            for batch in _iter_indexed_batches(remaining, batch_size):
-                deep_rows = _process_batch_locally(
-                    batch, loader_instance, processors, show_processor_progress
-                )
-                batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
-                accumulator.add_batch(batch_df)
-                progress.update(len(batch))
-                processed_count += len(batch)
-                if progress_callback:
-                    progress_callback(processed_count, remaining_count, Path(batch[-1].path))
-            return accumulator.finalize()
-
-        loader_name = getattr(loader_instance, "NAME", None)
-        try:
-            with ProcessPoolExecutor(
-                max_workers=worker_count,
-                initializer=_process_worker_initializer,
-                initargs=(loader_name, processor_classes),
-                mp_context=multiprocessing.get_context("spawn"),
-            ) as executor:
-                future_map: Dict = {}
-                with yaspin(text="Planning the processing tasks ...", timer=True).yellow as spinner:
-                    spinner._interval = 0.3
-                    for batch in _iter_indexed_batches(remaining, batch_size):
-                        fut = executor.submit(_process_batch_in_worker, batch)
-                        future_map[fut] = batch
-                for future in as_completed(future_map):
-                    batch = future_map[future]
-                    try:
-                        deep_rows = future.result()
-                    except Exception:  # pragma: no cover - logged for observability
-                        logger.exception(
-                            "Process worker failed for batch starting at %s",
-                            batch[0].path,
-                        )
-                        deep_rows = []
-
-                    batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
-                    accumulator.add_batch(batch_df)
-                    progress.update(len(batch))
-                    processed_count += len(batch)
-                    if progress_callback:
-                        progress_callback(
-                            processed_count, remaining_count, Path(batch[-1].path)
-                        )
-        except Exception as exc:
-            logger.warning(
-                "Processing Core: ProcessPoolExecutor unavailable (%s); falling back to threads.",
-                exc,
-            )
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                future_map: Dict = {}
-                for batch in _iter_indexed_batches(remaining, batch_size):
-                    fut = executor.submit(
-                        _process_batch_locally,
-                        batch,
-                        loader_instance,
-                        processors,
-                        False,
-                    )
-                    future_map[fut] = batch
-
-                for future in as_completed(future_map):
-                    batch = future_map[future]
-                    try:
-                        deep_rows = future.result()
-                    except Exception:  # pragma: no cover - logged for observability
-                        logger.exception(
-                            "Processor failed for batch starting at %s", batch[0].path
-                        )
-                        deep_rows = []
-
-                    batch_df = _combine_batch_with_basic(basic, batch, deep_rows)
-                    accumulator.add_batch(batch_df)
-                    progress.update(len(batch))
-                    if progress_callback:
-                        progress_callback(
-                            len(batch), remaining_count, Path(batch[-1].path)
-                        )
-
-        return accumulator.finalize()
+    return accumulator.finalize(), summary
 
 
 def _row_coord_key(row: Dict) -> tuple:
@@ -444,6 +407,7 @@ def _extract_record_properties(
     processors: List[PixelPatrolProcessor],
     show_progress: bool,
     file_path: Optional[Path] = None,
+    timing_out: Optional[Dict] = None,
 ) -> List[Dict]:
     """Run all matching processors on a single Record.
 
@@ -454,6 +418,7 @@ def _extract_record_properties(
     scalar: Dict = dict(rcd.meta)
     scalar.setdefault("obs_level", 0)
     long_rows: Optional[List[Dict]] = None
+    global_only_scalar: Dict = {}  # from processors marked GLOBAL_ONLY — only goes in obs_level=0
 
     processor_iter: Iterable[PixelPatrolProcessor]
     if show_progress:
@@ -488,6 +453,8 @@ def _extract_record_properties(
             if isinstance(out, list):
                 if out:  # empty list means "nothing to add" — don't discard prior rows
                     long_rows = _merge_long_rows(long_rows, out) if long_rows is not None else out
+            elif getattr(P, 'GLOBAL_ONLY', False):
+                global_only_scalar.update(out)
             else:
                 scalar.update(out)
         except RuntimeError as err:
@@ -503,10 +470,18 @@ def _extract_record_properties(
                 P.NAME,
                 record_path,
             )
+        finally:
+            if timing_out is not None:
+                k = f"proc_{proc_name}"
+                timing_out[k] = timing_out.get(k, 0.0) + (time.perf_counter() - t0)
 
     if long_rows is not None:
-        return [{**scalar, **row} for row in long_rows]
-    return [dict(scalar)]
+        result = [{**scalar, **row} for row in long_rows]
+        for row in result:
+            if row.get('obs_level') == 0:
+                row.update(global_only_scalar)
+        return result
+    return [{**scalar, **global_only_scalar}]
 
 
 def load_and_process_records_from_file(
@@ -514,6 +489,7 @@ def load_and_process_records_from_file(
     loader: PixelPatrolLoader,
     processors: List[PixelPatrolProcessor],
     show_processor_progress: bool = True,
+    timing_out: Optional[Dict] = None,
 ) -> List[Dict]:
     """
     Load a file with the given loader, run all matching processors, and return
@@ -528,6 +504,7 @@ def load_and_process_records_from_file(
         loader: An instance of PixelPatrolLoader to load the file.
         processors: A list of PixelPatrolProcessor instances to run on the loaded record(s).
         show_processor_progress: Is show progress bar in e.g. Cli
+        timing_out: Optional mutable dict; loader and processor CPU-seconds are accumulated into it.
     Returns:
         A list of dicts with combined metadata from the loader and all applicable
         processors.  Empty list if the file cannot be loaded.
@@ -536,6 +513,7 @@ def load_and_process_records_from_file(
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return []
 
+    t_load = time.perf_counter()
     try:
         result = loader.load(str(file_path))
         if result is None:
@@ -543,6 +521,9 @@ def load_and_process_records_from_file(
     except Exception as e:
         logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
         return []
+    finally:
+        if timing_out is not None:
+            timing_out["load"] = timing_out.get("load", 0.0) + (time.perf_counter() - t_load)
 
     result_list: List[Dict] = []
 
@@ -565,12 +546,14 @@ def load_and_process_records_from_file(
                     loader.NAME, child_id, file_path,
                 )
                 continue
-            rows = _extract_record_properties(rcd, processors, False, file_path)
+            rows = _extract_record_properties(rcd, processors, False, file_path, timing_out=timing_out)
             for row in rows:
                 row["child_id"] = child_id
             result_list.extend(rows)
     else:
-        result_list.extend(_extract_record_properties(result, processors, show_processor_progress, file_path))
+        result_list.extend(_extract_record_properties(
+            result, processors, show_processor_progress, file_path, timing_out=timing_out,
+        ))
 
     return result_list
 
@@ -580,7 +563,7 @@ def build_records_df(
     processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     flush_dir: Optional[Path] = None,
-) -> Optional[pl.DataFrame]:
+) -> tuple[Optional[pl.DataFrame], object]:
     """Build the full records DataFrame by scanning files and processing them.
 
     Args:
@@ -591,7 +574,7 @@ def build_records_df(
                             Called for each file processed during deep processing
         flush_dir: Optional Path to a directory for flushing intermediate parquet chunks during processing.
     Returns:
-        A Polars DataFrame containing the full records, or None if no files were found.
+        Tuple of (records DataFrame or None, ProcessingSummary or None).
     """
 
     config = processing_config or ProcessingConfig()
@@ -600,18 +583,20 @@ def build_records_df(
         bases, loader=loader, accepted_extensions=config.selected_file_extensions
     )
     if loader is None or basic is None:
-        return basic
+        return basic, None
 
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
-    deep = _build_deep_record_df(basic,
-                                 loader,
-                                 processing_config=config,
-                                 progress_callback=progress_callback,
-                                 flush_dir=flush_dir,)
+    deep, summary = _build_deep_record_df(
+        basic,
+        loader,
+        processing_config=config,
+        progress_callback=progress_callback,
+        flush_dir=flush_dir,
+    )
 
-    return deep
+    return deep, summary
 
 
 def _build_basic_file_df(
@@ -679,57 +664,64 @@ def count_file_extensions(paths_df: Optional[pl.DataFrame]) -> Dict[str, int]:
     return result
 
 
-def _resolve_worker_count(config: ProcessingConfig, total_rows: Optional[int] = None) -> int:
-    """
-    Determine the number of parallel workers to use (minimum 1).
+_WORKER_MEMORY_OVERHEAD = 6.0  # conservative: input + processing intermediates + Python allocator headroom
 
-    Behavior:
-    - If `processing_max_workers` is specified in `settings`, use that value but cap it
-      at the number of available CPUs.
-    - If `total_rows` is provided, never allocate more workers than there are rows to
-      process (so 1 file -> 1 worker). This avoids oversubscribing workers for tiny
-      datasets.
 
-    Args:
-        config: ProcessingConfig that may specify `processing_max_workers`.
-        total_rows: Optional total number of rows/files that will be processed.
-    Returns:
-        An integer representing the number of parallel workers to use.
+def _resolve_worker_count(
+    config: ProcessingConfig,
+    total_rows: Optional[int] = None,
+    target_mb: float = 1024.0,
+) -> int:
+    """Return the number of parallel workers, capped by CPUs, available RAM, and file count.
+
+    When max_workers is not explicitly configured, the RAM limit is derived from
+    available memory divided by (target_mb × overhead factor). This prevents OOM
+    when many workers each load a large image chunk simultaneously.
     """
     cpu_count = os.cpu_count() or 1
 
     if config.processing_max_workers is not None:
-        requested = max(1, config.processing_max_workers)
-        max_workers = min(requested, cpu_count)
+        max_workers = max(1, min(config.processing_max_workers, cpu_count))
     else:
-        max_workers = max(1, cpu_count)
+        ram_limit = _ram_worker_limit(target_mb)
+        max_workers = max(1, min(cpu_count, ram_limit))
+        logger.debug(
+            "Processing Core: auto worker count = %d (CPUs=%d, RAM limit=%d at %.0f MB/worker)",
+            max_workers, cpu_count, ram_limit, target_mb * _WORKER_MEMORY_OVERHEAD,
+        )
 
-    # If we know how many rows will be processed, don't use more workers than rows.
     if total_rows is not None:
         if total_rows <= 1:
             return 1
         return min(max_workers, max(1, total_rows))
-
     return max_workers
 
 
-def _resolve_batch_size(
-    worker_count: int, flush_threshold: int, total_rows: int
-) -> int:
-    """
-    Derive batch size from flush threshold and available workers.
-    Ensures that there is at least one checkpoint flush per dataset processing.
+def _ram_worker_limit(target_mb: float) -> int:
+    """Max workers that fit in available RAM given the per-worker memory budget."""
+    available = _estimate_available_memory_bytes()
+    if available is None:
+        return os.cpu_count() or 1
+    budget_per_worker = target_mb * _WORKER_MEMORY_OVERHEAD * 1024 ** 2
+    return max(1, int(available / budget_per_worker))
 
-    Args:
-        worker_count: Number of parallel workers aka CPU cores.
-        flush_threshold: Number of rows after which to flush records to disk.
-        total_rows: Total number of rows/files in the dataset to process.
-    Returns:
-        An integer representing the batch size per worker for processing.
+
+def _resolve_batch_size(worker_count: int, total_rows: int) -> int:
     """
-    if flush_threshold <= 0:  # e.g. flush is completely disabled or not properly set
-        return max(1, math.ceil(total_rows / max(1, worker_count)))
-    return max(1, math.ceil(flush_threshold / max(1, worker_count)))
+    Choose how many files to pack into each dask task.
+
+    Targets 4× worker_count tasks so the progress bar has enough steps to be
+    meaningful while keeping batch sizes large enough to amortise the
+    per-task pickle serialisation overhead.  Capped at 50 files per batch so
+    results never grow large enough to slow down the process pool.
+
+    Examples:
+        57 files,  22 workers → batch=1  (57 tasks,  fine-grained progress)
+        1k files,  22 workers → batch=11 (91 tasks,  ~4 per worker)
+        200k files,22 workers → batch=50 (4k tasks, capped to avoid overhead)
+    """
+    target_tasks = worker_count * 4
+    return max(1, min(50, total_rows // max(1, target_tasks)))
 
 
 def _resolve_flush_threshold(total_rows: int, config: ProcessingConfig) -> int:
@@ -936,6 +928,10 @@ class _RecordsAccumulator:
             col for col in final_df.columns
             if final_df[col].is_null().all()
             or (final_df[col].dtype == pl.Utf8 and (final_df[col].is_null() | (final_df[col] == "")).all())
+            # Drop List/Array columns — DuckDB reports their type as e.g. "BIGINT[]" which
+            # the viewer misclassifies as a numeric metric, causing AVG(shape) to crash and
+            # hiding all other metrics.  The info is already in scalar columns (Z_size etc).
+            or isinstance(final_df[col].dtype, (pl.List, pl.Array))
         ]
         if cols_to_drop:
             final_df = final_df.drop(cols_to_drop)

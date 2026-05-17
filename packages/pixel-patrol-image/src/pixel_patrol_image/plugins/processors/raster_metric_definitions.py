@@ -44,7 +44,12 @@ def _scalar_rows_agg(fn: Callable[[List[Any]], Any]) -> Callable[[RasterMetricSp
 
     def agg(spec: RasterMetricSpec, rows: List[Dict[str, Any]]) -> Any:
         vals = [r[spec.name] for r in rows if spec.name in r]
-        return fn(vals) if vals else AGG_SKIP
+        if not vals:
+            return AGG_SKIP
+        arr = np.asarray(vals, dtype=float)
+        if not np.any(np.isfinite(arr)):
+            return np.nan
+        return fn(arr)
 
     return agg
 

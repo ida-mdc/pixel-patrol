@@ -17,10 +17,15 @@ def fold_to_tiles(
 
     Returns (tiled, mask) both of shape (n_planes, n_tiles_y, n_tiles_x, tile_size, tile_size).
     n_planes is the product of all leading dimensions.  mask is False on padding pixels.
+
+    If tile_size >= max(H, W) the block is treated as a single tile (no XY breakdown).
+    Set PIXEL_PATROL_STATS_TILE_SIZE to a large value to get one value per Z-plane only.
     """
     h, w = block.shape[-2:]
     mask = np.ones(block.shape, dtype=bool)
-    ts = tile_size
+    # Cap tile_size to the image extent so an oversized tile_size produces a single
+    # tile rather than padding the array to (n, tile_size, tile_size) which OOMs.
+    ts = min(tile_size, max(h, w))
     py, px = (ts - h % ts) % ts, (ts - w % ts) % ts
     if py or px:
         if not np.issubdtype(block.dtype, np.floating):
@@ -35,14 +40,27 @@ def fold_to_tiles(
     return tiled, mask_tiled
 
 
-class NumpyRasterBackend:
-    """Turn lazy image chunks into a square tile grid and measure statistics on each tile."""
+def _nbr_stats(arr: np.ndarray):
+    """Compute 3×3 neighbourhood mean and std — shared between mscn and local_std_ratio."""
+    nbr_sum = np.zeros_like(arr[..., :-2, :-2])
+    nbr_sq_sum = np.zeros_like(nbr_sum)
+    h, w = arr.shape[-2], arr.shape[-1]
+    for di in range(3):
+        for dj in range(3):
+            patch = arr[..., di:h - 2 + di, dj:w - 2 + dj]
+            nbr_sum += patch
+            nbr_sq_sum += patch * patch
+    local_mean = nbr_sum / 9.0
+    local_std = np.sqrt(np.maximum(nbr_sq_sum / 9.0 - local_mean ** 2, 0.0))
+    return local_mean, local_std
 
-    def __init__(self, dask_arr, tile_size, s_min, s_max, enabled_metrics, dim_names):
-        """Store the chunked image, tile width and height, value ranges per slice, metrics to run, and dimension labels."""
-        self.dask_arr = dask_arr
+
+class NumpyRasterBackend:
+    """Turn image chunks into a square tile grid and measure statistics on each tile."""
+
+    def __init__(self, arr: np.ndarray, tile_size, s_min, s_max, enabled_metrics, dim_names):
+        self.arr = arr
         self.tile_size = tile_size
-        self.dim_starts = [np.cumsum((0,) + c[:-1]) for c in self.dask_arr.chunks]
         self.s_min = s_min
         self.s_max = s_max
         self.enabled_metrics = enabled_metrics
@@ -55,6 +73,7 @@ class NumpyRasterBackend:
         mask: np.ndarray,
         axes: Tuple[int, int],
         ctx_list: List[Dict[str, float]],
+        nbr_cache: Optional[Dict] = None,
     ) -> Optional[np.ndarray]:
         """Calculate one requested statistic across each tile, or return nothing if it is not supported."""
         match metric_name:
@@ -64,8 +83,8 @@ class NumpyRasterBackend:
             case MetricNames.STD_INTENSITY: return np.nanstd(arr, axis=axes)
             case MetricNames.FINITE_PIXEL_COUNT: return np.sum(mask & ~np.isnan(arr), axis=axes)
             case MetricNames.MICHELSON_CONTRAST: return michelson_contrast_tile(arr, axes)
-            case MetricNames.MSCN_VARIANCE: return mscn_variance_tile(arr, axes)
-            case MetricNames.LOCAL_STD_RATIO: return local_std_ratio_tile(arr, axes)
+            case MetricNames.MSCN_VARIANCE: return mscn_variance_tile(arr, axes, nbr_cache)
+            case MetricNames.LOCAL_STD_RATIO: return local_std_ratio_tile(arr, axes, nbr_cache)
             case MetricNames.HISTOGRAM_NAN_COUNT: return np.sum(np.isnan(arr) & mask, axis=axes)
             case MetricNames.HISTOGRAM_COUNTS: return histogram_counts(arr, mask, ctx_list)
             case MetricNames.BLOCKING_INDEX: return calc_blocking(arr, mask, None)
@@ -76,92 +95,54 @@ class NumpyRasterBackend:
         """Pad and reshape a block into a tile grid; delegates to module-level fold_to_tiles."""
         return fold_to_tiles(block, self.tile_size)
 
-    def process(self, b_idx: Tuple[int, ...], precomputed: Optional[np.ndarray] = None) -> List[Dict[str, Any]]:
-        """Load one chunk from the lazy array and produce results for every tile that overlaps real pixels."""
-        block = precomputed if precomputed is not None else self.dask_arr.blocks[b_idx].compute()
-        block_origin = self._block_origin(b_idx)
+    def process(self) -> List[Dict[str, Any]]:
+        """Produce tile rows, one plane at a time to bound peak RAM.
+
+        Each non-spatial plane (Z-slice, channel, …) is folded and measured
+        independently so metric intermediates are proportional to one plane
+        rather than the full Z-stack.  Neighbourhood stats shared between
+        mscn_variance and local_std_ratio are computed once per plane.
+        """
+        block = self.arr
         ns_shape = block.shape[:-2]
-
-        reshaped, mask = self.fold_block(block)
-        histogram_ctx = self._histogram_ctx_per_plane(ns_shape, block_origin)
-        tile_axes = (-2, -1)
-        tensors = self._evaluate_tile_metrics(reshaped, mask, tile_axes, histogram_ctx)
-
+        nd_leading = block.ndim - 2
         ctx_fields = enabled_ctx_tile_fields(self.enabled_metrics)
-        valid_mask = np.any(mask, axis=tile_axes)
+        tile_axes = (-2, -1)
+        ts = self.tile_size
 
         rows: List[Dict[str, Any]] = []
-        for idx in np.ndindex(valid_mask.shape):
-            if not valid_mask[idx]:
-                continue
-            rows.append(
-                self._tile_row(idx, ns_shape, block_origin, tensors, histogram_ctx, ctx_fields)
-            )
+        for ns_local in (np.ndindex(ns_shape) if ns_shape else [()]):
+            plane = block[ns_local][np.newaxis]      # (1, H, W)
+            reshaped, mask = self.fold_block(plane)  # (1, n_ty, n_tx, ts, ts)
+
+            hist_ctx = [{"min": float(self.s_min[ns_local]), "max": float(self.s_max[ns_local])}]
+
+            # Cache 3×3 neighbourhood stats: mscn and local_std_ratio share the same
+            # computation (nbr_sum, nbr_sq_sum → local_mean, local_std).
+            nbr_cache: Dict = {}
+            tensors: Dict[str, np.ndarray] = {}
+            for spec in self.enabled_metrics:
+                out = self.compute_tile_metric(spec.name, reshaped, mask, tile_axes, hist_ctx, nbr_cache)
+                if out is not None:
+                    tensors[spec.name] = out
+
+            valid_mask = np.any(mask, axis=tile_axes)  # (1, n_ty, n_tx)
+            for idx in np.ndindex(valid_mask.shape):
+                if not valid_mask[idx]:
+                    continue
+                _, tile_yi, tile_xi = idx
+                row: Dict[str, Any] = {"obs_level": block.ndim}
+                for i in range(nd_leading):
+                    row[self.dim_names[i]] = ns_local[i]
+                row["dim_y"] = tile_yi * ts
+                row["dim_x"] = tile_xi * ts
+                for name, tensor in tensors.items():
+                    val = tensor[idx]
+                    row[name] = float(val) if np.isscalar(val) else val
+                for field_name, ctx_key in ctx_fields:
+                    row[field_name] = hist_ctx[0][ctx_key]
+                rows.append(row)
         return rows
-
-    def _block_origin(self, b_idx: Tuple[int, ...]) -> List[int]:
-        """Pixel offsets telling where this chunk begins inside the full image."""
-        return [int(self.dim_starts[ax][b_idx[ax]]) for ax in range(self.dask_arr.ndim)]
-
-    def _histogram_ctx_per_plane(
-        self, ns_shape: Tuple[int, ...], block_origin: List[int]
-    ) -> List[Dict[str, float]]:
-        """For each slice in this chunk, the darkest and brightest values used when binning histograms."""
-        nd_leading = self.dask_arr.ndim - 2
-        ctx_list: List[Dict[str, float]] = []
-        for n_idx in np.ndindex(ns_shape):
-            global_ns = tuple(block_origin[i] + n_idx[i] for i in range(nd_leading))
-            ctx_list.append(
-                {"min": float(self.s_min[global_ns]), "max": float(self.s_max[global_ns])}
-            )
-        return ctx_list
-
-    def _evaluate_tile_metrics(
-        self,
-        reshaped: np.ndarray,
-        mask: np.ndarray,
-        axes: Tuple[int, int],
-        histogram_ctx: List[Dict[str, float]],
-    ) -> Dict[str, np.ndarray]:
-        """Run every chosen metric over the tiled layout and collect results under metric names."""
-        tensors: Dict[str, np.ndarray] = {}
-        for spec in self.enabled_metrics:
-            out = self.compute_tile_metric(spec.name, reshaped, mask, axes, histogram_ctx)
-            if out is not None:
-                tensors[spec.name] = out
-        return tensors
-
-    def _tile_row(
-        self,
-        tile_idx: Tuple[int, ...],
-        ns_shape: Tuple[int, ...],
-        block_origin: List[int],
-        tensors: Dict[str, np.ndarray],
-        histogram_ctx: List[Dict[str, float]],
-        ctx_fields: Tuple[Tuple[str, str], ...],
-    ) -> Dict[str, Any]:
-        """Build one record listing tile position, measured numbers, and histogram range metadata."""
-        plane_flat, tile_yi, tile_xi = tile_idx  # indices into (n_planes, n_tiles_y, n_tiles_x)
-        nd_leading = self.dask_arr.ndim - 2
-        ns_local = np.unravel_index(plane_flat, ns_shape) if ns_shape else ()
-
-        row: Dict[str, Any] = {"obs_level": self.dask_arr.ndim}
-        for i in range(nd_leading):
-            row[self.dim_names[i]] = block_origin[i] + ns_local[i]
-
-        ts = self.tile_size
-        row["dim_y"] = block_origin[-2] + tile_yi * ts
-        row["dim_x"] = block_origin[-1] + tile_xi * ts
-
-        for name, tensor in tensors.items():
-            val = tensor[tile_idx]
-            row[name] = float(val) if np.isscalar(val) else val
-
-        slice_ctx = histogram_ctx[plane_flat]
-        for field_name, ctx_key in ctx_fields:
-            row[field_name] = slice_ctx[ctx_key]
-
-        return row
 
 
 def histogram_counts(
@@ -265,82 +246,67 @@ def michelson_contrast_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -
     mean_local_range = np.nanmean(local_max - local_min, axis=axes)
     with np.errstate(all="ignore"):
         tile_std = np.nanstd(arr, axis=axes)
-    return np.where(tile_std > 0, mean_local_range / tile_std, np.nan)
+    result = np.full_like(tile_std, np.nan)
+    valid = tile_std > 0
+    result[valid] = mean_local_range[valid] / tile_std[valid]
+    return result
 
 
-def mscn_variance_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> np.ndarray:
-    """Variance of Mean-Subtracted Contrast-Normalized (MSCN) coefficients over 3×3 windows.
+def mscn_variance_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1),
+                       cache: Optional[Dict] = None) -> np.ndarray:
+    """Variance of MSCN coefficients: (I − μ_local) / (σ_local + C) over 3×3 windows.
 
-    For each interior pixel:
-        c(i,j) = (I(i,j) − μ_local(i,j)) / (σ_local(i,j) + C)
-    where μ_local and σ_local are the 3×3 neighbourhood mean and std, and C is a
-    stability constant (0.1 % of tile dynamic range).
-
-    Local mean subtraction removes the DC offset (handles background-subtracted images);
-    local std division removes the gain (handles absolute brightness variation).  The
-    resulting variance is intensity-independent by construction.
-
-    Ref: Mittal, A., Moorthy, A. K., & Bovik, A. C. (2012). No-reference image quality
-    assessment in the spatial domain. IEEE Trans. Image Process., 21(12), 4695–4708.
+    Ref: Mittal et al. (2012). IEEE Trans. Image Process., 21(12), 4695–4708.
     """
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
 
-    nbr_sum = np.zeros_like(arr[..., :-2, :-2])
-    nbr_sq_sum = np.zeros_like(nbr_sum)
-    for di in range(3):
-        for dj in range(3):
-            patch = arr[..., di:h - 2 + di, dj:w - 2 + dj]
-            nbr_sum += patch
-            nbr_sq_sum += patch * patch
-
-    local_mean = nbr_sum / 9.0
-    local_std = np.sqrt(np.maximum(nbr_sq_sum / 9.0 - local_mean ** 2, 0.0))
+    local_mean, local_std = _nbr_stats_cached(arr, cache)
 
     with np.errstate(all="ignore"):
         tile_range = np.nanmax(arr, axis=axes, keepdims=True) - np.nanmin(arr, axis=axes, keepdims=True)
-    C = np.maximum(tile_range * 1e-3, 1e-10)  # shape (..., 1, 1) broadcasts to center
-
+    C = np.maximum(tile_range * 1e-3, 1e-10)
     center = arr[..., 1:-1, 1:-1]
     c = (center - local_mean) / (local_std + C)
-    return np.nanvar(c, axis=axes)
+    all_nan = np.all(np.isnan(c), axis=axes)
+    if not np.any(all_nan):
+        return np.nanvar(c, axis=axes)
+    c_safe = np.where(all_nan[..., np.newaxis, np.newaxis], 0.0, c)
+    return np.where(all_nan, np.nan, np.nanvar(c_safe, axis=axes))
 
 
-def local_std_ratio_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1)) -> np.ndarray:
-    """Mean local 3×3 std divided by tile std: mean(local_std) / tile_std.
+def local_std_ratio_tile(arr: np.ndarray, axes: Tuple[int, int] = (-2, -1),
+                         cache: Optional[Dict] = None) -> np.ndarray:
+    """Mean local 3×3 std / tile std — sharpness proxy.
 
-    Measures how much of the tile's overall variation is concentrated in small local
-    patches.  A sharp, focused tile with clear edges has high local std at each edge
-    relative to the global spread → ratio approaches 1.  A smooth or out-of-focus tile
-    has low local std everywhere even if the global std is non-zero → ratio is low.
-
-    Both numerator and denominator are standard deviations (differences of squared
-    values relative to local means), so both are translation-invariant and scale
-    identically under multiplicative intensity changes.  The ratio is therefore
-    invariant to both additive offsets and multiplicative scaling.
-
-    Returns NaN for tiles where tile_std is zero (perfectly uniform tiles).
-
-    Ref: Groen, F. C., Young, I. T., & Ligthart, G. (1985). A comparison of different
-    focus functions for use in autofocus algorithms. Cytometry, 6(2), 81–91.
+    Ref: Groen et al. (1985). Cytometry, 6(2), 81–91.
     """
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
 
-    nbr_sum = np.zeros_like(arr[..., :-2, :-2])
-    nbr_sq_sum = np.zeros_like(nbr_sum)
-    for di in range(3):
-        for dj in range(3):
-            patch = arr[..., di:h - 2 + di, dj:w - 2 + dj]
-            nbr_sum += patch
-            nbr_sq_sum += patch * patch
+    _, local_std = _nbr_stats_cached(arr, cache)
 
-    local_mean = nbr_sum / 9.0
-    local_std = np.sqrt(np.maximum(nbr_sq_sum / 9.0 - local_mean ** 2, 0.0))
-
-    mean_local_std = np.nanmean(local_std, axis=axes)
+    all_nan = np.all(np.isnan(local_std), axis=axes)
+    if np.any(all_nan):
+        local_std_safe = np.where(all_nan[..., np.newaxis, np.newaxis], 0.0, local_std)
+        mean_local_std = np.where(all_nan, np.nan, np.nanmean(local_std_safe, axis=axes))
+    else:
+        mean_local_std = np.nanmean(local_std, axis=axes)
     with np.errstate(all="ignore"):
         tile_std = np.nanstd(arr, axis=axes)
-    return np.where(tile_std > 0, mean_local_std / tile_std, np.nan)
+    result = np.full_like(tile_std, np.nan)
+    valid = tile_std > 0
+    result[valid] = mean_local_std[valid] / tile_std[valid]
+    return result
+
+
+def _nbr_stats_cached(arr: np.ndarray, cache: Optional[Dict]) -> Tuple[np.ndarray, np.ndarray]:
+    """Return (local_mean, local_std) from cache if available, else compute and store."""
+    if cache is not None and 'nbr' in cache:
+        return cache['nbr']
+    result = _nbr_stats(arr)
+    if cache is not None:
+        cache['nbr'] = result
+    return result

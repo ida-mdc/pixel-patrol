@@ -63,7 +63,7 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
         selected_file_extensions=loader.SUPPORTED_EXTENSIONS,
     )
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processing_config=config,
@@ -100,7 +100,7 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
     def progress_callback(current: int, total: int, current_file: Path) -> None:
         progress_calls.append((current, total, current_file))
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processing_config=config,
@@ -134,7 +134,7 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
         records_flush_every_n=1,
     )
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processing_config=config,
