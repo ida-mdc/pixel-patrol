@@ -15,9 +15,8 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# You can also define a specific logger for the top-level package
 logger = logging.getLogger(__name__)
-logger.info("Pixel Patrol package initialized.")
+logger.debug("Pixel Patrol package initialized.")
 
 # Set random seeds for reproducibility
 random.seed(42)

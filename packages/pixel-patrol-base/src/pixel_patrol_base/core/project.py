@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from pathlib import Path
 import dataclasses
 from typing import List, Union, Iterable, Optional, Set, Callable
@@ -24,7 +25,7 @@ class Project:
 
         if output_path is None:
             output_path = Path(self.base_dir) / f"{self.name}.parquet"
-            logger.info(f"Project Core: No output_path specified; inferring: '{output_path}'.")
+            logger.debug(f"Project Core: No output_path specified; inferring: '{output_path}'.")
         self.output_path: Path = resolve_parquet_output_path(output_path)
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
@@ -34,7 +35,7 @@ class Project:
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
-        logger.info(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else 'None' } and base dir: {self.base_dir}.")
+        logger.debug(f"Project Core: Project '{self.name}' initialized with loader {self.loader.NAME if self.loader else 'None' } and base dir: {self.base_dir}.")
 
 
     @property
@@ -44,14 +45,14 @@ class Project:
     @base_dir.setter
     def base_dir(self, value: Union[str, Path]) -> None:
         """Set and validate the project base directory."""
-        logger.info(f"Project Core: Attempting to set project base directory to '{value}'.")
+        logger.debug(f"Project Core: Attempting to set project base directory to '{value}'.")
         resolved_base = validation.resolve_and_validate_base_dir(value)
         self._base_dir = resolved_base
-        logger.info(f"Project Core: Project base directory set to: '{self._base_dir}'.")
+        logger.debug(f"Project Core: Project base directory set to: '{self._base_dir}'.")
 
 
     def add_paths(self, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> "Project":
-        logger.info(f"Project Core: Attempting to add paths to project '{self.name}'.")
+        logger.debug(f"Project Core: Attempting to add paths to project '{self.name}'.")
 
         paths_to_add_raw = validation.validate_paths_type(paths)
 
@@ -62,7 +63,7 @@ class Project:
                 validated_paths_to_process.append(validated_path)
 
         if not validated_paths_to_process:
-            logger.info(f"Project Core: No valid or non-redundant paths provided to add to project '{self.name}'. No change.")
+            logger.debug(f"Project Core: No valid or non-redundant paths provided to add to project '{self.name}'. No change.")
             return self
 
         initial_paths_set = set(self.paths)
@@ -80,7 +81,7 @@ class Project:
         self.paths = sorted(list(updated_paths_set))
 
         if set(self.paths) != initial_paths_set:
-            logger.info(f"Project Core: Paths updated for project '{self.name}'. Total paths count: {len(self.paths)}.")
+            logger.debug(f"Project Core: Paths updated for project '{self.name}'. Total paths count: {len(self.paths)}.")
         else:
             logger.info(
                 f"Project Core: No change to project paths for '{self.name}'. Total paths count: {len(self.paths)}.")
@@ -90,7 +91,7 @@ class Project:
 
 
     def delete_path(self, path: Union[str, Path]) -> "Project":
-        logger.info(f"Project Core: Attempting to delete path '{path}' from project '{self.name}'.")
+        logger.debug(f"Project Core: Attempting to delete path '{path}' from project '{self.name}'.")
 
         resolved_p_to_delete = validation.resolve_and_validate_project_path(path, self.base_dir)
 
@@ -108,7 +109,7 @@ class Project:
         self.paths = [p for p in self.paths if p != resolved_p_to_delete]
 
         if len(self.paths) < initial_len:
-            logger.info(f"Project Core: Successfully deleted path '{resolved_p_to_delete}' from project '{self.name}'.")
+            logger.debug(f"Project Core: Successfully deleted path '{resolved_p_to_delete}' from project '{self.name}'.")
 
         else:
             logger.warning(
@@ -150,7 +151,7 @@ class Project:
         config = self._prepare_processing_config(processing_config)
         flush_dir = self.output_path.parent / f"_batches_{self.name}"
 
-        self.records_df = processing.build_records_df(
+        self.records_df, _summary = processing.build_records_df(
             bases=self.paths,
             loader=self.loader,
             processing_config=config,
@@ -171,6 +172,12 @@ class Project:
             processing.cleanup_flush_dir(flush_dir)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
+
+        if _summary is not None:
+            _summary.project_name = self.name
+            _summary.date_str = datetime.now().strftime("%Y-%m-%d")
+            self.processing_summary = _summary
+            _summary.write_next_to(self.output_path)
 
         return self
 
@@ -217,7 +224,7 @@ def _resolve_extensions(
             logger.info("Project Core: All file extensions are selected.")
             return "all"
         else:
-            logger.info(f"Project Core: Using loader-supported extensions: {loader.SUPPORTED_EXTENSIONS}")
+            logger.debug(f"Project Core: Using loader-supported extensions: {loader.SUPPORTED_EXTENSIONS}")
             return loader.SUPPORTED_EXTENSIONS
 
     if isinstance(proposed, set):
@@ -226,7 +233,7 @@ def _resolve_extensions(
             logger.warning("Project Core: selected_file_extensions is an empty set - no file will be processed.")
             return set()
         if loader is None:
-            logger.info(f"Project Core: File extensions selected: {proposed}")
+            logger.debug(f"Project Core: File extensions selected: {proposed}")
             return proposed
         else:
             resolved = validation.validate_and_filter_extensions(proposed, loader.SUPPORTED_EXTENSIONS)
@@ -234,7 +241,7 @@ def _resolve_extensions(
                 logger.warning(
                     "Project Core: No loader-supported file extensions provided. No files will be processed.")
                 return set()
-            logger.info(f"Project Core: File extensions set to: {resolved}.")
+            logger.debug(f"Project Core: File extensions set to: {resolved}.")
             return resolved
 
     logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed)}")

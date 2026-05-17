@@ -835,7 +835,7 @@ class _RecordsAccumulator:
         self._chunk_index = 0
         self._combine_headroom_ratio = combine_headroom_ratio
         if self._flush_dir:
-            logger.info(
+            logger.debug(
                 "Processing Core: buffering %s rows per chunk; partial batches go to '%s'",
                 self._flush_every_n,
                 self._flush_dir,
