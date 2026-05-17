@@ -665,8 +665,16 @@ def _build_deep_record_df(
 
 
 def _row_coord_key(row: Dict) -> tuple:
-    """Canonical coordinate tuple used to match rows from different processors."""
-    dim_items = tuple(sorted((k, row.get(k)) for k in row if k.startswith("dim_")))
+    """Canonical coordinate tuple used to match rows from different processors.
+
+    Only scalar dim_* fields (int, float, str, None) are used as coordinates.
+    List/array-valued dim_* fields (e.g. dim_order metadata from a loader) are skipped
+    to avoid unhashable-type errors.
+    """
+    dim_items = tuple(sorted(
+        (k, v) for k, v in row.items()
+        if k.startswith("dim_") and (v is None or isinstance(v, (int, float, str, bool)))
+    ))
     return (row.get("obs_level"),) + dim_items
 
 
