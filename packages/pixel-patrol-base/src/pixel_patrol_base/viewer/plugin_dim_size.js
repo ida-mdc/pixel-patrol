@@ -101,8 +101,10 @@ export default {
             FROM pp_data ${xyWhere} GROUP BY 1, 2 ORDER BY 1, 2
           `);
           if (binRows.length) {
-            const xs = [...new Set(binRows.map(r => Number(r.xbin)))].sort((a, b) => a - b);
-            const ys = [...new Set(binRows.map(r => Number(r.ybin)))].sort((a, b) => a - b);
+            const numBinsX = Math.ceil(spanX / binX) + 1;
+            const numBinsY = Math.ceil(spanY / binY) + 1;
+            const xs = Array.from({ length: numBinsX }, (_, i) => minX + i * binX);
+            const ys = Array.from({ length: numBinsY }, (_, i) => minY + i * binY);
             const xi = new Map(xs.map((v, i) => [v, i]));
             const yi = new Map(ys.map((v, i) => [v, i]));
             const z  = Array.from({ length: ys.length }, () => Array(xs.length).fill(null));
