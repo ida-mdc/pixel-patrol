@@ -339,10 +339,11 @@ def _hpc_build_tasks(
 
 
 class _HpcSliceWorker:
-    """Process one Z/T slice of a large file using slice-safe processors (raw tile rows only)."""
+    """Process one tile chunk using all slice-safe processors via the run_slice interface."""
 
-    def __init__(self, loader_name: str):
+    def __init__(self, loader_name: str, slice_safe_classes: List[type]):
         self.loader_name = loader_name
+        self.slice_safe_classes = slice_safe_classes
 
     def __call__(self, task: Dict) -> List[Dict]:
         import dask
@@ -385,30 +386,23 @@ class _HpcSliceWorker:
         y_ax, x_ax = dim_order.index('Y'), dim_order.index('X')
         arr = _da.moveaxis(arr, [y_ax, x_ax], [-2, -1])
 
-        t_proc = time.perf_counter()
-        try:
-            from pixel_patrol_image.plugins.processors.raster_image_dask_processor import (
-                collect_tile_rows as _collect, enabled_raster_metrics as _metrics, process_chunk as _pc,
-            )
-            from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
-            slc = task['slc']
-            origin = task['origin']
-            dim_order_out = list(task['dim_order_out'])
-            ns_dims = [d for d in dim_order_out if d not in ('Y', 'X')]
-            dim_names = [f'dim_{d.lower()}' for d in ns_dims] + ['dim_y', 'dim_x']
-            tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
-            sp_axes = tuple(range(arr.ndim - 2, arr.ndim))
-            chunk = arr[slc].compute()
-            s_min = chunk.min(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.min())
-            s_max = chunk.max(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.max())
-            metrics = _metrics()
-            tile_rows = _pc(chunk, origin, dim_names, tile_size, metrics, s_min, s_max)
-            for row in tile_rows:
-                row['__hpc_row_index__'] = task['row_index']
-            rows.extend(tile_rows)
-            timing['proc_raster-image'] = time.perf_counter() - t_proc
-        except Exception as exc:
-            logger.warning('hpc slice: raster processing failed %s: %s', task['path'], exc)
+        slc = task['slc']
+        origin = task['origin']
+        dim_order_out = list(task['dim_order_out'])
+        chunk = arr[slc].compute()
+
+        for cls in self.slice_safe_classes:
+            t_proc = time.perf_counter()
+            try:
+                tile_rows = cls().run_slice(chunk, list(origin), dim_order_out)
+                for row in tile_rows:
+                    row['__hpc_row_index__'] = task['row_index']
+                    row['__proc__'] = cls.NAME
+                rows.extend(tile_rows)
+            except Exception as exc:
+                logger.warning('hpc slice: %s failed for %s: %s', cls.NAME, task['path'], exc)
+            finally:
+                timing[f'proc_{cls.NAME}'] = timing.get(f'proc_{cls.NAME}', 0.0) + (time.perf_counter() - t_proc)
 
         rows.append({'__timing__': timing})
         return rows
@@ -502,13 +496,14 @@ def _build_deep_record_df(
 
     # Unified dispatch worker: routes each task to the right handler.
     class _DispatchWorker:
-        def __init__(self, ln, all_cls, non_ss_cls):
+        def __init__(self, ln, all_cls, non_ss_cls, ss_cls):
             self.ln, self.all_cls, self.non_ss_cls = ln, all_cls, non_ss_cls
+            self._slice_worker = _HpcSliceWorker(ln, ss_cls)
 
         def __call__(self, task):
             import dask
             if task['type'] == 'slice':
-                return _HpcSliceWorker(self.ln)(task)
+                return self._slice_worker(task)
             classes = self.non_ss_cls if task['type'] == 'full_file' else self.all_cls
             items = [_IndexedPath(task['row_index'], task['path'])] if task['type'] == 'full_file' \
                     else task['batch']
@@ -522,7 +517,7 @@ def _build_deep_record_df(
                 pass
             return result
 
-    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes)
+    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes, slice_safe_classes)
 
     def _force_exit(sig, frame):
         raise SystemExit(1)
@@ -538,7 +533,19 @@ def _build_deep_record_df(
             _active_client = _get_client()
             futures = _active_client.map(worker_fn, all_tasks)
             _dist_progress(futures, notebook=False)
-            all_results: List[List[Dict]] = _active_client.gather(futures)
+            # errors='skip' returns the exception object for killed/failed tasks
+            # instead of raising, so partial results from surviving tasks are kept.
+            all_results_raw = _active_client.gather(futures, errors='skip')
+            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+            if n_failed:
+                logger.warning(
+                    'gather: %d of %d tasks failed (workers killed or OOM); '
+                    'partial results will be saved', n_failed, len(futures)
+                )
+            all_results: List[List[Dict]] = [
+                r if not isinstance(r, BaseException) else []
+                for r in all_results_raw
+            ]
         except (ImportError, ValueError):
             scheduler = 'synchronous' if worker_count == 1 else 'processes'
             compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
@@ -564,7 +571,7 @@ def _build_deep_record_df(
     all_timing: Dict[str, float] = {"load": 0.0, "n_files": 0}
 
     # Collect raw tile rows from slice tasks and strip timing sentinels from all results.
-    raw_tile_rows_by_ridx: Dict[int, List[Dict]] = {}
+    raw_tile_rows_by_ridx: Dict[tuple, List[Dict]] = {}  # (row_index, proc_name) -> rows
     cleaned_results: List[tuple] = []   # (task, deep_rows)
 
     for task, raw_rows in zip(all_tasks, all_results):
@@ -579,25 +586,33 @@ def _build_deep_record_df(
         if task['type'] == 'slice':
             for row in rows:
                 if "__hpc_row_index__" in row:
-                    raw_tile_rows_by_ridx.setdefault(row.pop("__hpc_row_index__"), []).append(row)
+                    ridx = row.pop("__hpc_row_index__")
+                    proc_name = row.pop("__proc__", "unknown")
+                    raw_tile_rows_by_ridx.setdefault((ridx, proc_name), []).append(row)
         else:
             cleaned_results.append((task, rows))
 
-    # Accumulate tile rows per large file (runs accumulate_power_set once for the whole file).
+    # Accumulate tile rows per (file, processor) — runs accumulate_power_set once per combo.
+    # Groups by processor so each processor's rollup is correct and they're merged afterwards.
     accumulated_by_ridx: Dict[int, List[Dict]] = {}
     if raw_tile_rows_by_ridx:
-        try:
-            from pixel_patrol_image.plugins.processors.raster_image_dask_processor import (
-                accumulate_raster_tile_rows as _acc_rtr,
-            )
-            for ridx, tile_rows in raw_tile_rows_by_ridx.items():
-                shape, dim_order_out = _large_file_meta[ridx]
-                acc_rows = _acc_rtr(tile_rows, shape, dim_order_out)
-                for row in acc_rows:
-                    row['row_index'] = ridx
+        _ss_by_name = {cls.NAME: cls for cls in slice_safe_classes}
+        for (ridx, proc_name), tile_rows in raw_tile_rows_by_ridx.items():
+            proc_cls = _ss_by_name.get(proc_name)
+            if proc_cls is None:
+                continue
+            shape, dim_order_out = _large_file_meta[ridx]
+            try:
+                acc_rows = proc_cls.accumulate_slice_rows(tile_rows, shape, dim_order_out)
+            except Exception as exc:
+                logger.warning('accumulate_slice_rows failed for %s/%s: %s', proc_name, ridx, exc)
+                continue
+            for row in acc_rows:
+                row['row_index'] = ridx
+            if ridx not in accumulated_by_ridx:
                 accumulated_by_ridx[ridx] = acc_rows
-        except ImportError:
-            logger.warning("pixel_patrol_image not available — raster slice results dropped")
+            else:
+                accumulated_by_ridx[ridx] = _merge_long_rows(accumulated_by_ridx[ridx], acc_rows)
 
     processed_count = 0
     with tqdm(total=total, desc="Saving results", unit="file",

@@ -127,6 +127,22 @@ class RasterImageDaskProcessor:
         _log.debug('done   record=%s  rows=%d  elapsed=%.1fs', src, len(out), time.perf_counter() - t0)
         return out
 
+    def run_slice(self, chunk: np.ndarray, origin: List[int], dim_order_out: List[str]) -> List[Dict]:
+        """Process one tile chunk. Returns raw tile rows — call accumulate_slice_rows after all slices."""
+        ns_dims = [d for d in dim_order_out if d not in ('Y', 'X')]
+        dim_names = [f'dim_{d.lower()}' for d in ns_dims] + ['dim_y', 'dim_x']
+        tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
+        sp_axes = tuple(range(chunk.ndim - 2, chunk.ndim))
+        s_min = chunk.min(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.min())
+        s_max = chunk.max(axis=sp_axes) if chunk.ndim > 2 else np.array(chunk.max())
+        return process_chunk(chunk, origin, dim_names, tile_size, enabled_raster_metrics(), s_min, s_max)
+
+    @staticmethod
+    def accumulate_slice_rows(
+        tile_rows: List[Dict], full_shape: tuple, dim_order_out: List[str]
+    ) -> List[Dict]:
+        return accumulate_raster_tile_rows(tile_rows, full_shape, dim_order_out)
+
     @staticmethod
     def _open_array(art: Record):
         """Reorder axes so Y, X are last. Returns (lazy_dask_array, dim_order_out)."""
