@@ -667,13 +667,15 @@ def _build_deep_record_df(
 def _row_coord_key(row: Dict) -> tuple:
     """Canonical coordinate tuple used to match rows from different processors.
 
-    Only scalar dim_* fields (int, float, str, None) are used as coordinates.
-    List/array-valued dim_* fields (e.g. dim_order metadata from a loader) are skipped
-    to avoid unhashable-type errors.
+    Only single-letter coordinate dim_* fields (dim_z, dim_c, dim_y, dim_x, …)
+    are used — these are always exactly 5 characters ("dim_" + 1 letter) and carry
+    scalar values (int or None).  Multi-character fields like dim_order (loader
+    metadata) are excluded so they don't break dict-key hashing or row matching.
     """
     dim_items = tuple(sorted(
         (k, v) for k, v in row.items()
-        if k.startswith("dim_") and (v is None or isinstance(v, (int, float, str, bool)))
+        if len(k) == 5 and k.startswith("dim_")
+        and (v is None or isinstance(v, (int, float)))
     ))
     return (row.get("obs_level"),) + dim_items
 
@@ -1223,10 +1225,6 @@ class _RecordsAccumulator:
             col for col in final_df.columns
             if final_df[col].is_null().all()
             or (final_df[col].dtype == pl.Utf8 and (final_df[col].is_null() | (final_df[col] == "")).all())
-            # Drop List/Array columns — DuckDB reports their type as e.g. "BIGINT[]" which
-            # the viewer misclassifies as a numeric metric, causing AVG(shape) to crash and
-            # hiding all other metrics.  The info is already in scalar columns (Z_size etc).
-            or isinstance(final_df[col].dtype, (pl.List, pl.Array))
         ]
         if cols_to_drop:
             final_df = final_df.drop(cols_to_drop)
