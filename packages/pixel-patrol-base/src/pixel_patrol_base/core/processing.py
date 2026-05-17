@@ -271,7 +271,7 @@ def _hpc_open_array_info(path: str, loader_name: str) -> Optional[tuple]:
         ns_dims = [d for d in dim_order if d not in ('Y', 'X')]
         return arr.shape, arr.dtype, ns_dims + ['Y', 'X']
     except Exception as exc:
-        logger.debug('hpc_open_array_info: %s — %s', path, exc)
+        logger.warning('hpc plan: could not open %s — %s', path, exc)
         return None
 
 
@@ -286,16 +286,14 @@ def _hpc_build_tasks(
     """Route files into mixed task list. Small files batch; large files get a full-file task
     (non-slice-safe processors) plus per-slice tasks (slice-safe processors).
 
-    Uses disk size as a cheap pre-filter; opens lazily only files that could be large.
-    Size threshold: half of target_mb on disk (conservative for compressed formats).
+    Every file is opened lazily (header only) to get the actual array memory size.
     Returns (tasks, large_file_meta) where large_file_meta maps row_index to
     (full_shape, dim_order_out) needed for post-gather accumulation.
     """
     from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
 
-    disk_threshold_bytes = target_mb * 1024 ** 2 * 0.5
     tasks: List[Dict] = []
-    large_file_meta: Dict[int, tuple] = {}   # row_index → (full_shape, dim_order_out)
+    large_file_meta: Dict[int, tuple] = {}
     batch: List[_IndexedPath] = []
     batch_size_mb = 0.0
 
@@ -307,22 +305,22 @@ def _hpc_build_tasks(
         path, row_index = row['path'], int(row['row_index'])
         size_bytes = row.get('size_bytes') or 0
 
-        if size_bytes >= disk_threshold_bytes:
-            info = _hpc_open_array_info(path, loader_name)
-            if info is not None:
-                shape, dtype, dim_order_out = info
-                arr_mb = np.prod(shape) * dtype.itemsize / (1024 ** 2)
-                if arr_mb > target_mb:
-                    _flush(); batch.clear(); batch_size_mb = 0.0
-                    slices = _sp(shape, ''.join(dim_order_out), dtype, target_mb)
-                    large_file_meta[row_index] = (shape, dim_order_out)
-                    tasks.append({'type': 'full_file', 'row_index': row_index, 'path': path})
-                    for slc in slices:
-                        origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
-                        tasks.append({'type': 'slice', 'row_index': row_index, 'path': path,
-                                      'slc': slc, 'origin': origin, 'dim_order_out': dim_order_out,
-                                      'full_shape': shape})
-                    continue
+        info = _hpc_open_array_info(path, loader_name)
+        if info is not None:
+            shape, dtype, dim_order_out = info
+            arr_mb = np.prod(shape) * dtype.itemsize / (1024 ** 2)
+            logger.debug('hpc plan: %s  shape=%s  %.0f MB', path, shape, arr_mb)
+            if arr_mb > target_mb:
+                _flush(); batch.clear(); batch_size_mb = 0.0
+                slices = _sp(shape, ''.join(dim_order_out), dtype, target_mb)
+                large_file_meta[row_index] = (shape, dim_order_out)
+                tasks.append({'type': 'full_file', 'row_index': row_index, 'path': path})
+                for slc in slices:
+                    origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
+                    tasks.append({'type': 'slice', 'row_index': row_index, 'path': path,
+                                  'slc': slc, 'origin': origin, 'dim_order_out': dim_order_out,
+                                  'full_shape': shape})
+                continue
 
         batch.append(_IndexedPath(row_index, path))
         batch_size_mb += size_bytes / (1024 ** 2)
@@ -462,7 +460,7 @@ def _build_deep_record_df(
                 basic, loader_name, target_mb, slice_safe_classes, non_slice_safe_classes,
             )
         except Exception as _exc:
-            logger.debug('hpc_build_tasks failed, falling back to regular batching: %s', _exc)
+            logger.warning('hpc plan failed, falling back to regular batching: %s', _exc)
             _hpc_tasks = None
 
     _use_hpc = _hpc_tasks is not None and any(t['type'] == 'slice' for t in _hpc_tasks)
