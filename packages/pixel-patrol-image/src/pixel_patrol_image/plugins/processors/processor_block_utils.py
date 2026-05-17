@@ -4,7 +4,7 @@ import logging
 import math
 import os
 import time
-from itertools import combinations
+from itertools import combinations, product as iterproduct
 from typing import Any, Callable, Dict, FrozenSet, Generator, List, Tuple
 
 import dask.array as da
@@ -26,56 +26,64 @@ def raster_slicing_plan(
     dtype: np.dtype,
     target_mb: float,
 ) -> List[Tuple[slice, ...]]:
-    """Two-level slicing plan for raster-image: Z/T first, then Y (tile-aligned) if still too large.
+    """Memory-aware chunking for raster-image processing.
 
-    ATOMIC_DIMS (C, S) and X are never split so colocalization always gets all channels.
-    Y is split as a secondary axis when a full C×X plane exceeds target_mb — the common
-    case for very large XY microscopy images (e.g. 40C × 50000 × 40000).
-    Y step is aligned to tile_size so tiles never cross strip boundaries.
+    Rules:
+      C / S  — never split; every task gets all channels (colocalization requires this).
+      X, Y   — chunked at multiples of tile_size; budget allocated largest-first.
+      Z/T/…  — chunked at K values per task using whatever budget remains after XY.
+
+    NumpyRasterBackend then computes one output row per
+      (channel × Z/T-value × tile_size-block-in-Y × tile_size-block-in-X),
+    so splitting here never coarsens the output granularity.
     """
     tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
     dims = {name: {'idx': i, 'size': shape[i]} for i, name in enumerate(dim_string)}
 
-    y_idx  = dims.get('Y', {}).get('idx')
-    y_size = dims.get('Y', {}).get('size', 1) if y_idx is not None else 1
+    if 'Y' not in dims or 'X' not in dims:
+        return [tuple(slice(None) for _ in shape)]
 
-    # Bytes per one full C×Y×X plane (for Z/T step calculation and Y-split trigger)
-    cx_px = 1
-    for d, info in dims.items():
-        if d in ATOMIC_DIMS or d == 'X':
-            cx_px *= info['size']        # C × X (without Y)
-    bytes_per_plane = cx_px * y_size * dtype.itemsize
+    y_idx, y_size = dims['Y']['idx'], dims['Y']['size']
+    x_idx, x_size = dims['X']['idx'], dims['X']['size']
 
-    # Level 1: split along first non-atomic, non-spatial dim (Z or T)
-    splittable = [d for d in dim_string if d not in ATOMIC_DIMS and d not in ('X', 'Y')]
-    split_dim  = splittable[0] if splittable else None
+    # Bytes for one "atomic tile" = all-C × 1-per-other-dim × tile_size × tile_size
+    c_px = math.prod(info['size'] for d, info in dims.items() if d in ATOMIC_DIMS) or 1
+    bytes_per_tile = c_px * tile_size * tile_size * dtype.itemsize
+    budget = max(1, int(target_mb * 1024 ** 2 // bytes_per_tile))
 
-    if split_dim:
-        d_idx  = dims[split_dim]['idx']
-        d_size = dims[split_dim]['size']
-        z_step = max(1, int(target_mb * 1024 ** 2 // bytes_per_plane))
-        z_starts = list(range(0, d_size, z_step))
-    else:
-        d_idx, d_size, z_step = None, 1, None
-        z_starts = [None]
+    # Non-ATOMIC, non-spatial dims (Z, T, …) — chunked with remaining budget
+    ns_dims = [(d, dims[d]['idx'], dims[d]['size'])
+               for d in dim_string if d not in ATOMIC_DIMS and d not in ('X', 'Y')]
 
-    # Level 2: split Y (tile-aligned) when a full plane exceeds target_mb
-    bytes_per_tile_strip = cx_px * tile_size * dtype.itemsize
-    if bytes_per_plane > target_mb * 1024 ** 2 and y_idx is not None:
-        strips_per_task = max(1, int(target_mb * 1024 ** 2 // bytes_per_tile_strip))
-        y_step = strips_per_task * tile_size
-    else:
-        y_step = y_size  # no Y splitting needed
+    # Allocate budget: fill X first, then Y, then distribute remainder to Z/T/…
+    n_x = math.ceil(x_size / tile_size)
+    n_y = math.ceil(y_size / tile_size)
 
+    x_tiles = min(n_x, budget);  budget = max(1, budget // x_tiles)
+    y_tiles = min(n_y, budget);  budget = max(1, budget // y_tiles)
+
+    k_per_dim: List[int] = []
+    for _, _, size in ns_dims:
+        k = min(size, budget)
+        k_per_dim.append(k)
+        budget = max(1, budget // k)
+
+    x_step = x_tiles * tile_size
+    y_step = y_tiles * tile_size
+
+    # Cartesian product of all ns-dim range starts × Y starts × X starts
+    ns_ranges = [range(0, size, k) for (_, _, size), k in zip(ns_dims, k_per_dim)]
     slices: List[Tuple[slice, ...]] = []
-    for z_start in z_starts:
-        for y_start in range(0, y_size, y_step):
-            slc = [slice(None)] * len(shape)
-            if d_idx is not None and z_start is not None:
-                slc[d_idx] = slice(z_start, min(z_start + z_step, d_size))
-            if y_step < y_size:
-                slc[y_idx] = slice(y_start, min(y_start + y_step, y_size))
-            slices.append(tuple(slc))
+
+    for ns_starts in (iterproduct(*ns_ranges) if ns_ranges else [()]):
+        for y0 in range(0, y_size, y_step):
+            for x0 in range(0, x_size, x_step):
+                slc = [slice(None)] * len(shape)
+                for (_, idx, size), start, k in zip(ns_dims, ns_starts, k_per_dim):
+                    slc[idx] = slice(start, min(start + k, size))
+                slc[y_idx] = slice(y0, min(y0 + y_step, y_size))
+                slc[x_idx] = slice(x0, min(x0 + x_step, x_size))
+                slices.append(tuple(slc))
 
     return slices or [tuple(slice(None) for _ in shape)]
 
