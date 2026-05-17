@@ -1,3 +1,9 @@
+function availabilityLine(withData, total, label) {
+  const n = Number(withData), tot = Number(total);
+  const pct = tot > 0 ? ((n / tot) * 100).toFixed(2) : '0.00';
+  return `${n.toLocaleString()} of ${tot.toLocaleString()} files (${pct}%) have '${label}' information.`;
+}
+
 const SAMPLE_N         = 2000;
 const MAX_FILE_OPTIONS = 500;
 const MODE_ID          = 'hist-mode-radio';
@@ -26,7 +32,15 @@ export default {
       const { escapeHtml } = ctx.plot;
       const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
       const hasNames = ctx.schema.allCols.includes('name');
-  
+
+      const [availRow] = await ctx.queryRows(
+        `SELECT COUNT(*) AS total, COUNT("histogram_counts") AS n FROM pp_data ${ctx.where}`
+      );
+      const availP = document.createElement('p');
+      availP.style.marginBottom = '12px';
+      availP.textContent = availabilityLine(availRow.n, availRow.total, 'Pixel Value Histograms');
+      container.appendChild(availP);
+
       const controlsDiv = document.createElement('div');
       controlsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;margin-bottom:20px';
   
