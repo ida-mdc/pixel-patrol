@@ -25,7 +25,7 @@ class Project:
         if output_path is None:
             output_path = Path(self.base_dir) / f"{self.name}.parquet"
             logger.info(f"Project Core: No output_path specified; inferring: '{output_path}'.")
-        self.output_path: Path = resolve_parquet_output_path(output_path)
+        self.output_path: Path = _sanitize_output_filename(resolve_parquet_output_path(output_path))
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
@@ -148,7 +148,7 @@ class Project:
             progress_callback: Optional callback(current, total, current_file) called per file.
         """
         config = self._prepare_processing_config(processing_config)
-        flush_dir = self.output_path.parent / f"_batches_{self.name}"
+        flush_dir = self.output_path.parent / f"_batches_{self.output_path.stem}"
 
         self.records_df = processing.build_records_df(
             bases=self.paths,
@@ -195,6 +195,18 @@ class Project:
 
     def get_output_path(self) -> Path:
         return self.output_path
+
+
+def _sanitize_output_filename(path: Path) -> Path:
+    """Replace spaces in the output parquet filename stem with underscores."""
+    sanitized = path.stem.replace(' ', '_')
+    if sanitized == path.stem:
+        return path
+    new_path = path.with_stem(sanitized)
+    logger.warning(
+        f"Project Core: Output filename contained spaces; renamed to '{new_path.name}'."
+    )
+    return new_path
 
 
 def _resolve_extensions(
