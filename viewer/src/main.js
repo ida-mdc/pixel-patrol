@@ -6,6 +6,7 @@ import { renderAll } from './renderer.js';
 import { registry } from './plugin-registry.js';
 import { state, on } from './state.js';
 import { buildWhere } from './sql.js';
+import { buildScopedWhere } from './cohort-sql.js';
 import { getPaletteNames } from './colors.js';
 import { readUrlParams, writeUrlParams } from './url-params.js';
 import { exportBakedHtml } from './export-snapshot.js';
@@ -342,7 +343,7 @@ function exportBaseName() {
 async function handleExport(format, scope) {
   clearExportError();
   const table      = scope === 'full' ? 'pp_all' : 'pp_data';
-  const where      = buildWhere(state.filter);
+  const where      = buildScopedWhere(schema, state);
   const isFiltered = !!where;
 
   if (format === 'csv') {
