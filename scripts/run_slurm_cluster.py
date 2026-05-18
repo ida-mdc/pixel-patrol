@@ -24,8 +24,8 @@ Outputs (written next to the parquet file):
 """
 
 import argparse
-import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -34,59 +34,99 @@ from dask.distributed import Client, performance_report
 
 from pixel_patrol_base.api import create_project, add_paths, process_files
 
+_W = 62   # box width — matches processing_summary.py
 
-def _collect_worker_stats(client: Client) -> dict:
-    """Collect per-worker task counts and final resource state before shutdown."""
-    stats = {"workers": {}, "collected_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
-    try:
-        info = client.scheduler_info().get("workers", {})
-        for addr, w in info.items():
-            hostname = addr.split("//")[-1].split(":")[0]
-            stats["workers"][addr] = {
-                "host":          hostname,
-                "nthreads":      w.get("nthreads", 0),
-                "memory_limit":  w.get("memory_limit", 0),
-                "metrics":       w.get("metrics", {}),
-            }
-    except Exception as exc:
-        stats["error"] = str(exc)
 
-    # Run psutil on every worker to get final CPU / RAM snapshot.
+def _parse_cluster_report(html_path: Path) -> dict:
+    """Extract CPU, memory and worker stats from a dask performance_report HTML file."""
     try:
-        def _worker_snapshot():
-            import psutil, os
-            vm = psutil.virtual_memory()
-            cpu = psutil.cpu_percent(interval=0.5)
-            return {
-                "pid":          os.getpid(),
-                "cpu_pct":      cpu,
-                "ram_used_gb":  vm.used  / 1024**3,
-                "ram_total_gb": vm.total / 1024**3,
-                "ram_pct":      vm.percent,
-            }
-        snapshots = client.run(_worker_snapshot)
-        for addr, snap in snapshots.items():
-            if addr in stats["workers"]:
-                stats["workers"][addr]["snapshot"] = snap
-    except Exception:
-        pass
+        html = html_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+
+    stats: dict = {}
+
+    # CPU min / max / mean  (e.g.  'min: 0.0%'  'max: 213.9%'  'mean: 19.1%')
+    cpu = {}
+    for label, val in re.findall(r'"(min|max|mean): ([\d.]+)%"', html):
+        cpu[label] = float(val)
+    if cpu:
+        stats["cpu"] = cpu
+
+    # Memory  (e.g.  'min: 299.70 MiB'  'max: 3.45 GiB')
+    mem = {}
+    for label, val, unit in re.findall(r'"(min|max|mean): ([\d.]+) (MiB|GiB)"', html):
+        gb = float(val) / 1024 if unit == "MiB" else float(val)
+        mem[label] = gb
+    if mem:
+        stats["memory_gb"] = mem
+
+    # Unique worker addresses embedded in the task-stream data
+    addrs = set(re.findall(r"tcp://[\d.]+:\d+", html))
+    if addrs:
+        stats["worker_addrs"] = sorted(addrs)
+        stats["n_workers_connected"] = len(addrs)
+        stats["worker_nodes"] = sorted(set(
+            a.split("//")[1].split(":")[0] for a in addrs
+        ))
 
     return stats
 
 
-def _print_cluster_summary(stats: dict) -> None:
-    workers = stats.get("workers", {})
-    if not workers:
+def _append_cluster_section(summary_path: Path, cluster_stats: dict,
+                             workers_requested: int) -> None:
+    """Append a compact cluster-utilisation block to the .summary.txt file."""
+    if not cluster_stats:
         return
-    print(f"\n  Cluster stats  ({len(workers)} workers)")
-    print(f"  {'Host':<20}  {'CPU%':>5}  {'RAM used':>10}  {'RAM%':>5}")
-    print(f"  {'─'*20}  {'─'*5}  {'─'*10}  {'─'*5}")
-    for w in sorted(workers.values(), key=lambda x: x["host"]):
-        snap = w.get("snapshot", {})
-        cpu   = snap.get("cpu_pct", float("nan"))
-        ram_u = snap.get("ram_used_gb", float("nan"))
-        ram_p = snap.get("ram_pct", float("nan"))
-        print(f"  {w['host']:<20}  {cpu:>4.0f}%  {ram_u:>8.1f} GB  {ram_p:>4.0f}%")
+
+    def _ln(content: str) -> str:
+        return f"║{content:<{_W}}║"
+
+    lines = ["", f"╔{'═' * _W}╗"]
+    lines.append(_ln("  Cluster utilisation  (source: dask performance_report)".center(_W)))
+    lines.append(f"╠{'═' * _W}╣")
+
+    n_conn = cluster_stats.get("n_workers_connected", 0)
+    nodes  = cluster_stats.get("worker_nodes", [])
+    lines.append(_ln(f"  Workers  {n_conn} connected / {workers_requested} requested"
+                     f"  ·  {len(nodes)} node{'s' if len(nodes) != 1 else ''}"))
+
+    cpu = cluster_stats.get("cpu", {})
+    if cpu:
+        lines.append(_ln(
+            f"  CPU      min {cpu.get('min', 0):.0f}%"
+            f"  ·  mean {cpu.get('mean', 0):.0f}%"
+            f"  ·  max {cpu.get('max', 0):.0f}%"
+        ))
+
+    mem = cluster_stats.get("memory_gb", {})
+    if mem:
+        def _fmt_gb(v: float) -> str:
+            return f"{v:.2f} GB" if v < 1 else f"{v:.1f} GB"
+        lines.append(_ln(
+            f"  RAM      min {_fmt_gb(mem.get('min', 0))}"
+            f"  ·  mean {_fmt_gb(mem.get('mean', 0))}"
+            f"  ·  max {_fmt_gb(mem.get('max', 0))}"
+        ))
+
+    if nodes:
+        prefix = "  Nodes    "
+        shown, rest = [], list(nodes)
+        avail = _W - len(prefix)
+        while rest:
+            trailer = f"  +{len(rest)} more" if rest else ""
+            c = rest[0]
+            if len("  ".join(shown + [c])) + len(trailer) <= avail:
+                shown.append(rest.pop(0))
+            else:
+                break
+        trailer = f"  +{len(rest)} more" if rest else ""
+        lines.append(_ln(prefix + "  ".join(shown) + trailer))
+
+    lines.append(f"╚{'═' * _W}╝")
+
+    with open(summary_path, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def main():
@@ -113,7 +153,6 @@ def main():
 
     output = Path(args.output).resolve()
     perf_report_path = output.with_suffix(".cluster_report.html")
-    stats_path        = output.with_suffix(".cluster_stats.json")
 
     extra = []
     if args.partition:
@@ -159,11 +198,15 @@ def main():
 
         print(f"Cluster report: {perf_report_path}")
 
-        # Collect final per-worker snapshot before workers disconnect.
-        stats = _collect_worker_stats(client)
-        stats_path.write_text(json.dumps(stats, indent=2))
-        print(f"Cluster stats:  {stats_path}")
-        _print_cluster_summary(stats)
+        # Parse the HTML and append a cluster section to the summary file.
+        cluster_stats = _parse_cluster_report(perf_report_path)
+        summary_path  = output.with_suffix(".summary.txt")
+        _append_cluster_section(summary_path, cluster_stats, args.workers)
+
+        # Print the full summary (includes both processing + cluster sections).
+        if summary_path.exists():
+            print()
+            print(summary_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

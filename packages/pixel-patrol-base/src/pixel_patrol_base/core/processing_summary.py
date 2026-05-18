@@ -49,8 +49,9 @@ class ProcessingSummary:
     project_name: str = ""
     date_str: str = ""
     n_tasks: int = 0                    # total tasks dispatched (slices + full-file + batch)
-    n_workers_actual: int = 0           # workers that responded during processing
-    worker_nodes: List[str] = field(default_factory=list)  # unique node hostnames
+    n_workers_actual: int = 0           # peak workers connected during processing
+    worker_nodes: List[str] = field(default_factory=list)   # unique node hostnames
+    tasks_per_worker: Dict[str, int] = field(default_factory=dict)  # addr → task count
 
     def format(self) -> str:  # noqa: A003
         lines: list[str] = []
@@ -83,12 +84,15 @@ class ProcessingSummary:
             f"  ·  {throughput:.2f} files/s"
         ))
 
-        # Parallel efficiency (CPU used / max possible)
+        # Task throughput
         n_w = self.n_workers_actual or self.worker_count
-        if total_cpu > 0 and self.wall_s > 0 and n_w > 0:
-            efficiency = min(100.0, total_cpu / (self.wall_s * n_w) * 100.0)
-            lines.append(_ln(f"  CPU efficiency  {efficiency:.0f}%"
-                             f"  ({n_w} workers × {_fmt_s(self.wall_s)} wall)"))
+        if self.n_tasks > 0 and self.wall_s > 0:
+            tasks_per_min = self.n_tasks / (self.wall_s / 60.0)
+            avg_per_w = self.n_tasks / n_w if n_w else 0
+            lines.append(_ln(
+                f"  {self.n_tasks} tasks  ·  {tasks_per_min:.1f} tasks/min"
+                f"  ·  avg {avg_per_w:.0f} tasks/worker"
+            ))
 
         # Node list (if distributed and multiple nodes)
         if self.worker_nodes and len(self.worker_nodes) > 1:

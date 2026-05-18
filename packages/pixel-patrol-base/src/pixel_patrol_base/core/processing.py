@@ -3,6 +3,7 @@ import math
 import os
 import shutil
 import signal
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Iterable, Iterator, NamedTuple, Callable
@@ -253,6 +254,8 @@ def _cleanup_partial_chunks_dir(flush_dir: Optional[Path], cleanup_combined_parq
         except OSError:
             # If not empty or cannot remove, leave it in place.
             pass
+
+
 
 
 def _hpc_open_array_info(path: str, loader_name: str) -> Optional[tuple]:
@@ -633,21 +636,20 @@ def _build_deep_record_df(
             if progress_callback:
                 progress_callback(processed_count, total, Path(batch_items[-1].path))
 
-    # Collect worker / node info from the distributed scheduler if available.
+    # Worker info: query scheduler right after gather while workers are still connected.
     n_workers_actual = 0
     worker_nodes: list = []
     if _using_distributed:
         try:
             from dask.distributed import get_client as _get_client
-            _cli = _get_client()
-            _info = _cli.scheduler_info().get('workers', {})
-            n_workers_actual = len(_info)
+            _winfo = _get_client().scheduler_info().get('workers', {})
+            n_workers_actual = len(_winfo)
             worker_nodes = sorted(set(
-                addr.split('//')[-1].split(':')[0]
-                for addr in _info.keys()
+                a.split('//')[-1].split(':')[0] for a in _winfo
             ))
         except Exception:
             pass
+    tasks_per_worker: dict = {}
 
     from pixel_patrol_base.core.processing_summary import ProcessingSummary
     summary = ProcessingSummary(
@@ -660,6 +662,7 @@ def _build_deep_record_df(
         n_tasks=len(all_tasks),
         n_workers_actual=n_workers_actual,
         worker_nodes=worker_nodes,
+        tasks_per_worker=tasks_per_worker,
     )
 
     return accumulator.finalize(), summary
