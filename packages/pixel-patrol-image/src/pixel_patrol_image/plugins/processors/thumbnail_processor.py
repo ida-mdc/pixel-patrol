@@ -138,13 +138,12 @@ class ThumbnailProcessor:
             y_off, x_off = r['__y_origin__'], r['__x_origin__']
             y_ext, x_ext = r['__y_extent__'], r['__x_extent__']
 
-            # Canvas cell for this patch
-            cy  = int(y_off / y_full * SPRITE_SIZE)
-            cx  = int(x_off / x_full * SPRITE_SIZE)
-            ch  = max(1, round(y_ext / y_full * SPRITE_SIZE))
-            cw  = max(1, round(x_ext / x_full * SPRITE_SIZE))
-            cy2 = min(cy + ch, SPRITE_SIZE)
-            cx2 = min(cx + cw, SPRITE_SIZE)
+            # Derive start AND end from proportional position so adjacent tiles
+            # are always contiguous — no black gaps from independent rounding.
+            cy  = round(y_off / y_full * SPRITE_SIZE)
+            cy2 = min(round((y_off + y_ext) / y_full * SPRITE_SIZE), SPRITE_SIZE)
+            cx  = round(x_off / x_full * SPRITE_SIZE)
+            cx2 = min(round((x_off + x_ext) / x_full * SPRITE_SIZE), SPRITE_SIZE)
             ah, aw = cy2 - cy, cx2 - cx
             if ah <= 0 or aw <= 0 or patch.size == 0:
                 continue
