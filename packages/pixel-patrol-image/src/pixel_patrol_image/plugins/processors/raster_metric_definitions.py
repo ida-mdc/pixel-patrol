@@ -61,27 +61,29 @@ def _histogram_counts_agg(spec: RasterMetricSpec, rows: List[Dict[str, Any]]) ->
     return aggregate_histograms(rows)
 
 
-def _weighted_mean_intensity_agg(spec: "RasterMetricSpec", rows: List[Dict[str, Any]]) -> Any:
-    """Average brightness across tiles by counting real pixels per tile so large tiles matter more."""
+def _weighted_mean_agg(spec: "RasterMetricSpec", rows: List[Dict[str, Any]]) -> Any:
+    """Pixel-count weighted mean: edge/partial tiles contribute proportionally to their valid area."""
     num = 0.0
     den = 0.0
     for r in rows:
         if spec.name not in r:
             continue
-        if MetricNames.FINITE_PIXEL_COUNT not in r:
-            continue
-        w = float(r[MetricNames.FINITE_PIXEL_COUNT])
+        w = float(r.get(MetricNames.FINITE_PIXEL_COUNT, 0) or 0)
         if w <= 0:
             continue
-        fn = float(r[spec.name])
-        if not np.isfinite(fn):
+        v = float(r[spec.name])
+        if not np.isfinite(v):
             continue
-        num += fn * w
+        num += v * w
         den += w
     if den <= 0:
         vals = [float(r[spec.name]) for r in rows if spec.name in r and np.isfinite(r[spec.name])]
         return float(np.nanmean(vals)) if vals else AGG_SKIP
     return num / den
+
+
+# Keep old name as alias for backwards compat
+_weighted_mean_intensity_agg = _weighted_mean_agg
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,19 +197,19 @@ RASTER_METRIC_REGISTRY: Tuple[RasterMetricSpec, ...] = (
         name=MetricNames.MICHELSON_CONTRAST,
         data_type=np.float32,
         is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
+        aggregate_rows=_weighted_mean_agg,
     ),
     RasterMetricSpec(
         name=MetricNames.MSCN_VARIANCE,
         data_type=np.float32,
         is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
+        aggregate_rows=_weighted_mean_agg,
     ),
     RasterMetricSpec(
         name=MetricNames.LOCAL_STD_RATIO,
         data_type=np.float32,
         is_spatial=True,
-        aggregate_rows=_scalar_rows_agg(np.nanmean),
+        aggregate_rows=_weighted_mean_agg,
     ),
     RasterMetricSpec(
         name=MetricNames.HISTOGRAM_MIN,
