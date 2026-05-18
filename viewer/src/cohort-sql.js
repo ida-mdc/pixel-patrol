@@ -28,7 +28,7 @@ export function buildDimCohortCondition(schema, dimensions) {
   const predicates = selected.map(([letter, idx]) => `s.${q(`dim_${letter}`)} = ${idx}`);
   if (!predicates.length) return '';
 
-  return `pp_data.${jq} IN (
+  return `${jq} IN (
     SELECT DISTINCT s.${jq}
     FROM pp_all s
     WHERE ${predicates.join(' AND ')}

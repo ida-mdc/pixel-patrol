@@ -1,3 +1,9 @@
+function availabilityLine(withData, total, label) {
+  const n = Number(withData), tot = Number(total);
+  const pct = tot > 0 ? ((n / tot) * 100).toFixed(2) : '0.00';
+  return `${n.toLocaleString()} of ${tot.toLocaleString()} files (${pct}%) have '${label}' information.`;
+}
+
 // Matches BasicStatsProcessor.OUTPUT_SCHEMA
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
@@ -50,7 +56,7 @@ const QUALITY_INFO = [
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
-async function renderViolins(container, ctx, filterMetric) {
+async function renderViolins(container, ctx, filterMetric, label) {
   const { q, groupCol: gcFn, groupExpr: geFn } = ctx.sql;
   const { append: appendPlot, flexGrid: createFlexGrid, niceName } = ctx.plot;
 
@@ -61,6 +67,28 @@ async function renderViolins(container, ctx, filterMetric) {
   if (!metrics.length) {
     container.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
     return;
+  }
+
+  const metricSelects = metrics.map((m, i) => `COUNT(${q(m)}) AS c${i}`).join(', ');
+  const [availRow] = await ctx.queryRows(
+    `SELECT COUNT(*) AS total, ${metricSelects} FROM pp_data ${ctx.where}`
+  );
+  const tot = Number(availRow.total);
+  const counts = metrics.map((m, i) => ({ metric: m, n: Number(availRow[`c${i}`]) }));
+  const allSame = counts.every(c => c.n === counts[0].n);
+  if (allSame) {
+    const p = document.createElement('p');
+    p.style.marginBottom = '12px';
+    p.textContent = availabilityLine(counts[0].n, tot, label);
+    container.appendChild(p);
+  } else {
+    for (const { metric, n } of counts) {
+      const p = document.createElement('p');
+      p.style.marginBottom = '4px';
+      p.textContent = availabilityLine(n, tot, niceName(metric));
+      container.appendChild(p);
+    }
+    if (container.lastChild) container.lastChild.style.marginBottom = '12px';
   }
 
   // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
@@ -198,7 +226,7 @@ function makeViolinPlugin(id, label, info, filterMetric) {
     },
     async render(container, ctx) {
       try {
-        await renderViolins(container, ctx, filterMetric);
+        await renderViolins(container, ctx, filterMetric, label);
       } catch {
         container.innerHTML = '<div class="no-data">Failed to load data.</div>';
       }
