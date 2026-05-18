@@ -53,8 +53,13 @@ export function legendWithGrouping(baseLegend, state, fallback = '') {
   };
 }
 
-// Applied to every chart — never show the mode-bar, always be responsive.
-const CHART_CONFIG = { responsive: true, displayModeBar: false };
+const CHART_CONFIG = {
+  responsive: true,
+  displayModeBar: 'hover',
+  modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+  displaylogo: false,
+  toImageButtonOptions: { format: 'png', scale: 3 },
+};
 
 // ---------------------------------------------------------------------------
 // Core plot helper
