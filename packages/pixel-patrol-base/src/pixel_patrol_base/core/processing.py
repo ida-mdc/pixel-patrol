@@ -639,7 +639,8 @@ def _build_deep_record_df(
     if _using_distributed:
         try:
             from dask.distributed import get_client as _get_client
-            _info = _get_client().scheduler_info().get('workers', {})
+            _cli = _get_client()
+            _info = _cli.scheduler_info().get('workers', {})
             n_workers_actual = len(_info)
             worker_nodes = sorted(set(
                 addr.split('//')[-1].split(':')[0]
