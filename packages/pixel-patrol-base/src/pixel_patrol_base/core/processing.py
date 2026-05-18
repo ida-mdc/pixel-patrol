@@ -1469,16 +1469,19 @@ class _RecordsAccumulator:
         if not self._written_files:
             return self._active_df
 
-        paths = [str(p) for p in self._written_files if p.exists()]
+        paths = [p for p in self._written_files if p.exists()]
         if not paths:
             return pl.DataFrame([])
 
-        # Lazy scan reads files one at a time — peak memory is one file at a time,
-        # not the sum of all files at once.
-        final_df = (
-            pl.scan_parquet(paths, missing_columns="insert")
-            .collect()
-        )
+        # Lazy concat with diagonal_relaxed handles two problems simultaneously:
+        # 1. Missing columns: columns absent from some batch files are filled with null.
+        # 2. Type mismatches: e.g. a column written as Null (all-null batch) vs Int64
+        #    (batch with actual tile rows) — diagonal_relaxed coerces to the wider type.
+        # Each scan_parquet is lazy so files are read one at a time during collect.
+        final_df = pl.concat(
+            [pl.scan_parquet(str(p)) for p in paths],
+            how="diagonal_relaxed",
+        ).collect()
         return self.post_process_final_df(final_df)
 
     def _is_enough_memory_to_combine(self, total_size: int) -> bool:
