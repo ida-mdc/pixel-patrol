@@ -144,7 +144,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
 
     config = ProcessingConfig(
         processing_max_workers=1,
-        records_flush_every_n=1,
+        flush_every_n=1,
     )
 
     monkeypatch.setattr(
@@ -259,7 +259,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
 
     config = ProcessingConfig(
         processing_max_workers=1,
-        records_flush_every_n=1,
+        flush_every_n=1,
     )
 
     def per_file_props(file_path):

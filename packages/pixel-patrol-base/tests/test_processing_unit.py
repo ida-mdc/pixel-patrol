@@ -66,24 +66,33 @@ def test_records_accumulator_skips_combine_on_low_memory(tmp_path, monkeypatch):
     assert list(flush_dir.glob("records_batch_*.parquet"))
 
 
-def test_resolve_flush_threshold_caps_to_half_dataset():
-    """Flush threshold should be capped to half the dataset size."""
-    config = ProcessingConfig(records_flush_every_n=100)
+def test_resolve_flush_threshold_returns_config_value():
+    """Flush threshold should be the exact value from config, not capped by file count."""
+    config = ProcessingConfig(flush_every_n=100)
+    assert processing._resolve_flush_threshold(10, config) == 100
+    assert processing._resolve_flush_threshold(1, config) == 100
 
-    assert processing._resolve_flush_threshold(10, config) == 5
+
+def test_resolve_flush_threshold_zero_files_disables_flush():
+    """No files to process — flushing should be disabled."""
+    config = ProcessingConfig(flush_every_n=50)
+    assert processing._resolve_flush_threshold(0, config) == 0
 
 
-def test_resolve_flush_threshold_enforces_max_intermediate_flushes(caplog):
-    """Very low flush thresholds that would cause > MAX_INTERMEDIATE_FLUSHES are adjusted."""
-    # Very large dataset with tiny requested flush => would result in many flushes
-    config = ProcessingConfig(records_flush_every_n=1)
+def test_resolve_flush_threshold_exceeds_record_count(tmp_path):
+    """When flush_every_n > actual records, no intermediate flush occurs and finalize still works."""
+    flush_dir = tmp_path / "batches"
+    flush_dir.mkdir()
+    acc = processing._RecordsAccumulator(flush_every_n=1000, flush_dir=flush_dir)
 
-    with caplog.at_level("WARNING"):
-        threshold = processing._resolve_flush_threshold(1_000_000, config)
+    # Add only 5 records — well below the threshold of 1000
+    acc.add_batch(pl.DataFrame({"row_index": list(range(5)), "path": [str(i) for i in range(5)]}))
 
-    # Should be adjusted to ceil(total_rows / MAX_INTERMEDIATE_FLUSHES) => 1000
-    assert threshold == 1000
-    assert "Flushing this often on your dataset would result in" in caplog.text
+    assert acc._active_df.height == 5
+    assert not list(flush_dir.glob("records_batch_*.parquet")), "no intermediate flush expected"
+
+    final_df = acc.finalize()
+    assert final_df.height == 5
 
 
 def test_resolve_batch_size_uses_total_rows_when_flush_disabled():

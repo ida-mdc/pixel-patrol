@@ -1,6 +1,6 @@
 import pytest
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
+from pixel_patrol_base.config import DEFAULT_FLUSH_EVERY_N
 
 
 # --- Defaults ---
@@ -11,7 +11,7 @@ def test_defaults():
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
     assert config.processing_max_workers is None
-    assert config.records_flush_every_n == DEFAULT_RECORDS_FLUSH_EVERY_N
+    assert config.flush_every_n == DEFAULT_FLUSH_EVERY_N
 
 
 # --- processors_included / excluded conflict ---
@@ -79,18 +79,18 @@ def test_max_workers_non_int_raises():
         ProcessingConfig(processing_max_workers=1.5)
 
 
-# --- records_flush_every_n ---
+# --- flush_every_n ---
 
 def test_flush_every_n_valid():
-    config = ProcessingConfig(records_flush_every_n=50)
-    assert config.records_flush_every_n == 50
+    config = ProcessingConfig(flush_every_n=50)
+    assert config.flush_every_n == 50
 
 
 def test_flush_every_n_zero_raises():
-    with pytest.raises(ValueError, match="records_flush_every_n must be a positive integer"):
-        ProcessingConfig(records_flush_every_n=0)
+    with pytest.raises(ValueError, match="flush_every_n must be a positive integer"):
+        ProcessingConfig(flush_every_n=0)
 
 
 def test_flush_every_n_negative_raises():
-    with pytest.raises(ValueError, match="records_flush_every_n must be a positive integer"):
-        ProcessingConfig(records_flush_every_n=-10)
+    with pytest.raises(ValueError, match="flush_every_n must be a positive integer"):
+        ProcessingConfig(flush_every_n=-10)

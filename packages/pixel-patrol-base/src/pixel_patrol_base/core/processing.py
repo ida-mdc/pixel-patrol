@@ -21,7 +21,7 @@ from pixel_patrol_base.utils.df_utils import (
     postprocess_basic_file_metadata_df,
 )
 from pixel_patrol_base.core.specs import is_record_matching_processor
-from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO, MAX_INTERMEDIATE_FLUSHES
+from pixel_patrol_base.config import COMBINE_HEADROOM_RATIO
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.io.parquet_io import write_chunk
 
@@ -686,13 +686,13 @@ def _resolve_worker_count(config: ProcessingConfig, total_rows: Optional[int] = 
     Behavior:
     - If `processing_max_workers` is specified in `settings`, use that value but cap it
       at the number of available CPUs.
-    - If `total_rows` is provided, never allocate more workers than there are rows to
-      process (so 1 file -> 1 worker). This avoids oversubscribing workers for tiny
-      datasets.
+    - If `total_rows` is provided, never allocate more workers than there are input files
+      (so 1 file -> 1 worker). This avoids oversubscribing workers for tiny datasets.
+      Note: `total_rows` is the input file count, not the output record count.
 
     Args:
         config: ProcessingConfig that may specify `processing_max_workers`.
-        total_rows: Optional total number of rows/files that will be processed.
+        total_rows: Optional number of input files to process.
     Returns:
         An integer representing the number of parallel workers to use.
     """
@@ -718,54 +718,32 @@ def _resolve_batch_size(
 ) -> int:
     """
     Derive batch size from flush threshold and available workers.
-    Ensures that there is at least one checkpoint flush per dataset processing.
 
     Args:
-        worker_count: Number of parallel workers aka CPU cores.
-        flush_threshold: Number of rows after which to flush records to disk.
-        total_rows: Total number of rows/files in the dataset to process.
+        worker_count: Number of parallel workers.
+        flush_threshold: Output-row threshold after which to flush to disk (0 = disabled).
+        total_rows: Number of input files (used only when flush is disabled).
     Returns:
-        An integer representing the batch size per worker for processing.
+        Number of input files to dispatch per worker batch.
     """
-    if flush_threshold <= 0:  # e.g. flush is completely disabled or not properly set
+    if flush_threshold <= 0:  # flush disabled — split files evenly across workers
         return max(1, math.ceil(total_rows / max(1, worker_count)))
     return max(1, math.ceil(flush_threshold / max(1, worker_count)))
 
 
-def _resolve_flush_threshold(total_rows: int, config: ProcessingConfig) -> int:
-    """Sets the flush threshold from settings or defaults. Ensures non-negative and half the dataset size to enforce a checkpoint flush.
+def _resolve_flush_threshold(total_files: int, config: ProcessingConfig) -> int:
+    """Returns the configured flush threshold, or 0 to disable flushing.
 
     Args:
-        total_rows: Total number of rows/files to process.
-        config: ProcessingConfig that may specify `records_flush_every_n`.
+        total_files: Number of input files (NOT output row count — loaders may expand
+                     a single file into many output rows).
+        config: ProcessingConfig that may specify `flush_every_n`.
     Returns:
-        An integer representing the flush threshold for records.
+        The flush threshold in output rows, or 0 if there is nothing to process.
     """
-    if total_rows <= 0:
+    if total_files <= 0:
         return 0
-    value = config.records_flush_every_n
-    # Preserve the ability to disable flushing when a non-positive value is configured.
-    if value is None or value <= 0:
-        return 0
-
-    # Ensure at least one flush can occur for small datasets while capping at roughly half the dataset size.
-    upper_bound = max(1, total_rows // 2)
-
-    # Enforce a maximum count of intermediate flushes (e.g. <= MAX_INTERMEDIATE_FLUSHES).
-    # If the user configured a very small flush threshold that would cause too many flushes,
-    # we adjust it upward to keep the number of flushes reasonable and log a warning.
-    min_allowed = max(1, math.ceil(total_rows / MAX_INTERMEDIATE_FLUSHES))
-    if value < min_allowed:
-        requested_flushes = math.ceil(total_rows / value) if value > 0 else float('inf')
-        logger.warning(
-            "Processing Core: Flushing this often on your dataset would result in %d flushes. "
-            "This slows processing down. Your settings are being changed to result in %d flushes only.",
-            requested_flushes,
-            MAX_INTERMEDIATE_FLUSHES,
-        )
-        value = min_allowed
-
-    return max(1, min(value, upper_bound))
+    return config.flush_every_n or 0
 
 
 def _estimate_available_memory_bytes() -> Optional[int]:
@@ -836,7 +814,7 @@ class _RecordsAccumulator:
         self._combine_headroom_ratio = combine_headroom_ratio
         if self._flush_dir:
             logger.info(
-                "Processing Core: buffering %s rows per chunk; partial batches go to '%s'",
+                "Processing Core: buffering %s output rows per chunk; partial batches go to '%s'",
                 self._flush_every_n,
                 self._flush_dir,
             )

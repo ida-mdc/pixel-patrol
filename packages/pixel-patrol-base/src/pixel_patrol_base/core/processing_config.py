@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Set, Union, Optional
 
-from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
+from pixel_patrol_base.config import DEFAULT_FLUSH_EVERY_N
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class ProcessingConfig:
 
     # --- Run behaviour ---
     processing_max_workers: Optional[int] = None
-    records_flush_every_n: Optional[int] = None
+    flush_every_n: Optional[int] = None
     parquet_row_group_size: Optional[int] = None  # None → use parquet_io default (2048)
 
     # --- Project Metadata ---
@@ -43,12 +43,12 @@ class ProcessingConfig:
             if not isinstance(self.processing_max_workers, int) or self.processing_max_workers < 1:
                 raise ValueError("processing_max_workers must be a positive integer or None.")
 
-        if self.records_flush_every_n is None:
-            self.records_flush_every_n = DEFAULT_RECORDS_FLUSH_EVERY_N
+        if self.flush_every_n is None:
+            self.flush_every_n = DEFAULT_FLUSH_EVERY_N
 
         if self.processing_max_workers is not None:
             if not isinstance(self.processing_max_workers, int) or self.processing_max_workers < 1:
                 raise ValueError("processing_max_workers must be a positive integer or None.")
 
-        if not isinstance(self.records_flush_every_n, int) or self.records_flush_every_n < 1:
-            raise ValueError("records_flush_every_n must be a positive integer.")
+        if not isinstance(self.flush_every_n, int) or self.flush_every_n < 1:
+            raise ValueError("flush_every_n must be a positive integer.")

@@ -59,7 +59,7 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
 
     config = ProcessingConfig(
         processing_max_workers=2,
-        records_flush_every_n=1,
+        flush_every_n=1,
         selected_file_extensions=loader.SUPPORTED_EXTENSIONS,
     )
 
@@ -92,7 +92,7 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
 
     config = ProcessingConfig(
         processing_max_workers=2,
-        records_flush_every_n=1,
+        flush_every_n=1,
     )
 
     progress_calls = []
@@ -131,7 +131,7 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
 
     config = ProcessingConfig(
         processing_max_workers=2,
-        records_flush_every_n=1,
+        flush_every_n=1,
     )
 
     df = build_records_df(

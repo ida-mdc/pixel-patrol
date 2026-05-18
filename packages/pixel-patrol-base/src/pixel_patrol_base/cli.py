@@ -56,12 +56,15 @@ def cli():
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
               help='Maximum number of processing workers. Use 1 to disable multiprocessing.')
+@click.option('--flush-every-n', type=int, default=None, show_default=True,
+              help='Flush intermediate results to disk every N output rows.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None,
-              max_workers: int | None):
+              max_workers: int | None,
+              flush_every_n: int | None):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
     """
@@ -96,6 +99,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         processing_max_workers=max_workers,
+        flush_every_n=flush_every_n,
         flavor=flavor or None,
         description=description or None,
         parquet_row_group_size=parquet_row_group_size,
