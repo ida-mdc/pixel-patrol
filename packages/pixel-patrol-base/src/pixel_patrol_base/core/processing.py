@@ -18,7 +18,7 @@ from dask.diagnostics import ProgressBar
 import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.core.file_system import walk_filesystem
+from pixel_patrol_base.core.file_system import walk_filesystem, iter_filesystem
 from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import (
     normalize_file_extension,
@@ -411,13 +411,143 @@ class _HpcSliceWorker:
         return rows
 
 
+class _DispatchWorker:
+    """Routes each task to the right handler (batch, full_file, or slice)."""
+
+    def __init__(self, ln, all_cls, non_ss_cls, ss_cls):
+        self.ln, self.all_cls, self.non_ss_cls = ln, all_cls, non_ss_cls
+        self._slice_worker = _HpcSliceWorker(ln, ss_cls)
+
+    def __call__(self, task):
+        import dask
+        if task['type'] == 'slice':
+            return self._slice_worker(task)
+        classes = self.non_ss_cls if task['type'] == 'full_file' else self.all_cls
+        items = [_IndexedPath(task['row_index'], task['path'])] if task['type'] == 'full_file' \
+                else task['batch']
+        with dask.config.set(scheduler='synchronous'):
+            result = _process_file_batch(items, self.ln, classes)
+        gc.collect()
+        try:
+            import ctypes
+            ctypes.cdll.LoadLibrary("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+        return result
+
+
+def _scan_and_submit(
+    bases,
+    accepted_extensions,
+    loader_instance: "PixelPatrolLoader",
+    client,
+    processor_classes,
+    slice_safe_classes,
+    non_slice_safe_classes,
+    target_mb: float,
+    max_files_per_batch: int = 50,
+) -> tuple:
+    """Stream-scan the filesystem and submit dask tasks as batches form.
+
+    Files are discovered one by one via iter_filesystem.  Each time a batch
+    fills (by size or count) it is immediately submitted as a future so workers
+    can start while the scan continues.  Large files that exceed target_mb are
+    routed to full_file + slice tasks instead.
+
+    Returns (basic_df, all_tasks, futures, large_file_meta, t_wall_start).
+    basic_df is built from the records collected during the scan.
+    """
+    from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
+
+    loader_name = getattr(loader_instance, 'NAME', None)
+    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes, slice_safe_classes)
+
+    basic_records: List[Dict] = []
+    all_tasks: List[Dict] = []
+    futures = []
+    large_file_meta: Dict[int, tuple] = {}
+    batch: List[_IndexedPath] = []
+    batch_mb = 0.0
+    n_files = 0
+
+    def _flush():
+        nonlocal batch, batch_mb
+        if not batch:
+            return
+        task = {'type': 'batch', 'batch': batch[:]}
+        all_tasks.append(task)
+        futures.append(client.submit(worker_fn, task))
+        batch.clear()
+        batch_mb = 0.0
+
+    t_wall_start = time.perf_counter()
+
+    for path, record in iter_filesystem(bases, accepted_extensions, loader_instance):
+        record['row_index'] = n_files
+        basic_records.append(record)
+        size_bytes = record.get('size_bytes', 0) or 0
+
+        info = None
+        if loader_name and slice_safe_classes and size_bytes / (1024 ** 2) > target_mb * 0.5:
+            info = _hpc_open_array_info(str(path), loader_name)
+
+        if info is not None:
+            shape, dtype, dim_order_out = info
+            arr_mb = np.prod(shape) * dtype.itemsize / (1024 ** 2)
+            if arr_mb > target_mb:
+                _flush()
+                large_file_meta[n_files] = (shape, dim_order_out)
+                task_ff = {'type': 'full_file', 'row_index': n_files, 'path': str(path)}
+                all_tasks.append(task_ff)
+                futures.append(client.submit(worker_fn, task_ff))
+                for slc in _sp(shape, ''.join(dim_order_out), dtype, target_mb):
+                    origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
+                    task_s = {'type': 'slice', 'row_index': n_files, 'path': str(path),
+                              'slc': slc, 'origin': origin,
+                              'dim_order_out': dim_order_out, 'full_shape': shape}
+                    all_tasks.append(task_s)
+                    futures.append(client.submit(worker_fn, task_s))
+                n_files += 1
+                continue
+
+        batch.append(_IndexedPath(n_files, str(path)))
+        batch_mb += size_bytes / (1024 ** 2)
+        if batch_mb >= target_mb or len(batch) >= max_files_per_batch:
+            _flush()
+
+        n_files += 1
+
+        if n_files % 500 == 0:
+            print(f"\r  scanning: {n_files} files, {len(futures)} tasks submitted",
+                  end='', flush=True)
+
+    _flush()
+
+    suffix = ' ' * 30
+    print(f"\r  scan done: {n_files} files → {len(futures)} tasks{suffix}")
+
+    if not basic_records:
+        return pl.DataFrame(), [], [], {}, t_wall_start
+
+    basic = pl.DataFrame(basic_records)
+    basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
+    basic = basic.with_columns(pl.col('row_index').cast(pl.Int64))
+
+    return basic, all_tasks, futures, large_file_meta, t_wall_start
+
+
 def _build_deep_record_df(
     basic: pl.DataFrame,
     loader_instance: PixelPatrolLoader,
     processing_config: Optional[ProcessingConfig] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     flush_dir: Optional[Path] = None,
+    _prebuilt: Optional[tuple] = None,
 ) -> tuple[pl.DataFrame, object]:
+    """
+    _prebuilt: optional (all_tasks, futures, large_file_meta, t_wall_start) from
+    _scan_and_submit — skips task-building and submission, goes straight to gather.
+    """
     if basic.is_empty():
         return pl.DataFrame([]), None
 
@@ -447,126 +577,120 @@ def _build_deep_record_df(
     slice_safe_classes = [cls for cls in processor_classes if getattr(cls, 'SLICE_SAFE', False)]
     non_slice_safe_classes = [cls for cls in processor_classes if not getattr(cls, 'SLICE_SAFE', False)]
 
-    # Build HPC task plan when there are slice-safe processors and a loader is present.
-    # Opens large files lazily (header only) to get actual array memory size; small files
-    # are detected by disk size and batched without opening.
-    _hpc_tasks: Optional[List[Dict]] = None
-    _large_file_meta: Dict[int, tuple] = {}
-    if loader_name and slice_safe_classes:
-        try:
-            target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
-            _hpc_tasks, _large_file_meta = _hpc_build_tasks(
-                basic, loader_name, target_mb, slice_safe_classes, non_slice_safe_classes,
-            )
-        except Exception as _exc:
-            logger.warning('hpc plan failed, falling back to regular batching: %s', _exc)
-            _hpc_tasks = None
+    if _prebuilt is not None:
+        # Streaming path: tasks were already submitted during the file scan.
+        # Skip task-building and submission; go straight to gather.
+        all_tasks, prebuilt_futures, _large_file_meta, t_wall_start = _prebuilt
+        _use_hpc = any(t['type'] == 'slice' for t in all_tasks)
+        accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
+        if flush_dir:
+            _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
 
-    _use_hpc = _hpc_tasks is not None and any(t['type'] == 'slice' for t in _hpc_tasks)
-
-    # When using distributed without HPC plan, one task per file; locally, batch to amortise overhead.
-    batch_size = 1 if (_using_distributed and not _use_hpc) else _resolve_batch_size(worker_count, total)
-
-    accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
-    if flush_dir:
-        _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
-
-    _tile_px = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
-    _chunk_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
-
-    if _use_hpc:
-        n_batch_t = sum(1 for t in _hpc_tasks if t['type'] == 'batch')
-        n_full_t  = sum(1 for t in _hpc_tasks if t['type'] == 'full_file')
-        n_slice_t = sum(1 for t in _hpc_tasks if t['type'] == 'slice')
-        parts = []
-        if n_batch_t: parts.append(f"{n_batch_t} batch")
-        if n_full_t:  parts.append(f"{n_full_t} full-file")
-        if n_slice_t: parts.append(f"{n_slice_t} slice")
-        print(f"  plan:   {total} file{'s' if total != 1 else ''}  →  {' + '.join(parts)} tasks"
-              f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles")
-        all_tasks = _hpc_tasks
+        from dask.distributed import get_client as _get_client, progress as _dist_progress
+        _active_client = _get_client()
+        _dist_progress(prebuilt_futures, notebook=False)
+        all_results_raw = _active_client.gather(prebuilt_futures, errors='skip')
+        n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+        if n_failed:
+            logger.warning('gather: %d/%d tasks failed; partial results saved',
+                           n_failed, len(prebuilt_futures))
+        all_results: List[List[Dict]] = [
+            r if not isinstance(r, BaseException) else [] for r in all_results_raw
+        ]
     else:
-        batches = list(_iter_indexed_batches(basic, batch_size))
-        logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
-                     total, len(batches), worker_count)
-        print(
-            f"  plan:   {total} file{'s' if total != 1 else ''}"
-            f"  ·  {len(batches)} task{'s' if len(batches) != 1 else ''}"
-            f"  ·  {batch_size} file{'s' if batch_size != 1 else ''}/task"
-            f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles"
-        )
-        all_tasks = [{'type': 'batch', 'batch': b} for b in batches]
-
-    # Unified dispatch worker: routes each task to the right handler.
-    class _DispatchWorker:
-        def __init__(self, ln, all_cls, non_ss_cls, ss_cls):
-            self.ln, self.all_cls, self.non_ss_cls = ln, all_cls, non_ss_cls
-            self._slice_worker = _HpcSliceWorker(ln, ss_cls)
-
-        def __call__(self, task):
-            import dask
-            if task['type'] == 'slice':
-                return self._slice_worker(task)
-            classes = self.non_ss_cls if task['type'] == 'full_file' else self.all_cls
-            items = [_IndexedPath(task['row_index'], task['path'])] if task['type'] == 'full_file' \
-                    else task['batch']
-            with dask.config.set(scheduler='synchronous'):
-                result = _process_file_batch(items, self.ln, classes)
-            gc.collect()
+        # Standard path: build tasks from basic DataFrame, then submit.
+        # Build HPC task plan when there are slice-safe processors and a loader is present.
+        _hpc_tasks: Optional[List[Dict]] = None
+        _large_file_meta: Dict[int, tuple] = {}
+        if loader_name and slice_safe_classes:
             try:
-                import ctypes
-                ctypes.cdll.LoadLibrary("libc.so.6").malloc_trim(0)
-            except Exception:
-                pass
-            return result
+                target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+                _hpc_tasks, _large_file_meta = _hpc_build_tasks(
+                    basic, loader_name, target_mb, slice_safe_classes, non_slice_safe_classes,
+                )
+            except Exception as _exc:
+                logger.warning('hpc plan failed, falling back to regular batching: %s', _exc)
+                _hpc_tasks = None
 
-    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes, slice_safe_classes)
+        _use_hpc = _hpc_tasks is not None and any(t['type'] == 'slice' for t in _hpc_tasks)
 
-    def _force_exit(sig, frame):
-        raise SystemExit(1)
+        batch_size = _resolve_batch_size(worker_count, total)
 
-    t_wall_start = time.perf_counter()
-    old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
-    try:
-        bag = db.from_sequence(all_tasks, npartitions=len(all_tasks))
+        accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
+        if flush_dir:
+            _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
+
+        _tile_px = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
+        _chunk_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+
+        if _use_hpc:
+            n_batch_t = sum(1 for t in _hpc_tasks if t['type'] == 'batch')
+            n_full_t  = sum(1 for t in _hpc_tasks if t['type'] == 'full_file')
+            n_slice_t = sum(1 for t in _hpc_tasks if t['type'] == 'slice')
+            parts = []
+            if n_batch_t: parts.append(f"{n_batch_t} batch")
+            if n_full_t:  parts.append(f"{n_full_t} full-file")
+            if n_slice_t: parts.append(f"{n_slice_t} slice")
+            print(f"  plan:   {total} file{'s' if total != 1 else ''}  →  {' + '.join(parts)} tasks"
+                  f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles")
+            all_tasks = _hpc_tasks
+        else:
+            batches = list(_iter_indexed_batches(basic, batch_size))
+            logger.debug("Processing Core: %d file(s), %d batch(es), %d worker(s)",
+                         total, len(batches), worker_count)
+            print(
+                f"  plan:   {total} file{'s' if total != 1 else ''}"
+                f"  ·  {len(batches)} task{'s' if len(batches) != 1 else ''}"
+                f"  ·  {batch_size} file{'s' if batch_size != 1 else ''}/task"
+                f"  ·  ≤{_chunk_mb:.0f} MB/chunk  ·  {_tile_px} px tiles"
+            )
+            all_tasks = [{'type': 'batch', 'batch': b} for b in batches]
+
+        worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes, slice_safe_classes)
+
+        def _force_exit(sig, frame):
+            raise SystemExit(1)
+
+        t_wall_start = time.perf_counter()
+        old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            if not _using_distributed:
-                raise ValueError("no distributed client")
-            from dask.distributed import get_client as _get_client, progress as _dist_progress
-            _active_client = _get_client()
-            futures = _active_client.map(worker_fn, all_tasks)
-            _dist_progress(futures, notebook=False)
-            # errors='skip' returns the exception object for killed/failed tasks
-            # instead of raising, so partial results from surviving tasks are kept.
-            all_results_raw = _active_client.gather(futures, errors='skip')
-            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
-            if n_failed:
-                logger.warning(
-                    'gather: %d of %d tasks failed (workers killed or OOM); '
-                    'partial results will be saved', n_failed, len(futures)
-                )
-            all_results: List[List[Dict]] = [
-                r if not isinstance(r, BaseException) else []
-                for r in all_results_raw
-            ]
-        except (ImportError, ValueError):
-            scheduler = 'synchronous' if worker_count == 1 else 'processes'
-            compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
+            bag = db.from_sequence(all_tasks, npartitions=len(all_tasks))
             try:
-                with ProgressBar(dt=1.0):
-                    all_results = bag.map(worker_fn).compute(scheduler=scheduler, **compute_kwargs)
-            except Exception as exc:
-                logger.warning(
-                    "Processing Core: parallel execution failed (%s). "
-                    "Falling back to single-process execution.", exc,
-                )
-                with ProgressBar(dt=1.0):
-                    all_results = bag.map(worker_fn).compute(scheduler='synchronous')
-    except KeyboardInterrupt:
-        signal.signal(signal.SIGINT, _force_exit)
-        raise
-    finally:
-        signal.signal(signal.SIGINT, old_handler)
+                if not _using_distributed:
+                    raise ValueError("no distributed client")
+                from dask.distributed import get_client as _get_client, progress as _dist_progress
+                _active_client = _get_client()
+                futures = _active_client.map(worker_fn, all_tasks)
+                _dist_progress(futures, notebook=False)
+                all_results_raw = _active_client.gather(futures, errors='skip')
+                n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+                if n_failed:
+                    logger.warning(
+                        'gather: %d of %d tasks failed (workers killed or OOM); '
+                        'partial results will be saved', n_failed, len(futures)
+                    )
+                all_results: List[List[Dict]] = [
+                    r if not isinstance(r, BaseException) else []
+                    for r in all_results_raw
+                ]
+            except (ImportError, ValueError):
+                scheduler = 'synchronous' if worker_count == 1 else 'processes'
+                compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
+                try:
+                    with ProgressBar(dt=1.0):
+                        all_results = bag.map(worker_fn).compute(scheduler=scheduler, **compute_kwargs)
+                except Exception as exc:
+                    logger.warning(
+                        "Processing Core: parallel execution failed (%s). "
+                        "Falling back to single-process execution.", exc,
+                    )
+                    with ProgressBar(dt=1.0):
+                        all_results = bag.map(worker_fn).compute(scheduler='synchronous')
+        except KeyboardInterrupt:
+            signal.signal(signal.SIGINT, _force_exit)
+            raise
+        finally:
+            signal.signal(signal.SIGINT, old_handler)
 
     wall_s = time.perf_counter() - t_wall_start
 
@@ -880,11 +1004,60 @@ def build_records_df(
 
     config = processing_config or ProcessingConfig()
 
+    if loader is None:
+        basic = _build_basic_file_df(bases, loader=None, accepted_extensions=config.selected_file_extensions)
+        return basic, None
+
+    # Use streaming scan when a distributed cluster is already connected: files are
+    # submitted as tasks immediately as they are discovered so workers start while
+    # the directory tree is still being walked.
+    try:
+        from dask.distributed import get_client as _gc
+        _dist_client = _gc()
+        _is_distributed = True
+    except (ImportError, ValueError):
+        _dist_client = None
+        _is_distributed = False
+
+    if _is_distributed:
+        processors = discover_processor_plugins()
+        if config.processors_included:
+            processors = [p for p in processors if p.NAME in config.processors_included]
+        elif config.processors_excluded:
+            processors = [p for p in processors if p.NAME not in config.processors_excluded]
+        processor_classes = [p.__class__ for p in processors]
+        slice_safe_classes    = [c for c in processor_classes if getattr(c, 'SLICE_SAFE', False)]
+        non_slice_safe_classes = [c for c in processor_classes if not getattr(c, 'SLICE_SAFE', False)]
+        target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+
+        basic, all_tasks, futures, large_file_meta, t_wall_start = _scan_and_submit(
+            bases=bases,
+            accepted_extensions=config.selected_file_extensions,
+            loader_instance=loader,
+            client=_dist_client,
+            processor_classes=processor_classes,
+            slice_safe_classes=slice_safe_classes,
+            non_slice_safe_classes=non_slice_safe_classes,
+            target_mb=target_mb,
+        )
+        if basic is None or basic.is_empty():
+            return basic, None
+
+        deep, summary = _build_deep_record_df(
+            basic, loader,
+            processing_config=config,
+            progress_callback=progress_callback,
+            flush_dir=flush_dir,
+            _prebuilt=(all_tasks, futures, large_file_meta, t_wall_start),
+        )
+        return deep, summary
+
+    # Non-distributed path: scan all files first, then process.
     basic = _build_basic_file_df(
         bases, loader=loader, accepted_extensions=config.selected_file_extensions
     )
-    if loader is None or basic is None:
-        return basic, None
+    if basic is None:
+        return None, None
 
     basic = basic.with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)

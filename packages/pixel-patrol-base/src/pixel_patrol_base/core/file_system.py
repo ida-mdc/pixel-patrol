@@ -44,6 +44,45 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
     return record
 
 
+def iter_filesystem(
+    bases: List[Path],
+    accepted_extensions: Set[str] | Literal["all"],
+    loader: Optional[PixelPatrolLoader] = None,
+):
+    """Generator version of walk_filesystem — yields (path, record_dict) as files are found.
+
+    Allows callers to process each file immediately without waiting for a full directory scan.
+    Useful for large directory trees where the scan itself takes significant time.
+    """
+    include_all = accepted_extensions == "all"
+    is_folder_check = (loader is not None) and \
+                      hasattr(loader, "is_folder_supported") and \
+                      (include_all or
+                       not accepted_extensions.isdisjoint(getattr(loader, "FOLDER_EXTENSIONS", set())))
+    folder_support_fn = loader.is_folder_supported if is_folder_check else None
+
+    for base in bases:
+        for root, dirnames, filenames in os.walk(base, topdown=True):
+            dirpath = Path(root)
+            if is_folder_check:
+                keep: List[str] = []
+                for d in dirnames:
+                    sub = dirpath / d
+                    if folder_support_fn(sub):
+                        record = make_basic_record(sub, base, is_folder=False)
+                        if record:
+                            yield Path(sub), record
+                    else:
+                        keep.append(d)
+                dirnames[:] = keep
+            for name in filenames:
+                p = dirpath / name
+                if include_all or p.suffix.lower().lstrip(".") in accepted_extensions:
+                    record = make_basic_record(p, base, is_folder=False)
+                    if record:
+                        yield p, record
+
+
 def walk_filesystem(
     bases: List[Path],
     accepted_extensions: Set[str] | Literal["all"],
