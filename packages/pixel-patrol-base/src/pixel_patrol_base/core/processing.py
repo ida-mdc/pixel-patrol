@@ -485,8 +485,15 @@ def _scan_and_submit(
         size_bytes = record.get('size_bytes', 0) or 0
 
         info = None
-        if loader_name and slice_safe_classes and size_bytes / (1024 ** 2) > target_mb * 0.5:
-            info = _hpc_open_array_info(str(path), loader_name)
+        if loader_name and slice_safe_classes:
+            file_mb = size_bytes / (1024 ** 2)
+            # Open to check actual array size when:
+            # - size_bytes is tiny (< 1 MB): directory-based formats like zarr report only
+            #   the directory entry size (~4 KB), not the actual data size.
+            # - size_bytes suggests the file might exceed the chunk threshold.
+            # Skip the open only for files clearly too small to ever need slicing.
+            if file_mb < 1.0 or file_mb > target_mb * 0.5:
+                info = _hpc_open_array_info(str(path), loader_name)
 
         if info is not None:
             shape, dtype, dim_order_out = info
@@ -1436,12 +1443,11 @@ class _RecordsAccumulator:
             self._flush_active_to_disk(force=False)
 
     def finalize(self) -> pl.DataFrame:
-        """
-        Finalize accumulation: flush remaining active data and combine all chunks into one Parquet file if applicable, while removing partial chunks.
-        If insufficient memory is available for combining, skips the combine step and retains chunk files.
+        """Flush remaining rows then combine all batch chunks into one DataFrame.
 
-        Returns:
-            A Polars DataFrame containing all accumulated records, or an empty DataFrame if combining was skipped.
+        Uses lazy scan_parquet so files are read one at a time rather than all
+        simultaneously, keeping coordinator peak memory proportional to the
+        largest single batch file rather than the total dataset size.
         """
         if self._flush_dir:
             if not self._active_df.is_empty():
@@ -1452,21 +1458,17 @@ class _RecordsAccumulator:
         if not self._written_files:
             return self._active_df
 
-        total_size = sum(p.stat().st_size for p in self._written_files if p.exists())
-        if not self._is_enough_memory_to_combine(total_size):
+        paths = [str(p) for p in self._written_files if p.exists()]
+        if not paths:
             return pl.DataFrame([])
 
-        frames = [pl.read_parquet(path) for path in self._written_files]
-        if not self._active_df.is_empty():
-            frames.append(self._active_df)
-
-        if not frames:
-            return pl.DataFrame([])
-
-        final_df = pl.concat(frames, how="diagonal_relaxed", rechunk=True)
-        final_df = self.post_process_final_df(final_df)
-
-        return final_df
+        # Lazy scan reads files one at a time — peak memory is one file at a time,
+        # not the sum of all files at once.
+        final_df = (
+            pl.scan_parquet(paths, missing_columns="insert")
+            .collect()
+        )
+        return self.post_process_final_df(final_df)
 
     def _is_enough_memory_to_combine(self, total_size: int) -> bool:
         available_memory = _estimate_available_memory_bytes()
