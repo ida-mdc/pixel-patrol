@@ -488,11 +488,10 @@ def _scan_and_submit(
         if loader_name and slice_safe_classes:
             file_mb = size_bytes / (1024 ** 2)
             # Open to check actual array size when:
-            # - size_bytes is tiny (< 1 MB): directory-based formats like zarr report only
-            #   the directory entry size (~4 KB), not the actual data size.
+            # - path is a directory: directory-based formats (zarr, n5, …) report only
+            #   the directory entry size in size_bytes, not the actual data size.
             # - size_bytes suggests the file might exceed the chunk threshold.
-            # Skip the open only for files clearly too small to ever need slicing.
-            if file_mb < 1.0 or file_mb > target_mb * 0.5:
+            if path.is_dir() or file_mb > target_mb * 0.5:
                 info = _hpc_open_array_info(str(path), loader_name)
 
         if info is not None:
