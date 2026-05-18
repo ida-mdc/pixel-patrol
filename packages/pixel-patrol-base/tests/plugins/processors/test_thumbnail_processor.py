@@ -135,6 +135,14 @@ class TestThumbnailProcessor:
         np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 1])
         np.testing.assert_array_equal(arr[:, :, 0], arr[:, :, 2])
 
+    def test_numpy_array_input(self):
+        """Processor must work when art.data is a plain numpy array (e.g. LMDB loader path)."""
+        data = np.random.randint(0, 256, (20, 20, 3), dtype=np.uint8)
+        record = record_from(data, {"dim_order": "YXS"})  # numpy, not dask
+        rows = ThumbnailProcessor().run(record)
+        assert rows[0]["thumbnail"] is not None
+        assert len(rows[0]["thumbnail"]) == SPRITE_SIZE * SPRITE_SIZE * 4
+
     def test_empty_image(self):
         data = np.array([[]], dtype=np.uint8)
         dask_data = da.from_array(data, chunks=(1, 1))
@@ -176,6 +184,32 @@ class TestThumbnailProcessor:
         data = np.zeros((2, 20, 20), dtype=np.float32)
         data[1] = 1.0  # mean = 0.5, lower=0, upper=0.5 → normalized to 255
         thumb = self._thumbnail(data, "SYX")
+        arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
+        assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
+
+    def test_channel_dimension_mean_trailing_c(self):
+        """Non-RGB YXC: C is the last axis — must be meaned, not Y (regression for trailing color dim)."""
+        # ch0=0, ch1=200 → mean=100; lower=0, upper=100 → 100/100*255=255
+        data = np.zeros((20, 20, 2), dtype=np.uint8)
+        data[:, :, 1] = 200
+        thumb = self._thumbnail(data, "YXC")
+        arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
+        assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
+
+    def test_s_dimension_mean_trailing_s(self):
+        """Non-RGB YXS: S is the last axis — must be meaned, not Y."""
+        data = np.zeros((20, 20, 2), dtype=np.float32)
+        data[:, :, 1] = 1.0  # mean=0.5; lower=0, upper=0.5 → normalized to 255
+        thumb = self._thumbnail(data, "YXS")
+        arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
+        assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
+
+    def test_tyxc_nonrgb_center_t_mean_trailing_c(self):
+        """TYXC non-RGB: T center-sliced then trailing C meaned — validates both steps."""
+        nt = 3
+        data = np.zeros((nt, 20, 20, 2), dtype=np.uint8)
+        data[nt // 2, :, :, 1] = 200  # signal only at center T, channel 1
+        thumb = self._thumbnail(data, "TYXC")
         arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
         assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
 

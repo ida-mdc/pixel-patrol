@@ -110,7 +110,7 @@ def _generate_thumbnail(
         return None
 
     dtype_name = str(da_array.dtype)
-    arr = da_array.copy()
+    arr = da_array if isinstance(da_array, da.Array) else da.from_array(np.asarray(da_array))
     if arr.dtype == bool:
         arr = arr.astype(np.float32)
     elif np.issubdtype(arr.dtype, np.floating):
@@ -130,8 +130,9 @@ def _generate_thumbnail(
     # Collapse any leftover non-spatial dimensions by mean
     target_ndim = 3 if is_rgb else 2
     while arr.ndim > target_ndim:
-        arr = da.mean(arr, axis=0)
-        current_dim_order = current_dim_order[1:]
+        ax = next(i for i, d in enumerate(current_dim_order) if d not in keep_dims)
+        arr = da.mean(arr, axis=ax)
+        current_dim_order = current_dim_order[:ax] + current_dim_order[ax + 1:]
 
     normalized, norm_min, norm_max = _normalize(arr)
     img = normalized.compute()
