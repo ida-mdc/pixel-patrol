@@ -433,26 +433,21 @@ class _DispatchWorker:
         return result
 
 
-def _scan_and_submit(
+def _scan_tasks(
     bases,
     accepted_extensions,
     loader_instance: "PixelPatrolLoader",
-    client,
     processor_classes,
     slice_safe_classes,
     non_slice_safe_classes,
     target_mb: float,
     max_files_per_batch: int = 50,
 ) -> tuple:
-    """Stream-scan the filesystem and submit dask tasks as batches form.
+    """Scan the filesystem and build the task list without submitting anything.
 
-    Files are discovered one by one via iter_filesystem.  Each time a batch
-    fills (by size or count) it is immediately submitted as a future so workers
-    can start while the scan continues.  Large files that exceed target_mb are
-    routed to full_file + slice tasks instead.
-
-    Returns (basic_df, all_tasks, futures, large_file_meta, t_wall_start).
-    basic_df is built from the records collected during the scan.
+    Returns (basic_df, all_tasks, large_file_meta, t_wall_start, worker_fn).
+    Submission is deferred to the caller which uses a sliding window via
+    as_completed to bound the number of results held in scheduler memory.
     """
     from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
 
@@ -461,7 +456,6 @@ def _scan_and_submit(
 
     basic_records: List[Dict] = []
     all_tasks: List[Dict] = []
-    futures = []
     large_file_meta: Dict[int, tuple] = {}
     batch: List[_IndexedPath] = []
     batch_mb = 0.0
@@ -471,9 +465,7 @@ def _scan_and_submit(
         nonlocal batch, batch_mb
         if not batch:
             return
-        task = {'type': 'batch', 'batch': batch[:]}
-        all_tasks.append(task)
-        futures.append(client.submit(worker_fn, task))
+        all_tasks.append({'type': 'batch', 'batch': batch[:]})
         batch.clear()
         batch_mb = 0.0
 
@@ -500,16 +492,12 @@ def _scan_and_submit(
             if arr_mb > target_mb:
                 _flush()
                 large_file_meta[n_files] = (shape, dim_order_out)
-                task_ff = {'type': 'full_file', 'row_index': n_files, 'path': str(path)}
-                all_tasks.append(task_ff)
-                futures.append(client.submit(worker_fn, task_ff))
+                all_tasks.append({'type': 'full_file', 'row_index': n_files, 'path': str(path)})
                 for slc in _sp(shape, ''.join(dim_order_out), dtype, target_mb):
                     origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
-                    task_s = {'type': 'slice', 'row_index': n_files, 'path': str(path),
-                              'slc': slc, 'origin': origin,
-                              'dim_order_out': dim_order_out, 'full_shape': shape}
-                    all_tasks.append(task_s)
-                    futures.append(client.submit(worker_fn, task_s))
+                    all_tasks.append({'type': 'slice', 'row_index': n_files, 'path': str(path),
+                                      'slc': slc, 'origin': origin,
+                                      'dim_order_out': dim_order_out, 'full_shape': shape})
                 n_files += 1
                 continue
 
@@ -521,22 +509,22 @@ def _scan_and_submit(
         n_files += 1
 
         if n_files % 500 == 0:
-            print(f"\r  scanning: {n_files} files, {len(futures)} tasks submitted",
+            print(f"\r  scanning: {n_files} files, {len(all_tasks)} tasks",
                   end='', flush=True)
 
     _flush()
 
     suffix = ' ' * 30
-    print(f"\r  scan done: {n_files} files → {len(futures)} tasks{suffix}")
+    print(f"\r  scan done: {n_files} files → {len(all_tasks)} tasks{suffix}")
 
     if not basic_records:
-        return pl.DataFrame(), [], [], {}, t_wall_start
+        return pl.DataFrame(), [], {}, t_wall_start, worker_fn
 
     basic = pl.DataFrame(basic_records)
     basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
     basic = basic.with_columns(pl.col('row_index').cast(pl.Int64))
 
-    return basic, all_tasks, futures, large_file_meta, t_wall_start
+    return basic, all_tasks, large_file_meta, t_wall_start, worker_fn
 
 
 def _build_deep_record_df(
@@ -583,7 +571,7 @@ def _build_deep_record_df(
     if _prebuilt is not None:
         # Streaming path: tasks were already submitted during the file scan.
         # Skip task-building and submission; go straight to gather.
-        all_tasks, prebuilt_futures, _large_file_meta, t_wall_start, _is_local = _prebuilt
+        all_tasks, _large_file_meta, t_wall_start, worker_fn, _is_local = _prebuilt
         _use_hpc = any(t['type'] == 'slice' for t in all_tasks)
         _using_distributed = not _is_local
         accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
@@ -594,7 +582,7 @@ def _build_deep_record_df(
         # For batch tasks: flush immediately. For HPC files (full_file + slices):
         # accumulate per-file and flush once all slices for that file are done.
         _ss_by_name = {cls.NAME: cls for cls in slice_safe_classes}
-        future_to_task: Dict = {f: t for f, t in zip(prebuilt_futures, all_tasks)}
+        pending_tasks: Dict = {}  # future -> task  (only in-flight futures)
 
         # Per large-file state: how many slices to expect, how many done, accumulated rows.
         _slice_total: Dict[int, int] = {}
@@ -609,7 +597,7 @@ def _build_deep_record_df(
 
         all_timing: Dict[str, float] = {'load': 0.0, 'n_files': 0}
         n_done = 0
-        n_total = len(prebuilt_futures)
+        n_total = len(all_tasks)
         n_failed = 0
         processed_count = 0
 
@@ -650,16 +638,41 @@ def _build_deep_record_df(
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
             from dask.distributed import as_completed as _as_completed, get_client as _gc
-            for future, result in _as_completed(prebuilt_futures,
-                                                with_results=True, raise_errors=False):
+            _client = _gc()
+
+            # Sliding window: keep at most MAX_IN_FLIGHT futures outstanding so
+            # completed results don't pile up in scheduler memory faster than the
+            # coordinator can process and flush them.
+            _n_workers = max(len(_client.scheduler_info().get('workers', {})), 1)
+            MAX_IN_FLIGHT = _n_workers * 4
+
+            _task_iter = iter(enumerate(all_tasks))  # (idx, task)
+            _ac = _as_completed([], with_results=True, raise_errors=False)
+
+            def _submit_next():
+                """Submit the next pending task if the window has capacity."""
+                while len(pending_tasks) < MAX_IN_FLIGHT:
+                    try:
+                        _, task = next(_task_iter)
+                    except StopIteration:
+                        return
+                    f = _client.submit(worker_fn, task)
+                    pending_tasks[f] = task
+                    _ac.add(f)
+
+            _submit_next()  # fill initial window
+
+            for future, result in _ac:
                 n_done += 1
                 print(f'\r  {n_done}/{n_total} tasks done', end='', flush=True)
+                task = pending_tasks.pop(future)
+                _submit_next()  # refill window as soon as a slot opens
+
                 if isinstance(result, BaseException):
                     logger.warning('task failed: %s', result)
                     n_failed += 1
                     continue
 
-                task = future_to_task[future]
                 rows = _strip_timing(result)
 
                 if task['type'] == 'batch':
@@ -1148,11 +1161,10 @@ def build_records_df(
         slice_safe_classes     = [c for c in processor_classes if getattr(c, 'SLICE_SAFE', False)]
         non_slice_safe_classes = [c for c in processor_classes if not getattr(c, 'SLICE_SAFE', False)]
 
-        basic, all_tasks, futures, large_file_meta, t_wall_start = _scan_and_submit(
+        basic, all_tasks, large_file_meta, t_wall_start, worker_fn = _scan_tasks(
             bases=bases,
             accepted_extensions=config.selected_file_extensions,
             loader_instance=loader,
-            client=_dist_client,
             processor_classes=processor_classes,
             slice_safe_classes=slice_safe_classes,
             non_slice_safe_classes=non_slice_safe_classes,
@@ -1166,7 +1178,7 @@ def build_records_df(
             processing_config=config,
             progress_callback=progress_callback,
             flush_dir=flush_dir,
-            _prebuilt=(all_tasks, futures, large_file_meta, t_wall_start, _is_local_cluster),
+            _prebuilt=(all_tasks, large_file_meta, t_wall_start, worker_fn, _is_local_cluster),
         )
     finally:
         if _own_client is not None:
