@@ -12,9 +12,6 @@ import numpy as np
 from tqdm.auto import tqdm
 import gc
 
-import dask.bag as db
-from dask.diagnostics import ProgressBar
-
 import polars as pl
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
@@ -580,23 +577,34 @@ def _build_deep_record_df(
     if _prebuilt is not None:
         # Streaming path: tasks were already submitted during the file scan.
         # Skip task-building and submission; go straight to gather.
-        all_tasks, prebuilt_futures, _large_file_meta, t_wall_start = _prebuilt
+        all_tasks, prebuilt_futures, _large_file_meta, t_wall_start, _is_local = _prebuilt
         _use_hpc = any(t['type'] == 'slice' for t in all_tasks)
+        _using_distributed = not _is_local
         accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
         if flush_dir:
             _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
 
-        from dask.distributed import get_client as _get_client, progress as _dist_progress
-        _active_client = _get_client()
-        _dist_progress(prebuilt_futures, notebook=False)
-        all_results_raw = _active_client.gather(prebuilt_futures, errors='skip')
-        n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
-        if n_failed:
-            logger.warning('gather: %d/%d tasks failed; partial results saved',
-                           n_failed, len(prebuilt_futures))
-        all_results: List[List[Dict]] = [
-            r if not isinstance(r, BaseException) else [] for r in all_results_raw
-        ]
+        def _force_exit(sig, frame):
+            raise SystemExit(1)
+
+        old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            from dask.distributed import get_client as _get_client, progress as _dist_progress
+            _active_client = _get_client()
+            _dist_progress(prebuilt_futures, notebook=False)
+            all_results_raw = _active_client.gather(prebuilt_futures, errors='skip')
+            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+            if n_failed:
+                logger.warning('gather: %d/%d tasks failed; partial results saved',
+                               n_failed, len(prebuilt_futures))
+            all_results: List[List[Dict]] = [
+                r if not isinstance(r, BaseException) else [] for r in all_results_raw
+            ]
+        except KeyboardInterrupt:
+            signal.signal(signal.SIGINT, _force_exit)
+            raise
+        finally:
+            signal.signal(signal.SIGINT, old_handler)
     else:
         # Standard path: build tasks from basic DataFrame, then submit.
         # Build HPC task plan when there are slice-safe processors and a loader is present.
@@ -654,38 +662,21 @@ def _build_deep_record_df(
         t_wall_start = time.perf_counter()
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            bag = db.from_sequence(all_tasks, npartitions=len(all_tasks))
-            try:
-                if not _using_distributed:
-                    raise ValueError("no distributed client")
-                from dask.distributed import get_client as _get_client, progress as _dist_progress
-                _active_client = _get_client()
-                futures = _active_client.map(worker_fn, all_tasks)
-                _dist_progress(futures, notebook=False)
-                all_results_raw = _active_client.gather(futures, errors='skip')
-                n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
-                if n_failed:
-                    logger.warning(
-                        'gather: %d of %d tasks failed (workers killed or OOM); '
-                        'partial results will be saved', n_failed, len(futures)
-                    )
-                all_results: List[List[Dict]] = [
-                    r if not isinstance(r, BaseException) else []
-                    for r in all_results_raw
-                ]
-            except (ImportError, ValueError):
-                scheduler = 'synchronous' if worker_count == 1 else 'processes'
-                compute_kwargs = {} if worker_count == 1 else {'num_workers': worker_count}
-                try:
-                    with ProgressBar(dt=1.0):
-                        all_results = bag.map(worker_fn).compute(scheduler=scheduler, **compute_kwargs)
-                except Exception as exc:
-                    logger.warning(
-                        "Processing Core: parallel execution failed (%s). "
-                        "Falling back to single-process execution.", exc,
-                    )
-                    with ProgressBar(dt=1.0):
-                        all_results = bag.map(worker_fn).compute(scheduler='synchronous')
+            from dask.distributed import get_client as _get_client, progress as _dist_progress
+            _active_client = _get_client()
+            futures = _active_client.map(worker_fn, all_tasks)
+            _dist_progress(futures, notebook=False)
+            all_results_raw = _active_client.gather(futures, errors='skip')
+            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+            if n_failed:
+                logger.warning(
+                    'gather: %d of %d tasks failed (workers killed or OOM); '
+                    'partial results will be saved', n_failed, len(futures)
+                )
+            all_results: List[List[Dict]] = [
+                r if not isinstance(r, BaseException) else []
+                for r in all_results_raw
+            ]
         except KeyboardInterrupt:
             signal.signal(signal.SIGINT, _force_exit)
             raise
@@ -1008,27 +999,34 @@ def build_records_df(
         basic = _build_basic_file_df(bases, loader=None, accepted_extensions=config.selected_file_extensions)
         return basic, None
 
-    # Use streaming scan when a distributed cluster is already connected: files are
-    # submitted as tasks immediately as they are discovered so workers start while
-    # the directory tree is still being walked.
+    target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
+
+    # Always use a dask distributed client so local and remote processing share one
+    # code path. Create a temporary LocalCluster when no external client is connected.
+    _own_cluster = None
+    _own_client = None
+    _is_local_cluster = False
     try:
         from dask.distributed import get_client as _gc
         _dist_client = _gc()
-        _is_distributed = True
     except (ImportError, ValueError):
-        _dist_client = None
-        _is_distributed = False
+        from dask.distributed import Client as _Client, LocalCluster as _LC
+        n = _resolve_worker_count(config, target_mb=target_mb)
+        _own_cluster = _LC(n_workers=n, threads_per_worker=1, memory_limit=0)
+        _own_client = _Client(_own_cluster)
+        _dist_client = _own_client
+        _is_local_cluster = True
+        print(f"  local cluster: {n} workers  ·  dashboard: {_own_client.dashboard_link}")
 
-    if _is_distributed:
+    try:
         processors = discover_processor_plugins()
         if config.processors_included:
             processors = [p for p in processors if p.NAME in config.processors_included]
         elif config.processors_excluded:
             processors = [p for p in processors if p.NAME not in config.processors_excluded]
         processor_classes = [p.__class__ for p in processors]
-        slice_safe_classes    = [c for c in processor_classes if getattr(c, 'SLICE_SAFE', False)]
+        slice_safe_classes     = [c for c in processor_classes if getattr(c, 'SLICE_SAFE', False)]
         non_slice_safe_classes = [c for c in processor_classes if not getattr(c, 'SLICE_SAFE', False)]
-        target_mb = float(os.environ.get('PIXEL_PATROL_MAX_BLOCK_MB', '1024'))
 
         basic, all_tasks, futures, large_file_meta, t_wall_start = _scan_and_submit(
             bases=bases,
@@ -1043,34 +1041,18 @@ def build_records_df(
         if basic is None or basic.is_empty():
             return basic, None
 
-        deep, summary = _build_deep_record_df(
+        return _build_deep_record_df(
             basic, loader,
             processing_config=config,
             progress_callback=progress_callback,
             flush_dir=flush_dir,
-            _prebuilt=(all_tasks, futures, large_file_meta, t_wall_start),
+            _prebuilt=(all_tasks, futures, large_file_meta, t_wall_start, _is_local_cluster),
         )
-        return deep, summary
-
-    # Non-distributed path: scan all files first, then process.
-    basic = _build_basic_file_df(
-        bases, loader=loader, accepted_extensions=config.selected_file_extensions
-    )
-    if basic is None:
-        return None, None
-
-    basic = basic.with_row_index("row_index").with_columns(
-        pl.col("row_index").cast(pl.Int64)
-    )
-    deep, summary = _build_deep_record_df(
-        basic,
-        loader,
-        processing_config=config,
-        progress_callback=progress_callback,
-        flush_dir=flush_dir,
-    )
-
-    return deep, summary
+    finally:
+        if _own_client is not None:
+            _own_client.close()
+        if _own_cluster is not None:
+            _own_cluster.close()
 
 
 def _build_basic_file_df(

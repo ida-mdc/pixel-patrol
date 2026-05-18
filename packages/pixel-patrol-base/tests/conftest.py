@@ -8,6 +8,21 @@ from PIL import Image
 from pixel_patrol_base.core.project import Project
 
 
+@pytest.fixture()
+def thread_client():
+    """Thread-based LocalCluster for tests that need dask.distributed.
+
+    Using processes=False means workers run in threads, so monkeypatched
+    module-level functions are visible to them without any extra setup.
+    """
+    from dask.distributed import Client, LocalCluster
+    cluster = LocalCluster(n_workers=2, threads_per_worker=1, processes=False)
+    client = Client(cluster)
+    yield client
+    client.close()
+    cluster.close()
+
+
 @pytest.fixture
 def mock_project_name() -> str:
     return "My Test Project"

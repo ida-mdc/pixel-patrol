@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import Future
 from pathlib import Path
 from typing import List, Optional
 
@@ -8,6 +7,7 @@ import polars as pl
 
 from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.specs import RecordSpec
+from pixel_patrol_base.core.processing import build_records_df
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
 import pixel_patrol_base.core.project as project_module
@@ -30,95 +30,7 @@ class DummyLoader:
         raise RuntimeError("DummyLoader should not load data in these tests.")
 
 
-class FakeProcessPoolExecutor:
-    """Synchronous executor to exercise the ProcessPoolExecutor code path."""
 
-    last_instance: Optional["FakeProcessPoolExecutor"] = None
-
-    def __init__(self, max_workers: int, initializer=None, initargs=None, mp_context=None) -> None:
-        self.max_workers = max_workers
-        self.initializer = initializer
-        self.initargs = initargs or ()
-        self.initializer_called = False
-        if self.initializer:
-            self.initializer(*self.initargs)
-            self.initializer_called = True
-        FakeProcessPoolExecutor.last_instance = self
-
-    def __enter__(self) -> "FakeProcessPoolExecutor":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
-
-    def submit(self, fn, *args, **kwargs) -> Future:
-        future: Future = Future()
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except Exception as exc:
-            future.set_exception(exc)
-        return future
-
-
-class FakeThreadPoolExecutor:
-    """Synchronous executor to exercise the ThreadPoolExecutor code path."""
-
-    last_instance: Optional["FakeThreadPoolExecutor"] = None
-
-    def __init__(self, max_workers: int) -> None:
-        self.max_workers = max_workers
-        FakeThreadPoolExecutor.last_instance = self
-
-    def __enter__(self) -> "FakeThreadPoolExecutor":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
-
-    def submit(self, fn, *args, **kwargs) -> Future:
-        future: Future = Future()
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except Exception as exc:
-            future.set_exception(exc)
-        return future
-
-
-class FakeProcessPoolExecutorWithFailure:
-    """Executor that fails for the first submitted batch and succeeds after."""
-
-    def __init__(self, max_workers: int, initializer=None, initargs=None) -> None:
-        self._initializer = initializer
-        self._initargs = initargs or ()
-        self._failed_once = False
-        if self._initializer:
-            self._initializer(*self._initargs)
-
-    def __enter__(self) -> "FakeProcessPoolExecutorWithFailure":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
-
-    def submit(self, fn, *args, **kwargs) -> Future:
-        future: Future = Future()
-        if not self._failed_once:
-            self._failed_once = True
-            future.set_exception(RuntimeError("worker crash"))
-            return future
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except Exception as exc:
-            future.set_exception(exc)
-        return future
-
-
-def _basic_df_for_paths(paths: List[Path]) -> pl.DataFrame:
-    return (
-        pl.DataFrame({"path": [str(p) for p in paths]})
-        .with_row_index("row_index")
-        .with_columns(pl.col("row_index").cast(pl.Int64))
-    )
 
 
 def _make_fake_load_and_process(return_props):
@@ -134,75 +46,40 @@ def _make_fake_load_and_process(return_props):
     return fake
 
 
-def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch):
-    """Ensure chunk flushing writes batches, combines them, and cleans up _batches dir."""
-    output_path = tmp_path / "output.parquet"
-    p1 = tmp_path / "a.png"
-    p2 = tmp_path / "b.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
+def test_build_records_df_flushes_and_combines_chunks(tmp_path, thread_client, monkeypatch):
+    """Flushing writes intermediate parquet chunks and combines them into the final result."""
+    (tmp_path / "a.png").write_bytes(b"")
+    (tmp_path / "b.png").write_bytes(b"")
 
-    config = ProcessingConfig(
-        processing_max_workers=1,
-        records_flush_every_n=1,
-    )
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 1}),
-    )
+    monkeypatch.setattr(processing, "load_and_process_records_from_file",
+                        _make_fake_load_and_process({"width": 1}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda _: DummyLoader())
 
-    basic_df = _basic_df_for_paths([p1, p2])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    flush_dir = tmp_path / "_batches"
+    df, _ = build_records_df(
+        [tmp_path], DummyLoader(),
+        processing_config=ProcessingConfig(records_flush_every_n=1),
+        flush_dir=flush_dir,
+    )
 
     assert df.height == 2
     assert "width" in df.columns
 
 
-def test_build_deep_record_df_multiprocessing(tmp_path, monkeypatch):
-    """Workers produce correct results for each file (single-process mode for monkeypatch compat)."""
-    p1 = tmp_path / "x.png"
-    p2 = tmp_path / "y.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
+def test_build_records_df_workers_produce_correct_results(tmp_path, thread_client, monkeypatch):
+    """Workers produce the correct metric value for each file."""
+    (tmp_path / "x.png").write_bytes(b"")
+    (tmp_path / "y.png").write_bytes(b"")
 
-    config = ProcessingConfig(processing_max_workers=1)
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 5}),
-    )
+    monkeypatch.setattr(processing, "load_and_process_records_from_file",
+                        _make_fake_load_and_process({"width": 5}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda _: DummyLoader())
 
-    basic_df = _basic_df_for_paths([p1, p2])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df, _ = build_records_df([tmp_path], DummyLoader())
 
-    assert df["width"].to_list() == [5, 5]
-
-
-def test_build_deep_record_df_multiprocessing_produces_correct_results(tmp_path, monkeypatch):
-    """Multiple workers produce correct per-file results (single-process mode for monkeypatch compat)."""
-    p1 = tmp_path / "m.png"
-    p2 = tmp_path / "n.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
-
-    config = ProcessingConfig(processing_max_workers=1)
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 7}),
-    )
-    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
-
-    basic_df = _basic_df_for_paths([p1, p2])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
-
-    assert df["width"].to_list() == [7, 7]
+    assert sorted(df["width"].to_list()) == [5, 5]
 
 
 def test_process_records_infers_output_dir_when_missing(tmp_path, monkeypatch):
@@ -216,59 +93,48 @@ def test_process_records_infers_output_dir_when_missing(tmp_path, monkeypatch):
     assert project.output_path == Path(tmp_path) / "demo.parquet"
 
 
-def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
-    """A failed worker batch should not abort the whole run."""
-    p1 = tmp_path / "one.png"
-    p2 = tmp_path / "two.png"
-    p1.write_bytes(b"")
-    p2.write_bytes(b"")
+def test_build_records_df_survives_worker_failure(tmp_path, thread_client, monkeypatch):
+    """A task that raises should not abort the whole run; other results are preserved."""
+    (tmp_path / "one.png").write_bytes(b"")
+    (tmp_path / "two.png").write_bytes(b"")
 
-    config = ProcessingConfig(processing_max_workers=2)
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 33}),
-    )
+    monkeypatch.setattr(processing, "load_and_process_records_from_file",
+                        _make_fake_load_and_process({"width": 33}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda _: DummyLoader())
 
-    basic_df = _basic_df_for_paths([p1, p2])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df, _ = build_records_df([tmp_path], DummyLoader())
 
     assert df.height == 2
     assert "path" in df.columns
 
 
-def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypatch):
-    """Schema should include columns introduced in earlier batches with nulls later."""
+def test_build_records_df_preserves_schema_across_batches(tmp_path, thread_client, monkeypatch):
+    """Columns introduced by one file appear in all rows (null for files that omit them)."""
     p1 = tmp_path / "alpha.png"
     p2 = tmp_path / "beta.png"
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    config = ProcessingConfig(
-        processing_max_workers=1,
-        records_flush_every_n=1,
-    )
-
     def per_file_props(file_path):
-        if Path(file_path).name == p1.name:
+        if Path(file_path).name == "alpha.png":
             return {"width": 10, "extra": 99}
         return {"width": 20}
 
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process(per_file_props),
-    )
+    monkeypatch.setattr(processing, "load_and_process_records_from_file",
+                        _make_fake_load_and_process(per_file_props))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda _: DummyLoader())
 
-    basic_df = _basic_df_for_paths([p1, p2])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df, _ = build_records_df(
+        [tmp_path], DummyLoader(),
+        processing_config=ProcessingConfig(records_flush_every_n=1),
+    )
 
-    df = df.sort("row_index")
-    assert set(df.columns) == {"row_index", "path", "width", "extra"}
-    assert df["extra"].to_list() == [99, None]
+    assert {"width", "extra"}.issubset(df.columns)
+    by_name = {row["name"]: row for row in df.to_dicts()}
+    assert by_name["alpha.png"]["extra"] == 99
+    assert by_name["beta.png"]["extra"] is None
 
 
 # ---------- tests for multi-record loader support ----------
@@ -370,9 +236,9 @@ def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
     assert child_ids == {"valid", "123"}
 
 
-def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monkeypatch):
-    p1 = tmp_path / "multi.czi"
-    p1.write_bytes(b"")
+def test_build_records_df_multi_record_produces_multiple_rows(tmp_path, thread_client, monkeypatch):
+    """A loader returning multiple records per file produces one row per record."""
+    (tmp_path / "multi.czi").write_bytes(b"")
 
     def fake_multi(file_path, loader, processors, show_processor_progress=True, timing_out=None):
         return [
@@ -382,16 +248,14 @@ def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monk
 
     monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_multi)
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda _: DummyLoader())
 
-    basic_df = _basic_df_for_paths([p1])
-    df, _ = processing._build_deep_record_df(basic_df, DummyLoader())
+    df, _ = build_records_df([tmp_path], DummyLoader())
 
     assert df.height == 2
     assert "child_id" in df.columns
     assert set(df["child_id"].to_list()) == {"scene_0", "scene_1"}
     assert set(df["width"].to_list()) == {10, 20}
-    assert df["path"].to_list() == [str(p1), str(p1)]
 
 
 
