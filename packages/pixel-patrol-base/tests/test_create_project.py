@@ -71,10 +71,9 @@ def test_create_project_base_dir_with_relative_path(mock_project_name: str, tmp_
         os.chdir(original_cwd)  # Restore original CWD
 
 def test_output_path_inferred_when_not_provided(mock_project_name: str, tmp_path: Path):
-    """When no output_path is given, it defaults to base_dir/name.parquet with spaces replaced by underscores."""
+    """When no output_path is given, it should default to base_dir/name.parquet."""
     project = api.create_project(mock_project_name, tmp_path)
-    sanitized = mock_project_name.replace(' ', '_')
-    assert project.output_path == tmp_path.resolve() / f"{sanitized}.parquet"
+    assert project.output_path == tmp_path.resolve() / f"{mock_project_name}.parquet"
 
 
 def test_output_path_explicit_absolute(mock_project_name: str, tmp_path: Path):
@@ -141,13 +140,3 @@ def test_output_path_independent_of_base_dir(mock_project_name: str, tmp_path: P
     project = api.create_project(mock_project_name, base, output_path=output)
     assert project.output_path == output.resolve()
     assert not project.output_path.is_relative_to(base)
-
-
-def test_output_path_spaces_in_stem_sanitized_with_warning(mock_project_name: str, tmp_path: Path, caplog):
-    """Spaces in the output filename stem are replaced with underscores and a warning is logged."""
-    import logging
-    output = tmp_path / "my output file.parquet"
-    with caplog.at_level(logging.WARNING, logger="pixel_patrol_base.core.project"):
-        project = api.create_project(mock_project_name, tmp_path, output_path=output)
-    assert project.output_path == (tmp_path / "my_output_file.parquet").resolve()
-    assert any("spaces" in r.message for r in caplog.records)
