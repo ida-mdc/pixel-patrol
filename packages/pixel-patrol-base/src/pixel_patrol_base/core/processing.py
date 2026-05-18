@@ -584,27 +584,137 @@ def _build_deep_record_df(
         if flush_dir:
             _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
 
+        # Process results as they complete so coordinator memory stays bounded.
+        # For batch tasks: flush immediately. For HPC files (full_file + slices):
+        # accumulate per-file and flush once all slices for that file are done.
+        _ss_by_name = {cls.NAME: cls for cls in slice_safe_classes}
+        future_to_task: Dict = {f: t for f, t in zip(prebuilt_futures, all_tasks)}
+
+        # Per large-file state: how many slices to expect, how many done, accumulated rows.
+        _slice_total: Dict[int, int] = {}
+        for t in all_tasks:
+            if t['type'] == 'slice':
+                _slice_total[t['row_index']] = _slice_total.get(t['row_index'], 0) + 1
+        _hpc_state: Dict[int, Dict] = {
+            ridx: {'full_rows': None, 'path': None,
+                   'tile_rows': {}, 'done': 0, 'total': cnt}
+            for ridx, cnt in _slice_total.items()
+        }
+
+        all_timing: Dict[str, float] = {'load': 0.0, 'n_files': 0}
+        n_done = 0
+        n_total = len(prebuilt_futures)
+        n_failed = 0
+        processed_count = 0
+
+        def _strip_timing(raw_rows):
+            if raw_rows and isinstance(raw_rows[-1], dict) and '__timing__' in raw_rows[-1]:
+                for k, v in raw_rows[-1]['__timing__'].items():
+                    if isinstance(v, (int, float)):
+                        all_timing[k] = all_timing.get(k, 0.0) + v
+                return raw_rows[:-1]
+            return list(raw_rows)
+
+        def _try_flush_hpc_file(ridx):
+            nonlocal processed_count
+            state = _hpc_state[ridx]
+            if state['full_rows'] is None or state['done'] < state['total']:
+                return
+            deep_rows = list(state['full_rows'])
+            for (r, proc_name), tile_rows in state['tile_rows'].items():
+                proc_cls = _ss_by_name.get(proc_name)
+                if proc_cls is None:
+                    continue
+                shape, dim_order_out = _large_file_meta[r]
+                try:
+                    acc = proc_cls.accumulate_slice_rows(tile_rows, shape, dim_order_out)
+                    for row in acc:
+                        row['row_index'] = r
+                    deep_rows = _merge_long_rows(deep_rows, acc)
+                except Exception as exc:
+                    logger.warning('accumulate_slice_rows failed %s/%s: %s', proc_name, r, exc)
+            batch_items = [_IndexedPath(ridx, state['path'])]
+            accumulator.add_batch(_combine_batch_with_basic(basic, batch_items, deep_rows))
+            processed_count += 1
+            del _hpc_state[ridx]  # free accumulated tile rows
+
         def _force_exit(sig, frame):
             raise SystemExit(1)
 
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            from dask.distributed import get_client as _get_client, progress as _dist_progress
-            _active_client = _get_client()
-            _dist_progress(prebuilt_futures, notebook=False)
-            all_results_raw = _active_client.gather(prebuilt_futures, errors='skip')
-            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+            from dask.distributed import as_completed as _as_completed, get_client as _gc
+            for future, result in _as_completed(prebuilt_futures,
+                                                with_results=True, raise_errors=False):
+                n_done += 1
+                print(f'\r  {n_done}/{n_total} tasks done', end='', flush=True)
+                if isinstance(result, BaseException):
+                    logger.warning('task failed: %s', result)
+                    n_failed += 1
+                    continue
+
+                task = future_to_task[future]
+                rows = _strip_timing(result)
+
+                if task['type'] == 'batch':
+                    batch_df = _combine_batch_with_basic(basic, task['batch'], rows)
+                    accumulator.add_batch(batch_df)
+                    processed_count += len(task['batch'])
+
+                elif task['type'] == 'full_file':
+                    ridx = task['row_index']
+                    _hpc_state[ridx]['full_rows'] = rows
+                    _hpc_state[ridx]['path'] = task['path']
+                    _try_flush_hpc_file(ridx)
+
+                elif task['type'] == 'slice':
+                    ridx = task['row_index']
+                    _hpc_state[ridx]['path'] = task['path']
+                    for row in rows:
+                        if '__hpc_row_index__' in row:
+                            row.pop('__hpc_row_index__')
+                            pname = row.pop('__proc__', 'unknown')
+                            _hpc_state[ridx]['tile_rows'].setdefault((ridx, pname), []).append(row)
+                    _hpc_state[ridx]['done'] += 1
+                    _try_flush_hpc_file(ridx)
+
+            print()
             if n_failed:
-                logger.warning('gather: %d/%d tasks failed; partial results saved',
-                               n_failed, len(prebuilt_futures))
-            all_results: List[List[Dict]] = [
-                r if not isinstance(r, BaseException) else [] for r in all_results_raw
-            ]
+                logger.warning('%d/%d tasks failed; partial results saved', n_failed, n_total)
         except KeyboardInterrupt:
             signal.signal(signal.SIGINT, _force_exit)
             raise
         finally:
             signal.signal(signal.SIGINT, old_handler)
+
+        # as_completed path writes directly to accumulator; skip the post-gather loop.
+        wall_s = time.perf_counter() - t_wall_start
+        n_workers_actual = 0
+        worker_nodes: list = []
+        if _using_distributed:
+            try:
+                _winfo = _gc().scheduler_info().get('workers', {})
+                n_workers_actual = len(_winfo)
+                worker_nodes = sorted(set(
+                    a.split('//')[-1].split(':')[0] for a in _winfo
+                ))
+            except Exception:
+                pass
+
+        from pixel_patrol_base.core.processing_summary import ProcessingSummary
+        summary = ProcessingSummary(
+            n_files=total,
+            wall_s=wall_s,
+            worker_count=worker_count,
+            is_distributed=_using_distributed,
+            load_cpu_s=all_timing.get('load', 0.0),
+            processor_cpu_s={k[5:]: v for k, v in all_timing.items() if k.startswith('proc_')},
+            n_tasks=n_total,
+            n_workers_actual=n_workers_actual,
+            worker_nodes=worker_nodes,
+            tasks_per_worker={},
+        )
+        return accumulator.finalize(), summary
     else:
         # Standard path: build tasks from basic DataFrame, then submit.
         # Build HPC task plan when there are slice-safe processors and a loader is present.
@@ -662,21 +772,25 @@ def _build_deep_record_df(
         t_wall_start = time.perf_counter()
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            from dask.distributed import get_client as _get_client, progress as _dist_progress
+            from dask.distributed import get_client as _get_client, as_completed as _as_completed
             _active_client = _get_client()
             futures = _active_client.map(worker_fn, all_tasks)
-            _dist_progress(futures, notebook=False)
-            all_results_raw = _active_client.gather(futures, errors='skip')
-            n_failed = sum(1 for r in all_results_raw if isinstance(r, BaseException))
+            future_to_idx = {f: i for i, f in enumerate(futures)}
+            all_results = [[]] * len(futures)
+            n_failed = 0
+            n_done = 0
+            n_total = len(futures)
+            for future, result in _as_completed(futures, with_results=True, raise_errors=False):
+                n_done += 1
+                print(f'\r  {n_done}/{n_total} tasks done', end='', flush=True)
+                if isinstance(result, BaseException):
+                    logger.warning('task failed: %s', result)
+                    n_failed += 1
+                    result = []
+                all_results[future_to_idx[future]] = result
+            print()
             if n_failed:
-                logger.warning(
-                    'gather: %d of %d tasks failed (workers killed or OOM); '
-                    'partial results will be saved', n_failed, len(futures)
-                )
-            all_results: List[List[Dict]] = [
-                r if not isinstance(r, BaseException) else []
-                for r in all_results_raw
-            ]
+                logger.warning('%d/%d tasks failed; partial results saved', n_failed, n_total)
         except KeyboardInterrupt:
             signal.signal(signal.SIGINT, _force_exit)
             raise

@@ -180,9 +180,9 @@ def main():
         print(f"Scheduler:  {client.scheduler.address}")
         print(f"Dashboard:  {client.dashboard_link}")
         print(f"Waiting for workers (need ≥{min_workers} of {args.workers})...")
-        client.wait_for_workers(n_workers=min_workers, timeout=600)
+        client.wait_for_workers(n_workers=min_workers)
         n_ready = len(client.scheduler_info()["workers"])
-        print(f"Workers ready: {n_ready}")
+        print(f"Workers ready: {n_ready}/{args.workers}")
 
         name = args.name or args.data_dir.name
         project = create_project(name, str(args.data_dir),
