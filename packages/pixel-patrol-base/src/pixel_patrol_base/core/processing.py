@@ -316,7 +316,8 @@ def _hpc_build_tasks(
                 _flush(); batch.clear(); batch_size_mb = 0.0
                 slices = _sp(shape, ''.join(dim_order_out), dtype, target_mb)
                 large_file_meta[row_index] = (shape, dim_order_out)
-                tasks.append({'type': 'full_file', 'row_index': row_index, 'path': path})
+                if non_slice_safe_classes:
+                    tasks.append({'type': 'full_file', 'row_index': row_index, 'path': path})
                 for slc in slices:
                     origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
                     tasks.append({'type': 'slice', 'row_index': row_index, 'path': path,
@@ -433,7 +434,7 @@ class _DispatchWorker:
         return result
 
 
-def _scan_tasks(
+def _scan_tasks_gen(
     bases,
     accepted_extensions,
     loader_instance: "PixelPatrolLoader",
@@ -441,22 +442,19 @@ def _scan_tasks(
     slice_safe_classes,
     non_slice_safe_classes,
     target_mb: float,
+    basic_records: List[Dict],
+    large_file_meta: Dict[int, tuple],
     max_files_per_batch: int = 50,
-) -> tuple:
-    """Scan the filesystem and build the task list without submitting anything.
+):
+    """Generator: yield tasks one at a time as files are discovered.
 
-    Returns (basic_df, all_tasks, large_file_meta, t_wall_start, worker_fn).
-    Submission is deferred to the caller which uses a sliding window via
-    as_completed to bound the number of results held in scheduler memory.
+    Populates basic_records and large_file_meta in-place so callers can look up
+    basic metadata for a file as soon as it has been scanned — before the task
+    result arrives, so no full DataFrame is needed during streaming processing.
     """
     from pixel_patrol_image.plugins.processors.processor_block_utils import raster_slicing_plan as _sp
 
     loader_name = getattr(loader_instance, 'NAME', None)
-    worker_fn = _DispatchWorker(loader_name, processor_classes, non_slice_safe_classes, slice_safe_classes)
-
-    basic_records: List[Dict] = []
-    all_tasks: List[Dict] = []
-    large_file_meta: Dict[int, tuple] = {}
     batch: List[_IndexedPath] = []
     batch_mb = 0.0
     n_files = 0
@@ -464,12 +462,11 @@ def _scan_tasks(
     def _flush():
         nonlocal batch, batch_mb
         if not batch:
-            return
-        all_tasks.append({'type': 'batch', 'batch': batch[:]})
+            return None
+        task = {'type': 'batch', 'batch': batch[:]}
         batch.clear()
         batch_mb = 0.0
-
-    t_wall_start = time.perf_counter()
+        return task
 
     for path, record in iter_filesystem(bases, accepted_extensions, loader_instance):
         record['row_index'] = n_files
@@ -479,10 +476,6 @@ def _scan_tasks(
         info = None
         if loader_name and slice_safe_classes:
             file_mb = size_bytes / (1024 ** 2)
-            # Open to check actual array size when:
-            # - path is a directory: directory-based formats (zarr, n5, …) report only
-            #   the directory entry size in size_bytes, not the actual data size.
-            # - size_bytes suggests the file might exceed the chunk threshold.
             if path.is_dir() or file_mb > target_mb * 0.5:
                 info = _hpc_open_array_info(str(path), loader_name)
 
@@ -490,41 +483,35 @@ def _scan_tasks(
             shape, dtype, dim_order_out = info
             arr_mb = np.prod(shape) * dtype.itemsize / (1024 ** 2)
             if arr_mb > target_mb:
-                _flush()
+                task = _flush()
+                if task:
+                    yield task
                 large_file_meta[n_files] = (shape, dim_order_out)
-                all_tasks.append({'type': 'full_file', 'row_index': n_files, 'path': str(path)})
+                if non_slice_safe_classes:
+                    yield {'type': 'full_file', 'row_index': n_files, 'path': str(path)}
                 for slc in _sp(shape, ''.join(dim_order_out), dtype, target_mb):
                     origin = [s.start or 0 if isinstance(s, slice) else int(s) for s in slc]
-                    all_tasks.append({'type': 'slice', 'row_index': n_files, 'path': str(path),
-                                      'slc': slc, 'origin': origin,
-                                      'dim_order_out': dim_order_out, 'full_shape': shape})
+                    yield {'type': 'slice', 'row_index': n_files, 'path': str(path),
+                           'slc': slc, 'origin': origin,
+                           'dim_order_out': dim_order_out, 'full_shape': shape}
                 n_files += 1
                 continue
 
         batch.append(_IndexedPath(n_files, str(path)))
         batch_mb += size_bytes / (1024 ** 2)
         if batch_mb >= target_mb or len(batch) >= max_files_per_batch:
-            _flush()
+            task = _flush()
+            if task:
+                yield task
 
         n_files += 1
 
         if n_files % 500 == 0:
-            print(f"\r  scanning: {n_files} files, {len(all_tasks)} tasks",
-                  end='', flush=True)
+            print(f"\r  scanning: {n_files} files", end='', flush=True)
 
-    _flush()
-
-    suffix = ' ' * 30
-    print(f"\r  scan done: {n_files} files → {len(all_tasks)} tasks{suffix}")
-
-    if not basic_records:
-        return pl.DataFrame(), [], {}, t_wall_start, worker_fn
-
-    basic = pl.DataFrame(basic_records)
-    basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
-    basic = basic.with_columns(pl.col('row_index').cast(pl.Int64))
-
-    return basic, all_tasks, large_file_meta, t_wall_start, worker_fn
+    task = _flush()
+    if task:
+        yield task
 
 
 def _build_deep_record_df(
@@ -539,11 +526,14 @@ def _build_deep_record_df(
     _prebuilt: optional (all_tasks, futures, large_file_meta, t_wall_start) from
     _scan_and_submit — skips task-building and submission, goes straight to gather.
     """
-    if basic.is_empty():
+    # Generator path: _prebuilt has 6 elements (task_gen, basic_records, …)
+    # Standard path: _prebuilt has 5 elements (all_tasks, …) or None
+    is_generator_path = _prebuilt is not None and len(_prebuilt) == 6
+    if not is_generator_path and (basic is None or basic.is_empty()):
         return pl.DataFrame([]), None
 
     config = processing_config or ProcessingConfig()
-    total = basic.height
+    total = basic.height if basic is not None else 0  # updated after scan in generator path
     processors = discover_processor_plugins()
 
     if processing_config:
@@ -568,36 +558,29 @@ def _build_deep_record_df(
     slice_safe_classes = [cls for cls in processor_classes if getattr(cls, 'SLICE_SAFE', False)]
     non_slice_safe_classes = [cls for cls in processor_classes if not getattr(cls, 'SLICE_SAFE', False)]
 
-    if _prebuilt is not None:
-        # Streaming path: tasks were already submitted during the file scan.
-        # Skip task-building and submission; go straight to gather.
-        all_tasks, _large_file_meta, t_wall_start, worker_fn, _is_local = _prebuilt
-        _use_hpc = any(t['type'] == 'slice' for t in all_tasks)
+    if is_generator_path:
+        # Generator path: scan and submit simultaneously so workers start immediately.
+        # basic_records is populated in-place as files are discovered; no full basic
+        # DataFrame is needed during processing — batches look up rows by index.
+        task_gen, _basic_records, _large_file_meta, t_wall_start, worker_fn, _is_local = _prebuilt
+        _use_hpc = False  # set to True if any slice task is seen
         _using_distributed = not _is_local
-        accumulator = _RecordsAccumulator(flush_every_n=flush_threshold, flush_dir=flush_dir)
+        # flush_threshold unknown until scan ends; use a generous default
+        _flush_thresh = max(flush_threshold, 10_000)
+        accumulator = _RecordsAccumulator(flush_every_n=_flush_thresh, flush_dir=flush_dir)
         if flush_dir:
             _cleanup_partial_chunks_dir(flush_dir, cleanup_combined_parquet=False)
 
-        # Process results as they complete so coordinator memory stays bounded.
-        # For batch tasks: flush immediately. For HPC files (full_file + slices):
-        # accumulate per-file and flush once all slices for that file are done.
         _ss_by_name = {cls.NAME: cls for cls in slice_safe_classes}
-        pending_tasks: Dict = {}  # future -> task  (only in-flight futures)
+        all_tasks: List[Dict] = []
+        pending_tasks: Dict = {}  # future -> task
 
-        # Per large-file state: how many slices to expect, how many done, accumulated rows.
+        # HPC state is built dynamically as slice tasks are submitted
+        _hpc_state: Dict[int, Dict] = {}
         _slice_total: Dict[int, int] = {}
-        for t in all_tasks:
-            if t['type'] == 'slice':
-                _slice_total[t['row_index']] = _slice_total.get(t['row_index'], 0) + 1
-        _hpc_state: Dict[int, Dict] = {
-            ridx: {'full_rows': None, 'path': None,
-                   'tile_rows': {}, 'done': 0, 'total': cnt}
-            for ridx, cnt in _slice_total.items()
-        }
 
         all_timing: Dict[str, float] = {'load': 0.0, 'n_files': 0}
         n_done = 0
-        n_total = len(all_tasks)
         n_failed = 0
         processed_count = 0
 
@@ -609,10 +592,27 @@ def _build_deep_record_df(
                 return raw_rows[:-1]
             return list(raw_rows)
 
+        def _combine_with_basic_list(batch_items, deep_rows):
+            """Build a per-batch basic DataFrame from the accumulated basic_records list."""
+            relevant = [_basic_records[item.row_index] for item in batch_items]
+            basic_batch = pl.DataFrame(relevant, infer_schema_length=None)
+            basic_batch = postprocess_basic_file_metadata_df(normalize_file_extension(basic_batch))
+            basic_batch = basic_batch.with_columns(pl.col('row_index').cast(pl.Int64))
+            if not deep_rows:
+                return basic_batch
+            deep_df = pl.DataFrame(deep_rows, nan_to_null=True, strict=False, infer_schema_length=None)
+            if deep_df.is_empty():
+                return basic_batch
+            deep_df = deep_df.with_columns(pl.col('row_index').cast(pl.Int64))
+            overlap = [c for c in deep_df.columns if c in basic_batch.columns and c != 'row_index']
+            if overlap:
+                basic_batch = basic_batch.drop(overlap)
+            return basic_batch.join(deep_df, on='row_index', how='left')
+
         def _try_flush_hpc_file(ridx):
             nonlocal processed_count
-            state = _hpc_state[ridx]
-            if state['full_rows'] is None or state['done'] < state['total']:
+            state = _hpc_state.get(ridx)
+            if state is None or state['full_rows'] is None or state['done'] < state['total']:
                 return
             deep_rows = list(state['full_rows'])
             for (r, proc_name), tile_rows in state['tile_rows'].items():
@@ -628,9 +628,19 @@ def _build_deep_record_df(
                 except Exception as exc:
                     logger.warning('accumulate_slice_rows failed %s/%s: %s', proc_name, r, exc)
             batch_items = [_IndexedPath(ridx, state['path'])]
-            accumulator.add_batch(_combine_batch_with_basic(basic, batch_items, deep_rows))
+            accumulator.add_batch(_combine_with_basic_list(batch_items, deep_rows))
             processed_count += 1
-            del _hpc_state[ridx]  # free accumulated tile rows
+            del _hpc_state[ridx]
+
+        def _register_slice_task(task):
+            nonlocal _use_hpc
+            _use_hpc = True
+            ridx = task['row_index']
+            _slice_total[ridx] = _slice_total.get(ridx, 0) + 1
+            if ridx not in _hpc_state:
+                _hpc_state[ridx] = {'full_rows': None, 'path': None,
+                                     'tile_rows': {}, 'done': 0, 'total': 0}
+            _hpc_state[ridx]['total'] += 1
 
         def _force_exit(sig, frame):
             raise SystemExit(1)
@@ -640,33 +650,35 @@ def _build_deep_record_df(
             from dask.distributed import as_completed as _as_completed, get_client as _gc
             _client = _gc()
 
-            # Sliding window: keep at most MAX_IN_FLIGHT futures outstanding so
-            # completed results don't pile up in scheduler memory faster than the
-            # coordinator can process and flush them.
+            # MAX_IN_FLIGHT: use a generous bound so workers stay busy even when
+            # only a fraction of requested workers have connected yet.
             _n_workers = max(len(_client.scheduler_info().get('workers', {})), 1)
-            MAX_IN_FLIGHT = _n_workers * 4
+            MAX_IN_FLIGHT = max(_n_workers * 10, 500)
 
-            _task_iter = iter(enumerate(all_tasks))  # (idx, task)
             _ac = _as_completed([], with_results=True, raise_errors=False)
 
-            def _submit_next():
-                """Submit the next pending task if the window has capacity."""
+            def _submit_from_gen():
+                """Pull tasks from the scan generator and submit until window is full."""
                 while len(pending_tasks) < MAX_IN_FLIGHT:
                     try:
-                        _, task = next(_task_iter)
+                        task = next(task_gen)
                     except StopIteration:
                         return
+                    all_tasks.append(task)
+                    if task['type'] == 'slice':
+                        _register_slice_task(task)
                     f = _client.submit(worker_fn, task)
                     pending_tasks[f] = task
                     _ac.add(f)
 
-            _submit_next()  # fill initial window
+            _submit_from_gen()  # start filling the window while scanning
 
             for future, result in _ac:
                 n_done += 1
-                print(f'\r  {n_done}/{n_total} tasks done', end='', flush=True)
+                n_total_so_far = len(all_tasks)
+                print(f'\r  {n_done}/{n_total_so_far}+ tasks done', end='', flush=True)
                 task = pending_tasks.pop(future)
-                _submit_next()  # refill window as soon as a slot opens
+                _submit_from_gen()  # pull more tasks from scan as slots open
 
                 if isinstance(result, BaseException):
                     logger.warning('task failed: %s', result)
@@ -676,12 +688,14 @@ def _build_deep_record_df(
                 rows = _strip_timing(result)
 
                 if task['type'] == 'batch':
-                    batch_df = _combine_batch_with_basic(basic, task['batch'], rows)
+                    batch_df = _combine_with_basic_list(task['batch'], rows)
                     accumulator.add_batch(batch_df)
                     processed_count += len(task['batch'])
 
                 elif task['type'] == 'full_file':
                     ridx = task['row_index']
+                    _hpc_state.setdefault(ridx, {'full_rows': None, 'path': None,
+                                                  'tile_rows': {}, 'done': 0, 'total': 0})
                     _hpc_state[ridx]['full_rows'] = rows
                     _hpc_state[ridx]['path'] = task['path']
                     _try_flush_hpc_file(ridx)
@@ -697,16 +711,23 @@ def _build_deep_record_df(
                     _hpc_state[ridx]['done'] += 1
                     _try_flush_hpc_file(ridx)
 
-            print()
-            if n_failed:
-                logger.warning('%d/%d tasks failed; partial results saved', n_failed, n_total)
         except KeyboardInterrupt:
             signal.signal(signal.SIGINT, _force_exit)
             raise
         finally:
             signal.signal(signal.SIGINT, old_handler)
 
-        # as_completed path writes directly to accumulator; skip the post-gather loop.
+        # Scan is now complete (generator exhausted by _submit_from_gen).
+        n_total = len(all_tasks)
+        total = len(_basic_records)
+        if total == 0:
+            return pl.DataFrame([]), None
+        # Build the basic DataFrame for the summary (not used for per-batch joins,
+        # only for the ProcessingSummary n_files count and final accumulator output).
+        basic = pl.DataFrame(_basic_records)
+        basic = postprocess_basic_file_metadata_df(normalize_file_extension(basic))
+        basic = basic.with_columns(pl.col('row_index').cast(pl.Int64))
+
         wall_s = time.perf_counter() - t_wall_start
         n_workers_actual = 0
         worker_nodes: list = []
@@ -1161,7 +1182,12 @@ def build_records_df(
         slice_safe_classes     = [c for c in processor_classes if getattr(c, 'SLICE_SAFE', False)]
         non_slice_safe_classes = [c for c in processor_classes if not getattr(c, 'SLICE_SAFE', False)]
 
-        basic, all_tasks, large_file_meta, t_wall_start, worker_fn = _scan_tasks(
+        loader_name = getattr(loader, 'NAME', None)
+        worker_fn = _DispatchWorker(loader_name, processor_classes,
+                                    non_slice_safe_classes, slice_safe_classes)
+        basic_records: List[Dict] = []
+        large_file_meta: Dict[int, tuple] = {}
+        task_gen = _scan_tasks_gen(
             bases=bases,
             accepted_extensions=config.selected_file_extensions,
             loader_instance=loader,
@@ -1169,16 +1195,18 @@ def build_records_df(
             slice_safe_classes=slice_safe_classes,
             non_slice_safe_classes=non_slice_safe_classes,
             target_mb=target_mb,
+            basic_records=basic_records,
+            large_file_meta=large_file_meta,
         )
-        if basic is None or basic.is_empty():
-            return basic, None
+        t_wall_start = time.perf_counter()
 
         return _build_deep_record_df(
-            basic, loader,
+            None, loader,
             processing_config=config,
             progress_callback=progress_callback,
             flush_dir=flush_dir,
-            _prebuilt=(all_tasks, large_file_meta, t_wall_start, worker_fn, _is_local_cluster),
+            _prebuilt=(task_gen, basic_records, large_file_meta,
+                       t_wall_start, worker_fn, _is_local_cluster),
         )
     finally:
         if _own_client is not None:
