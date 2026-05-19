@@ -69,7 +69,7 @@ class Project:
         initial_paths_set = set(self.paths)
         temp_final_paths_set = set(self.paths).copy()  # Start with current paths
         if len(self.paths) == 1 and self.paths[0] == self.base_dir:
-            logger.info(
+            logger.debug(
                 "Project Core: Explicit paths being added, removing base directory from initial paths set for redundancy check.")
             temp_final_paths_set.clear()
 
@@ -83,7 +83,7 @@ class Project:
         if set(self.paths) != initial_paths_set:
             logger.debug(f"Project Core: Paths updated for project '{self.name}'. Total paths count: {len(self.paths)}.")
         else:
-            logger.info(
+            logger.debug(
                 f"Project Core: No change to project paths for '{self.name}'. Total paths count: {len(self.paths)}.")
 
         logger.debug(f"Project Core: Current project paths: {self.paths}")
@@ -101,7 +101,7 @@ class Project:
 
         if len(self.paths) == 1 and self.paths[0] == resolved_p_to_delete:
             self.paths = [self.base_dir]
-            logger.info(
+            logger.debug(
                 f"Project Core: Last specific path '{resolved_p_to_delete}' deleted; re-added base directory '{self.base_dir}'.")
             return self
 

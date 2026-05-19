@@ -682,6 +682,7 @@ def _build_deep_record_df(
                 n_total_so_far = len(all_tasks)
                 print(f'\r  {n_done}/{n_total_so_far}+ tasks done', end='', flush=True)
                 task = pending_tasks.pop(future)
+                future.release()  # free scheduler memory immediately; keeps dashboard counter in sync
                 _submit_from_gen()  # pull more tasks from scan as slots open
 
                 if isinstance(result, BaseException):

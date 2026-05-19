@@ -140,7 +140,12 @@ def main():
                    help="Wait for at least this many workers before starting (default: all --workers).")
     p.add_argument("--mem-per-worker", default="60GB")
     p.add_argument("--walltime", default="47:30:00")
-    p.add_argument("--tile-size", type=int, default=1024)
+    p.add_argument("--tile-size", type=int, default=None,
+                   help="XY tile size in pixels for spatial metrics (default: 256 with --tile-metrics, "
+                        "65536 without — effectively one tile per plane).")
+    p.add_argument("--tile-metrics", action="store_true", default=False,
+                   help="Store per-tile spatial metrics in output (off by default; "
+                        "increases output size and coordinator RAM usage significantly).")
     p.add_argument("--chunk-mb", type=int, default=1024)
     p.add_argument("--partition", default=None)
     p.add_argument("--account", default=None)
@@ -148,8 +153,11 @@ def main():
                    help="Processor names to skip, e.g. channel-colocalization")
     args = p.parse_args()
 
-    os.environ["PIXEL_PATROL_STATS_TILE_SIZE"] = str(args.tile_size)
+    tile_size = args.tile_size if args.tile_size is not None else (256 if args.tile_metrics else 65536)
+    os.environ["PIXEL_PATROL_STATS_TILE_SIZE"] = str(tile_size)
     os.environ["PIXEL_PATROL_MAX_BLOCK_MB"] = str(args.chunk_mb)
+    if args.tile_metrics:
+        os.environ["PIXEL_PATROL_RASTER_XY_TILE_METRICS"] = "1"
 
     output = Path(args.output).resolve()
     perf_report_path = output.with_suffix(".cluster_report.html")
@@ -167,8 +175,9 @@ def main():
         walltime=args.walltime,
         job_extra_directives=extra,
         job_script_prologue=[
-            f"export PIXEL_PATROL_STATS_TILE_SIZE={args.tile_size}",
+            f"export PIXEL_PATROL_STATS_TILE_SIZE={tile_size}",
             f"export PIXEL_PATROL_MAX_BLOCK_MB={args.chunk_mb}",
+            f"export PIXEL_PATROL_RASTER_XY_TILE_METRICS={'1' if args.tile_metrics else '0'}",
             "export DASK_DISTRIBUTED__LOGGING__DISTRIBUTED=error",
         ],
     )
