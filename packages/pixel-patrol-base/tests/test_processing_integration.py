@@ -144,7 +144,7 @@ def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch)
 
     config = ProcessingConfig(
         processing_max_workers=1,
-        flush_every_n=1,
+        chunk_every_n=1,
     )
 
     monkeypatch.setattr(
@@ -259,7 +259,7 @@ def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypa
 
     config = ProcessingConfig(
         processing_max_workers=1,
-        flush_every_n=1,
+        chunk_every_n=1,
     )
 
     def per_file_props(file_path):
@@ -440,12 +440,12 @@ def test_extract_record_properties_skips_runtime_error_processor():
     assert rows[0]["ok"] == 1
 
 
-def test_cleanup_partial_batches_dir(tmp_path):
+def test_cleanup_chunks_dir(tmp_path):
     d = tmp_path / "batches"
     d.mkdir()
 
-    p1 = d / "records_batch_00000.parquet"
-    p2 = d / "records_batch_00001.parquet"
+    p1 = d / "chunk_00000.parquet"
+    p2 = d / "chunk_00001.parquet"
     combined = d / "records_df.parquet"
 
     pl.DataFrame({"row_index": [0]}).write_parquet(p1)
@@ -454,49 +454,49 @@ def test_cleanup_partial_batches_dir(tmp_path):
 
     assert p1.exists() and p2.exists() and combined.exists()
 
-    processing._cleanup_partial_chunks_dir(d)
+    processing._cleanup_chunks_dir(d)
 
     assert not p1.exists()
     assert not p2.exists()
     assert not combined.exists()
 
     # calling again is a no-op
-    processing._cleanup_partial_chunks_dir(d)
+    processing._cleanup_chunks_dir(d)
 
     # empty directory should be removed
     assert not d.exists()
 
 
-def test_finalize_leaves_batches_dir_intact(tmp_path):
-    """finalize() should combine chunks into a DataFrame but leave the flush_dir
-    in place — cleanup is the caller's responsibility (via cleanup_flush_dir)."""
-    flush_dir = tmp_path / "_batches"
-    flush_dir.mkdir()
+def test_finalize_leaves_chunks_dir_intact(tmp_path):
+    """finalize() should combine chunks into a DataFrame but leave the chunks_dir
+    in place — cleanup is the caller's responsibility (via cleanup_chunks_dir)."""
+    chunks_dir = tmp_path / "_chunks"
+    chunks_dir.mkdir()
 
-    p1 = flush_dir / "records_batch_00000.parquet"
-    p2 = flush_dir / "records_batch_00001.parquet"
+    p1 = chunks_dir / "chunk_00000.parquet"
+    p2 = chunks_dir / "chunk_00001.parquet"
     pl.DataFrame({"a": [1], "row_index": [0]}).write_parquet(p1)
     pl.DataFrame({"a": [2], "row_index": [1]}).write_parquet(p2)
 
     accumulator = processing._RecordsAccumulator(
-        flush_every_n=1,
-        flush_dir=flush_dir,
+        chunk_every_n=1,
+        chunks_dir=chunks_dir,
     )
-    accumulator._written_files = [p1, p2]
+    accumulator._written_chunks = [p1, p2]
     accumulator._chunk_index = 2
 
     result = accumulator.finalize()
 
     assert result.height == 2
     assert "a" in result.columns
-    assert flush_dir.exists(), "flush_dir must survive finalize(); only cleanup_flush_dir should remove it"
+    assert chunks_dir.exists(), "chunks_dir must survive finalize(); only cleanup_chunks_dir should remove it"
 
 
-def test_finalize_without_flush_dir_returns_active_df():
-    """finalize() without a flush_dir returns the active DataFrame directly."""
+def test_finalize_without_chunks_dir_returns_active_df():
+    """finalize() without a chunks_dir returns the active DataFrame directly."""
     accumulator = processing._RecordsAccumulator(
-        flush_every_n=100,
-        flush_dir=None,
+        chunk_every_n=100,
+        chunks_dir=None,
     )
     accumulator._active_df = pl.DataFrame({"a": [1, 2, 3]})
 
@@ -506,23 +506,23 @@ def test_finalize_without_flush_dir_returns_active_df():
     assert result["a"].to_list() == [1, 2, 3]
 
 
-# ---------- tests for cleanup_flush_dir ----------
+# ---------- tests for cleanup_chunks_dir ----------
 
 
 def test_cleanup_not_called_when_no_records(tmp_path, monkeypatch):
-    """cleanup_flush_dir must not be called when build_records_df returns nothing."""
+    """cleanup_chunks_dir must not be called when build_records_df returns nothing."""
     cleanup_calls = []
     monkeypatch.setattr(processing, "build_records_df", lambda *a, **kw: None)
-    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+    monkeypatch.setattr(processing, "cleanup_chunks_dir", lambda path: cleanup_calls.append(path))
 
     p = Project(name="test", base_dir=tmp_path)
     p.process_records()
 
-    assert cleanup_calls == [], "cleanup_flush_dir must not be called when there are no records"
+    assert cleanup_calls == [], "cleanup_chunks_dir must not be called when there are no records"
 
 
 def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
-    """cleanup_flush_dir must not be called when save_parquet raises — chunks are
+    """cleanup_chunks_dir must not be called when save_parquet raises — chunks are
     the only remaining copy of the data and must be preserved."""
     cleanup_calls = []
     monkeypatch.setattr(
@@ -535,16 +535,16 @@ def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
 
     # Patch save_parquet on the project module where it was imported
     monkeypatch.setattr(project_module, "save_parquet", failing_save)
-    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+    monkeypatch.setattr(processing, "cleanup_chunks_dir", lambda path: cleanup_calls.append(path))
 
     p = Project(name="test", base_dir=tmp_path)
     p.process_records()
 
-    assert cleanup_calls == [], "cleanup_flush_dir must not be called after a failed save"
+    assert cleanup_calls == [], "cleanup_chunks_dir must not be called after a failed save"
 
 
 def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkeypatch):
-    """cleanup_flush_dir must be called exactly once with flush_dir = output_path.parent / '_batches'
+    """cleanup_chunks_dir must be called exactly once with chunks_dir = output_path.parent / '_batches'
     when save_parquet succeeds."""
     cleanup_calls = []
     monkeypatch.setattr(
@@ -552,14 +552,14 @@ def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkey
         lambda *a, **kw: pl.DataFrame({"a": [1]}),
     )
     monkeypatch.setattr(project_module, "save_parquet", lambda df, path, meta: None)
-    monkeypatch.setattr(processing, "cleanup_flush_dir", lambda path: cleanup_calls.append(path))
+    monkeypatch.setattr(processing, "cleanup_chunks_dir", lambda path: cleanup_calls.append(path))
 
     p = Project(name="test", base_dir=tmp_path)
-    expected_flush_dir = p.output_path.parent / f"_batches_{p.name}"
+    expected_chunks_dir = p.output_path.parent / f"_chunks_{p.name}"
 
     p.process_records()
 
-    assert len(cleanup_calls) == 1, "cleanup_flush_dir must be called exactly once on success"
-    assert cleanup_calls[0] == expected_flush_dir, (
-        f"cleanup_flush_dir called with wrong path: {cleanup_calls[0]!r}, expected {expected_flush_dir!r}"
+    assert len(cleanup_calls) == 1, "cleanup_chunks_dir must be called exactly once on success"
+    assert cleanup_calls[0] == expected_chunks_dir, (
+        f"cleanup_chunks_dir called with wrong path: {cleanup_calls[0]!r}, expected {expected_chunks_dir!r}"
     )

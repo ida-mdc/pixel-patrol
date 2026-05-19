@@ -40,7 +40,7 @@ def process_files(
         selected_file_extensions: Union[Set[str], str, None] = None,
         # --- Run behaviour ---
         processing_max_workers: Optional[int] = None,
-        flush_every_n: Optional[int] = None,
+        chunk_every_n: Optional[int] = None,
         parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
         flavor: Optional[str] = None,
@@ -59,7 +59,7 @@ def process_files(
         selected_file_extensions:   Extensions to process, e.g. {"tif", "png"}, or "all".
                                     Defaults to "all".
         processing_max_workers:     Thread-pool size. None = default.
-        flush_every_n:      Flush intermediate results to disk every N output rows.
+        chunk_every_n:      Write intermediate results to disk every N output rows.
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
         description:                Free-form description string embedded in the parquet metadata.
@@ -72,7 +72,7 @@ def process_files(
         processors_excluded=processors_excluded or set(),
         selected_file_extensions=selected_file_extensions or "all",
         processing_max_workers=processing_max_workers,
-        flush_every_n=flush_every_n,
+        chunk_every_n=chunk_every_n,
         parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",

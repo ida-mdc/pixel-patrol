@@ -29,7 +29,7 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
-        self.records_flush_dir: Optional[Path] = None
+        self.records_chunks_dir: Optional[Path] = None
         self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
@@ -148,14 +148,14 @@ class Project:
             progress_callback: Optional callback(current, total, current_file) called per file.
         """
         config = self._prepare_processing_config(processing_config)
-        flush_dir = self.output_path.parent / f"_batches_{self.output_path.stem}"
+        chunks_dir = self.output_path.parent / f"_chunks_{self.output_path.stem}"
 
         self.records_df = processing.build_records_df(
             bases=self.paths,
             loader=self.loader,
             processing_config=config,
             progress_callback=progress_callback,
-            flush_dir=flush_dir,
+            chunks_dir=chunks_dir,
         )
 
         if self.records_df is None or self.records_df.is_empty():
@@ -168,7 +168,7 @@ class Project:
             if config.parquet_row_group_size is not None:
                 rgs_kwargs["row_group_size"] = config.parquet_row_group_size
             save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
-            processing.cleanup_flush_dir(flush_dir)
+            processing.cleanup_chunks_dir(chunks_dir)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
