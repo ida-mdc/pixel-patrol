@@ -18,6 +18,11 @@ warnings.filterwarnings(
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_image.plugins.processors.raster_metric_definitions import enabled_ctx_tile_fields, MetricNames
 
+# Number of non-spatial planes processed per metric-evaluation pass.
+# Bounds _nbr_stats peak RAM: (B × n_ty × n_tx × ts² × 8 bytes) must fit in worker memory.
+# At ts=256, n_ty=n_tx=40: each plane ≈ 83 MB (float64) → 32 planes ≈ 2.6 GB.
+_PLANE_BATCH = 32
+
 
 def fold_to_tiles(
     block: np.ndarray, tile_size: int
@@ -114,26 +119,35 @@ class NumpyRasterBackend:
         return fold_to_tiles(block, self.tile_size)
 
     def process(self) -> List[Dict[str, Any]]:
-        """Produce tile rows, one plane at a time to bound peak RAM."""
+        """Produce tile rows, processing planes in batches.
+
+        Batching amortises Python/NumPy call overhead across _PLANE_BATCH planes
+        while keeping neighbourhood-stats intermediates proportional to the batch
+        rather than the full Z-stack.
+        """
         block = self.arr
         ns_shape = block.shape[:-2]
         nd_leading = block.ndim - 2
         ctx_fields = enabled_ctx_tile_fields(self.enabled_metrics)
         tile_axes = (-2, -1)
-        ts = self.tile_size
+
+        all_ns = list(np.ndindex(ns_shape)) if ns_shape else [()]
 
         rows: List[Dict[str, Any]] = []
-        for ns_local in (np.ndindex(ns_shape) if ns_shape else [()]):
-            plane = block[ns_local][np.newaxis]      # (1, H, W)
-            reshaped, mask = self.fold_block(plane)  # (1, n_ty, n_tx, ts, ts)
+        for batch_start in range(0, len(all_ns), _PLANE_BATCH):
+            batch_ns = all_ns[batch_start: batch_start + _PLANE_BATCH]
 
-            # Only convert to float and mark padding as NaN for border tiles that were
-            # extended to reach tile_size. Interior tiles keep their original dtype.
+            batch_block = np.stack([block[ns] for ns in batch_ns])  # (B, H, W)
+            reshaped, mask = self.fold_block(batch_block)            # (B, n_ty, n_tx, ts, ts)
+
             if not mask.all():
                 reshaped = reshaped.astype(np.float32, copy=False)
                 reshaped[~mask] = np.nan
 
-            hist_ctx = [{"min": float(self.s_min[ns_local]), "max": float(self.s_max[ns_local])}]
+            hist_ctx = [
+                {"min": float(self.s_min[ns]), "max": float(self.s_max[ns])}
+                for ns in batch_ns
+            ]
 
             nbr_cache: Dict = {}
             tensors: Dict[str, np.ndarray] = {}
@@ -142,11 +156,13 @@ class NumpyRasterBackend:
                 if out is not None:
                     tensors[spec.name] = out
 
-            valid_mask = np.any(mask, axis=tile_axes)  # (1, n_ty, n_tx)
+            ts = reshaped.shape[-1]
+            valid_mask = np.any(mask, axis=tile_axes)  # (B, n_ty, n_tx)
             for idx in np.ndindex(valid_mask.shape):
                 if not valid_mask[idx]:
                     continue
-                _, tile_yi, tile_xi = idx
+                b_i, tile_yi, tile_xi = idx
+                ns_local = batch_ns[b_i]
                 row: Dict[str, Any] = {"obs_level": block.ndim}
                 for i in range(nd_leading):
                     row[self.dim_names[i]] = ns_local[i]
@@ -155,8 +171,9 @@ class NumpyRasterBackend:
                 for name, tensor in tensors.items():
                     val = tensor[idx]
                     row[name] = float(val) if np.isscalar(val) else val
+                slice_ctx = hist_ctx[b_i]
                 for field_name, ctx_key in ctx_fields:
-                    row[field_name] = hist_ctx[0][ctx_key]
+                    row[field_name] = slice_ctx[ctx_key]
                 rows.append(row)
         return rows
 
@@ -166,29 +183,41 @@ def histogram_counts(
     mask: np.ndarray,
     ctx_list: List[Dict[str, float]],
 ) -> np.ndarray:
-    """Count pixels per brightness bucket on each tile, using each slice's own min/max as the range."""
-    ty, tx = reshaped.shape[1], reshaped.shape[2]
+    """Count pixels per brightness bucket on each tile.
+
+    Uses offset-binning: encodes tile identity into the bin index so the entire
+    plane can be counted with a single np.bincount call instead of one per tile,
+    eliminating the O(n_ty × n_tx) inner loop.
+    """
+    B = HISTOGRAM_BINS
+    n_planes, ty, tx = reshaped.shape[:3]
+    n_tiles = ty * tx
     all_h: List[np.ndarray] = []
-    for i in range(reshaped.shape[0]):
+    for i in range(n_planes):
         s_min, s_max = ctx_list[i]["min"], ctx_list[i]["max"]
-        if np.issubdtype(reshaped.dtype, np.floating):
-            valid_mask = mask[i] & ~np.isnan(reshaped[i])
+        plane = reshaped[i]
+        if np.issubdtype(plane.dtype, np.floating):
+            vmask = mask[i] & ~np.isnan(plane)
         else:
-            valid_mask = mask[i]
-        h = np.zeros((ty, tx, HISTOGRAM_BINS), dtype=np.int64)
+            vmask = mask[i]
+
+        h = np.zeros((ty, tx, B), dtype=np.int64)
         if s_min < s_max:
-            pixels = reshaped[i].reshape(ty, tx, -1).astype(np.float32, copy=False)
-            vmask  = valid_mask.reshape(ty, tx, -1)
-            bin_width = (s_max - s_min) / HISTOGRAM_BINS
-            for iy in range(ty):
-                for ix in range(tx):
-                    valid = pixels[iy, ix, vmask[iy, ix]]
-                    bin_indices = np.clip(
-                        ((valid - s_min) / bin_width).astype(np.int32), 0, HISTOGRAM_BINS - 1
-                    )
-                    h[iy, ix] = np.bincount(bin_indices, minlength=HISTOGRAM_BINS)
+            bin_width = (s_max - s_min) / B
+            pixels = plane.reshape(n_tiles, -1).astype(np.float32, copy=False)
+            valid  = vmask.reshape(n_tiles, -1)
+            bins = np.clip(
+                np.floor((pixels - s_min) / bin_width).astype(np.int32),
+                0, B - 1,
+            )
+            # Shift each tile's bins by k*(B+1) so all tiles can be counted in one call.
+            # The +1 gap between tiles means the sentinel value B never aliases tile k+1's bin 0.
+            offsets = (np.arange(n_tiles, dtype=np.int64) * (B + 1)).reshape(-1, 1)
+            flat = np.where(valid, bins + offsets, np.int64(-1)).ravel()
+            counts = np.bincount(flat[flat >= 0], minlength=n_tiles * (B + 1))
+            h = counts.reshape(n_tiles, B + 1)[:, :B].reshape(ty, tx, B)
         else:
-            h[:, :, 0] = np.sum(valid_mask, axis=(-2, -1))
+            h[..., 0] = vmask.reshape(ty, tx, -1).sum(axis=-1)
         all_h.append(h)
     return np.array(all_h)
 
