@@ -46,9 +46,13 @@ def raster_slicing_plan(
     y_idx, y_size = dims['Y']['idx'], dims['Y']['size']
     x_idx, x_size = dims['X']['idx'], dims['X']['size']
 
+    # Cap tile_size to actual image extent so that PIXEL_PATROL_STATS_TILE_SIZE values
+    # larger than the image (e.g. 65536 to disable tiling) don't consume the whole budget.
+    tile_size_eff = min(tile_size, y_size, x_size)
+
     # Bytes for one "atomic tile" = all-C × 1-per-other-dim × tile_size × tile_size
     c_px = math.prod(info['size'] for d, info in dims.items() if d in ATOMIC_DIMS) or 1
-    bytes_per_tile = c_px * tile_size * tile_size * dtype.itemsize
+    bytes_per_tile = c_px * tile_size_eff * tile_size_eff * dtype.itemsize
     budget = max(1, int(target_mb * 1024 ** 2 // bytes_per_tile))
 
     # Non-ATOMIC, non-spatial dims (Z, T, …) — chunked with remaining budget
@@ -256,12 +260,13 @@ def accumulate_power_set(
             )
 
     for depth in range(ndim - 1, -1, -1):
-        if not enable_tile_rows and depth > 0:
-            continue
-
         for g_dims in combinations(dim_names, depth):
             has_y = dim_y_key in g_dims
             has_x = dim_x_key in g_dims
+            # Without tile rows, skip any grouping that retains a spatial coordinate.
+            # Non-spatial aggregations (per-C, per-Z, per-CZ, global) are still produced.
+            if not enable_tile_rows and (has_y or has_x):
+                continue
             gd_set = frozenset(g_dims)
             full_minus_y = frozenset(dim_names) - {dim_y_key}
             full_minus_x = frozenset(dim_names) - {dim_x_key}

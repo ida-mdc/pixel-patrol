@@ -28,10 +28,11 @@ def _plane_batch_size(h: int, w: int, tile_size: int) -> int:
 
     Override with PIXEL_PATROL_PLANE_BATCH_GB (default 8).
     """
-    n_ty = math.ceil(h / tile_size)
-    n_tx = math.ceil(w / tile_size)
+    ts = min(tile_size, max(h, w))  # matches fold_to_tiles capping
+    n_ty = math.ceil(h / ts)
+    n_tx = math.ceil(w / ts)
     # _nbr_stats allocates two (B, n_ty, n_tx, ts-2, ts-2) float64 arrays
-    bytes_per_plane = 2 * n_ty * n_tx * max(tile_size - 2, 1) ** 2 * 8
+    bytes_per_plane = 2 * n_ty * n_tx * max(ts - 2, 1) ** 2 * 8
     target_gb = float(os.environ.get('PIXEL_PATROL_PLANE_BATCH_GB', '8'))
     target_bytes = int(target_gb * 1024 ** 3)
     return max(1, int(target_bytes / max(bytes_per_plane, 1)))

@@ -119,6 +119,7 @@ def test_lowercase_dim_order_still_runs_quality(proc):
 def test_full_tree_yx_row_count(proc, monkeypatch):
     """YX image with 2×2 tiles: depth-0=1, depth-1=4 (2 X + 2 Y), depth-2=4 tiles."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((8, 8), dtype=np.float32), chunks=(4, 4))
     result = proc.run(record_from(data, {"dim_order": "YX"}))
     assert len(_at_depth(result, 0)) == 1
@@ -129,6 +130,7 @@ def test_full_tree_yx_row_count(proc, monkeypatch):
 def test_full_tree_tyx_row_count(proc, monkeypatch):
     """TYX T=2, one XY tile: omit depth-1 dim_x/dim_y strips (single tile); omit (t,x)/(t,y)."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "8")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 8, 8), dtype=np.float32), chunks=(1, 8, 8))
     result = proc.run(record_from(data, {"dim_order": "TYX"}))
     assert len(_at_depth(result, 0)) == 1
@@ -140,6 +142,7 @@ def test_full_tree_tyx_row_count(proc, monkeypatch):
 def test_full_tree_czyx_single_values(proc, monkeypatch):
     """CZYX C=1, Z=1, one XY tile: degenerate dim_x/dim_y-only rollups omitted → 8 rows."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "8")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((1, 1, 8, 8), dtype=np.float32), chunks=(1, 1, 8, 8))
     result = proc.run(record_from(data, {"dim_order": "CZYX"}))
     assert len(result) == 8
@@ -148,6 +151,7 @@ def test_full_tree_czyx_single_values(proc, monkeypatch):
 def test_full_tree_czyx_row_count(proc, monkeypatch):
     """CZYX C=2, Z=2, one XY tile: full power-set is halved once spatial strips are degenerate."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "8")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 2, 8, 8), dtype=np.float32), chunks=(1, 1, 8, 8))
     result = proc.run(record_from(data, {"dim_order": "CZYX"}))
     assert len(result) == 18
@@ -194,6 +198,7 @@ def test_nonspatial_rechunked_to_one(proc, monkeypatch):
 def test_tile_count_yx(proc, monkeypatch):
     """(8,8) with 4-pixel XY chunk: 4 tile rows."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((8, 8), dtype=np.float32), chunks=(4, 4))
     assert len(_tiles(proc.run(record_from(data, {"dim_order": "YX"})))) == 4
 
@@ -201,6 +206,7 @@ def test_tile_count_yx(proc, monkeypatch):
 def test_tile_count_czyx(proc, monkeypatch):
     """CZYX C=2, Z=2, 2×2 XY tiles: 2×2×2×2=16 tile rows."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 2, 8, 8), dtype=np.float32), chunks=(1, 1, 4, 4))
     assert len(_tiles(proc.run(record_from(data, {"dim_order": "CZYX"})))) == 16
 
@@ -212,6 +218,7 @@ def test_tile_count_czyx(proc, monkeypatch):
 def test_dim_coordinates_yx(proc, monkeypatch):
     """(8,8) with (4,4) chunks: dim_y ∈ {0,4}, dim_x ∈ {0,4}."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((8, 8), dtype=np.float32), chunks=(4, 4))
     rows = _tiles(proc.run(record_from(data, {"dim_order": "YX"})))
     assert {r["dim_y"] for r in rows} == {0, 4}
@@ -221,6 +228,7 @@ def test_dim_coordinates_yx(proc, monkeypatch):
 def test_dim_coordinates_match_chunk_data(proc, monkeypatch):
     """Corner tile (dim_y=0, dim_x=0) mean matches the stored pixel slice."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = np.arange(8 * 8, dtype=np.float32).reshape(8, 8)
     arr = da.from_array(data, chunks=(4, 4))
     result = proc.run(record_from(arr, {"dim_order": "YX"}))
@@ -262,6 +270,7 @@ def test_per_cz_slice_rows_czyx(proc):
 def test_per_cx_rows_czyx(proc, monkeypatch):
     """CZYX C=2, 2 X tiles: depth-2 per-CX rows (dim_c + dim_x, no dim_y or dim_z)."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 2, 4, 8), dtype=np.float32), chunks=(1, 1, 4, 4))
     result = proc.run(record_from(data, {"dim_order": "CZYX"}))
     per_cx = [r for r in result if r["obs_level"] == 2
@@ -275,6 +284,7 @@ def test_per_cx_rows_czyx(proc, monkeypatch):
 def test_czx_profile_rows(proc, monkeypatch):
     """When only one Y tile exists, per-(C,Z,X) rollups duplicate normalized leaf tiles → omitted."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 2, 4, 8), dtype=np.float32), chunks=(1, 1, 4, 4))
     result = proc.run(record_from(data, {"dim_order": "CZYX"}))
     dup_rollups = [r for r in result if r["obs_level"] == 3
@@ -291,6 +301,7 @@ def test_czx_profile_rows(proc, monkeypatch):
 def test_spatial_profile_rows_depth1(proc, monkeypatch):
     """CZYX: global per-X rows at depth=1 cover all X tile positions."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = da.from_array(np.ones((2, 2, 4, 8), dtype=np.float32), chunks=(1, 1, 4, 4))
     result = proc.run(record_from(data, {"dim_order": "CZYX"}))
     per_x = [r for r in result if r["obs_level"] == 1 and "dim_x" in r]
@@ -366,6 +377,7 @@ def test_per_c_mean_matches_global_for_uniform(proc):
 def test_per_tile_mean_matches_spatial_region(proc, monkeypatch):
     """Each tile's mean matches the pixel values in its spatial region."""
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "4")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     data = np.zeros((8, 8), dtype=np.float32)
     data[:4, :4] = 1.0
     data[:4, 4:] = 2.0
@@ -480,6 +492,7 @@ def test_global_basic_stats_match_pixel_truth_with_partial_edge_tiles(proc, monk
     Uses a size that does not tile evenly so edge tiles cover fewer real pixels.
     """
     monkeypatch.setenv("PIXEL_PATROL_STATS_TILE_SIZE", "8")
+    monkeypatch.setenv("PIXEL_PATROL_RASTER_XY_TILE_METRICS", "1")
     rng = np.random.default_rng(42)
     data = rng.standard_normal((10, 10)).astype(np.float32)
     result = proc.run(record_from(da.from_array(data, chunks=(10, 10)), {"dim_order": "YX"}))

@@ -94,7 +94,7 @@ def accumulate_raster_tile_rows(
     ns_dims = [d for d in dim_order_out if d not in ('Y', 'X')]
     dim_names = [f'dim_{d.lower()}' for d in ns_dims] + ['dim_y', 'dim_x']
     tile_size = int(os.environ.get('PIXEL_PATROL_STATS_TILE_SIZE', '256'))
-    enable_tile_rows = os.environ.get(RASTER_TILE_ROWS_ENV_VAR, '1') == '1'
+    enable_tile_rows = os.environ.get(RASTER_TILE_ROWS_ENV_VAR, '0') == '1'
     out = accumulate_power_set(
         tile_rows, dim_names,
         aggregate_fn=aggregate_metrics_for_group,
