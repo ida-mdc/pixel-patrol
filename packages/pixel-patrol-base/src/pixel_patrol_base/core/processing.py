@@ -536,6 +536,37 @@ def load_and_process_records_from_file(
         logger.warning(f"File not found: '{file_path}'. Cannot extract metadata.")
         return []
 
+    result_list: List[Dict] = []
+
+    # Prefer streaming to avoid holding all sub-images in memory at once.
+    if hasattr(loader, "load_iter"):
+        try:
+            items = tqdm(
+                loader.load_iter(str(file_path)),
+                desc="  Processing sub-images",
+                unit="img",
+                leave=False,
+                colour="blue",
+                position=1,
+            )
+            for child_id, rcd in items:
+                if isinstance(child_id, int):
+                    child_id = str(child_id)
+                if not isinstance(child_id, str) or not child_id:
+                    logger.warning(
+                        "Loader '%s' returned invalid child key %r for '%s'; skipping record.",
+                        loader.NAME, child_id, file_path,
+                    )
+                    continue
+                rows = _extract_record_properties(rcd, processors, False, file_path)
+                for row in rows:
+                    row["child_id"] = child_id
+                result_list.extend(rows)
+        except Exception as e:
+            logger.info(f"Loader '{loader.NAME}' load_iter failed with exception, skipping: {e}")
+            return []
+        return result_list
+
     try:
         result = loader.load(str(file_path))
         if result is None:
@@ -543,8 +574,6 @@ def load_and_process_records_from_file(
     except Exception as e:
         logger.info(f"Loader '{loader.NAME}' failed with exception, skipping: {e}")
         return []
-
-    result_list: List[Dict] = []
 
     if isinstance(result, dict):
         # Multi-image file: show progress over sub-images

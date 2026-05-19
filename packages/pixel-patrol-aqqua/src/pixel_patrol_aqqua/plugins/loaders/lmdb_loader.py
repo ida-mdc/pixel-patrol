@@ -160,8 +160,8 @@ class LmdbLoader:
         return path.is_dir() and (path / "data.mdb").exists()
 
     @staticmethod
-    def load(source: str) -> Optional[Dict[str, Any]]:
-        """Load all images from a single LMDB file.
+    def load_iter(source: str):
+        """Yield (child_id, record) one at a time from an LMDB file.
         """
         lmdb_path = Path(source)
         env, db, txn = _open_lmdb_readonly(lmdb_path)
@@ -172,11 +172,11 @@ class LmdbLoader:
             )
 
             if n_entries == 0:
-                return None
+                return
 
             parquet_meta = _load_meta_parquet(lmdb_path)
 
-            records: Dict[str, Any] = {}
+            count = 0
             with txn.cursor() as cursor:
                 cursor.first()
                 while True:
@@ -194,9 +194,8 @@ class LmdbLoader:
                             # blosc2 meta takes precedence on key conflicts
                             meta = {**parquet_meta[str(uuid)], **meta}
 
-                        records[child_id] = record_from(
-                            data, meta, kind="intensity"
-                        )
+                        yield child_id, record_from(data, meta, kind="intensity")
+                        count += 1
                     except Exception as e:
                         logger.exception(
                             "LmdbLoader: failed to read image key %s in '%s': %s",
@@ -210,9 +209,20 @@ class LmdbLoader:
 
             logger.info(
                 "LmdbLoader: loaded %d record(s) from '%s'",
-                len(records),
+                count,
                 lmdb_path.name,
             )
-            return records if records else None
         finally:
             env.close()
+
+    @staticmethod
+    def load(source: str) -> Optional[Dict[str, Any]]:
+        """Load all images from a single LMDB file.
+
+        Prefer load_iter() for large files to avoid holding all images in
+        memory simultaneously.
+        """
+        records: Dict[str, Any] = {}
+        for child_id, record in LmdbLoader.load_iter(source):
+            records[child_id] = record
+        return records if records else None
