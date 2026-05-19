@@ -2,6 +2,8 @@
 NumPy backend for raster tiles: XY fold layout + per-metric tile kernels.
 """
 
+import math
+import os
 import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -18,10 +20,21 @@ warnings.filterwarnings(
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_image.plugins.processors.raster_metric_definitions import enabled_ctx_tile_fields, MetricNames
 
-# Number of non-spatial planes processed per metric-evaluation pass.
-# Bounds _nbr_stats peak RAM: (B × n_ty × n_tx × ts² × 8 bytes) must fit in worker memory.
-# At ts=256, n_ty=n_tx=40: each plane ≈ 83 MB (float64) → 32 planes ≈ 2.6 GB.
-_PLANE_BATCH = 32
+def _plane_batch_size(h: int, w: int, tile_size: int) -> int:
+    """Number of planes to process per pass, sized so _nbr_stats intermediates stay
+    within a safe fraction of available worker RAM.  Scales automatically with image
+    dimensions: small images get large batches (less Python overhead), large images
+    get smaller batches (less peak RAM).
+
+    Override with PIXEL_PATROL_PLANE_BATCH_GB (default 8).
+    """
+    n_ty = math.ceil(h / tile_size)
+    n_tx = math.ceil(w / tile_size)
+    # _nbr_stats allocates two (B, n_ty, n_tx, ts-2, ts-2) float64 arrays
+    bytes_per_plane = 2 * n_ty * n_tx * max(tile_size - 2, 1) ** 2 * 8
+    target_gb = float(os.environ.get('PIXEL_PATROL_PLANE_BATCH_GB', '8'))
+    target_bytes = int(target_gb * 1024 ** 3)
+    return max(1, int(target_bytes / max(bytes_per_plane, 1)))
 
 
 def fold_to_tiles(
@@ -132,10 +145,12 @@ class NumpyRasterBackend:
         tile_axes = (-2, -1)
 
         all_ns = list(np.ndindex(ns_shape)) if ns_shape else [()]
+        h, w = block.shape[-2], block.shape[-1]
+        plane_batch = _plane_batch_size(h, w, self.tile_size)
 
         rows: List[Dict[str, Any]] = []
-        for batch_start in range(0, len(all_ns), _PLANE_BATCH):
-            batch_ns = all_ns[batch_start: batch_start + _PLANE_BATCH]
+        for batch_start in range(0, len(all_ns), plane_batch):
+            batch_ns = all_ns[batch_start: batch_start + plane_batch]
 
             batch_block = np.stack([block[ns] for ns in batch_ns])  # (B, H, W)
             reshaped, mask = self.fold_block(batch_block)            # (B, n_ty, n_tx, ts, ts)
