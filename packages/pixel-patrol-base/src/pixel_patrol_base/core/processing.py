@@ -638,8 +638,12 @@ def _build_deep_record_df(
             ridx = task['row_index']
             _slice_total[ridx] = _slice_total.get(ridx, 0) + 1
             if ridx not in _hpc_state:
-                _hpc_state[ridx] = {'full_rows': None, 'path': None,
-                                     'tile_rows': {}, 'done': 0, 'total': 0}
+                # When non_slice_safe_classes is empty no full_file task will arrive,
+                # so pre-set full_rows to [] to unblock _try_flush_hpc_file.
+                _hpc_state[ridx] = {
+                    'full_rows': None if non_slice_safe_classes else [],
+                    'path': None, 'tile_rows': {}, 'done': 0, 'total': 0,
+                }
             _hpc_state[ridx]['total'] += 1
 
         def _force_exit(sig, frame):
@@ -886,6 +890,10 @@ def _build_deep_record_df(
             else:
                 accumulated_by_ridx[ridx] = _merge_long_rows(accumulated_by_ridx[ridx], acc_rows)
 
+    # Build ridx→path from slice tasks for files that have no full_file entry
+    # (i.e. when non_slice_safe_classes was empty and no full_file task was generated).
+    _ridx_to_path = {t['row_index']: t['path'] for t in all_tasks if t['type'] == 'slice'}
+
     processed_count = 0
     with tqdm(total=total, desc="Saving results", unit="file",
               leave=True, colour="green", disable=progress_callback is not None) as progress:
@@ -904,6 +912,21 @@ def _build_deep_record_df(
             processed_count += len(batch_items)
             if progress_callback:
                 progress_callback(processed_count, total, Path(batch_items[-1].path))
+
+        # Flush accumulated tile rows for large files that had no full_file task.
+        handled_ridx = {task['row_index'] for task, _ in cleaned_results if task['type'] == 'full_file'}
+        for ridx, acc_rows in accumulated_by_ridx.items():
+            if ridx in handled_ridx:
+                continue
+            path = _ridx_to_path.get(ridx)
+            if path is None:
+                continue
+            batch_df = _combine_batch_with_basic(basic, [_IndexedPath(ridx, path)], acc_rows)
+            accumulator.add_batch(batch_df)
+            progress.update(1)
+            processed_count += 1
+            if progress_callback:
+                progress_callback(processed_count, total, Path(path))
 
     # Worker info: query scheduler right after gather while workers are still connected.
     n_workers_actual = 0
