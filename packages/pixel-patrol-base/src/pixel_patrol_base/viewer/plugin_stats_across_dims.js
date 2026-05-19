@@ -219,6 +219,11 @@ async function renderAcrossDims(container, ctx, filterMetric) {
 
     const tableWrap = document.createElement('div');
     tableWrap.style.overflowX = 'auto';
+    if (dimLettersVisible.length === 1) {
+      const letter = dimLettersVisible[0];
+      const xCount = Math.max(...metrics.map(m => new Set((dimAggMap[letter]?.[m] ?? []).map(r => r.x)).size));
+      tableWrap.style.maxWidth = `clamp(25%, ${xCount * 3}%, 100%)`;
+    }
     const table = document.createElement('table');
     table.style.cssText = `border-collapse:collapse;table-layout:fixed;width:100%;min-width:${dimLettersVisible.length * minColPx}px`;
 
