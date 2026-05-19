@@ -12,19 +12,30 @@ from pixel_patrol_base.core.contracts import PixelPatrolLoader
 logger = logging.getLogger(__name__)
 
 
+def _folder_size(path: Path) -> int:
+    """Compute total size in bytes of all files recursively under a directory."""
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
 def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[str, Any]:
     """
     Create a basic metadata record for a file or folder,
     computing depth relative to `base` and normalizing extensions.
     """
     try:
-        stat_func = path.stat if not is_folder else lambda: None
-        st = stat_func() if not is_folder else None
+        st = path.stat() if not is_folder else None
     except Exception as e:
         logger.warning(f"Failed stat for {path}: {e}")
         return {}
 
     depth = len(path.parts) - len(base.parts)
+
+    if is_folder:
+        size_bytes = 0
+    elif path.is_dir():
+        size_bytes = _folder_size(path)
+    else:
+        size_bytes = st.st_size
 
     # TODO: I guess we're missing imported_path_short and modification_month that were created in preprocess_files
     # common_base = find_common_base(unique_folders) - should be added after
@@ -36,7 +47,7 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
         "type": "folder" if is_folder else "file",
         "parent": str(path.parent) if path != base else None,
         "depth": depth,
-        "size_bytes": 0 if is_folder else st.st_size,
+        "size_bytes": size_bytes,
         "modification_date": datetime.fromtimestamp(os.path.getmtime(path)),
         "file_extension": None if is_folder else path.suffix.lstrip(".").lower(),
         "imported_path": str(base),
