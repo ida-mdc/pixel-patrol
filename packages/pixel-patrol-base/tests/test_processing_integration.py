@@ -14,9 +14,11 @@ import pixel_patrol_base.core.project as project_module
 import pixel_patrol_base.plugin_registry as plugin_registry_module
 
 
-class DummyLoader:
-    """Minimal loader stub for processing integration tests."""
+# ---------------------------------------------------------------------------
+# Shared stubs
+# ---------------------------------------------------------------------------
 
+class DummyLoader:
     NAME = "dummy"
     SUPPORTED_EXTENSIONS = set()
     OUTPUT_SCHEMA = {}
@@ -27,11 +29,11 @@ class DummyLoader:
         return False
 
     def load(self, source: str):
-        raise RuntimeError("DummyLoader should not load data in these tests.")
+        raise RuntimeError("DummyLoader.load should not be called in these tests.")
 
 
 class FakeProcessPoolExecutor:
-    """Synchronous executor to exercise the ProcessPoolExecutor code path."""
+    """Synchronous in-process executor that exercises the ProcessPoolExecutor code path."""
 
     last_instance: Optional["FakeProcessPoolExecutor"] = None
 
@@ -61,7 +63,7 @@ class FakeProcessPoolExecutor:
 
 
 class FakeThreadPoolExecutor:
-    """Synchronous executor to exercise the ThreadPoolExecutor code path."""
+    """Synchronous in-process executor for the thread-pool fallback path."""
 
     last_instance: Optional["FakeThreadPoolExecutor"] = None
 
@@ -85,9 +87,9 @@ class FakeThreadPoolExecutor:
 
 
 class FakeProcessPoolExecutorWithFailure:
-    """Executor that fails for the first submitted batch and succeeds after."""
+    """Executor whose first submitted task always fails; subsequent tasks succeed."""
 
-    def __init__(self, max_workers: int, initializer=None, initargs=None) -> None:
+    def __init__(self, max_workers: int, initializer=None, initargs=None, mp_context=None) -> None:
         self._initializer = initializer
         self._initargs = initargs or ()
         self._failed_once = False
@@ -115,79 +117,79 @@ class FakeProcessPoolExecutorWithFailure:
 
 def _basic_df_for_paths(paths: List[Path]) -> pl.DataFrame:
     return (
-        pl.DataFrame({"path": [str(p) for p in paths]})
+        pl.DataFrame({
+            "path": [str(p) for p in paths],
+            "type": ["file"] * len(paths),
+        })
         .with_row_index("row_index")
         .with_columns(pl.col("row_index").cast(pl.Int64))
     )
 
 
-def _make_fake_load_and_process(return_props):
-    def fake(file_path, loader, processors, show_processor_progress=True):
+def _make_fake_iter_file_rows(return_props):
+    """Return a fake _iter_file_rows generator that yields one row dict per file."""
+    def fake_iter(file_path, loader, processors, show_progress):
         if callable(return_props) and not isinstance(return_props, dict):
             props = return_props(file_path)
         else:
             props = return_props
-        if not props:
-            return []
-        return [props]
+        if props:
+            yield props
+    return fake_iter
 
-    return fake
 
+# ---------------------------------------------------------------------------
+# _build_deep_record_df — integration
+# ---------------------------------------------------------------------------
 
 def test_build_deep_record_df_flushes_and_combines_chunks(tmp_path, monkeypatch):
-    """Ensure chunk flushing writes batches, combines them, and cleans up _batches dir."""
-    output_path = tmp_path / "output.parquet"
+    """Chunk files are written during processing and combined into a single result."""
     p1 = tmp_path / "a.png"
     p2 = tmp_path / "b.png"
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    config = ProcessingConfig(
-        processing_max_workers=1,
-        chunk_every_n=1,
-    )
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 1}),
-    )
+    config = ProcessingConfig(processing_max_workers=1, chunk_every_n=1)
+    monkeypatch.setattr(processing, "_iter_file_rows", _make_fake_iter_file_rows({"width": 1}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), processing_config=config,
+        chunks_dir=tmp_path / "_chunks",
+    )
 
     assert df.height == 2
     assert "width" in df.columns
 
 
 def test_build_deep_record_df_process_pool_path_uses_initializer(tmp_path, monkeypatch):
-    """Exercise the ProcessPoolExecutor branch with a synchronous fake executor."""
+    """ProcessPoolExecutor branch: initializer is called and results are combined."""
     p1 = tmp_path / "x.png"
     p2 = tmp_path / "y.png"
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
     config = ProcessingConfig(processing_max_workers=2)
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 5}),
-    )
+    monkeypatch.setattr(processing, "_iter_file_rows", _make_fake_iter_file_rows({"width": 5}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), processing_config=config,
+        chunks_dir=tmp_path / "_chunks",
+    )
 
     assert FakeProcessPoolExecutor.last_instance is not None
     assert FakeProcessPoolExecutor.last_instance.max_workers == 2
     assert FakeProcessPoolExecutor.last_instance.initializer_called is True
-    assert df["width"].to_list() == [5, 5]
+    assert sorted(df["width"].to_list()) == [5, 5]
 
 
 def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, monkeypatch):
-    """Fallback to threads when process pool creation fails."""
+    """Falls back to ThreadPoolExecutor when ProcessPoolExecutor creation fails."""
     p1 = tmp_path / "m.png"
     p2 = tmp_path / "n.png"
     p1.write_bytes(b"")
@@ -199,97 +201,118 @@ def test_build_deep_record_df_thread_fallback_on_process_pool_error(tmp_path, mo
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("process pool unavailable")
 
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 7}),
-    )
+    monkeypatch.setattr(processing, "_iter_file_rows", _make_fake_iter_file_rows({"width": 7}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FailingProcessPoolExecutor)
     monkeypatch.setattr(processing, "ThreadPoolExecutor", FakeThreadPoolExecutor)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), processing_config=config,
+        chunks_dir=tmp_path / "_chunks",
+    )
 
     assert FakeThreadPoolExecutor.last_instance is not None
     assert FakeThreadPoolExecutor.last_instance.max_workers == 2
-    assert df["width"].to_list() == [7, 7]
+    assert sorted(df["width"].to_list()) == [7, 7]
 
 
 def test_process_records_infers_output_dir_when_missing(tmp_path, monkeypatch):
-    """Project should infer output_dir when unset and base_dir is known."""
+    """Project infers output_dir when unset and base_dir is known."""
     project = Project(name="demo", base_dir=tmp_path, loader=None)
-
     monkeypatch.setattr(processing, "build_records_df", lambda *args, **kwargs: pl.DataFrame())
-
     project.process_records(processing_config=ProcessingConfig(selected_file_extensions="all"))
-
     assert project.output_path == Path(tmp_path) / "demo.parquet"
 
 
 def test_build_deep_record_df_survives_worker_failure(tmp_path, monkeypatch):
-    """A failed worker batch should not abort the whole run."""
+    """A failed worker batch does not abort the run; the failed file appears with basic info only."""
     p1 = tmp_path / "one.png"
     p2 = tmp_path / "two.png"
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
     config = ProcessingConfig(processing_max_workers=2)
-
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process({"width": 33}),
-    )
+    monkeypatch.setattr(processing, "_iter_file_rows", _make_fake_iter_file_rows({"width": 33}))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
-    monkeypatch.setattr(plugin_registry_module, "discover_loader", lambda loader_id: DummyLoader())
+    monkeypatch.setattr(processing, "discover_loader", lambda loader_id: DummyLoader())
     monkeypatch.setattr(processing, "ProcessPoolExecutor", FakeProcessPoolExecutorWithFailure)
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), processing_config=config,
+        chunks_dir=tmp_path / "_chunks",
+    )
 
     assert df.height == 2
     assert "path" in df.columns
 
 
-def test_build_deep_record_df_preserves_schema_across_batches(tmp_path, monkeypatch):
-    """Schema should include columns introduced in earlier batches with nulls later."""
+def test_build_deep_record_df_preserves_schema_across_chunks(tmp_path, monkeypatch):
+    """Columns introduced in one chunk appear in the final df; absent rows are null."""
     p1 = tmp_path / "alpha.png"
     p2 = tmp_path / "beta.png"
     p1.write_bytes(b"")
     p2.write_bytes(b"")
 
-    config = ProcessingConfig(
-        processing_max_workers=1,
-        chunk_every_n=1,
-    )
+    config = ProcessingConfig(processing_max_workers=1, chunk_every_n=1)
 
     def per_file_props(file_path):
         if Path(file_path).name == p1.name:
             return {"width": 10, "extra": 99}
         return {"width": 20}
 
-    monkeypatch.setattr(
-        processing, "load_and_process_records_from_file",
-        _make_fake_load_and_process(per_file_props),
-    )
+    monkeypatch.setattr(processing, "_iter_file_rows", _make_fake_iter_file_rows(per_file_props))
     monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
 
     basic_df = _basic_df_for_paths([p1, p2])
-    df = processing._build_deep_record_df(basic_df, DummyLoader(), processing_config=config)
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), processing_config=config,
+        chunks_dir=tmp_path / "_chunks",
+    )
 
-    df = df.sort("row_index")
-    assert set(df.columns) == {"row_index", "path", "width", "extra"}
-    assert df["extra"].to_list() == [99, None]
+    assert "width" in df.columns
+    assert "extra" in df.columns
+    alpha = df.filter(pl.col("path") == str(p1))
+    beta = df.filter(pl.col("path") == str(p2))
+    assert alpha["extra"][0] == 99
+    assert beta["extra"][0] is None
 
 
-# ---------- tests for multi-record loader support ----------
+def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monkeypatch):
+    """A file yielding multiple rows (sub-images) produces one output row per sub-image."""
+    p1 = tmp_path / "multi.czi"
+    p1.write_bytes(b"")
 
+    def fake_multi(file_path, loader, processors, show_progress):
+        yield {"child_id": "scene_0", "width": 10}
+        yield {"child_id": "scene_1", "width": 20}
+
+    monkeypatch.setattr(processing, "_iter_file_rows", fake_multi)
+    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
+
+    basic_df = _basic_df_for_paths([p1])
+    df = processing._build_deep_record_df(
+        basic_df, DummyLoader(), chunks_dir=tmp_path / "_chunks",
+    )
+
+    assert df.height == 2
+    assert "child_id" in df.columns
+    assert set(df["child_id"].to_list()) == {"scene_0", "scene_1"}
+    assert set(df["width"].to_list()) == {10, 20}
+    assert set(df["path"].to_list()) == {str(p1)}
+
+
+# ---------------------------------------------------------------------------
+# _iter_file_rows
+# ---------------------------------------------------------------------------
 
 class _StubRecord:
     def __init__(self, meta: dict):
         self.meta = meta
 
 
-def test_load_and_process_records_from_file_single_record(tmp_path):
+def test_iter_file_rows_single_record(tmp_path):
     f = tmp_path / "single.png"
     f.write_bytes(b"\x89PNG")
 
@@ -298,13 +321,12 @@ def test_load_and_process_records_from_file_single_record(tmp_path):
         def load(self, source):
             return _StubRecord({"color": "red"})
 
-    result = processing.load_and_process_records_from_file(f, SingleLoader(), processors=[])
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert result[0]["color"] == "red"
+    rows = list(processing._iter_file_rows(f, SingleLoader(), processors=[], show_progress=False))
+    assert len(rows) == 1
+    assert rows[0]["color"] == "red"
 
 
-def test_load_and_process_records_from_file_multi_record(tmp_path):
+def test_iter_file_rows_multi_record(tmp_path):
     f = tmp_path / "multi.czi"
     f.write_bytes(b"\x00")
 
@@ -316,26 +338,25 @@ def test_load_and_process_records_from_file_multi_record(tmp_path):
                 "scene_B": _StubRecord({"width": 20}),
             }
 
-    result = processing.load_and_process_records_from_file(f, MultiLoader(), processors=[])
-    assert isinstance(result, list)
-    assert len(result) == 2
-    ids = {r["child_id"] for r in result}
+    rows = list(processing._iter_file_rows(f, MultiLoader(), processors=[], show_progress=False))
+    assert len(rows) == 2
+    ids = {r["child_id"] for r in rows}
     assert ids == {"scene_A", "scene_B"}
-    widths = {r["child_id"]: r["width"] for r in result}
+    widths = {r["child_id"]: r["width"] for r in rows}
     assert widths == {"scene_A": 10, "scene_B": 20}
 
 
-def test_load_and_process_records_from_file_nonexistent(tmp_path):
+def test_iter_file_rows_nonexistent(tmp_path):
     class AnyLoader:
         NAME = "any"
         def load(self, source):
             raise AssertionError("should not be called")
 
-    result = processing.load_and_process_records_from_file(tmp_path / "nope.png", AnyLoader(), processors=[])
-    assert result == []
+    rows = list(processing._iter_file_rows(tmp_path / "nope.png", AnyLoader(), [], False))
+    assert rows == []
 
 
-def test_load_and_process_records_from_file_loader_failure(tmp_path):
+def test_iter_file_rows_loader_failure(tmp_path):
     f = tmp_path / "bad.tif"
     f.write_bytes(b"bad")
 
@@ -344,11 +365,11 @@ def test_load_and_process_records_from_file_loader_failure(tmp_path):
         def load(self, source):
             raise RuntimeError("boom")
 
-    result = processing.load_and_process_records_from_file(f, FailLoader(), processors=[])
-    assert result == []
+    rows = list(processing._iter_file_rows(f, FailLoader(), [], False))
+    assert rows == []
 
 
-def test_load_and_process_records_from_file_loader_returns_none(tmp_path):
+def test_iter_file_rows_loader_returns_none(tmp_path):
     f = tmp_path / "nothing.tif"
     f.write_bytes(b"x")
 
@@ -357,11 +378,11 @@ def test_load_and_process_records_from_file_loader_returns_none(tmp_path):
         def load(self, source):
             return None
 
-    result = processing.load_and_process_records_from_file(f, NoneLoader(), processors=[])
-    assert result == []
+    rows = list(processing._iter_file_rows(f, NoneLoader(), [], False))
+    assert rows == []
 
 
-def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
+def test_iter_file_rows_skips_invalid_child_keys(tmp_path):
     f = tmp_path / "keys.czi"
     f.write_bytes(b"\x00")
 
@@ -369,40 +390,49 @@ def test_load_and_process_records_from_file_skips_invalid_child_keys(tmp_path):
         NAME = "badkeys"
         def load(self, source):
             return {
-                "": _StubRecord({"x": 1}),
-                123: _StubRecord({"x": 2}),
+                "": _StubRecord({"x": 1}),       # empty key → skipped
+                123: _StubRecord({"x": 2}),       # int key → coerced to "123"
                 "valid": _StubRecord({"x": 3}),
             }
 
-    result = processing.load_and_process_records_from_file(f, BadKeysLoader(), processors=[])
-    assert len(result) == 2
-    child_ids = {r["child_id"] for r in result}
+    rows = list(processing._iter_file_rows(f, BadKeysLoader(), [], False))
+    assert len(rows) == 2
+    child_ids = {r["child_id"] for r in rows}
     assert child_ids == {"valid", "123"}
 
 
-def test_build_deep_record_df_multi_record_produces_multiple_rows(tmp_path, monkeypatch):
-    p1 = tmp_path / "multi.czi"
-    p1.write_bytes(b"")
+# ---------------------------------------------------------------------------
+# _combine_all_chunks — leaves chunks_dir intact
+# ---------------------------------------------------------------------------
 
-    def fake_multi(file_path, loader, processors, show_processor_progress=True):
-        return [
-            {"child_id": "scene_0", "width": 10},
-            {"child_id": "scene_1", "width": 20},
-        ]
+def test_combine_all_chunks_leaves_chunks_dir_intact(tmp_path):
+    """_combine_all_chunks reads chunk files but does not remove them.
+    Cleanup is the caller's responsibility via cleanup_chunks_dir."""
+    chunks_dir = tmp_path / "_chunks"
+    chunks_dir.mkdir()
 
-    monkeypatch.setattr(processing, "load_and_process_records_from_file", fake_multi)
-    monkeypatch.setattr(plugin_registry_module, "discover_processor_plugins", lambda: [])
+    basic_df = _basic_df_for_paths([tmp_path / "a.png", tmp_path / "b.png"])
 
-    basic_df = _basic_df_for_paths([p1])
-    df = processing._build_deep_record_df(basic_df, DummyLoader())
+    p1 = chunks_dir / "chunk_000000_00000.parquet"
+    p2 = chunks_dir / "chunk_000001_00000.parquet"
+    pl.DataFrame({"a": [1], "row_index": [0]}).with_columns(
+        pl.col("row_index").cast(pl.Int64)
+    ).write_parquet(p1)
+    pl.DataFrame({"a": [2], "row_index": [1]}).with_columns(
+        pl.col("row_index").cast(pl.Int64)
+    ).write_parquet(p2)
 
-    assert df.height == 2
-    assert "child_id" in df.columns
-    assert set(df["child_id"].to_list()) == {"scene_0", "scene_1"}
-    assert set(df["width"].to_list()) == {10, 20}
-    assert df["path"].to_list() == [str(p1), str(p1)]
+    result = processing._combine_all_chunks(chunks_dir, basic_df)
+
+    assert result.height == 2
+    assert "a" in result.columns
+    assert chunks_dir.exists(), "chunks_dir must survive; only cleanup_chunks_dir should remove it"
+    assert p1.exists() and p2.exists()
 
 
+# ---------------------------------------------------------------------------
+# _extract_record_properties
+# ---------------------------------------------------------------------------
 
 def test_extract_record_properties_skips_runtime_error_processor():
     class RecordStub:
@@ -416,7 +446,6 @@ def test_extract_record_properties_skips_runtime_error_processor():
     class RuntimeSkipProcessor:
         NAME = "runtime-skip"
         INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
-
         @staticmethod
         def run(_):
             raise RuntimeError("skip in never-materialize mode")
@@ -424,14 +453,12 @@ def test_extract_record_properties_skips_runtime_error_processor():
     class GoodProcessor:
         NAME = "good"
         INPUT = RecordSpec(axes={"Y", "X"}, kinds={"intensity"}, capabilities={"spatial-2d"})
-
         @staticmethod
         def run(_):
             return {"ok": 1}
 
-    r = RecordStub()
     rows = processing._extract_record_properties(
-        r,
+        RecordStub(),
         [RuntimeSkipProcessor(), GoodProcessor()],
         show_progress=False,
     )
@@ -440,12 +467,16 @@ def test_extract_record_properties_skips_runtime_error_processor():
     assert rows[0]["ok"] == 1
 
 
+# ---------------------------------------------------------------------------
+# _cleanup_chunks_dir
+# ---------------------------------------------------------------------------
+
 def test_cleanup_chunks_dir(tmp_path):
     d = tmp_path / "batches"
     d.mkdir()
 
-    p1 = d / "chunk_00000.parquet"
-    p2 = d / "chunk_00001.parquet"
+    p1 = d / "chunk_000000_00000.parquet"
+    p2 = d / "chunk_000001_00000.parquet"
     combined = d / "records_df.parquet"
 
     pl.DataFrame({"row_index": [0]}).write_parquet(p1)
@@ -459,55 +490,15 @@ def test_cleanup_chunks_dir(tmp_path):
     assert not p1.exists()
     assert not p2.exists()
     assert not combined.exists()
+    assert not d.exists()
 
     # calling again is a no-op
     processing._cleanup_chunks_dir(d)
 
-    # empty directory should be removed
-    assert not d.exists()
 
-
-def test_finalize_leaves_chunks_dir_intact(tmp_path):
-    """finalize() should combine chunks into a DataFrame but leave the chunks_dir
-    in place — cleanup is the caller's responsibility (via cleanup_chunks_dir)."""
-    chunks_dir = tmp_path / "_chunks"
-    chunks_dir.mkdir()
-
-    p1 = chunks_dir / "chunk_00000.parquet"
-    p2 = chunks_dir / "chunk_00001.parquet"
-    pl.DataFrame({"a": [1], "row_index": [0]}).write_parquet(p1)
-    pl.DataFrame({"a": [2], "row_index": [1]}).write_parquet(p2)
-
-    accumulator = processing._RecordsAccumulator(
-        chunk_every_n=1,
-        chunks_dir=chunks_dir,
-    )
-    accumulator._written_chunks = [p1, p2]
-    accumulator._chunk_index = 2
-
-    result = accumulator.finalize()
-
-    assert result.height == 2
-    assert "a" in result.columns
-    assert chunks_dir.exists(), "chunks_dir must survive finalize(); only cleanup_chunks_dir should remove it"
-
-
-def test_finalize_without_chunks_dir_returns_active_df():
-    """finalize() without a chunks_dir returns the active DataFrame directly."""
-    accumulator = processing._RecordsAccumulator(
-        chunk_every_n=100,
-        chunks_dir=None,
-    )
-    accumulator._active_df = pl.DataFrame({"a": [1, 2, 3]})
-
-    result = accumulator.finalize()
-
-    assert result.height == 3
-    assert result["a"].to_list() == [1, 2, 3]
-
-
-# ---------- tests for cleanup_chunks_dir ----------
-
+# ---------------------------------------------------------------------------
+# Project-level cleanup lifecycle
+# ---------------------------------------------------------------------------
 
 def test_cleanup_not_called_when_no_records(tmp_path, monkeypatch):
     """cleanup_chunks_dir must not be called when build_records_df returns nothing."""
@@ -523,7 +514,7 @@ def test_cleanup_not_called_when_no_records(tmp_path, monkeypatch):
 
 def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
     """cleanup_chunks_dir must not be called when save_parquet raises — chunks are
-    the only remaining copy of the data and must be preserved."""
+    the only remaining copy of the data."""
     cleanup_calls = []
     monkeypatch.setattr(
         processing, "build_records_df",
@@ -533,7 +524,6 @@ def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
     def failing_save(df, path, meta):
         raise OSError("disk full")
 
-    # Patch save_parquet on the project module where it was imported
     monkeypatch.setattr(project_module, "save_parquet", failing_save)
     monkeypatch.setattr(processing, "cleanup_chunks_dir", lambda path: cleanup_calls.append(path))
 
@@ -544,8 +534,7 @@ def test_cleanup_not_called_when_save_fails(tmp_path, monkeypatch):
 
 
 def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkeypatch):
-    """cleanup_chunks_dir must be called exactly once with chunks_dir = output_path.parent / '_batches'
-    when save_parquet succeeds."""
+    """cleanup_chunks_dir is called exactly once with the correct chunks_dir on success."""
     cleanup_calls = []
     monkeypatch.setattr(
         processing, "build_records_df",
@@ -560,6 +549,4 @@ def test_cleanup_called_with_correct_path_after_successful_save(tmp_path, monkey
     p.process_records()
 
     assert len(cleanup_calls) == 1, "cleanup_chunks_dir must be called exactly once on success"
-    assert cleanup_calls[0] == expected_chunks_dir, (
-        f"cleanup_chunks_dir called with wrong path: {cleanup_calls[0]!r}, expected {expected_chunks_dir!r}"
-    )
+    assert cleanup_calls[0] == expected_chunks_dir

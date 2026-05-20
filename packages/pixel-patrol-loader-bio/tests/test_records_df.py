@@ -11,10 +11,11 @@ from PIL import Image
 from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_base.core import processing as _processing
 from pixel_patrol_base.core.processing import (
     build_records_df,
     _build_deep_record_df,
-    load_and_process_records_from_file,
+    _iter_file_rows,
     PATHS_DF_EXPECTED_SCHEMA,
 )
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
@@ -53,24 +54,23 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
     p2 = tmp_path / "img2.jpg"; p2.touch()
     paths = [p1, p2]
 
-    def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True):
+    def fake_iter_file_rows(file_path, loader_inst, processors, show_progress=False):
         assert loader_inst.NAME == "bioio"
-        return [{"width": 100, "height": 200}]
+        yield {"width": 100, "height": 200}
 
-    monkeypatch.setattr("pixel_patrol_base.core.processing.load_and_process_records_from_file",
-                        fake_load_and_process)
+    monkeypatch.setattr(_processing, "_iter_file_rows", fake_iter_file_rows)
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
+    monkeypatch.setattr(_processing, "_resolve_worker_count", lambda *args, **kwargs: 1)
 
     # Build a basic DataFrame expected by the processing core
-    basic_df = pl.DataFrame({"path": paths}).with_row_index("row_index").with_columns(
+    basic_df = pl.DataFrame({"path": [str(p) for p in paths]}).with_row_index("row_index").with_columns(
         pl.col("row_index").cast(pl.Int64)
     )
 
-    df = _build_deep_record_df(basic_df, loader)
+    df = _build_deep_record_df(basic_df, loader, chunks_dir=tmp_path / "_chunks")
 
     assert isinstance(df, pl.DataFrame)
-    assert set(df.columns) == {"row_index", "path", "width", "height"}
+    assert set(df.columns) == {"path", "width", "height"}
     assert df.height == 2
     assert df["width"].to_list() == [100, 100]
     assert df["height"].to_list() == [200, 200]
@@ -78,14 +78,14 @@ def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, 
 
 def test_load_and_process_returns_empty_for_nonexistent_file(tmp_path, loader):
     missing = tmp_path / "no.png"
-    assert load_and_process_records_from_file(missing, loader=loader, processors=[]) == []
+    assert list(_iter_file_rows(missing, loader, [], show_progress=False)) == []
 
 
 def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
     img_file = tmp_path / "img.jpg"
     img_file.write_bytes(b"not really an image") # type: ignore
     monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert load_and_process_records_from_file(img_file, loader=loader, processors=[]) == []
+    assert list(_iter_file_rows(img_file, loader, [], show_progress=False)) == []
 
 
 class DummyImg:
@@ -137,9 +137,7 @@ def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_p
         "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
         lambda p: DummyImg()
     )
-    result = load_and_process_records_from_file(
-        img_file, loader=loader, processors=[]
-    )
+    result = list(_iter_file_rows(img_file, loader, [], show_progress=False))
     assert isinstance(result, list)
     assert len(result) == 1
     props = result[0]
@@ -159,17 +157,13 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
     p_invalid = tmp_path / "invalid.png"
     p_invalid.touch()
 
-    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
+    def fake_iter_file_rows(file_path, _loader, _processors, show_progress=False):
         if Path(file_path) == p_valid:
-            return [{"width": 10, "height": 20}]
-        return []
+            yield {"width": 10, "height": 20}
 
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing.load_and_process_records_from_file",
-        fake_load_and_process
-    )
+    monkeypatch.setattr(_processing, "_iter_file_rows", fake_iter_file_rows)
     # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
+    monkeypatch.setattr(_processing, "_resolve_worker_count", lambda *args, **kwargs: 1)
 
     basic_df = (
         pl.DataFrame({"path": [str(p_valid), str(p_invalid)]})
@@ -177,10 +171,11 @@ def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch,
         .with_columns(pl.col("row_index").cast(pl.Int64))
     )
 
-    df = _build_deep_record_df(basic_df, loader_instance=loader)
+    df = _build_deep_record_df(basic_df, loader_instance=loader, chunks_dir=tmp_path / "_chunks")
 
     assert isinstance(df, pl.DataFrame)
     assert df.height == 2
+    # p_valid processed first (has chunk); p_invalid appended as failed row
     assert df["path"].to_list() == [str(p_valid), str(p_invalid)]
     assert df["width"].to_list() == [10, None]
     assert df["height"].to_list() == [20, None]
@@ -209,10 +204,7 @@ def test_build_records_df_from_file_system_with_images_returns_expected_columns_
             .alias("height"),
         )
 
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._build_deep_record_df",
-        fake_build_deep_record_df
-    )
+    monkeypatch.setattr(_processing, "_build_deep_record_df", fake_build_deep_record_df)
 
     result = build_records_df(
         bases=[base],
@@ -254,10 +246,7 @@ def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correc
             .alias("height"),
         )
 
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._build_deep_record_df",
-        fake_build_deep_record_df
-    )
+    monkeypatch.setattr(_processing, "_build_deep_record_df", fake_build_deep_record_df)
 
     result = build_records_df(
         bases=[base],

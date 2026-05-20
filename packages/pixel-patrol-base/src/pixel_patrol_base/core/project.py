@@ -29,7 +29,7 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
-        self.records_chunks_dir: Optional[Path] = None
+        self.chunk_dir: Optional[Path] = None
         self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
