@@ -1,0 +1,29 @@
+[project]
+name = "pixel-patrol-loader-video"
+version = "0.4.0"
+description = "PixelPatrol add-on package for loading video files (mp4, avi, mov, mkv, …)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "av>=12.0.0",
+    "pixel-patrol-base==0.4.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_loader_video"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_video_builtins = "pixel_patrol_loader_video.plugin_registry:register_loader_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }
