@@ -1,13 +1,20 @@
-import logging
+"""Thumbnail processor — generates one spatial patch per memory chunk, assembled by get_aggregation."""
+
+import warnings
+from collections import defaultdict
+from typing import Any, Dict, List
 
 import dask.array as da
 import numpy as np
 
 from pixel_patrol_base.config import SPRITE_SIZE
+from pixel_patrol_base.core.contracts import ChunkKind
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 
-logger = logging.getLogger(__name__)
+warnings.filterwarnings("ignore", message="invalid value encountered in cast", category=RuntimeWarning)
+
+_PATCH_MAX = 64
 
 
 def _get_color_dim(capabilities) -> str | None:
@@ -57,120 +64,146 @@ def _normalize(arr: da.Array) -> tuple[da.Array, float, float]:
     return da.clip(normalized, 0, 255).astype(np.uint8), lower, upper
 
 
-def _resize_and_pad(img: np.ndarray) -> np.ndarray:
+def _assemble(rows: List[Dict]) -> Dict[str, Any]:
+    """Assemble per-chunk patches into one SPRITE_SIZE × SPRITE_SIZE RGBA thumbnail.
+
+    Full image extent is derived from the patches' own position + size metadata,
+    so no external full_shape is needed.
     """
-    Scale img to fit within SPRITE_SIZE × SPRITE_SIZE while preserving aspect ratio,
-    then center-pad to exactly SPRITE_SIZE × SPRITE_SIZE.
+    valid = [r for r in rows if "__thumbnail_patch__" in r]
+    if not valid:
+        return {}
 
-    Downsampling / upsampling uses nearest-neighbor resampling.
+    y_full = max(r["dim_y"] + r["Y_size"] for r in valid)
+    x_full = max(r["dim_x"] + r["X_size"] for r in valid)
 
-    Returns an RGBA canvas (SPRITE_SIZE, SPRITE_SIZE, 4): padding pixels have alpha=0
-    (transparent), content pixels have alpha=255 (opaque).
+    by_pos: dict = defaultdict(list)
+    for r in valid:
+        by_pos[(r["dim_y"], r["dim_x"])].append(r)
 
-    img must be (H, W) or (H, W, C).
-    """
-    h, w = img.shape[:2]
-    scale = min(SPRITE_SIZE / h, SPRITE_SIZE / w)
-    new_h = max(1, int(h * scale))
-    new_w = max(1, int(w * scale))
-
-    row_idx = np.linspace(0, h - 1, new_h).astype(np.int64)
-    col_idx = np.linspace(0, w - 1, new_w).astype(np.int64)
-    resized = img[row_idx][:, col_idx]
-
-    # RGBA canvas: alpha=0 everywhere (transparent padding)
     canvas = np.zeros((SPRITE_SIZE, SPRITE_SIZE, 4), dtype=np.uint8)
-    y_off = (SPRITE_SIZE - new_h) // 2
-    x_off = (SPRITE_SIZE - new_w) // 2
+    for group in by_pos.values():
+        r = group[len(group) // 2]
+        patch = r["__thumbnail_patch__"]
+        y_off, x_off = r["dim_y"], r["dim_x"]
+        y_ext, x_ext = r["Y_size"], r["X_size"]
 
-    if resized.ndim == 2:
-        # Grayscale → replicate to RGB
-        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 0] = resized
-        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 1] = resized
-        canvas[y_off:y_off + new_h, x_off:x_off + new_w, 2] = resized
-    else:
-        canvas[y_off:y_off + new_h, x_off:x_off + new_w, :resized.shape[2]] = resized[:, :, :4]
+        cy  = round(y_off / y_full * SPRITE_SIZE)
+        cy2 = min(round((y_off + y_ext) / y_full * SPRITE_SIZE), SPRITE_SIZE)
+        cx  = round(x_off / x_full * SPRITE_SIZE)
+        cx2 = min(round((x_off + x_ext) / x_full * SPRITE_SIZE), SPRITE_SIZE)
+        ah, aw = cy2 - cy, cx2 - cx
+        if ah <= 0 or aw <= 0 or patch.size == 0:
+            continue
 
-    # Mark content region as fully opaque
-    canvas[y_off:y_off + new_h, x_off:x_off + new_w, 3] = 255
-    return canvas
+        h, w = patch.shape[:2]
+        r_idx = np.round(np.linspace(0, h - 1, ah)).astype(np.int64)
+        c_idx = np.round(np.linspace(0, w - 1, aw)).astype(np.int64)
+        small = patch[r_idx][:, c_idx]
 
+        if small.ndim == 2:
+            canvas[cy:cy2, cx:cx2, 0] = small
+            canvas[cy:cy2, cx:cx2, 1] = small
+            canvas[cy:cy2, cx:cx2, 2] = small
+        else:
+            n_c = min(small.shape[2], 3)
+            canvas[cy:cy2, cx:cx2, :n_c] = small[:, :, :n_c]
+        canvas[cy:cy2, cx:cx2, 3] = 255
 
-def _generate_thumbnail(
-    da_array: da.Array, dim_order: str, color_dim: str | None
-) -> tuple[bytes, float, float, str] | None:
-    """
-    Generate a thumbnail as raw RGBA bytes (SPRITE_SIZE × SPRITE_SIZE × 4, uint8).
-
-    All images are normalized: lower bound = min(data_min, 0), upper = data_max.
-
-    Returns (raw_bytes, norm_min, norm_max, dtype_name), or None if generation fails.
-    """
-    if da_array is None or da_array.size == 0:
-        return None
-
-    dtype_name = str(da_array.dtype)
-    arr = da_array.copy()
-    if arr.dtype == bool:
-        arr = arr.astype(np.float32)
-    elif np.issubdtype(arr.dtype, np.floating):
-        # replace NaNs with zeros to avoid RuntimeWarnings of dask
-        arr = da.where(da.isnull(arr), 0.0, arr)
-
-    is_rgb = color_dim is not None
-
-    keep_dims = {'X', 'Y'}
-    if is_rgb:
-        keep_dims.add(color_dim)
-
-    # For non-RGB, preserve C/S so they get meaned below rather than center-sliced
-    reduce_keep_dims = keep_dims if is_rgb else keep_dims | {'C', 'S'}
-    arr, current_dim_order = _reduce_to_spatial(arr, dim_order, reduce_keep_dims)
-
-    # Collapse any leftover non-spatial dimensions by mean
-    target_ndim = 3 if is_rgb else 2
-    while arr.ndim > target_ndim:
-        arr = da.mean(arr, axis=0)
-        current_dim_order = current_dim_order[1:]
-
-    normalized, norm_min, norm_max = _normalize(arr)
-    img = normalized.compute()
-
-    # Transpose to (H, W) or (H, W, C)
-    dims = list(current_dim_order)
-    if is_rgb and color_dim in dims:
-        img = np.transpose(img, [dims.index('Y'), dims.index('X'), dims.index(color_dim)])
-        if img.shape[2] == 4:
-            img = img[:, :, :3]
-    elif 'Y' in dims and 'X' in dims and img.ndim == 2:
-        img = np.transpose(img, [dims.index('Y'), dims.index('X')])
-
-    h, w = img.shape[:2]
-    if h == 0 or w == 0:
-        return None
-
-    try:
-        canvas = _resize_and_pad(img)
-        return canvas.tobytes(), norm_min, norm_max, dtype_name
-    except Exception as e:
-        logger.error(f"Error generating thumbnail: {e}. Shape: {img.shape}, dtype: {img.dtype}")
-        return None
+    center = min(valid, key=lambda r: (
+        (r["dim_y"] - y_full / 2) ** 2 +
+        (r["dim_x"] - x_full / 2) ** 2
+    ))
+    return {
+        "thumbnail":          canvas.tobytes(),
+        "thumbnail_norm_min": center["__norm_min__"],
+        "thumbnail_norm_max": center["__norm_max__"],
+        "thumbnail_dtype":    center["__dtype__"],
+    }
 
 
 class ThumbnailProcessor:
-    NAME   = "thumbnail"
-    INPUT  = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
-    OUTPUT = "features"
+    """Generates a downsampled spatial patch from each memory chunk.
 
-    OUTPUT_SCHEMA = {
+    CHUNK_KIND = MEMORY: the pipeline delivers memory-safe chunks.
+    run_chunk returns a patch dict with position metadata; get_aggregation
+    assembles all patches into the final thumbnail, deriving the full extent
+    from the patches themselves.
+    """
+
+    NAME       = "thumbnail"
+    CHUNK_KIND = ChunkKind.MEMORY
+    INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
+    OUTPUT     = "features"
+    OUTPUT_SCHEMA: Dict[str, Any] = {
         "thumbnail":          bytes,
         "thumbnail_norm_min": float,
         "thumbnail_norm_max": float,
         "thumbnail_dtype":    str,
     }
-    def run(self, art: Record):
-        color_dim = _get_color_dim(art.capabilities)
-        result_data = _generate_thumbnail(art.data, art.dim_order, color_dim)
-        if result_data is None:
-            return [{"obs_level": 0, **{x: None for x in self.OUTPUT_SCHEMA}}]
-        return [{"obs_level": 0, **{x: result_data[i] for i, x in enumerate(self.OUTPUT_SCHEMA)}}]
+
+    def get_aggregation(self, name: str):
+        if name not in self.OUTPUT_SCHEMA:
+            return None
+        return lambda rows, g_dims: _assemble(rows).get(name)
+
+    def run_chunk(self, record: Record) -> Dict:
+        dim_order_out = list(record.dim_order)
+        if "Y" not in dim_order_out or "X" not in dim_order_out:
+            return {}
+
+        chunk: np.ndarray = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
+        color_dim = _get_color_dim(record.capabilities)
+        dim_str = "".join(dim_order_out)
+
+        arr = da.from_array(chunk.astype(np.float32), chunks=chunk.shape)
+        if np.issubdtype(chunk.dtype, np.floating):
+            arr = da.where(da.isnull(arr), 0.0, arr)
+
+        keep_dims = {"X", "Y", color_dim} if color_dim else {"X", "Y", "C", "S"}
+        arr, reduced_order = _reduce_to_spatial(arr, dim_str, keep_dims=keep_dims)
+        if arr.size == 0:
+            return {}
+
+        if color_dim and color_dim in reduced_order:
+            c_ax = list(reduced_order).index(color_dim)
+            if arr.shape[c_ax] == 1:
+                arr = arr.squeeze(axis=c_ax)
+                reduced_order = reduced_order.replace(color_dim, "", 1)
+        elif "C" in reduced_order:
+            c_ax = list(reduced_order).index("C")
+            n_c = arr.shape[c_ax]
+            if n_c > 4:
+                arr = da.mean(arr, axis=c_ax)
+                reduced_order = reduced_order.replace("C", "", 1)
+            elif n_c == 1:
+                arr = arr.squeeze(axis=c_ax)
+                reduced_order = reduced_order.replace("C", "", 1)
+
+        normalized, norm_min, norm_max = _normalize(arr)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="invalid value encountered in cast")
+            patch = normalized.compute()
+
+        dims = list(reduced_order)
+        if patch.ndim == 2:
+            patch = np.transpose(patch, [dims.index("Y"), dims.index("X")])
+        else:
+            other = next(i for i, d in enumerate(dims) if d not in ("Y", "X"))
+            patch = np.transpose(patch, [dims.index("Y"), dims.index("X"), other])
+
+        h, w = patch.shape[:2]
+        if h > _PATCH_MAX or w > _PATCH_MAX:
+            scale = min(_PATCH_MAX / h, _PATCH_MAX / w)
+            new_h = max(1, int(h * scale))
+            new_w = max(1, int(w * scale))
+            r_idx = np.round(np.linspace(0, h - 1, new_h)).astype(np.int64)
+            c_idx = np.round(np.linspace(0, w - 1, new_w)).astype(np.int64)
+            patch = patch[r_idx][:, c_idx]
+
+        return {
+            "__thumbnail_patch__": patch,
+            "__norm_min__":        norm_min,
+            "__norm_max__":        norm_max,
+            "__dtype__":           str(chunk.dtype),
+        }
