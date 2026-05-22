@@ -5,10 +5,6 @@ import importlib.metadata
 import logging
 from typing import TYPE_CHECKING, List, Type, Union
 
-from pixel_patrol_base.plugins.processors.basic_stats_processor import BasicStatsProcessor
-from pixel_patrol_base.plugins.processors.histogram_processor import HistogramProcessor
-from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
-
 if TYPE_CHECKING:
     from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
     PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
@@ -43,9 +39,11 @@ def discover_plugins_from_entrypoints(plugins_id) -> List[PixelPluginClass]:
     return res
 
 def register_processor_plugins():
+    from pixel_patrol_base.plugins.processors.raster_processor import BasicMetricsProcessor, HistogramProcessor
+    from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
     return [
-        BasicStatsProcessor,
-        ThumbnailProcessor,
+        BasicMetricsProcessor,
         HistogramProcessor,
+        ThumbnailProcessor,
     ]
 
