@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+import polars as pl
 import tifffile
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.specs import is_record_matching_processor
 
 from pixel_patrol_base import api
-from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.core.feature_schema import validate_processor_output
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.specs import is_record_matching_processor
+from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
 def generate_image_dataset(
@@ -58,7 +59,8 @@ def test_processor_schemata():
     )
     project.process_records(processing_config=processing_config)
 
-    if project.records_df is None or project.records_df.is_empty():
+    df = project.records_df
+    if df is None or df.is_empty():
         print("    [Error] No records processed!")
         return
 
@@ -89,7 +91,6 @@ def test_processor_schemata():
                 f"Processor {processor.NAME}: expected column '{col_name}' from OUTPUT_SCHEMA "
                 f"not found in records_df. Available columns: {sorted(df_columns)}"
             )
-
 
 
 def test_all_processors_return_dict():
