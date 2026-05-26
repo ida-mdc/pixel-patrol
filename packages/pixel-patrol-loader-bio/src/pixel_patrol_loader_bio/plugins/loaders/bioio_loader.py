@@ -1,7 +1,7 @@
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import bioio_imageio
 import numpy as np
@@ -10,7 +10,8 @@ import polars as pl
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
-from pixel_patrol_base.core.record import record_from
+from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -119,31 +120,43 @@ class BioIoLoader:
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
 
-    def load(self, source: str):
-        img = _load_bioio_image(Path(source))
+    def read_header(self, file_path: Path) -> FileInfo:
+        """Read file header; return shape/dtype/dim_order of the first scene plus total scene count."""
+        img = _load_bioio_image(file_path)
         if img is None:
-            raise UnsupportedFileFormatError(self.NAME, path=source)
+            raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
+        n_images = len(img.scenes) if hasattr(img, "scenes") else 1
+        meta = _extract_metadata(img)
+        meta = normalize_metadata(meta)
+        shape = tuple(int(x) for x in meta["shape"])
+        dim_order = tuple(meta["dim_order"])
+        dtype = np.dtype(meta.get("dtype", "float32"))
+        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
 
-        scenes = list(img.scenes) if hasattr(img, "scenes") else []
+    def load(self, file_path: Path) -> Record:
+        """Load a single-image (or first-scene) file; return a Record."""
+        img = _load_bioio_image(file_path)
+        if img is None:
+            raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
+        return self._build_record(img)
 
-        if len(scenes) <= 1:
-            return self._build_record(img)
-
-        records: Dict[str, Any] = {}
-        for scene in scenes:
-            img.set_scene(scene)
-            records[str(scene)] = self._build_record(img)
-        return records
+    def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        """Yield (scene_name, Record) for scenes [start, stop) in a multi-scene file."""
+        img = _load_bioio_image(file_path)
+        if img is None:
+            raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
+        scenes = list(img.scenes) if hasattr(img, "scenes") else [None]
+        for scene in scenes[start:stop]:
+            if scene is not None:
+                img.set_scene(scene)
+            yield str(scene) if scene is not None else "0", self._build_record(img)
 
     @staticmethod
-    def _build_record(img: BioImage):
+    def _build_record(img: BioImage) -> Record:
         """Extract metadata, squeeze singleton dims, and build a Record."""
-
         if hasattr(img, "set_resolution_level"):
             img.set_resolution_level(0)
-
         meta = _extract_metadata(img)
         meta = normalize_metadata(meta)
         data = da.squeeze(img.dask_data)
-
         return record_from(data, meta, kind="intensity")

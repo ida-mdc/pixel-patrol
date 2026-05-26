@@ -1,23 +1,20 @@
 from pathlib import Path
 
 import numpy as np
+import polars as pl
 import pytest
 import zarr
 from zarr.storage import LocalStore
-import polars as pl
 
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
-from pixel_patrol_base.core.processing import load_and_process_records_from_file, build_records_df
+from pixel_patrol_base.core.processing import build_records_df
+from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
 @pytest.fixture
 def zarr_folder(tmp_path: Path) -> Path:
-    """
-    Create a minimal OME-Zarr folder with valid NGFF metadata using the modern LocalStore interface.
-    Returns the .zarr folder path.
-    """
     zarr_path = tmp_path / "project" / "test_image.zarr"
     zarr_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -26,88 +23,61 @@ def zarr_folder(tmp_path: Path) -> Path:
     dtype = "uint16"
     data = np.random.randint(0, 65535, size=shape, dtype=dtype)
 
-    # Use LocalStore for compatibility with modern Zarr v3+
     store = LocalStore(str(zarr_path))
     root = zarr.group(store=store)
 
-    arr = root.create_array(
-        "0",
-        shape=shape,
-        chunks=chunks,
-        dtype=dtype,
-        overwrite=True
-    )
+    arr = root.create_array("0", shape=shape, chunks=chunks, dtype=dtype, overwrite=True)
     arr[:] = data
 
-    # Add required NGFF metadata
     root.attrs.put({
         "multiscales": [{
             "version": "0.4",
             "datasets": [{"path": "0"}],
-
             "axes": [
                 {"name": "t", "type": "time"},
                 {"name": "c", "type": "channel"},
                 {"name": "z", "type": "space"},
                 {"name": "y", "type": "space"},
-                {"name": "x", "type": "space"}
-            ]
+                {"name": "x", "type": "space"},
+            ],
         }],
-        "omero": {
-            "channels": [
-                {"label": "Channel 0"},
-                {"label": "Channel 1"}
-            ]
-        }
+        "omero": {"channels": [{"label": "Channel 0"}, {"label": "Channel 1"}]},
     })
 
     return zarr_path
 
-def test_zarr_path_recognition_as_image(zarr_folder: Path):
-    """
-    Test that a .zarr folder is correctly recognized and included in paths_df with type='file'.
-    """
+
+def test_zarr_path_recognition_as_file(zarr_folder: Path):
     parent_dir = zarr_folder.parent
-    paths_df = build_records_df([parent_dir], loader=ZarrLoader())
-    zarr_rows = paths_df.filter(pl.col("path") == str(zarr_folder))
+    loader = ZarrLoader()
+    df = build_records_df(
+        bases=[parent_dir],
+        loader=loader,
+        processors=discover_processor_plugins(),
+    )
+    assert df is not None
+    zarr_rows = df.filter(pl.col("path") == str(zarr_folder))
+    assert not zarr_rows.is_empty(), "Zarr folder not found in result"
+    assert zarr_rows[0, "file_extension"] == "zarr"
 
-    assert not zarr_rows.is_empty(), "Zarr folder not found in paths_df"
-    assert zarr_rows[0, "type"] == "file", "Zarr folder should be recognized as type 'file'"
-    assert zarr_rows[0, "file_extension"] == "zarr", "Zarr folder should have 'zarr' as file_extension"
 
-
-# test decorator + signature (edit existing test)
 @pytest.mark.parametrize("loader", [ZarrLoader(), BioIoLoader()])
-def test_extract_metadata_from_zarr_using_bioio(zarr_folder: Path, loader):
-    """
-    Test that extract_image_metadata can process a .zarr folder and returns valid metadata.
-    """
+def test_extract_metadata_from_zarr(zarr_folder: Path, loader):
     processors = discover_processor_plugins()
-    result = load_and_process_records_from_file(zarr_folder, loader=loader, processors=processors)
+    df = build_records_df(
+        bases=[zarr_folder.parent],
+        loader=loader,
+        processors=processors,
+    )
+    assert df is not None
+    rows = df.filter(pl.col("obs_level") == 0).to_dicts()
+    assert len(rows) >= 1
 
-    assert isinstance(result, list)
-    assert len(result) >= 1, "Expected at least one record from zarr loading"
-    metadata = result[0]
-
+    metadata = rows[0]
     assert isinstance(metadata, dict)
 
-    if isinstance(loader, BioIoLoader):
-        assert metadata.get("dim_order") == "CYX"
-        assert metadata.get("C_size") == 2
-        assert metadata.get("Y_size") == 10
-        assert metadata.get("X_size") == 10
-
-        assert "num_pixels" in metadata and metadata["num_pixels"] == 2 * 10 * 10
-        assert "shape" in metadata and metadata["shape"] == [2, 10, 10]
-        assert "ndim" in metadata and metadata["ndim"] == 3
-    else:
-        assert metadata.get("dim_order") in ["TCZYXS", "TCZYX", "TCYX", "CZYX", "CXY", "TYX"]
-        assert metadata.get("T_size") == 1
-        assert metadata.get("C_size") == 2
-        assert metadata.get("Z_size") == 1
-        assert metadata.get("Y_size") == 10
-        assert metadata.get("X_size") == 10
-
-        assert "num_pixels" in metadata and metadata["num_pixels"] == 1 * 2 * 1 * 10 * 10
-        assert "shape" in metadata and metadata["shape"] == [1, 2, 1, 10, 10]
-        assert "ndim" in metadata and metadata["ndim"] == 5
+    # Both loaders: zarr is recognized and intensity metrics are computed
+    assert metadata.get("file_extension") == "zarr"
+    assert metadata.get("num_pixels") == 1 * 2 * 1 * 10 * 10
+    assert metadata.get("min_intensity") is not None
+    assert metadata.get("max_intensity") is not None

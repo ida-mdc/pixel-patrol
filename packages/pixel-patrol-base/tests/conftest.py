@@ -1,11 +1,28 @@
 from pathlib import Path
+from typing import Any, Iterator, Set, Tuple
 from typing import List
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.record import Record, record_from
+
+
+class _AnyFileLoader:
+    """Minimal loader that accepts every extension and returns a dummy 10×10 image."""
+    NAME = "any-file"
+    SUPPORTED_EXTENSIONS: Set[str] = {".jpg", ".png", ".tif", ".npy"}
+
+    def read_header(self, file_path: Path) -> FileInfo:
+        return FileInfo(shape=(10, 10), dtype=np.dtype("uint8"), dim_order=("Y", "X"), n_images=1)
+
+    def load(self, file_path: Path) -> Record:
+        arr = np.zeros((10, 10), dtype=np.uint8)
+        meta = {"shape": [10, 10], "ndim": 2, "dim_order": "YX"}
+        return record_from(arr, meta, kind="intensity")
 
 
 @pytest.fixture
@@ -42,6 +59,7 @@ def temp_test_dirs(tmp_path: Path) -> List[Path]:
 @pytest.fixture
 def project_with_all_data(project_instance: Project, temp_test_dirs: List[Path]) -> Project:
     """Provides a Project with paths added and records fully processed."""
+    project_instance.loader = _AnyFileLoader()
     project_instance.add_paths(temp_test_dirs)
     project_instance.process_records()
     return project_instance

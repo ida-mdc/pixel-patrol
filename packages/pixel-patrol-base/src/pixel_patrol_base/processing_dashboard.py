@@ -688,8 +688,6 @@ def _register_callbacks(app: Dash):
 
         # Details
         details = []
-        if current_file:
-            details.append(html.P([html.Strong("Current file: "), current_file], className="small"))
         if total_files > 0:
             details.append(
                 html.P(
@@ -912,18 +910,17 @@ def _run_processing(
             )
 
         # Progress callback
-        def progress_callback(current: int, total: int, current_file: Path) -> None:
-            display_total = total_files if total_files > 0 else total
+        def progress_callback(current: int, total: int) -> None:
+            display_total = total_files if total_files > 0 else max(total, 1)
             display_current = min(current, display_total)
             progress_pct = 20 + int((display_current / display_total) * 65) if display_total > 0 else 20
 
             update_processing_state(
                 status="running",
                 progress=progress_pct,
-                message=f"Processing file {display_current}/{display_total}...",
+                message=f"Processing record {display_current}/{display_total}...",
                 processed_files=display_current,
                 total_files=display_total,
-                current_file=current_file.name if current_file else "",
             )
 
         # Process files — saves the parquet with metadata to project.output_path

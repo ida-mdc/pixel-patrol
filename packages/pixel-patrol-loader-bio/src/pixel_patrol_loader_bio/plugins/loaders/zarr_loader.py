@@ -7,7 +7,8 @@ import dask.array as da
 import numpy as np
 import zarr
 
-from pixel_patrol_base.core.record import record_from
+from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -187,12 +188,20 @@ class ZarrLoader:
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
 
-    def load(self, source: str):
-        path = Path(source)
-
-        arr = _load_zarr_array(path)
+    def read_header(self, file_path: Path) -> FileInfo:
+        """Read shape/dtype from Zarr metadata without loading pixel data."""
+        arr = _load_zarr_array(file_path)
         if arr is None:
-            raise RuntimeError(f"Cannot read Zarr array at: {source}")
+            raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
+        meta = _extract_zarr_metadata(arr, file_path)
+        shape = tuple(int(x) for x in arr.shape)
+        dim_order = tuple(meta["dim_order"])
+        dtype = np.dtype(str(arr.dtype))
+        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
 
-        meta = _extract_zarr_metadata(arr, path)
+    def load(self, file_path: Path) -> Record:
+        arr = _load_zarr_array(file_path)
+        if arr is None:
+            raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
+        meta = _extract_zarr_metadata(arr, file_path)
         return record_from(arr, meta, kind="intensity")

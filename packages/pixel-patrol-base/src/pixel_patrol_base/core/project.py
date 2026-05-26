@@ -7,7 +7,7 @@ import polars as pl
 from pixel_patrol_base.core import processing, validation
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.plugin_registry import discover_loader
+from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
 from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy, resolve_parquet_output_path
 from pixel_patrol_base.io.parquet_io import save_parquet
 
@@ -29,7 +29,6 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
-        self.records_flush_dir: Optional[Path] = None
         self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
@@ -121,7 +120,6 @@ class Project:
         """
         Validates and fills in defaults on the provided ProcessingConfig:
         - Resolves selected_file_extensions against the loader if needed.
-        - Infers records_flush_dir from base_dir if not explicitly set.
         """
         config: ProcessingConfig = processing_config or ProcessingConfig()
 
@@ -137,7 +135,7 @@ class Project:
     def process_records(
             self,
             processing_config: Optional[ProcessingConfig] = None,
-            progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+            progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> "Project":
         """
         Processes files in the project, building records_df.
@@ -145,17 +143,24 @@ class Project:
         Args:
             processing_config: Runtime options for slicing, processor selection, file
                                extensions, flush behaviour, etc. If None, defaults are used.
-            progress_callback: Optional callback(current, total, current_file) called per file.
+            progress_callback: Optional callback(done: int, total: int) called per completed record.
         """
         config = self._prepare_processing_config(processing_config)
-        flush_dir = self.output_path.parent / f"_batches_{self.output_path.stem}"
+        parts_dir = self.output_path.parent / f"_parts_{self.output_path.stem}"
+
+        processors = discover_processor_plugins()
+        if config.processors_included:
+            processors = [p for p in processors if p.NAME in config.processors_included]
+        elif config.processors_excluded:
+            processors = [p for p in processors if p.NAME not in config.processors_excluded]
 
         self.records_df = processing.build_records_df(
             bases=self.paths,
             loader=self.loader,
-            processing_config=config,
-            progress_callback=progress_callback,
-            flush_dir=flush_dir,
+            processors=processors,
+            config=config,
+            parts_dir=parts_dir,
+            on_progress=progress_callback,
         )
 
         if self.records_df is None or self.records_df.is_empty():
@@ -168,7 +173,7 @@ class Project:
             if config.parquet_row_group_size is not None:
                 rgs_kwargs["row_group_size"] = config.parquet_row_group_size
             save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
-            processing.cleanup_flush_dir(flush_dir)
+            processing.cleanup_chunks_dir(parts_dir)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
