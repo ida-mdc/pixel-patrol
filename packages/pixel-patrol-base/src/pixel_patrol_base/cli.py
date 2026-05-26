@@ -95,7 +95,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         selected_file_extensions=selected_extensions,
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
-        processing_max_workers=max_workers,
+        max_workers=max_workers,
         flavor=flavor or None,
         description=description or None,
         parquet_row_group_size=parquet_row_group_size,

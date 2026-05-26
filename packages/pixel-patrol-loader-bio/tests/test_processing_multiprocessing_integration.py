@@ -8,21 +8,20 @@ import polars as pl
 import pytest
 
 from pixel_patrol_base.core.processing import build_records_df
-from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.plugin_registry import discover_processor_plugins
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+
 
 def _repo_root() -> Path:
-    """Resolve the repository root directory from this test file."""
     return Path(__file__).resolve().parents[3]
 
 
 def _example_bioio_dir() -> Path:
-    """Locate the example bioio dataset directory."""
     return _repo_root() / "examples" / "datasets" / "bioio"
 
 
 def _iter_image_files(root: Path) -> Iterable[Path]:
-    """Iterate over loader-supported image files under the dataset root."""
     supported_extensions = {ext.lower().lstrip(".") for ext in BioIoLoader.SUPPORTED_EXTENSIONS}
     for p in root.rglob("*"):
         if not p.is_file() or p.name == "not_an_image.txt":
@@ -32,7 +31,6 @@ def _iter_image_files(root: Path) -> Iterable[Path]:
 
 
 def _copy_sample_images(src_files: List[Path], dst_dir: Path) -> List[Path]:
-    """Copy source images into a temporary directory for isolated processing."""
     dst_dir.mkdir(parents=True, exist_ok=True)
     copied: List[Path] = []
     for src in src_files:
@@ -43,7 +41,6 @@ def _copy_sample_images(src_files: List[Path], dst_dir: Path) -> List[Path]:
 
 
 def test_build_records_df_multiprocessing_on_real_images(tmp_path):
-    """Run real multiprocessing over a tiny image subset and verify flush output."""
     data_dir = _example_bioio_dir()
     if not data_dir.exists():
         pytest.skip(f"Example data directory not found: {data_dir}")
@@ -56,18 +53,18 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
     copied = _copy_sample_images(src_files[:2], sample_dir)
 
     loader = BioIoLoader()
-
     config = ProcessingConfig(
-        processing_max_workers=2,
-        records_flush_every_n=1,
+        max_workers=2,
+        rows_per_part=1,
         selected_file_extensions=loader.SUPPORTED_EXTENSIONS,
     )
 
     df = build_records_df(
         bases=[sample_dir],
         loader=loader,
-        processing_config=config,
-        flush_dir=tmp_path / "_batches",
+        processors=discover_processor_plugins(),
+        config=config,
+        parts_dir=tmp_path / "_batches",
     )
 
     assert df is not None
@@ -76,7 +73,6 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
 
 
 def test_build_records_df_multiprocessing_reports_progress(tmp_path):
-    """Progress callback should reflect total processed files with multiprocessing."""
     data_dir = _example_bioio_dir()
     if not data_dir.exists():
         pytest.skip(f"Example data directory not found: {data_dir}")
@@ -89,23 +85,20 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
     copied = _copy_sample_images(src_files[:3], sample_dir)
 
     loader = BioIoLoader()
-
-    config = ProcessingConfig(
-        processing_max_workers=2,
-        records_flush_every_n=1,
-    )
+    config = ProcessingConfig(max_workers=2, rows_per_part=1)
 
     progress_calls = []
 
-    def progress_callback(current: int, total: int, current_file: Path) -> None:
-        progress_calls.append((current, total, current_file))
+    def progress_callback(current: int, total: int) -> None:
+        progress_calls.append((current, total))
 
     df = build_records_df(
         bases=[sample_dir],
         loader=loader,
-        processing_config=config,
-        progress_callback=progress_callback,
-        flush_dir=tmp_path / "_batches",
+        processors=discover_processor_plugins(),
+        config=config,
+        parts_dir=tmp_path / "_batches",
+        on_progress=progress_callback,
     )
 
     assert df is not None
@@ -115,7 +108,6 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
 
 
 def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
-    """Processor outputs should appear when multiprocessing loads real images."""
     data_dir = _example_bioio_dir()
     if not data_dir.exists():
         pytest.skip(f"Example data directory not found: {data_dir}")
@@ -128,17 +120,14 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
     copied = _copy_sample_images(src_files[:2], sample_dir)
 
     loader = BioIoLoader()
-
-    config = ProcessingConfig(
-        processing_max_workers=2,
-        records_flush_every_n=1,
-    )
+    config = ProcessingConfig(max_workers=2, rows_per_part=1)
 
     df = build_records_df(
         bases=[sample_dir],
         loader=loader,
-        processing_config=config,
-        flush_dir=tmp_path / "_batches",
+        processors=discover_processor_plugins(),
+        config=config,
+        parts_dir=tmp_path / "_batches",
     )
 
     assert df is not None

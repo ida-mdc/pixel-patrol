@@ -94,8 +94,7 @@ def test_processor_schemata():
 
 
 def test_all_processors_return_dict():
-    """Every processor's run() must return a dict so that ``extracted.update(out)``
-    in ``_extract_record_properties`` is always safe.
+    """Every processor's run_chunk() must return a dict.
 
     This creates a small synthetic image, loads it into a Record, and runs every
     matching processor — verifying each returns a plain dict.
@@ -118,14 +117,11 @@ def test_all_processors_return_dict():
         if not is_record_matching_processor(record, processor.INPUT):
             continue
 
-        result = processor.run(record)
-        assert isinstance(result, list), (
+        result = processor.run_chunk(record)
+        assert isinstance(result, dict), (
             f"Processor '{processor.NAME}' returned {type(result).__name__} "
-            f"instead of list. Processors must return List[Dict] in long-format."
+            f"instead of dict. Processors must return Dict from run_chunk()."
         )
-        for row in result:
-            assert isinstance(row, dict)
-            assert "obs_level" in row, f"Processor '{processor.NAME}' row missing obs_level"
 
 
 

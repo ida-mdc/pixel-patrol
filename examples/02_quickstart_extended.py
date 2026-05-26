@@ -27,7 +27,7 @@ def main():
     api.add_paths(project, paths)
     api.process_files(
         project,
-        processing_max_workers=4,
+        max_workers=4,
         selected_file_extensions={"tif", "png", "jpeg"},
         flavor="Example Datasets",
         description="Authors: Annona Buddha and Banana Java",

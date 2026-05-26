@@ -1,6 +1,6 @@
 import pytest
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
+from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -10,8 +10,10 @@ def test_defaults():
     assert config.processors_included == set()
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
-    assert config.processing_max_workers is None
-    assert config.records_flush_every_n == DEFAULT_RECORDS_FLUSH_EVERY_N
+    assert config.max_workers is None
+    assert config.mb_per_task == 512.0
+    assert config.leaf_block_shape is None
+    assert config.rows_per_part == DEFAULT_ROWS_PER_PART
 
 
 # --- processors_included / excluded conflict ---
@@ -52,45 +54,74 @@ def test_extensions_empty_set():
     assert config.selected_file_extensions == set()
 
 
-# --- processing_max_workers ---
+# --- max_workers ---
 
 def test_max_workers_none():
-    config = ProcessingConfig(processing_max_workers=None)
-    assert config.processing_max_workers is None
+    config = ProcessingConfig(max_workers=None)
+    assert config.max_workers is None
 
 
 def test_max_workers_valid():
-    config = ProcessingConfig(processing_max_workers=4)
-    assert config.processing_max_workers == 4
+    config = ProcessingConfig(max_workers=4)
+    assert config.max_workers == 4
 
 
 def test_max_workers_zero_raises():
-    with pytest.raises(ValueError, match="processing_max_workers must be a positive integer"):
-        ProcessingConfig(processing_max_workers=0)
+    with pytest.raises(ValueError, match="max_workers must be a positive integer"):
+        ProcessingConfig(max_workers=0)
 
 
 def test_max_workers_negative_raises():
-    with pytest.raises(ValueError, match="processing_max_workers must be a positive integer"):
-        ProcessingConfig(processing_max_workers=-1)
+    with pytest.raises(ValueError, match="max_workers must be a positive integer"):
+        ProcessingConfig(max_workers=-1)
 
 
-def test_max_workers_non_int_raises():
-    with pytest.raises(ValueError, match="processing_max_workers must be a positive integer"):
-        ProcessingConfig(processing_max_workers=1.5)
+# --- mb_per_task ---
+
+def test_mb_per_task_valid():
+    config = ProcessingConfig(mb_per_task=256.0)
+    assert config.mb_per_task == 256.0
 
 
-# --- records_flush_every_n ---
-
-def test_flush_every_n_valid():
-    config = ProcessingConfig(records_flush_every_n=50)
-    assert config.records_flush_every_n == 50
+def test_mb_per_task_zero_raises():
+    with pytest.raises(ValueError, match="mb_per_task must be positive"):
+        ProcessingConfig(mb_per_task=0)
 
 
-def test_flush_every_n_zero_raises():
-    with pytest.raises(ValueError, match="records_flush_every_n must be a positive integer"):
-        ProcessingConfig(records_flush_every_n=0)
+def test_mb_per_task_negative_raises():
+    with pytest.raises(ValueError, match="mb_per_task must be positive"):
+        ProcessingConfig(mb_per_task=-1.0)
 
 
-def test_flush_every_n_negative_raises():
-    with pytest.raises(ValueError, match="records_flush_every_n must be a positive integer"):
-        ProcessingConfig(records_flush_every_n=-10)
+# --- leaf_block_shape ---
+
+def test_leaf_block_shape_none():
+    config = ProcessingConfig(leaf_block_shape=None)
+    assert config.leaf_block_shape is None
+
+
+def test_leaf_block_shape_valid():
+    config = ProcessingConfig(leaf_block_shape={"Z": 1, "Y": -1, "X": -1})
+    assert config.leaf_block_shape == {"Z": 1, "Y": -1, "X": -1}
+
+
+def test_leaf_block_shape_invalid_raises():
+    with pytest.raises(ValueError):
+        ProcessingConfig(leaf_block_shape={"Z": 0})
+
+
+# --- rows_per_part ---
+
+def test_rows_per_part_valid():
+    config = ProcessingConfig(rows_per_part=50)
+    assert config.rows_per_part == 50
+
+
+def test_rows_per_part_zero_raises():
+    with pytest.raises(ValueError, match="rows_per_part must be a positive integer"):
+        ProcessingConfig(rows_per_part=0)
+
+
+def test_rows_per_part_negative_raises():
+    with pytest.raises(ValueError, match="rows_per_part must be a positive integer"):
+        ProcessingConfig(rows_per_part=-10)

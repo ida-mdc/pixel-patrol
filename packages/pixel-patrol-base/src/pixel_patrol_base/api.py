@@ -32,15 +32,15 @@ def delete_path(project: Project, path: str) -> Project:
 
 def process_files(
         project: Project,
-        progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
         # --- Processor selection ---
         processors_included: Optional[Set[str]] = None,
         processors_excluded: Optional[Set[str]] = None,
         # --- File selection ---
         selected_file_extensions: Union[Set[str], str, None] = None,
         # --- Run behaviour ---
-        processing_max_workers: Optional[int] = None,
-        records_flush_every_n: Optional[int] = None,
+        max_workers: Optional[int] = None,
+        rows_per_part: Optional[int] = None,
         parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
         flavor: Optional[str] = None,
@@ -51,15 +51,15 @@ def process_files(
 
     Args:
         project:                    The project to process.
-        progress_callback:          Optional callback(current, total, current_file) -> None,
-                                    called for each file processed.
+        progress_callback:          Optional callback(done: int, total: int) called per
+                                    completed record.
         processors_included:        Only run these processors (e.g. {"basic-stats"}).
                                     If set, processors_excluded is ignored.
         processors_excluded:        Exclude these processors (e.g. {"histogram"}).
         selected_file_extensions:   Extensions to process, e.g. {"tif", "png"}, or "all".
                                     Defaults to "all".
-        processing_max_workers:     Thread-pool size. None = default.
-        records_flush_every_n:      Flush intermediate results to disk every N records.
+        max_workers:                Dask worker count. None = auto-detect CPU count.
+        rows_per_part:              Flush intermediate results to disk every N rows.
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
         description:                Free-form description string embedded in the parquet metadata.
@@ -67,17 +67,20 @@ def process_files(
     Returns:
         The project with processed records_df.
     """
+    config_kwargs = {}
+    if rows_per_part is not None:
+        config_kwargs["rows_per_part"] = rows_per_part
     processing_config = ProcessingConfig(
         processors_included=processors_included or set(),
         processors_excluded=processors_excluded or set(),
         selected_file_extensions=selected_file_extensions or "all",
-        processing_max_workers=processing_max_workers,
-        records_flush_every_n=records_flush_every_n,
+        max_workers=max_workers,
         parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",
             description=description or "",
         ),
+        **config_kwargs,
     )
     logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
