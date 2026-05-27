@@ -848,7 +848,12 @@ def _coordinate_pipeline(
         try:
             results: List[MemoryChunkResult] = future.result()
         except Exception as exc:
-            logger.warning("_coordinate_pipeline: worker failed for %s: %s", task, exc)
+            # Emit one user-visible warning per affected file path.
+            if isinstance(task, BatchTask):
+                for ip in task.files:
+                    logger.warning("Skipping '%s' — worker error: %s", ip.file_path, exc)
+            else:
+                logger.warning("Skipping '%s' — worker error: %s", task.file_path, exc)
             continue
 
         if isinstance(task, MemoryChunkTask):
@@ -896,6 +901,31 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator:
 # Entry point
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _collect_file_metadata_only(
+    bases:       List[Path],
+    config:      ProcessingConfig,
+    on_progress: Optional[Callable[[int, int], None]],
+) -> Optional[pl.DataFrame]:
+    """No-loader mode: discover files and return their filesystem metadata only.
+
+    Bypasses Dask entirely.  Each discovered file produces one row containing
+    the standard file metadata columns (path, name, type, parent, depth,
+    size_bytes).  No pixel data is loaded and no processors are run.
+    The result goes through the same _post_process step as a normal run so
+    column ordering, dtype shrinking, and the obs_level column are consistent.
+    """
+    rows: List[dict] = []
+    for _, file_meta in _discover_files(bases, config.selected_file_extensions):
+        rows.append({"obs_level": 0, **file_meta})
+        if on_progress:
+            on_progress(len(rows), -1)
+
+    if not rows:
+        return None
+
+    return _post_process(pl.from_dicts(rows))
+
+
 def build_records_df(
     bases:        List[Path],
     loader:       Any,
@@ -906,6 +936,10 @@ def build_records_df(
 ) -> Optional[pl.DataFrame]:
     """Scan files, distribute processing across Dask workers, return records_df.
 
+    When loader is None, no pixel data is loaded and no processors run —
+    only filesystem metadata (path, name, size_bytes, …) is collected.
+    This "inventory-only" mode bypasses Dask entirely and is fast.
+
     _discover_files, _plan_tasks, and the submit side of _coordinate_pipeline
     run concurrently via a streaming generator pipeline — workers receive their
     first tasks before the filesystem scan is complete.
@@ -913,10 +947,13 @@ def build_records_df(
     Args:
         bases:       Base directories to scan.
         loader:      Loader instance; must implement read_header, load, load_range.
+                     Pass None for inventory-only mode (file metadata only).
         processors:  Processor instances to run on each record. Caller is responsible
                      for applying processors_included / processors_excluded filtering.
+                     Ignored when loader is None.
         config:      Runtime options. Defaults used if None.
         parts_dir:   Directory for intermediate part files. None → in-memory only.
+                     Ignored when loader is None.
         on_progress: Optional callback(done: int, total: int) called per completed record.
                      total is -1 until the full record count is known.
 
@@ -927,9 +964,12 @@ def build_records_df(
     """
     cfg = config or ProcessingConfig()
 
+    if loader is None:
+        return _collect_file_metadata_only(bases, cfg, on_progress)
+
     with _get_or_create_client(cfg) as client:
         files_meta: List[dict] = []
-        folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None) if loader is not None else None
+        folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
             _discover_files(bases, cfg.selected_file_extensions, folder_exts),
             config=cfg,
