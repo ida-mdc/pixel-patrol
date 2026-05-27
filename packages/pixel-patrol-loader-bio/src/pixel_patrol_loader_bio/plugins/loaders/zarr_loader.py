@@ -1,7 +1,7 @@
 import logging
 import string
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, List, Mapping
+from typing import Any, Dict, Iterator, Optional, Set, List, Mapping, Tuple
 
 import dask.array as da
 import numpy as np
@@ -168,7 +168,7 @@ class ZarrLoader:
 
     NAME = "zarr"
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -205,3 +205,8 @@ class ZarrLoader:
             raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
         meta = _extract_zarr_metadata(arr, file_path)
         return record_from(arr, meta, kind="intensity")
+
+    def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        """Not used: ZarrLoader always returns n_images=1 so load_range is never called."""
+        raise NotImplementedError("ZarrLoader does not support container files (n_images=1 always)")
+        yield  # make this a generator
