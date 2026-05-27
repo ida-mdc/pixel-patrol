@@ -792,7 +792,7 @@ def _coordinate_pipeline(
     Maintains a MAX_PENDING_TASKS sliding window of Dask futures so workers
     stay busy while _plan_tasks is still generating tasks from the file stream.
     """
-    max_pending = 2 * len(client.nthreads())
+    max_pending = 2 * sum(client.nthreads().values())
     writer      = _ResultsWriter(config.rows_per_part, parts_dir, config.parquet_row_group_size)
     assembler   = _RecordAssembler()
     future_to_task: Dict[Any, Task] = {}
