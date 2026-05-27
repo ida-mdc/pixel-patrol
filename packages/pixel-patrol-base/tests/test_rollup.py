@@ -13,6 +13,7 @@ def _result(file_index=0, child_id=None, chunk_rows=None, leaf_rows=None):
         child_id=child_id,
         chunk_rows=chunk_rows or {},
         leaf_rows=leaf_rows or [],
+        image_meta={},
     )
 
 

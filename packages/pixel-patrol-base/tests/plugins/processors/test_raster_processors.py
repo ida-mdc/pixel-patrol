@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
+from pixel_patrol_base.core.record import record_from
 from pixel_patrol_image.plugins.processors.raster_image_processor import (
     CompressionMetricsProcessor,
     QualityMetricsProcessor,
@@ -30,8 +31,16 @@ def quality_proc():
 
 
 def _chunk(proc, np_arr, dim_order_str, origin=None):
-    dim_order_out = list(dim_order_str.upper())
-    return proc.run_chunk(np_arr, origin or [0] * len(dim_order_out), dim_order_out)
+    """Run a single chunk through a processor, replicating pipeline coordinate-stamping."""
+    dim_order_upper = dim_order_str.upper()
+    origin = origin or [0] * len(dim_order_upper)
+    record = record_from(np_arr, {"dim_order": dim_order_upper})
+    row = proc.run_chunk(record)
+    # Stamp coordinates and shape info the same way the pipeline does.
+    row.update({f"dim_{d.lower()}": origin[i] for i, d in enumerate(dim_order_upper)})
+    row["num_pixels"] = int(np.prod(np_arr.shape))
+    row.update({f"{d}_size": np_arr.shape[i] for i, d in enumerate(dim_order_upper)})
+    return row
 
 
 # ---------------------------------------------------------------------------
