@@ -4,6 +4,7 @@ Reads images stored in LMDB databases using the AqQua Dataset format
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -47,6 +48,47 @@ def _uncompress_blosc2(raw_bytes: bytes) -> blosc2.NDArray:
     return blosc2.ndarray_from_cframe(raw_bytes, True)
 
 
+def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
+    """Load the matching meta parquet sidecar for an LMDB file.
+
+    Expects a sibling file with the same numeric ID suffix:
+        *-images-{ID}.lmdb  →  *-meta-{ID}.parquet
+
+    Returns:
+        Dict mapping image-uuid -> flat metadata dict (excluding image-uuid itself).
+    """
+    match = re.search(r"-(\d+)\.lmdb$", lmdb_path.name)
+    if not match:
+        logger.warning("LmdbLoader: could not extract numeric ID from '%s'", lmdb_path.name)
+        return {}
+
+    numeric_id = match.group(1)
+    parquet_path = next(lmdb_path.parent.glob(f"*-meta-{numeric_id}.parquet"), None)
+    if parquet_path is None:
+        logger.warning("LmdbLoader: no meta parquet found for '%s'", lmdb_path.name)
+        return {}
+
+    logger.info("LmdbLoader: loading meta parquet '%s'", parquet_path.name)
+    df = pl.read_parquet(parquet_path)
+
+    if "image-uuid" not in df.columns:
+        logger.warning("LmdbLoader: meta parquet '%s' has no 'image-uuid' column", parquet_path.name)
+        return {}
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in df.iter_rows(named=True):
+        uuid = row.get("image-uuid")
+        if uuid is None:
+            continue
+        result[str(uuid)] = {
+            k: v for k, v in row.items()
+            if k != "image-uuid" and v is not None
+        }
+
+    logger.info("LmdbLoader: loaded %d meta rows from '%s'", len(result), parquet_path.name)
+    return result
+
+
 def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
     """Build a flat metadata dict from a blosc2 NDArray.
 
@@ -79,9 +121,8 @@ def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
         metadata["Y_size"] = int(h)
         metadata["X_size"] = int(w)
     elif np_arr.ndim == 3:
-        # Assume (H, W, C) — the typical storage order for colour images
         h, w, c = np_arr.shape
-        metadata["dim_order"] = "YXC"
+        metadata["dim_order"] = "YXS"
         metadata["Y_size"] = int(h)
         metadata["X_size"] = int(w)
         metadata["C_size"] = int(c)
@@ -158,6 +199,7 @@ class LmdbLoader:
     @staticmethod
     def load_range(lmdb_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         """Yield (child_id, Record) for images [start, stop) from the LMDB."""
+        parquet_meta = _load_meta_parquet(lmdb_path)
         env, db, txn = _open_lmdb_readonly(lmdb_path)
         try:
             with txn.cursor() as cursor:
@@ -174,6 +216,10 @@ class LmdbLoader:
                     try:
                         array = _uncompress_blosc2(cursor.value())
                         meta = _extract_metadata(array)
+                        uuid = meta.get("image-uuid")
+                        if uuid and str(uuid) in parquet_meta:
+                            # blosc2 meta takes precedence on key conflicts
+                            meta = {**parquet_meta[str(uuid)], **meta}
                         yield child_id, record_from(np.asarray(array), meta, kind="intensity")
                     except Exception as e:
                         logger.exception(

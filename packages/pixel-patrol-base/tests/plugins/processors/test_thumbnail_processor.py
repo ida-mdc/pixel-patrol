@@ -5,7 +5,8 @@ import pytest
 from PIL import Image
 
 from pixel_patrol_base.config import SPRITE_SIZE
-from pixel_patrol_image.plugins.processors.thumbnail_processor import ThumbnailProcessor
+from pixel_patrol_base.core.record import record_from
+from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
 
 
 def _decode_thumbnail(thumbnail: bytes) -> Image.Image:
@@ -19,9 +20,15 @@ def proc() -> ThumbnailProcessor:
 
 
 def _run(proc, data: np.ndarray, dim_order: str) -> dict:
-    dim_order_out = list(dim_order.upper())
-    origin = [0] * len(dim_order_out)
-    rows = [proc.run_chunk(data, origin, dim_order_out)]
+    record = record_from(data, {"dim_order": dim_order.upper()})
+    dims = list(dim_order.upper())
+    row = proc.run_chunk(record)
+    # stamp spatial position metadata (normally done by the pipeline)
+    if row and "__thumbnail_patch__" in row:
+        for i, d in enumerate(dims):
+            row[f"dim_{d.lower()}"] = 0
+            row[f"{d}_size"] = data.shape[i]
+    rows = [row]
     result = {}
     for name in proc.OUTPUT_SCHEMA:
         fn = proc.get_aggregation(name)
@@ -30,6 +37,18 @@ def _run(proc, data: np.ndarray, dim_order: str) -> dict:
             if val is not None:
                 result[name] = val
     return result
+
+
+def _run_chunk_with_origin(proc, data: np.ndarray, origin: list, dim_order: str) -> dict:
+    """Run a single chunk with explicit origin — simulates pipeline coordinate stamping."""
+    record = record_from(data, {"dim_order": dim_order.upper()})
+    dims = list(dim_order.upper())
+    row = proc.run_chunk(record)
+    if row and "__thumbnail_patch__" in row:
+        for i, d in enumerate(dims):
+            row[f"dim_{d.lower()}"] = origin[i]
+            row[f"{d}_size"] = data.shape[i]
+    return row
 
 
 def _thumbnail(proc, data, dim_order) -> bytes:
@@ -341,7 +360,7 @@ def test_multi_z_chunks_assembled_via_aggregation(proc):
     rows = []
     for z in range(3):
         data = np.full((1, 20, 20), z * 100, dtype=np.uint8)
-        rows.append(proc.run_chunk(data, [z, 0, 0], ["Z", "Y", "X"]))
+        rows.append(_run_chunk_with_origin(proc, data, [z, 0, 0], "ZYX"))
     result = _aggregate(proc, rows)
     assert "thumbnail" in result
     assert len(result["thumbnail"]) == SPRITE_SIZE * SPRITE_SIZE * 4
@@ -354,7 +373,7 @@ def test_multi_xy_chunks_cover_full_canvas(proc):
     rows = []
     for y_off, x_off, val in [(0, 0, 50), (0, 20, 100), (20, 0, 150), (20, 20, 200)]:
         data = np.full((20, 20), val, dtype=np.uint8)
-        rows.append(proc.run_chunk(data, [y_off, x_off], ["Y", "X"]))
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
     result = _aggregate(proc, rows)
     assert "thumbnail" in result
     arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
@@ -365,10 +384,19 @@ def test_multi_xy_chunks_cover_full_canvas(proc):
     assert arr[half:, half:,   3].min() == 255, "bottom-right quadrant empty"
 
 
+def test_numpy_array_input(proc):
+    """Processor must work when record.data is a plain numpy array (e.g. LMDB loader path)."""
+    data = np.random.randint(0, 256, (20, 20, 3), dtype=np.uint8)
+    result = _run(proc, data, "YXS")
+    assert result["thumbnail"] is not None
+    assert len(result["thumbnail"]) == SPRITE_SIZE * SPRITE_SIZE * 4
+
+
 def test_helper_columns_not_aggregated(proc):
     """get_aggregation returns None for internal __*__ patch columns."""
     data = np.ones((20, 20), dtype=np.uint8) * 128
-    row = proc.run_chunk(data, [0, 0], ["Y", "X"])
+    record = record_from(data, {"dim_order": "YX"})
+    row = proc.run_chunk(record)
     for key in row:
         if key.startswith("__"):
             assert proc.get_aggregation(key) is None, f"helper column has aggregation: {key}"
