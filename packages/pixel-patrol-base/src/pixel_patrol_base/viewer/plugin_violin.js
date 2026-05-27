@@ -9,9 +9,9 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
 const QUALITY_METRIC_BASES = new Set([
-  'laplacian_variance', 'tenengrad', 'brenner', 'noise_std', 'blocking_records', 'ringing_records',
+  'michelson_contrast', 'mscn_variance', 'local_std_ratio', 'blocking_index', 'ringing_index',
 ]);
 
 function matchesBases(col, bases) {
@@ -47,12 +47,11 @@ const QUALITY_INFO = [
   'Visualizes **image quality metrics** as violin plots across groups.',
   '', 'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
   '', '**Metrics**',
-  '- **Laplacian variance** – Edge-based sharpness estimate. Higher values indicate a sharper image.',
-  '- **Tenengrad** – Focus measure based on Sobel gradients; captures overall edge strength.',
-  '- **Brenner** – Measures fine structural detail using pixel intensity differences.',
-  '- **Noise std** – Estimated pixel-level noise standard deviation; higher noise reduces clarity.',
-  '- **Blocking records** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
-  '- **Ringing records** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
+  '- **Michelson contrast** – Global contrast ratio; higher values indicate greater dynamic range.',
+  '- **MSCN variance** – Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
+  '- **Local std ratio** – Ratio of local to global standard deviation; captures texture uniformity.',
+  '- **Blocking index** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
+  '- **Ringing index** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
