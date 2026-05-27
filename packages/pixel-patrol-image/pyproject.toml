@@ -27,8 +27,5 @@ dev = [
     "pytest-mock>=3.14.1",
 ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }
