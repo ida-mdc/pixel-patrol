@@ -56,12 +56,18 @@ def cli():
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
               help='Maximum number of processing workers. Use 1 to disable multiprocessing.')
+@click.option('--mb-per-task', type=float, default=None, show_default=True,
+              help='MB budget per Dask task (default: 512). Increase for datasets with many small images; decrease for very large images.')
+@click.option('--rows-per-part', type=int, default=None, show_default=True,
+              help='Flush intermediate results to disk every N rows (default: 2048).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None,
-              max_workers: int | None):
+              max_workers: int | None,
+              mb_per_task: float | None,
+              rows_per_part: int | None):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
     """
@@ -96,6 +102,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         max_workers=max_workers,
+        mb_per_task=mb_per_task,
+        rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
         parquet_row_group_size=parquet_row_group_size,

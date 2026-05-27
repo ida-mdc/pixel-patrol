@@ -463,7 +463,10 @@ def _execute_batch_task(
     """Process every file in the task as one complete memory chunk each."""
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
-        record     = loader.load(Path(idxed_path.file_path))
+        record = loader.load(Path(idxed_path.file_path))
+        if record is None:
+            logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
+            continue
         image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
         results.append(
@@ -480,7 +483,10 @@ def _execute_memory_chunk_task(
     config:     ProcessingConfig,
 ) -> List[MemoryChunkResult]:
     """Load the sub-region defined by task.spec and process it."""
-    record     = loader.load(Path(task.file_path))
+    record = loader.load(Path(task.file_path))
+    if record is None:
+        logger.warning("worker: loader returned None for %s; skipping", task.file_path)
+        return []
     # Extract image_meta from the full record BEFORE slicing — record.data.shape
     # here is the full image shape; task.spec.image_shape is the same value.
     image_meta = _extract_image_meta(record)
@@ -499,6 +505,10 @@ def _execute_sub_image_task(
     results: List[MemoryChunkResult] = []
     start, stop = task.image_slice
     for child_id, record in loader.load_range(Path(task.file_path), start, stop):
+        if record is None:
+            logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
+                           child_id, task.file_path)
+            continue
         # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
         image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
