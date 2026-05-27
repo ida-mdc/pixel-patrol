@@ -2,7 +2,7 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 const QUALITY_METRIC_BASES = new Set([
-  'laplacian_variance', 'tenengrad', 'brenner', 'noise_std', 'blocking_records', 'ringing_records',
+  'michelson_contrast', 'mscn_variance', 'local_std_ratio', 'blocking_index', 'ringing_index',
 ]);
 
 const COL_BG = ['#ffffff', '#f4f6f9'];

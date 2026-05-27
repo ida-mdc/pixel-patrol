@@ -2,10 +2,10 @@
 
 Each file yields one record (one logical image → one set of obs rows).
 Container files (LMDB, multi-series OME-TIFF) yield one record per sub-image.
-Large files are split into spatial memory_chunks processed in parallel.
+Large files are split into memory chunks (sub-regions) processed in parallel.
 
-MEMORY processors receive the full memory_chunk; their output goes to obs_level=0.
-LEAF processors run on leaf blocks within each memory_chunk; _rollup aggregates
+MEMORY processors receive the full memory chunk; their output goes to obs_level=0.
+LEAF processors run on leaf blocks within each memory chunk; _rollup aggregates
 their rows into obs_levels 0..n (power-set over non-degenerate dims).
 
 CALL GRAPH
@@ -16,9 +16,9 @@ CALL GRAPH
     ├─ _plan_tasks                   generator: FileInfo → Tasks
     └─ _coordinate_pipeline          submit + gather loop
           ├─ _execute_batch_task     [worker] small files
-          ├─ _execute_memory_chunk_task [worker] one spatial sub-region
+          ├─ _execute_memory_chunk_task [worker] one memory chunk (sub-region)
           ├─ _execute_sub_image_task [worker] sub-image batch
-          ├─ _RecordAssembler        collects spatial chunks per record
+          ├─ _RecordAssembler        collects memory chunks per record
           ├─ _rollup                 MemoryChunkResults → obs_row dicts
           ├─ _join_file_metadata     merge file metadata into obs rows
           └─ _ResultsWriter          buffer → parquet parts → finalize
@@ -63,7 +63,7 @@ class _IndexedPath(NamedTuple):
 
 @dataclass(frozen=True)
 class MemoryChunkSpec:
-    """Describes one spatial sub-region of a large file."""
+    """Describes one sub-region (memory chunk) of a large file."""
     slices:      Tuple[slice, ...]  # applied as arr[spec.slices]
     origin:      Tuple[int, ...]    # global start coordinate of this sub-region
     dim_order:   Tuple[str, ...]
@@ -78,7 +78,7 @@ class BatchTask:
 
 @dataclass(frozen=True)
 class MemoryChunkTask:
-    """One spatial sub-region (memory_chunk) of a large file."""
+    """One sub-region (memory chunk) of a large file."""
     file_index:      int
     file_path:      str
     spec:           MemoryChunkSpec
@@ -100,9 +100,10 @@ Task = Union[BatchTask, MemoryChunkTask, SubImageTask]
 class MemoryChunkResult:
     """Output of processing one memory_chunk."""
     file_index:  int
-    child_id:   Optional[str]
-    chunk_rows: Dict[str, dict]   # proc.NAME → raw run_chunk output (MEMORY procs)
-    leaf_rows:  List[dict]        # one merged dict per leaf block (LEAF procs)
+    child_id:    Optional[str]
+    chunk_rows:  Dict[str, dict]   # proc.NAME → raw run_chunk output (MEMORY procs)
+    leaf_rows:   List[dict]        # one merged dict per leaf block (LEAF procs)
+    image_meta:  Dict[str, Any]    # loader-provided image metadata, merged into all obs rows
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -116,7 +117,8 @@ def _resolve_leaf_block_shape(
     """Return the effective per-dim block size for every dim in dim_order.
 
     Default: X and Y → -1 (never split); all other dims → 1.
-    Values from user_spec override the defaults for any named dim.
+    These defaults reflect the conventional 2-D image plane — override any
+    dim via user_spec (e.g. leaf_block_shape={'X': 256, 'Z': 1}).
     -1 means full extent; positive N means split into blocks of N.
     """
     _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
@@ -357,6 +359,41 @@ def _build_record(record: Record, data: Any, origin: Tuple[int, ...]) -> Record:
     return record_from(arr, meta, kind=record.kind)
 
 
+# Fields that are PP-internal per-chunk values, not image-level metadata.
+# Excluded from image_meta so they don't overwrite PP-computed per-row fields.
+_IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
+
+
+def _extract_image_meta(record: Record) -> Dict[str, Any]:
+    """Collect image-level metadata from a fully-loaded (un-chunked) record.
+
+    Starts with all loader-provided fields in record.meta, drops PP-internal
+    per-chunk fields (shape, num_pixels) and dim_* coordinate keys, then
+    adds/overrides the canonical image-level fields:
+      dim_order — dimension order string (e.g. "SCZYX")
+      dtype     — canonical numpy dtype string (e.g. "uint16")
+      ndim      — number of dimensions
+      *_size    — full image extent per dim (e.g. S_size=3, Y_size=512)
+
+    Any additional loader-provided fields in record.meta (e.g. pixel_size_X,
+    channel_names) are included as-is.  The result is merged into every obs
+    row for this record so that image metadata is available at all obs_levels.
+
+    For container files (LMDB, multi-series OME-TIFF), call this once per
+    sub-image record so that each sub-image gets its own correct metadata.
+    """
+    meta: Dict[str, Any] = {
+        k: v for k, v in record.meta.items()
+        if not k.startswith("dim_") and k not in _IMAGE_META_SKIP
+    }
+    meta["dim_order"] = record.dim_order                  # already a clean string
+    meta["dtype"]     = str(np.dtype(record.data.dtype))  # canonical form, e.g. "uint16"
+    meta["ndim"]      = len(record.dim_order)
+    for i, d in enumerate(record.dim_order):
+        meta[f"{d}_size"] = int(record.data.shape[i])
+    return meta
+
+
 def _process_memory_chunk(
     mem_record:  Record,
     file_index:  int,
@@ -364,6 +401,7 @@ def _process_memory_chunk(
     processors:  List[Any],
     config:      ProcessingConfig,
     file_path:   str,
+    image_meta:  Dict[str, Any],
 ) -> MemoryChunkResult:
     """Run all processors on one materialised memory chunk; return a MemoryChunkResult."""
     arr        = mem_record.data
@@ -409,7 +447,11 @@ def _process_memory_chunk(
             _stamp_coordinates_to_row(leaf_row, dim_order, leaf_global_origin, leaf_arr.shape)
             leaf_rows.append(leaf_row)
 
-    return MemoryChunkResult(file_index=file_index, child_id=child_id, chunk_rows=chunk_rows, leaf_rows=leaf_rows)
+    return MemoryChunkResult(
+        file_index=file_index, child_id=child_id,
+        chunk_rows=chunk_rows, leaf_rows=leaf_rows,
+        image_meta=image_meta,
+    )
 
 
 def _execute_batch_task(
@@ -422,9 +464,11 @@ def _execute_batch_task(
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
         record     = loader.load(Path(idxed_path.file_path))
+        image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
         results.append(
-            _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config, idxed_path.file_path)
+            _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config,
+                                  idxed_path.file_path, image_meta=image_meta)
         )
     return results
 
@@ -435,10 +479,14 @@ def _execute_memory_chunk_task(
     processors: List[Any],
     config:     ProcessingConfig,
 ) -> List[MemoryChunkResult]:
-    """Load the spatial sub-region defined by task.spec and process it."""
+    """Load the sub-region defined by task.spec and process it."""
     record     = loader.load(Path(task.file_path))
+    # Extract image_meta from the full record BEFORE slicing — record.data.shape
+    # here is the full image shape; task.spec.image_shape is the same value.
+    image_meta = _extract_image_meta(record)
     mem_record = _build_record(record, record.data[task.spec.slices], task.spec.origin)
-    return [_process_memory_chunk(mem_record, task.file_index, None, processors, config, task.file_path)]
+    return [_process_memory_chunk(mem_record, task.file_index, None, processors, config,
+                                  task.file_path, image_meta=image_meta)]
 
 
 def _execute_sub_image_task(
@@ -451,9 +499,12 @@ def _execute_sub_image_task(
     results: List[MemoryChunkResult] = []
     start, stop = task.image_slice
     for child_id, record in loader.load_range(Path(task.file_path), start, stop):
+        # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
+        image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
         results.append(
-            _process_memory_chunk(mem_record, task.file_index, child_id, processors, config, task.file_path)
+            _process_memory_chunk(mem_record, task.file_index, child_id, processors, config,
+                                  task.file_path, image_meta=image_meta)
         )
     return results
 
@@ -473,7 +524,13 @@ def _rollup(
                    leaf metrics AND chunk processor columns (e.g. thumbnail).
       obs_level=1+ per-dim rows (per-channel, per-Z, per-T, …) from leaf
                    aggregation only.
-    Power-set over non-spatial dims; degenerate axes (size=1) skipped.
+    Power-set over non-degenerate (varying) dims.
+
+    Every returned row is augmented with image_meta (loader-provided metadata:
+    dim_order, dtype, *_size, pixel_size_*, channel_names, …) so it is
+    available at all obs_levels.  image_meta values take priority over
+    leaf-block-stamped *_size (which reflect the leaf block size, not the full
+    image), so callers always see the full-image extents.
     """
     all_leaf_rows = [row for cr in chunk_results for row in cr.leaf_rows]
 
@@ -496,6 +553,7 @@ def _rollup(
         if len({row.get(d) for row in all_leaf_rows}) > 1
     ]
     n = len(active_dims)
+    active_dim_set = set(active_dims)
 
     obs_rows: List[dict] = []
 
@@ -537,9 +595,25 @@ def _rollup(
 
     if n > 0:
         for row in all_leaf_rows:
-            obs_rows.append({**row, "obs_level": n})
+            # Strip degenerate (non-varying) dim coordinates from leaf rows.
+            # Dims not in active_dims have a single constant value (e.g. dim_x=0
+            # when X/Y are full-extent leaves).  Leaving them as 0 instead of
+            # null breaks the viewer's obs_level-based per-dim queries, which
+            # use `dim_x IS NULL` to identify pre-aggregated rows, and creates
+            # spurious single-slice entries in the dim-filter dropdowns.
+            filtered = {
+                k: v for k, v in row.items()
+                if not k.startswith("dim_") or k in active_dim_set
+            }
+            obs_rows.append({**filtered, "obs_level": n})
 
-    return obs_rows
+    # Merge image-level metadata into every obs row.
+    # {**row, **image_meta} lets image_meta override leaf-stamped *_size values
+    # (leaf blocks stamp S_size=1 per block; image_meta carries the full count).
+    # image_meta never contains dim_* coords, num_pixels, or obs_level, so
+    # all PP-computed per-row fields survive unchanged.
+    image_meta: Dict[str, Any] = chunk_results[0].image_meta if chunk_results else {}
+    return [{**row, **image_meta} for row in obs_rows]
 
 
 def _join_file_metadata(
@@ -714,6 +788,16 @@ def _coordinate_pipeline(
     future_to_task: Dict[Any, Task] = {}
     completed_records = 0
 
+    # Scatter the loader and processors to all workers once so they are not
+    # re-serialised with every task submission.  broadcast=True sends the data
+    # to every worker process upfront; Dask resolves each Future to the actual
+    # object on the worker side when the task runs.
+    # Note: client.scatter(list) scatters each element individually, so we wrap
+    # processors in a single-element list and unpack with [0] to scatter the
+    # whole list as one object.
+    loader_ref     = client.scatter(loader,        broadcast=True)
+    processors_ref = client.scatter([processors],  broadcast=True)[0]
+
     _executor_for: Dict[type, Any] = {
         BatchTask:       _execute_batch_task,
         MemoryChunkTask: _execute_memory_chunk_task,
@@ -721,7 +805,7 @@ def _coordinate_pipeline(
     }
 
     def _submit(t: Task) -> Any:
-        f = client.submit(_executor_for[type(t)], t, loader, processors, config, pure=False)
+        f = client.submit(_executor_for[type(t)], t, loader_ref, processors_ref, config, pure=False)
         future_to_task[f] = t
         return f
 
