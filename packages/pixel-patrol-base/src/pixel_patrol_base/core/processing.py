@@ -42,6 +42,7 @@ import numpy as np
 import polars as pl
 from dask.distributed import Client, LocalCluster, as_completed, get_client
 
+from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import _discover_files
 from pixel_patrol_base.core.processing_config import ProcessingConfig
@@ -666,7 +667,7 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
     # Drop all-null columns
     df = df.select([c for c in df.columns if df[c].null_count() < len(df)])
 
-    # Dtype shrink / downcast
+    # Dtype shrink / downcast; fixed-size list promotion for known fixed-width columns.
     casts = []
     for col in df.columns:
         dtype = df.schema[col]
@@ -676,6 +677,8 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
                 casts.append(pl.col(col).cast(new_dtype))
         elif dtype == pl.Float64:
             casts.append(pl.col(col).cast(pl.Float32))
+        elif col == "histogram_counts" and isinstance(dtype, pl.List):
+            casts.append(pl.col(col).list.to_array(HISTOGRAM_BINS))
     if casts:
         df = df.with_columns(casts)
 
