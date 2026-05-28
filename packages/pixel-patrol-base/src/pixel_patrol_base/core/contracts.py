@@ -47,6 +47,7 @@ class PixelPatrolLoader(Protocol):
     OUTPUT_SCHEMA: Dict[str, Any]
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]]
     FOLDER_EXTENSIONS: Set[str]
+    CONTAINER_EXTENSIONS: Set[str]  # extensions that may have n_images > 1; always read_header
 
     def is_folder_supported(self, path: Path) -> bool: ...
 

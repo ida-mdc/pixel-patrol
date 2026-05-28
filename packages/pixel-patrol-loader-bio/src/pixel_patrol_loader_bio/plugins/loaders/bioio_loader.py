@@ -115,7 +115,8 @@ class BioIoLoader:
         (r"^[A-Za-z]_size$", int),
     ]
 
-    FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
+    FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
+    CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff"}
 
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)

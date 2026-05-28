@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
-from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART
+from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_FILES_PER_TASK
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
@@ -41,8 +41,9 @@ class ProcessingConfig:
     max_workers: Optional[int] = None  # None → LocalCluster auto-detects CPU count
 
     # ── Task planning ────────────────────────────────────────────────────────
-    mb_per_task:       float                   = 512.0
-    leaf_block_shape:  Optional[Dict[str, int]] = None
+    mb_per_task:          float                   = 512.0
+    max_files_per_task:   int                     = DEFAULT_MAX_FILES_PER_TASK
+    leaf_block_shape:     Optional[Dict[str, int]] = None
 
     # ── Output ───────────────────────────────────────────────────────────────
     rows_per_part:        int            = DEFAULT_ROWS_PER_PART
@@ -61,6 +62,8 @@ class ProcessingConfig:
             raise ValueError("max_workers must be a positive integer or None.")
         if self.mb_per_task <= 0:
             raise ValueError("mb_per_task must be positive.")
+        if self.max_files_per_task < 1:
+            raise ValueError("max_files_per_task must be a positive integer.")
         if self.leaf_block_shape is not None:
             for dim, sz in self.leaf_block_shape.items():
                 if sz != -1 and sz < 1:
