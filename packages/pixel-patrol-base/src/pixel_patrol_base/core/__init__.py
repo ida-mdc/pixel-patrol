@@ -12,8 +12,14 @@ import dask
 # This is a basic setup; a more advanced application might allow custom handlers
 # and different levels for different modules.
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
 )
+
+# Suppress chatty third-party loggers that pollute the user-facing output.
+for _noisy in ("numexpr", "numexpr.utils", "distributed", "asyncio", "tornado"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 logger.debug("Pixel Patrol package initialized.")

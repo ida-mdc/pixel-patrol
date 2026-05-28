@@ -53,14 +53,14 @@ def project_with_loader(tmp_path: Path, stub_loader: _StubLoader) -> Project:
 # --- "all" ---
 
 def test_all_no_loader_returns_all_string(caplog):
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         result = _resolve_extensions("all", loader=None)
     assert result == "all"
     assert "All file extensions are selected" in caplog.text
 
 
 def test_all_with_loader_returns_supported_extensions(stub_loader, caplog):
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         result = _resolve_extensions("all", loader=stub_loader)
     assert result == stub_loader.SUPPORTED_EXTENSIONS
     assert "Using loader-supported extensions" in caplog.text
@@ -78,7 +78,7 @@ def test_all_case_insensitive_with_loader(stub_loader):
 # --- set, no loader ---
 
 def test_set_no_loader_returns_lowercased(caplog):
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         result = _resolve_extensions({"PNG", "JPG"}, loader=None)
     assert result == {"png", "jpg"}
     assert "File extensions selected" in caplog.text
