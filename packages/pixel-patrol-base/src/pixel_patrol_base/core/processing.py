@@ -764,15 +764,28 @@ class _ResultsWriter:
         self._buffer_rows = 0
         self._part_counter += 1
 
-    def finalize(self) -> pl.DataFrame:
-        """Flush any remaining buffer, combine all parts, and post-process."""
+    def finalize(self) -> Optional[pl.DataFrame]:
+        """Flush remaining buffer and signal what to do next.
+
+        Returns:
+          - None          if parts were written to disk (caller must call
+                          save_parquet_from_parts to stream-merge them).
+          - pl.DataFrame  if everything is in-memory (parts_dir=None path),
+                          with _post_process already applied.
+          - empty DF      if nothing was processed at all.
+
+        The previous collect()-all-parts path is intentionally removed: for
+        datasets large enough to spill to parts, loading all parts into a single
+        DataFrame causes OOM.  See save_parquet_from_parts for the streaming path.
+        """
         self.flush()
         if not self._part_paths and not self._buffer:
             return pl.DataFrame()
         if self._part_paths:
-            combined = pl.concat([pl.scan_parquet(p) for p in self._part_paths], how="diagonal_relaxed").collect()
-        else:
-            combined = pl.concat(self._buffer, how="diagonal_relaxed")
+            # Data is on disk — do not collect; caller streams from parts_dir.
+            return None
+        # In-memory path (parts_dir=None, small dataset).
+        combined = pl.concat(self._buffer, how="diagonal_relaxed")
         return _post_process(combined)
 
 
@@ -869,7 +882,181 @@ def _coordinate_pipeline(
                 _handle_record([result], result.file_index, result.child_id)
 
     result_df = writer.finalize()
+    if result_df is None:
+        return None  # parts on disk; caller uses save_parquet_from_parts
     return result_df if len(result_df) > 0 else None
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Streaming parquet writer  — used when parts were spilled to disk
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _null_columns_from_stats(parts: List[Path]) -> Set[str]:
+    """Return column names that are all-null across every part, using parquet statistics.
+
+    Reads only file metadata (no row data).  Columns whose statistics are absent
+    are conservatively treated as non-null (kept).
+    """
+    import pyarrow.parquet as pq
+    null_count: Dict[str, int] = {}
+    row_count:  Dict[str, int] = {}
+    for p in parts:
+        try:
+            meta = pq.read_metadata(p)
+        except Exception:
+            return set()
+        for rg_i in range(meta.num_row_groups):
+            rg      = meta.row_group(rg_i)
+            n_rows  = rg.num_rows
+            for col_i in range(rg.num_columns):
+                col_meta = rg.column(col_i)
+                name     = col_meta.path_in_schema
+                stats    = col_meta.statistics
+                if stats is not None and stats.null_count is not None:
+                    null_count[name] = null_count.get(name, 0) + stats.null_count
+                    row_count[name]  = row_count.get(name,  0) + n_rows
+    return {
+        name for name, nc in null_count.items()
+        if row_count.get(name, 0) > 0 and nc == row_count[name]
+    }
+
+
+def _int_shrink_from_stats(parts: List[Path], schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Determine safe integer type shrinkage using parquet min/max statistics.
+
+    Returns a mapping col_name → new_polars_dtype for columns where the global
+    min/max fits a narrower integer type.  Columns without statistics are skipped.
+    """
+    import pyarrow.parquet as pq
+    int_cols = {c for c, dt in schema.items() if dt.is_integer() and c not in _NO_SHRINK}
+    if not int_cols:
+        return {}
+    global_min: Dict[str, Any] = {}
+    global_max: Dict[str, Any] = {}
+    for p in parts:
+        try:
+            meta = pq.read_metadata(p)
+        except Exception:
+            return {}
+        for rg_i in range(meta.num_row_groups):
+            rg = meta.row_group(rg_i)
+            for col_i in range(rg.num_columns):
+                col_meta = rg.column(col_i)
+                name     = col_meta.path_in_schema
+                if name not in int_cols:
+                    continue
+                stats = col_meta.statistics
+                if stats is None or not stats.has_min_max:
+                    continue
+                try:
+                    mn, mx = stats.min, stats.max
+                    global_min[name] = min(global_min.get(name, mn), mn)
+                    global_max[name] = max(global_max.get(name, mx), mx)
+                except Exception:
+                    continue
+    result: Dict[str, Any] = {}
+    for name, cur_dt in schema.items():
+        if name not in global_min or not cur_dt.is_integer() or name in _NO_SHRINK:
+            continue
+        test     = pl.Series(name, [global_min[name], global_max[name]], dtype=cur_dt)
+        new_dt   = test.shrink_dtype().dtype
+        if new_dt != cur_dt:
+            result[name] = new_dt
+    return result
+
+
+def save_parquet_from_parts(
+    parts:        List[Path],
+    dest:         Path,
+    metadata:     Any,        # ProjectMetadata
+    row_group_size: Optional[int] = None,
+) -> int:
+    """Stream-merge part files into the final parquet, applying _post_process.
+
+    Reads one part at a time so peak memory is ~max(part_size) not sum(parts).
+    Handles diagonal_relaxed schema differences between parts: missing columns
+    are filled with nulls, type conflicts resolved by the unified schema.
+
+    Returns the total number of rows written.
+    """
+    import pyarrow.parquet as pq
+
+    if not parts:
+        return 0
+
+    # ── Step 1: unified schema via 0-row reads (reads only file metadata) ──
+    empty_frames = [pl.read_parquet(p, n_rows=0) for p in parts]
+    unified      = pl.concat(empty_frames, how="diagonal_relaxed")
+
+    # ── Step 2: drop all-null columns (from stats, no data read) ──
+    drop = _null_columns_from_stats(parts)
+    keep = [c for c in unified.columns if c not in drop]
+    unified = unified.select(keep)
+
+    # ── Step 3: build target schema with dtype transforms ──
+    int_targets = _int_shrink_from_stats(parts, dict(unified.schema))
+    casts: List[Any] = []
+    for col, dtype in unified.schema.items():
+        if col in int_targets:
+            casts.append(pl.col(col).cast(int_targets[col]))
+        elif dtype == pl.Float64:
+            casts.append(pl.col(col).cast(pl.Float32))
+        elif col == "histogram_counts" and isinstance(dtype, pl.List):
+            casts.append(pl.col(col).list.to_array(HISTOGRAM_BINS))
+    if casts:
+        unified = unified.with_columns(casts)
+
+    # ── Step 4: column reorder (same logic as _post_process) ──
+    dim_cols    = sorted(c for c in unified.columns if c.startswith("dim_"))
+    blob_cols   = [c for c in unified.columns if _is_blob_dtype(unified.schema[c])]
+    skip_set    = {"obs_level"} | set(dim_cols) | set(blob_cols)
+    scalar_cols = [c for c in unified.columns if c not in skip_set]
+    ordered     = [c for c in (["obs_level"] + dim_cols + scalar_cols + blob_cols)
+                   if c in unified.columns]
+    unified = unified.select(ordered)
+
+    # ── Step 5: build target Arrow schema with footer metadata ──
+    kv_meta      = metadata.to_parquet_meta()
+    arrow_kv     = {k.encode(): v.encode() for k, v in kv_meta.items()}
+    arrow_schema = unified.to_arrow().schema.with_metadata(arrow_kv)
+
+    # ── Step 6: stream-write one part at a time ──
+    rg_size    = row_group_size or 2048
+    total_rows = 0
+    with pq.ParquetWriter(dest, arrow_schema, compression="zstd") as writer:
+        for p in parts:
+            chunk = pl.read_parquet(p)
+
+            # child_id → type annotation (same as _post_process step 1)
+            if "child_id" in chunk.columns and "type" in chunk.columns:
+                chunk = chunk.with_columns(
+                    pl.when(pl.col("child_id").is_not_null())
+                    .then(pl.lit("sub_file"))
+                    .otherwise(pl.col("type"))
+                    .alias("type")
+                )
+
+            # Fill columns missing from this part with nulls
+            for col in ordered:
+                if col not in chunk.columns:
+                    chunk = chunk.with_columns(
+                        pl.lit(None).cast(unified.schema[col]).alias(col)
+                    )
+
+            # Select ordered columns only (drop any extras from this part)
+            chunk = chunk.select(ordered)
+
+            # Cast to target schema (handles type widening from diagonal_relaxed)
+            target_no_meta = arrow_schema.remove_metadata()
+            arrow_chunk = chunk.to_arrow().cast(target_no_meta)
+            writer.write_table(arrow_chunk, row_group_size=rg_size)
+            total_rows += len(chunk)
+
+    logger.info(
+        "save_parquet_from_parts: %d rows, %d parts → '%s'",
+        total_rows, len(parts), dest,
+    )
+    return total_rows
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

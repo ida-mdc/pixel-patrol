@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 import dataclasses
-from typing import List, Union, Iterable, Optional, Set, Callable
+from typing import Dict, List, Union, Iterable, Optional, Set, Callable
 import polars as pl
 
 from pixel_patrol_base.core import processing, validation
@@ -163,15 +163,38 @@ class Project:
             on_progress=progress_callback,
         )
 
-        if self.records_df is None or self.records_df.is_empty():
+        rgs_kwargs: Dict = {}
+        if config.parquet_row_group_size is not None:
+            rgs_kwargs["row_group_size"] = config.parquet_row_group_size
+
+        if self.records_df is None:
+            # Either nothing was processed, or parts were spilled to disk and
+            # finalize() intentionally skipped the collect to avoid OOM.
+            parts_on_disk = sorted(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else []
+            if not parts_on_disk:
+                logger.warning("Project Core: No files found/processed. records_df will be None.")
+                return self
+            # Streaming path: merge parts without loading all into memory.
+            logger.info(
+                "Project Core: streaming %d parts → '%s'",
+                len(parts_on_disk), self.output_path,
+            )
+            try:
+                processing.save_parquet_from_parts(
+                    parts_on_disk, self.output_path, self.metadata, **rgs_kwargs
+                )
+                processing.cleanup_chunks_dir(parts_dir)
+            except Exception as e:
+                logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
+            return self
+
+        if self.records_df.is_empty():
             logger.warning("Project Core: No files found/processed. records_df will be None.")
             self.records_df = None
             return self
 
+        # In-memory path (small dataset, parts_dir=None).
         try:
-            rgs_kwargs = {}
-            if config.parquet_row_group_size is not None:
-                rgs_kwargs["row_group_size"] = config.parquet_row_group_size
             save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
             processing.cleanup_chunks_dir(parts_dir)
         except Exception as e:
