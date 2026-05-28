@@ -261,6 +261,15 @@ def _plan_tasks(
       otherwise     → accumulate in current batch; flush when budget fills.
     """
     budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
+    _MAX_FILES_PER_BATCH = config.max_files_per_task
+    # Extensions that may hold multiple sub-images — always need read_header.
+    # Populated from the loader's CONTAINER_EXTENSIONS attribute; defaults to
+    # empty so loaders without the attribute behave as before.
+    _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
+    # Files clearly below this size threshold skip read_header() when their
+    # extension is not a container format — they cannot exceed the budget even
+    # at 8× compression and are guaranteed to be single images.
+    _small_file_threshold: int = budget_bytes // 8
     batch_files: List[_IndexedPath] = []
     batch_bytes: int = 0
 
@@ -273,7 +282,23 @@ def _plan_tasks(
         batch_bytes = 0
         return task
 
+    def _should_flush() -> bool:
+        return batch_bytes >= budget_bytes or len(batch_files) >= _MAX_FILES_PER_BATCH
+
     for file_path, file_meta in file_stream:
+        size_bytes: int = file_meta.get("size_bytes", 0)
+        ext: str = file_meta.get("file_extension", "")
+
+        if 0 < size_bytes < _small_file_threshold and ext not in _container_exts:
+            file_index = len(files_meta)
+            files_meta.append(file_meta)
+            batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
+            batch_bytes += size_bytes
+            if _should_flush():
+                if pending := _flush_batch():
+                    yield pending
+            continue
+
         try:
             info: FileInfo = loader.read_header(file_path)
         except Exception:
@@ -303,7 +328,7 @@ def _plan_tasks(
 
         batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
         batch_bytes += file_meta["size_bytes"]
-        if batch_bytes >= budget_bytes:
+        if _should_flush():
             if pending := _flush_batch():
                 yield pending
 
