@@ -28,17 +28,19 @@ class ProjectMetadata:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     base_dir: Optional[str] = None          # stored for future project reconstruction
     paths: List[str] = field(default_factory=list)  # stored for future project reconstruction
+    processing_stats: dict = field(default_factory=dict)  # timing/throughput from build_records_df
 
     def to_parquet_meta(self) -> dict[str, str]:
         """Serialise to parquet footer key-value pairs."""
         return {
-            "pp_project_name": self.project_name,
-            "pp_flavor":       self.flavor,
-            "pp_description":  self.description,
-            "pp_version":      self.version,
-            "pp_created_at":   self.created_at,
-            "pp_base_dir":     self.base_dir or "",
-            "pp_paths":        json.dumps(self.paths),
+            "pp_project_name":    self.project_name,
+            "pp_flavor":          self.flavor,
+            "pp_description":     self.description,
+            "pp_version":         self.version,
+            "pp_created_at":      self.created_at,
+            "pp_base_dir":        self.base_dir or "",
+            "pp_paths":           json.dumps(self.paths),
+            "pp_processing_stats": json.dumps(self.processing_stats),
         }
 
     @classmethod
@@ -50,6 +52,12 @@ class ProjectMetadata:
         except json.JSONDecodeError:
             paths = []
 
+        raw_stats = meta.get("pp_processing_stats", "{}")
+        try:
+            processing_stats = json.loads(raw_stats)
+        except json.JSONDecodeError:
+            processing_stats = {}
+
         raw_base = meta.get("pp_base_dir", "")
 
         return cls(
@@ -60,6 +68,7 @@ class ProjectMetadata:
             created_at=meta.get("pp_created_at", ""),
             base_dir=raw_base if raw_base else None,
             paths=paths,
+            processing_stats=processing_stats,
         )
 
     def populate_from_project(self, project: "Project") -> "ProjectMetadata":  # type: ignore[name-defined]

@@ -154,7 +154,15 @@ class Project:
         elif config.processors_excluded:
             processors = [p for p in processors if p.NAME not in config.processors_excluded]
 
-        self.records_df = processing.build_records_df(
+        loader_name = self.loader.NAME if self.loader else "none"
+        proc_names  = ", ".join(p.NAME for p in processors) or "none"
+        paths_str   = ", ".join(str(p) for p in self.paths)
+        logger.info("Input:      %s", paths_str)
+        logger.info("Output:     %s", self.output_path)
+        logger.info("Loader:     %s", loader_name)
+        logger.info("Processors: %s", proc_names)
+
+        self.records_df, stats = processing.build_records_df(
             bases=self.paths,
             loader=self.loader,
             processors=processors,
@@ -166,6 +174,10 @@ class Project:
         rgs_kwargs: Dict = {}
         if config.parquet_row_group_size is not None:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
+
+        if stats:
+            self.metadata.processing_stats = stats
+            _log_processing_summary(self.name, stats)
 
         if self.records_df is None:
             # Either nothing was processed, or parts were spilled to disk and
@@ -223,6 +235,31 @@ class Project:
 
     def get_output_path(self) -> Path:
         return self.output_path
+
+
+def _log_processing_summary(project_name: str, stats: dict) -> None:
+    wall_s  = stats.get("wall_s", 0.0)
+    n_files = stats.get("n_files", 0)
+    n_tasks = stats.get("n_tasks", 0)
+    n_w     = stats.get("n_workers", 0)
+    load_s  = stats.get("load_cpu_s", 0.0)
+    proc_s  = {k[5:]: v for k, v in stats.items() if k.startswith("proc_")}
+
+    def _fmt_s(s: float) -> str:
+        if s < 60:
+            return f"{s:.1f} s"
+        m, sec = divmod(int(s), 60)
+        return f"{m}m {sec:02d}s" if m < 60 else f"{m // 60}h {m % 60:02d}m"
+
+    throughput = n_files / wall_s if wall_s > 0 else 0.0
+    logger.info("Done:       %d files in %s  ·  %.1f files/s", n_files, _fmt_s(wall_s), throughput)
+
+    total_cpu = load_s + sum(proc_s.values())
+    logger.debug("processing stats: wall=%s cpu=%s tasks=%d workers=%d",
+                 _fmt_s(wall_s), _fmt_s(total_cpu), n_tasks, n_w)
+    for stage, cpu_s in ([("loading", load_s)] + list(proc_s.items())):
+        logger.debug("  %-20s %s  (%.1f s/file)", stage, _fmt_s(cpu_s),
+                     cpu_s / n_files if n_files else 0)
 
 
 def _resolve_extensions(
