@@ -25,6 +25,7 @@ class MockEntry:
 class MockLoader:
     SUPPORTED_EXTENSIONS: Set[str] = set()
     FOLDER_EXTENSIONS:    Set[str] = set()
+    CONTAINER_EXTENSIONS: Set[str] = {"lmdb"}
 
     def __init__(self, entries: Dict[str, MockEntry]) -> None:
         self._entries = entries

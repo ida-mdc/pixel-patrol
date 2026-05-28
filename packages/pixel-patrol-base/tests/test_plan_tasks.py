@@ -123,7 +123,8 @@ def test_header_failure_skips_file():
     loader = MockLoader({"/mystery.npy": MockEntry((64, 64), np.float32, ("Y", "X"), fail=True)})
     config = ProcessingConfig(mb_per_task=0.1)
     with capture_warnings() as warnings:
-        tasks, fi = _run([("/mystery.npy", 10240)], loader, config)
+        # 20 KB > fast-path threshold (budget/8 = 12.8 KB) so read_header is called
+        tasks, fi = _run([("/mystery.npy", 20000)], loader, config)
     assert len(tasks) == 0
     assert len(fi) == 0
     assert any("skipping" in w for w in warnings)

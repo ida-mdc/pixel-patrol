@@ -77,15 +77,12 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         name = base_directory.name # Use the name of the base directory
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
 
-    click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
     my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
 
     if paths:
-        click.echo(f"Adding explicitly specified paths: {', '.join(paths)}. Resolution will be relative to '{base_directory}'")
+        click.echo(f"Adding paths: {', '.join(paths)} (relative to '{base_directory}')")
         add_paths(my_project, paths)
     else:
-        # If no paths, we want to add the base directory itself.
-        click.echo(f"No --paths specified. Processing all images in '{base_directory}'.")
         add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extensions) if file_extensions else "all"
