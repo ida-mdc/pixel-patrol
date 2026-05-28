@@ -30,8 +30,10 @@ import itertools
 import math
 import logging
 import shutil
+import signal
+import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any, Callable, Dict, Generator, Iterator, List,
@@ -41,6 +43,7 @@ from typing import (
 import numpy as np
 import polars as pl
 from dask.distributed import Client, LocalCluster, as_completed, get_client
+from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
@@ -105,6 +108,7 @@ class MemoryChunkResult:
     chunk_rows:  Dict[str, dict]   # proc.NAME → raw run_chunk output (MEMORY procs)
     leaf_rows:   List[dict]        # one merged dict per leaf block (LEAF procs)
     image_meta:  Dict[str, Any]    # loader-provided image metadata, merged into all obs rows
+    timing:      Dict[str, float]  = field(default_factory=dict)  # "load", "proc_<NAME>" → CPU-seconds
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -436,13 +440,16 @@ def _process_memory_chunk(
 
     # MEMORY pass
     chunk_rows: Dict[str, dict] = {}
+    timing: Dict[str, float] = {}
     for proc in processors:
         if getattr(proc, "CHUNK_KIND", None) != ChunkKind.MEMORY:
             continue
         if not is_record_matching_processor(mem_record, proc.INPUT):
             continue
         try:
+            _t = time.perf_counter()
             row = proc.run_chunk(mem_record)
+            timing[f"proc_{proc.NAME}"] = timing.get(f"proc_{proc.NAME}", 0.0) + (time.perf_counter() - _t)
         except Exception as exc:
             logger.warning("worker: %s raised on memory chunk of %s: %s", proc.NAME, file_path, exc)
             continue
@@ -463,7 +470,9 @@ def _process_memory_chunk(
         leaf_row: dict = {}
         for proc in leaf_procs:
             try:
+                _t = time.perf_counter()
                 row = proc.run_chunk(leaf_record)
+                timing[f"proc_{proc.NAME}"] = timing.get(f"proc_{proc.NAME}", 0.0) + (time.perf_counter() - _t)
             except Exception as exc:
                 logger.warning("worker: %s raised on leaf of %s: %s", proc.NAME, file_path, exc)
                 continue
@@ -476,7 +485,7 @@ def _process_memory_chunk(
     return MemoryChunkResult(
         file_index=file_index, child_id=child_id,
         chunk_rows=chunk_rows, leaf_rows=leaf_rows,
-        image_meta=image_meta,
+        image_meta=image_meta, timing=timing,
     )
 
 
@@ -489,16 +498,18 @@ def _execute_batch_task(
     """Process every file in the task as one complete memory chunk each."""
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
+        _t = time.perf_counter()
         record = loader.load(Path(idxed_path.file_path))
+        load_s = time.perf_counter() - _t
         if record is None:
             logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
             continue
         image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        results.append(
-            _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config,
-                                  idxed_path.file_path, image_meta=image_meta)
-        )
+        result = _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config,
+                                       idxed_path.file_path, image_meta=image_meta)
+        result.timing["load"] = result.timing.get("load", 0.0) + load_s
+        results.append(result)
     return results
 
 
@@ -509,7 +520,9 @@ def _execute_memory_chunk_task(
     config:     ProcessingConfig,
 ) -> List[MemoryChunkResult]:
     """Load the sub-region defined by task.spec and process it."""
+    _t = time.perf_counter()
     record = loader.load(Path(task.file_path))
+    load_s = time.perf_counter() - _t
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
         return []
@@ -517,8 +530,10 @@ def _execute_memory_chunk_task(
     # here is the full image shape; task.spec.image_shape is the same value.
     image_meta = _extract_image_meta(record)
     mem_record = _build_record(record, record.data[task.spec.slices], task.spec.origin)
-    return [_process_memory_chunk(mem_record, task.file_index, None, processors, config,
-                                  task.file_path, image_meta=image_meta)]
+    result = _process_memory_chunk(mem_record, task.file_index, None, processors, config,
+                                   task.file_path, image_meta=image_meta)
+    result.timing["load"] = result.timing.get("load", 0.0) + load_s
+    return [result]
 
 
 def _execute_sub_image_task(
@@ -538,10 +553,9 @@ def _execute_sub_image_task(
         # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
         image_meta = _extract_image_meta(record)
         mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        results.append(
-            _process_memory_chunk(mem_record, task.file_index, child_id, processors, config,
-                                  task.file_path, image_meta=image_meta)
-        )
+        result = _process_memory_chunk(mem_record, task.file_index, child_id, processors, config,
+                                       task.file_path, image_meta=image_meta)
+        results.append(result)
     return results
 
 
@@ -814,17 +828,22 @@ def _coordinate_pipeline(
     config:       ProcessingConfig,
     parts_dir:    Optional[Path],
     on_progress:  Optional[Callable[[int, int], None]],
-) -> Optional[pl.DataFrame]:
+    n_workers:    int = 1,
+    is_distributed: bool = False,
+) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Drive the full submit → gather → rollup → join → accumulate cycle.
 
     Maintains a MAX_PENDING_TASKS sliding window of Dask futures so workers
     stay busy while _plan_tasks is still generating tasks from the file stream.
+    Returns (result_df, stats_dict) where stats_dict carries timing and throughput data.
     """
     max_pending = 2 * sum(client.nthreads().values())
     writer      = _ResultsWriter(config.rows_per_part, parts_dir, config.parquet_row_group_size)
     assembler   = _RecordAssembler()
     future_to_task: Dict[Any, Task] = {}
     completed_records = 0
+    n_tasks_submitted = 0
+    all_timing: Dict[str, float] = {}
 
     # Scatter the loader and processors to all workers once so they are not
     # re-serialised with every task submission.  broadcast=True sends the data
@@ -843,9 +862,28 @@ def _coordinate_pipeline(
     }
 
     def _submit(t: Task) -> Any:
+        nonlocal n_tasks_submitted
         f = client.submit(_executor_for[type(t)], t, loader_ref, processors_ref, config, pure=False)
         future_to_task[f] = t
+        n_tasks_submitted += 1
         return f
+
+    pbar = tqdm(
+        unit=" records",
+        unit_scale=False,
+        desc="Processing",
+        disable=on_progress is not None,
+        dynamic_ncols=True,
+        bar_format="{l_bar}{bar}| {n_fmt}{unit} [{elapsed}, {rate_fmt}]",
+    )
+
+    def _update_pbar_postfix() -> None:
+        try:
+            import psutil
+            vm = psutil.virtual_memory()
+            pbar.set_postfix({"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}, refresh=False)
+        except Exception:
+            pass
 
     def _handle_record(
         chunk_results: List[MemoryChunkResult],
@@ -853,25 +891,37 @@ def _coordinate_pipeline(
         child_id:      Optional[str],
     ) -> None:
         nonlocal completed_records
+        for cr in chunk_results:
+            for k, v in cr.timing.items():
+                all_timing[k] = all_timing.get(k, 0.0) + v
         obs_rows = _rollup(chunk_results, processors)
         if obs_rows:
             writer.add(_join_file_metadata(obs_rows, files_meta[file_index], child_id))
         completed_records += 1
+        pbar.update(1)
+        _update_pbar_postfix()
         if on_progress:
             on_progress(completed_records, -1)
 
+    t_wall_start = time.perf_counter()
     task_iter       = iter(task_stream)
     initial_futures = [_submit(t) for t in itertools.islice(task_iter, max_pending)]
     if not initial_futures:
-        return None
+        pbar.close()
+        return None, {}
 
     ac = as_completed(initial_futures)
+    all_submitted = False
     for future in ac:
         task = future_to_task.pop(future)
 
         next_task = next(task_iter, None)
         if next_task is not None:
             ac.add(_submit(next_task))
+        elif not all_submitted:
+            all_submitted = True
+            pbar.total = len(files_meta)
+            pbar.refresh()
 
         try:
             results: List[MemoryChunkResult] = future.result()
@@ -893,8 +943,30 @@ def _coordinate_pipeline(
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
 
+    pbar.close()
+    wall_s = time.perf_counter() - t_wall_start
+
+    try:
+        worker_info = client.scheduler_info().get("workers", {})
+        n_workers_actual = len(worker_info)
+        worker_nodes = sorted({addr.split("//")[-1].split(":")[0] for addr in worker_info})
+    except Exception:
+        n_workers_actual = n_workers
+        worker_nodes = []
+
+    stats: Dict[str, Any] = {
+        "wall_s":        wall_s,
+        "n_files":       len(files_meta),
+        "n_tasks":       n_tasks_submitted,
+        "n_workers":     n_workers_actual,
+        "worker_nodes":  worker_nodes,
+        "is_distributed": is_distributed,
+        "load_cpu_s":    all_timing.get("load", 0.0),
+        **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
+    }
+
     result_df = writer.finalize()
-    return result_df if len(result_df) > 0 else None
+    return (result_df if len(result_df) > 0 else None), stats
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -904,8 +976,8 @@ def _coordinate_pipeline(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @contextmanager
-def _get_or_create_client(config: ProcessingConfig) -> Generator:
-    """Yield an active Dask distributed client.
+def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool], None, None]:
+    """Yield (client, is_distributed) where is_distributed=True for pre-existing clusters.
 
     Reuses an existing client if one is connected; otherwise spins up a temporary
     LocalCluster with config.max_workers workers and shuts it down on context exit.
@@ -913,13 +985,18 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator:
     try:
         client = get_client()
         logger.debug("_get_or_create_client: reusing existing client %s", client.scheduler_info()["address"])
-        yield client
+        yield client, True
     except ValueError:
         logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", config.max_workers)
+        # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
+        # print tracebacks when the user presses Ctrl+C.  The parent restores its
+        # own handler immediately after the cluster is started.
+        _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         cluster = LocalCluster(n_workers=config.max_workers, threads_per_worker=1, processes=True)
+        signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         try:
-            yield client
+            yield client, False
         finally:
             client.close()
             cluster.close()
@@ -933,7 +1010,7 @@ def _collect_file_metadata_only(
     bases:       List[Path],
     config:      ProcessingConfig,
     on_progress: Optional[Callable[[int, int], None]],
-) -> Optional[pl.DataFrame]:
+) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """No-loader mode: discover files and return their filesystem metadata only.
 
     Bypasses Dask entirely.  Each discovered file produces one row containing
@@ -942,16 +1019,24 @@ def _collect_file_metadata_only(
     The result goes through the same _post_process step as a normal run so
     column ordering, dtype shrinking, and the obs_level column are consistent.
     """
+    t0 = time.perf_counter()
     rows: List[dict] = []
+    pbar = tqdm(unit=" files", unit_scale=False, desc="Scanning",
+                disable=on_progress is not None, dynamic_ncols=True,
+                bar_format="{l_bar}{bar}| {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
     for _, file_meta in _discover_files(bases, config.selected_file_extensions):
         rows.append({"obs_level": 0, **file_meta})
+        pbar.update(1)
         if on_progress:
             on_progress(len(rows), -1)
+    pbar.close()
 
+    stats: Dict[str, Any] = {"wall_s": time.perf_counter() - t0, "n_files": len(rows),
+                              "n_tasks": 0, "n_workers": 0, "is_distributed": False}
     if not rows:
-        return None
+        return None, stats
 
-    return _post_process(pl.from_dicts(rows))
+    return _post_process(pl.from_dicts(rows)), stats
 
 
 def build_records_df(
@@ -961,8 +1046,8 @@ def build_records_df(
     config:       Optional[ProcessingConfig] = None,
     parts_dir:    Optional[Path] = None,
     on_progress:  Optional[Callable[[int, int], None]] = None,
-) -> Optional[pl.DataFrame]:
-    """Scan files, distribute processing across Dask workers, return records_df.
+) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
+    """Scan files, distribute processing across Dask workers, return (records_df, stats).
 
     When loader is None, no pixel data is loaded and no processors run —
     only filesystem metadata (path, name, size_bytes, …) is collected.
@@ -985,7 +1070,8 @@ def build_records_df(
         on_progress: Optional callback(done: int, total: int) called per completed record.
                      total is -1 until the full record count is known.
 
-    Returns records_df, or None if no files are found or processed.
+    Returns (records_df, stats_dict). records_df is None if no files found.
+    stats_dict always contains wall_s, n_files, n_tasks, n_workers, load_cpu_s, proc_* keys.
 
     # TODO: processors_included / processors_excluded are handled by the caller
     #       (project.py); build_records_df receives the already-filtered list.
@@ -995,7 +1081,8 @@ def build_records_df(
     if loader is None:
         return _collect_file_metadata_only(bases, cfg, on_progress)
 
-    with _get_or_create_client(cfg) as client:
+    with _get_or_create_client(cfg) as (client, is_distributed):
+        n_workers = sum(client.nthreads().values())
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
@@ -1013,6 +1100,8 @@ def build_records_df(
             config=cfg,
             parts_dir=parts_dir,
             on_progress=on_progress,
+            n_workers=n_workers,
+            is_distributed=is_distributed,
         )
 
 
