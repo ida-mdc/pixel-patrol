@@ -106,20 +106,22 @@ def _aggregate_histograms(rows: List[Dict]) -> Any:
         return None
     g_min, g_max = np.nanmin(h_mins), np.nanmax(h_maxs)
     if g_min == g_max:
-        res = np.zeros(HISTOGRAM_BINS); res[0] = sum(np.sum(c) for c in h_counts); return res
-    if all(np.isclose(m, g_min, atol=1e-9) for m in h_mins) and \
-       all(np.isclose(m, g_max, atol=1e-9) for m in h_maxs):
-        return np.sum(np.stack([np.asarray(c, dtype=np.float64) for c in h_counts], axis=0), axis=0)
+        res = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
+        res[0] = sum(int(np.sum(c)) for c in h_counts)
+        return res
+    if all(np.isclose(m, g_min, rtol=1e-9, atol=1e-9) for m in h_mins) and \
+       all(np.isclose(m, g_max, rtol=1e-9, atol=1e-9) for m in h_maxs):
+        return np.sum(np.stack([np.asarray(c, dtype=np.int64) for c in h_counts], axis=0), axis=0)
     target_bins = np.linspace(g_min, g_max, HISTOGRAM_BINS + 1)
-    combined = np.zeros(HISTOGRAM_BINS)
+    combined = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
     for counts, s_min, s_max in zip(h_counts, h_mins, h_maxs):
         if s_min == s_max:
             idx = np.clip(np.searchsorted(target_bins, s_min) - 1, 0, HISTOGRAM_BINS - 1)
-            combined[idx] += np.sum(counts); continue
+            combined[idx] += int(np.sum(counts))
+            continue
         src_centers = np.linspace(s_min, s_max, len(counts), endpoint=False) + (s_max - s_min) / len(counts) / 2
         tgt = np.clip(np.searchsorted(target_bins, src_centers) - 1, 0, HISTOGRAM_BINS - 1)
-        for i, count in enumerate(counts):
-            combined[tgt[i]] += count
+        np.add.at(combined, tgt, np.asarray(counts, dtype=np.int64))
     return combined
 
 
