@@ -166,7 +166,8 @@ class LmdbLoader:
         (r"^[A-Za-z]+_size$", int),
     ]
 
-    FOLDER_EXTENSIONS: Set[str] = {"lmdb"}
+    FOLDER_EXTENSIONS:    Set[str] = {"lmdb"}
+    CONTAINER_EXTENSIONS: Set[str] = {"lmdb", "mdb"}
 
     @staticmethod
     def is_folder_supported(path: Path) -> bool:
