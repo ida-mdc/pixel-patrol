@@ -5,6 +5,7 @@ Reads images stored in LMDB databases using the AqQua Dataset format
 
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -48,6 +49,7 @@ def _uncompress_blosc2(raw_bytes: bytes) -> blosc2.NDArray:
     return blosc2.ndarray_from_cframe(raw_bytes, True)
 
 
+@lru_cache(maxsize=16)
 def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
     """Load the matching meta parquet sidecar for an LMDB file.
 
@@ -56,6 +58,9 @@ def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
 
     Returns:
         Dict mapping image-uuid -> flat metadata dict (excluding image-uuid itself).
+
+    Result is cached per worker process (lru_cache), so each LMDB file's parquet
+    is read from disk only once per worker, not once per load_range() call.
     """
     match = re.search(r"-(\d+)\.lmdb$", lmdb_path.name)
     if not match:
@@ -89,26 +94,20 @@ def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
     return result
 
 
-def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
-    """Build a flat metadata dict from a blosc2 NDArray.
-
-    The blosc2 array carries a ``.meta`` mapping with dataset-specific
-    fields. We pull everything from ``.meta`` and add shape/dtype info
-    derived from the array itself.
-    """
+def _extract_blosc2_user_meta(array: blosc2.NDArray) -> Dict[str, Any]:
+    """Extract the blosc2 user-metadata fields (no numpy conversion needed)."""
     metadata: Dict[str, Any] = {}
-
-    # ---- blosc2 user metadata ----
     if hasattr(array, "meta") and array.meta is not None:
         for key, value in dict(array.meta).items():
             if key in SKIP_KEYS:
                 continue
-
             metadata[str(key)] = value if isinstance(value, (str, int, float, bool, list)) else str(value)
+    return metadata
 
 
-    # ---- array-derived fields ----
-    np_arr = np.asarray(array)
+def _extract_array_meta(np_arr: np.ndarray) -> Dict[str, Any]:
+    """Extract shape/dtype/dim_order metadata from an already-converted numpy array."""
+    metadata: Dict[str, Any] = {}
     metadata["shape"] = list(np_arr.shape)
     metadata["ndim"] = int(np_arr.ndim)
     metadata["num_pixels"] = int(np_arr.size)
@@ -127,11 +126,21 @@ def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
         metadata["X_size"] = int(w)
         metadata["C_size"] = int(c)
     else:
-        metadata["dim_order"] = "".join(
-            f"D{i}" for i in range(np_arr.ndim)
-        )
+        metadata["dim_order"] = "".join(f"D{i}" for i in range(np_arr.ndim))
 
     return metadata
+
+
+def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
+    """Build a flat metadata dict from a blosc2 NDArray.
+
+    Combines blosc2 user metadata with shape/dtype info.
+    Used by read_header() and load() where a single conversion is fine.
+    For load_range(), use _extract_blosc2_user_meta() + _extract_array_meta()
+    directly to avoid converting to numpy twice.
+    """
+    np_arr = np.asarray(array)
+    return {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_arr)}
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +202,9 @@ class LmdbLoader:
                 array = _uncompress_blosc2(cursor.value())
         finally:
             env.close()
-        meta = _extract_metadata(array)
-        return record_from(np.asarray(array), meta, kind="intensity")
+        np_array = np.asarray(array)
+        meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
+        return record_from(np_array, meta, kind="intensity")
 
     @staticmethod
     def load_range(lmdb_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
@@ -215,12 +225,15 @@ class LmdbLoader:
                     child_id = str(int_key)
                     try:
                         array = _uncompress_blosc2(cursor.value())
-                        meta = _extract_metadata(array)
+                        # Convert to numpy once; reuse for both metadata extraction
+                        # and the Record payload — avoids decompressing blosc2 twice.
+                        np_array = np.asarray(array)
+                        meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
                         uuid = meta.get("image-uuid")
                         if uuid and str(uuid) in parquet_meta:
                             # blosc2 meta takes precedence on key conflicts
                             meta = {**parquet_meta[str(uuid)], **meta}
-                        yield child_id, record_from(np.asarray(array), meta, kind="intensity")
+                        yield child_id, record_from(np_array, meta, kind="intensity")
                     except Exception as e:
                         logger.exception(
                             "LmdbLoader: failed to read image key %s in '%s': %s",
