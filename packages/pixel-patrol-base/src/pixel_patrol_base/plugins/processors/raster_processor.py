@@ -79,6 +79,14 @@ def _pooled_std_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     return float(np.sqrt(max(0.0, (ns * (stds**2 + (means - mu)**2)).sum() / total)))
 
 
+def _integer_sum_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
+    """Integer-preserving sum — keeps count columns as int so polars schema stays consistent."""
+    vals = [r[spec.name] for r in rows if spec.name in r and r[spec.name] is not None]
+    if not vals:
+        return None
+    return int(sum(int(v) for v in vals))
+
+
 def _weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     """Pixel-count weighted mean."""
     num = den = 0.0
@@ -197,7 +205,7 @@ class BasicMetricsProcessor(RasterProcessor):
         RasterMetricSpec(name=MetricNames.MAX_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax)),
         RasterMetricSpec(name=MetricNames.MEAN_INTENSITY,     data_type=np.float32, aggregate_rows=_weighted_mean_agg),
         RasterMetricSpec(name=MetricNames.STD_INTENSITY,      data_type=np.float32, aggregate_rows=_pooled_std_agg),
-        RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_scalar_rows_agg(np.sum)),
+        RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
 
@@ -207,7 +215,7 @@ class HistogramProcessor(RasterProcessor):
     METRICS = (
         RasterMetricSpec(name=MetricNames.HISTOGRAM_MIN,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin)),
         RasterMetricSpec(name=MetricNames.HISTOGRAM_MAX,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax)),
-        RasterMetricSpec(name=MetricNames.HISTOGRAM_NAN_COUNT, data_type=np.uint64,  aggregate_rows=_scalar_rows_agg(np.sum)),
+        RasterMetricSpec(name=MetricNames.HISTOGRAM_NAN_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg),
         RasterMetricSpec(name=MetricNames.HISTOGRAM_COUNTS,    data_type=np.ndarray, aggregate_rows=lambda spec, rows: _aggregate_histograms(rows)),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
