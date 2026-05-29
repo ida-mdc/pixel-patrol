@@ -687,7 +687,10 @@ def _join_file_metadata(
     if child_id is not None:
         for row in rows:
             row["child_id"] = child_id
-    return pl.from_dicts(rows)
+    # Aggregate rows (obs_level < n) have None for dim_* columns that only become
+    # non-null in later per-dim or leaf rows.  Scan all rows so polars resolves
+    # the common supertype (nullable Int64) rather than locking in Null too early.
+    return pl.from_dicts(rows, infer_schema_length=len(rows))
 
 
 def _is_blob_dtype(dtype) -> bool:
