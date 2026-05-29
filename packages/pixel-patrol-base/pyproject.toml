@@ -16,6 +16,7 @@ dependencies = [
     "statsmodels>=0.14.4",
     "dask[distributed]>=2025.5.1",
     "duckdb>=1.2.0",
+    "psutil>=6.0.0",
     "tqdm>=4.67.1",
     "yaspin>=3.4.0",
 ]
