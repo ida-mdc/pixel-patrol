@@ -14,21 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcessingConfig:
-    """All parameters that govern a pipeline run.
-
-    Dask-specific fields vs. the original multiprocessing config:
-      mb_per_task       — on-disk MB budget per batch task; also the threshold above
-                          which a file is split into spatial memory-chunk tasks.
-      leaf_block_shape  — per-dim leaf block sizes used by leaf processors.
-                          Keys are dim names (e.g. "X", "Y", "Z", "C").
-                          Value -1 means "never split this dim" (full extent always).
-                          Positive N means "process in blocks of N along this dim".
-                          None → default: X=-1, Y=-1, all other dims=1.
-
-    Renamed vs. the old ProcessingConfig:
-      processing_max_workers → max_workers   (prefix was redundant)
-      records_flush_every_n  → rows_per_part (explicit about what it controls)
-    """
 
     # ── Processor selection ──────────────────────────────────────────────────
     processors_included: Set[str] = field(default_factory=set)
