@@ -1,4 +1,4 @@
-# Minimal Extension (Static Viewer)
+# Minimal Extension
 
 A complete, self-contained Pixel Patrol extension example.  It covers the full
 extension surface: a custom **loader**, a custom **processor**, and two custom
