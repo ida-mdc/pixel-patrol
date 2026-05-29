@@ -1,5 +1,4 @@
 import logging
-import os
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -148,8 +147,9 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         click.echo("\nCancelled.")
         raise SystemExit(1)
 
-    if Path(output).exists():
-        click.echo(f"Output saved to: '{output}'")
+    final_output = my_project.get_output_path()
+    if final_output and final_output.exists():
+        click.echo(f"Output saved to: '{final_output}'")
 
 
 @cli.command()
@@ -166,8 +166,7 @@ def launch(port: int):
     click.echo("Attempting to open dashboard in your default browser...")
 
     def _open_browser():
-        if not os.environ.get("WERKZEUG_RUN_MAIN"):
-            webbrowser.open_new_tab(dashboard_url)
+        webbrowser.open_new_tab(dashboard_url)
 
     Timer(1, _open_browser).start()
 

@@ -118,18 +118,13 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
     computing depth relative to `base` and normalizing extensions.
     """
     try:
-        stat_func = path.stat if not is_folder else lambda: None
-        st = stat_func() if not is_folder else None
+        st = path.stat() if not is_folder else None
     except Exception as e:
         logger.warning(f"Failed stat for {path}: {e}")
         return {}
 
     depth = len(path.parts) - len(base.parts)
 
-    # TODO: I guess we're missing imported_path_short and modification_month that were created in preprocess_files
-    # common_base = find_common_base(unique_folders) - should be added after
-    # pl.col("modification_date").dt.month().alias("modification_month"),
-    # pl.col("imported_path").str.replace(common_base, "", literal=True).alias("imported_path_short"),
     record: Dict[str, Any] = {
         "path": str(path),
         "name": path.name,
