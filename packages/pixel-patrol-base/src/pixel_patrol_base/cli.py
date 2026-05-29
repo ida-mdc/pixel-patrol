@@ -147,9 +147,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         click.echo("\nCancelled.")
         raise SystemExit(1)
 
-    final_output = my_project.get_output_path()
-    if final_output and final_output.exists():
-        click.echo(f"Output saved to: '{final_output}'")
+    if output_path.exists():
+        click.echo(f"Output saved to: '{output_path}'")
 
 
 @cli.command()
