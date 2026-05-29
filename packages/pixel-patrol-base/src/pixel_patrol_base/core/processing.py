@@ -4,9 +4,11 @@ Each file yields one record (one logical image → one set of obs rows).
 Container files (LMDB, multi-series OME-TIFF) yield one record per sub-image.
 Large files are split into memory chunks (sub-regions) processed in parallel.
 
-MEMORY processors receive the full memory chunk; their output goes to obs_level=0.
-LEAF processors run on leaf blocks within each memory chunk; _rollup aggregates
-their rows into obs_levels 0..n (power-set over non-degenerate dims).
+MEMORY processors receive one memory chunk at a time; when a file is split into
+multiple chunks they all run first, then results are assembled before obs_level=0 is written.
+LEAF processors run on every spatial leaf block within a chunk; _rollup aggregates
+their outputs into one row per unique combination of active dimensions (obs_level 0 = global,
+1 = per-Z, per-C, … n = per leaf block).
 
 CALL GRAPH
 ──────────
@@ -42,6 +44,8 @@ from typing import (
 
 import numpy as np
 import polars as pl
+import psutil
+import pyarrow.parquet as pq
 from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
@@ -51,9 +55,16 @@ from pixel_patrol_base.core.file_system import _discover_files
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
-from pixel_patrol_base.io.parquet_io import write_chunk
 
 logger = logging.getLogger(__name__)
+
+# Fields that are PP-internal per-chunk values, not image-level metadata.
+# Excluded from image_meta so they don't overwrite PP-computed per-row fields.
+_IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
+
+# Columns exempt from integer dtype shrinkage in _post_process.
+# size_bytes is a cumulative sum across many files and can exceed int32 range.
+_INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -343,7 +354,7 @@ def _plan_tasks(
                 continue
 
         batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
-        batch_bytes += file_meta["size_bytes"]
+        batch_bytes += file_meta.get("size_bytes", 0)
         if _should_flush():
             if pending := _flush_batch():
                 yield pending
@@ -391,9 +402,9 @@ def _iter_leaf_blocks(
 
 def _build_record(record: Record, data: Any, origin: Tuple[int, ...]) -> Record:
     """Build a new Record from a source record template, raw data, and a global origin."""
-    # Use synchronous scheduler to avoid routing zarr chunk reads through the
-    # distributed scheduler (which would submit one task per zarr chunk and
-    # produce huge graphs for arrays with many small chunks).
+    # If data is lazy (e.g. a zarr array), read it immediately in this worker process
+    # rather than letting Dask schedule it — otherwise Dask submits one sub-task per
+    # internal chunk and floods the cluster with thousands of tiny jobs.
     arr = data.compute(scheduler='synchronous') if hasattr(data, "compute") else np.asarray(data)
     meta = {
         **record.meta,
@@ -404,28 +415,17 @@ def _build_record(record: Record, data: Any, origin: Tuple[int, ...]) -> Record:
     return record_from(arr, meta, kind=record.kind)
 
 
-# Fields that are PP-internal per-chunk values, not image-level metadata.
-# Excluded from image_meta so they don't overwrite PP-computed per-row fields.
-_IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
-
-
 def _extract_image_meta(record: Record) -> Dict[str, Any]:
     """Collect image-level metadata from a fully-loaded (un-chunked) record.
 
     Starts with all loader-provided fields in record.meta, drops PP-internal
     per-chunk fields (shape, num_pixels) and dim_* coordinate keys, then
     adds/overrides the canonical image-level fields:
-      dim_order — dimension order string (e.g. "SCZYX")
-      dtype     — canonical numpy dtype string (e.g. "uint16")
-      ndim      — number of dimensions
-      *_size    — full image extent per dim (e.g. S_size=3, Y_size=512)
+    dim_order, dtype, ndim, *_size (full image extent per dim (e.g. S_size=3, Y_size=512))
+    Any additional loader-provided fields in record.meta are included as-is. 
+    Image metadata is available at all obs_levels.
 
-    Any additional loader-provided fields in record.meta (e.g. pixel_size_X,
-    channel_names) are included as-is.  The result is merged into every obs
-    row for this record so that image metadata is available at all obs_levels.
-
-    For container files (LMDB, multi-series OME-TIFF), call this once per
-    sub-image record so that each sub-image gets its own correct metadata.
+    For container files (LMDB, multi-series OME-TIFF), call this once per sub-image.
     """
     meta: Dict[str, Any] = {
         k: v for k, v in record.meta.items()
@@ -591,8 +591,7 @@ def _rollup(
                    aggregation only.
     Power-set over non-degenerate (varying) dims.
 
-    Every returned row is augmented with image_meta (loader-provided metadata:
-    dim_order, dtype, *_size, pixel_size_*, channel_names, …) so it is
+    Every returned row is augmented with image_meta so it is
     available at all obs_levels.  image_meta values take priority over
     leaf-block-stamped *_size (which reflect the leaf block size, not the full
     image), so callers always see the full-image extents.
@@ -701,9 +700,6 @@ def _is_blob_dtype(dtype) -> bool:
     return dtype == pl.Binary or isinstance(dtype, (pl.List, pl.Array))
 
 
-_NO_SHRINK = {"size_bytes"}  # protect from int shrink — sums across many files would overflow
-
-
 def _post_process(df: pl.DataFrame) -> pl.DataFrame:
     """Final cleanup applied once to the fully combined DataFrame.
 
@@ -728,7 +724,7 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
     casts = []
     for col in df.columns:
         dtype = df.schema[col]
-        if dtype.is_integer() and col not in _NO_SHRINK:
+        if dtype.is_integer() and col not in _INT_SHRINK_EXEMPT:
             new_dtype = df[col].shrink_dtype().dtype
             if new_dtype != dtype:
                 casts.append(pl.col(col).cast(new_dtype))
@@ -897,11 +893,13 @@ def _coordinate_pipeline(
 
     # Count memory-pressure pause events from Dask's distributed logger.
     class _PauseCounter(logging.Handler):
-        count = 0
+        def __init__(self) -> None:
+            super().__init__(logging.WARNING)
+            self.count = 0
         def emit(self, record: logging.LogRecord) -> None:
             if "Pausing worker" in record.getMessage():
-                _PauseCounter.count += 1
-    _pause_handler = _PauseCounter(logging.WARNING)
+                self.count += 1
+    _pause_handler = _PauseCounter()
     logging.getLogger("distributed.worker.memory").addHandler(_pause_handler)
 
     # Scatter the loader and processors to all workers once so they are not
@@ -948,12 +946,8 @@ def _coordinate_pipeline(
     )
 
     def _update_pbar_postfix() -> None:
-        try:
-            import psutil
-            vm = psutil.virtual_memory()
-            pbar.set_postfix({"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}, refresh=False)
-        except Exception:
-            pass
+        vm = psutil.virtual_memory()
+        pbar.set_postfix({"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}, refresh=False)
 
     def _handle_record(
         chunk_results: List[MemoryChunkResult],
@@ -1046,8 +1040,7 @@ def _coordinate_pipeline(
         worker_nodes = []
 
     try:
-        import psutil as _psutil
-        rss_by_worker = client.run(lambda: _psutil.Process().memory_info().rss)
+        rss_by_worker = client.run(lambda: psutil.Process().memory_info().rss)
         peak_worker_rss_mb = max(v / 1024 / 1024 for v in rss_by_worker.values()) if rss_by_worker else 0.0
     except Exception:
         peak_worker_rss_mb = 0.0
@@ -1081,7 +1074,6 @@ def _null_columns_from_stats(parts: List[Path]) -> Set[str]:
     Reads only file metadata (no row data).  Columns whose statistics are absent
     are conservatively treated as non-null (kept).
     """
-    import pyarrow.parquet as pq
     null_count: Dict[str, int] = {}
     row_count:  Dict[str, int] = {}
     for p in parts:
@@ -1111,8 +1103,7 @@ def _int_shrink_from_stats(parts: List[Path], schema: Dict[str, Any]) -> Dict[st
     Returns a mapping col_name → new_polars_dtype for columns where the global
     min/max fits a narrower integer type.  Columns without statistics are skipped.
     """
-    import pyarrow.parquet as pq
-    int_cols = {c for c, dt in schema.items() if dt.is_integer() and c not in _NO_SHRINK}
+    int_cols = {c for c, dt in schema.items() if dt.is_integer() and c not in _INT_SHRINK_EXEMPT}
     if not int_cols:
         return {}
     global_min: Dict[str, Any] = {}
@@ -1140,7 +1131,7 @@ def _int_shrink_from_stats(parts: List[Path], schema: Dict[str, Any]) -> Dict[st
                     continue
     result: Dict[str, Any] = {}
     for name, cur_dt in schema.items():
-        if name not in global_min or not cur_dt.is_integer() or name in _NO_SHRINK:
+        if name not in global_min or not cur_dt.is_integer() or name in _INT_SHRINK_EXEMPT:
             continue
         test     = pl.Series(name, [global_min[name], global_max[name]], dtype=cur_dt)
         new_dt   = test.shrink_dtype().dtype
@@ -1163,7 +1154,6 @@ def save_parquet_from_parts(
 
     Returns the total number of rows written.
     """
-    import pyarrow.parquet as pq
 
     if not parts:
         return 0
@@ -1245,8 +1235,6 @@ def save_parquet_from_parts(
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Cluster lifecycle
-# TODO: move to pixel_patrol_base.dask_utils once Dask pipeline is fully
-#       integrated — this is the only place that manages cluster lifecycle.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @contextmanager
@@ -1299,10 +1287,7 @@ def _collect_file_metadata_only(
     """No-loader mode: discover files and return their filesystem metadata only.
 
     Bypasses Dask entirely.  Each discovered file produces one row containing
-    the standard file metadata columns (path, name, type, parent, depth,
-    size_bytes).  No pixel data is loaded and no processors are run.
-    The result goes through the same _post_process step as a normal run so
-    column ordering, dtype shrinking, and the obs_level column are consistent.
+    the standard file metadata columns
     """
     t0 = time.perf_counter()
     rows: List[dict] = []
@@ -1316,8 +1301,18 @@ def _collect_file_metadata_only(
             on_progress(len(rows), -1)
     pbar.close()
 
-    stats: Dict[str, Any] = {"wall_s": time.perf_counter() - t0, "n_files": len(rows),
-                              "n_tasks": 0, "n_workers": 0, "is_distributed": False}
+    stats: Dict[str, Any] = {
+        "wall_s":                   time.perf_counter() - t0,
+        "n_files":                  len(rows),
+        "n_tasks":                  0,
+        "task_types":               {},
+        "n_workers":                0,
+        "worker_nodes":             [],
+        "is_distributed":           False,
+        "peak_worker_rss_mb":       0.0,
+        "n_memory_pressure_events": 0,
+        "load_cpu_s":               0.0,
+    }
     if not rows:
         return None, stats
 
@@ -1334,9 +1329,7 @@ def build_records_df(
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Scan files, distribute processing across Dask workers, return (records_df, stats).
 
-    When loader is None, no pixel data is loaded and no processors run —
-    only filesystem metadata (path, name, size_bytes, …) is collected.
-    This "inventory-only" mode bypasses Dask entirely and is fast.
+    When loader is None only filesystem metadata is collected.
 
     _discover_files, _plan_tasks, and the submit side of _coordinate_pipeline
     run concurrently via a streaming generator pipeline — workers receive their
@@ -1357,9 +1350,6 @@ def build_records_df(
 
     Returns (records_df, stats_dict). records_df is None if no files found.
     stats_dict always contains wall_s, n_files, n_tasks, n_workers, load_cpu_s, proc_* keys.
-
-    # TODO: processors_included / processors_excluded are handled by the caller
-    #       (project.py); build_records_df receives the already-filtered list.
     """
     cfg = config or ProcessingConfig()
 
