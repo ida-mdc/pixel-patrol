@@ -63,6 +63,11 @@ def cli():
               help='Connect to an existing Dask scheduler (e.g. tcp://host:8786).')
 @click.option('--mb-per-task', type=float, default=None, show_default=True,
               help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
+@click.option('--max-files-per-task', type=int, default=None, show_default=True,
+              help='Max files per batch task (default: 50). Lower values give more frequent progress on large flat datasets.')
+@click.option('--leaf-block-shape', 'leaf_block_shape', multiple=True,
+              help='Spatial chunk size per dim, e.g. --leaf-block-shape Z=1 --leaf-block-shape Y=256. '
+                   'Only relevant for large volumetric files (zarr, OME-TIFF).')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
               help='Flush intermediate results to disk every N rows (default: 2048).')
 @click.option('--log-file', is_flag=True, default=False,
@@ -75,6 +80,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               max_workers: int | None,
               scheduler: str | None,
               mb_per_task: float | None,
+              max_files_per_task: int | None,
+              leaf_block_shape: tuple[str, ...],
               rows_per_part: int | None,
               log_file: bool):
     """
@@ -122,6 +129,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         mb_per_task=mb_per_task,
+        max_files_per_task=max_files_per_task,
+        leaf_block_shape=_parse_leaf_block_shape(leaf_block_shape) if leaf_block_shape else None,
         rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
@@ -248,6 +257,20 @@ def build_viewer_html(output: Path):
         click.echo(f"Static viewer site written to: {out}")
     else:
         click.echo(f"Single-file viewer written to: {out}")
+
+
+def _parse_leaf_block_shape(items: tuple) -> dict:
+    """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means full extent."""
+    result = {}
+    for item in items:
+        if "=" not in item:
+            raise click.BadParameter(f"Expected format DIM=SIZE (e.g. Z=1), got: {item!r}")
+        k, v = item.split("=", 1)
+        try:
+            result[k.strip()] = int(v.strip())
+        except ValueError:
+            raise click.BadParameter(f"Size must be an integer, got: {v!r}")
+    return result
 
 
 def _parse_dims(dims: tuple) -> dict:
