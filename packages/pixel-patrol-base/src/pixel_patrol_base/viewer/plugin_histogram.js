@@ -4,11 +4,12 @@ function availabilityLine(withData, total, label) {
   return `${n.toLocaleString()} of ${tot.toLocaleString()} files (${pct}%) have '${label}' information.`;
 }
 
-const SAMPLE_N         = 2000;
-const MAX_FILE_OPTIONS = 500;
-const MODE_ID          = 'hist-mode-radio';
-const GROUP_SEL_ID     = 'hist-group-select';
-const FILE_SEL_ID      = 'hist-file-select';
+const DEFAULT_SAMPLES_PER_GROUP = 2000;
+const MAX_FILE_OPTIONS          = 500;
+const MODE_ID                   = 'hist-mode-radio';
+const GROUP_SEL_ID              = 'hist-group-select';
+const FILE_SEL_ID               = 'hist-file-select';
+const SAMPLE_INPUT_ID           = 'hist-sample-input';
 
 export default {
   id: 'histogram',
@@ -78,27 +79,42 @@ export default {
           </div>
         `;
       }
-  
+
+      controlsDiv.innerHTML += `
+        <div style="align-self:flex-end">
+          <label style="font-weight:600">
+            Max samples per group:
+            <input type="number" id="${SAMPLE_INPUT_ID}" value="${DEFAULT_SAMPLES_PER_GROUP}"
+                   min="50" step="100"
+                   style="width:90px;margin-left:8px;padding:2px 6px;border:1px solid #ccc;border-radius:4px">
+          </label>
+        </div>
+      `;
+
       container.appendChild(controlsDiv);
   
       const plotDiv = document.createElement('div');
       container.appendChild(plotDiv);
   
       const render = async () => {
-        const mode           = container.querySelector(`input[name="${MODE_ID}"]:checked`)?.value ?? 'shape';
-        const groupSelEl     = document.getElementById(GROUP_SEL_ID);
-        const fileSelEl      = document.getElementById(FILE_SEL_ID);
-        const selectedGroups = groupSelEl ? [...groupSelEl.selectedOptions].map(o => o.value).filter(Boolean) : [];
-        const selectedFile   = fileSelEl?.value ?? '';
+        const mode            = container.querySelector(`input[name="${MODE_ID}"]:checked`)?.value ?? 'shape';
+        const groupSelEl      = document.getElementById(GROUP_SEL_ID);
+        const fileSelEl       = document.getElementById(FILE_SEL_ID);
+        const sampleInputEl   = document.getElementById(SAMPLE_INPUT_ID);
+        const selectedGroups  = groupSelEl ? [...groupSelEl.selectedOptions].map(o => o.value).filter(Boolean) : [];
+        const selectedFile    = fileSelEl?.value ?? '';
+        const samplesPerGroup = Math.max(50, parseInt(sampleInputEl?.value ?? DEFAULT_SAMPLES_PER_GROUP, 10) || DEFAULT_SAMPLES_PER_GROUP);
         plotDiv.innerHTML = '';
-        await renderHistogram(plotDiv, ctx, { mode, selectedGroups, selectedFile, hasRange, hasNames });
+        await renderHistogram(plotDiv, ctx, { mode, selectedGroups, selectedFile, hasRange, hasNames, samplesPerGroup });
       };
-  
+
       container.querySelectorAll(`input[name="${MODE_ID}"]`).forEach(el => el.addEventListener('change', render));
       const groupSelEl = document.getElementById(GROUP_SEL_ID);
       if (groupSelEl) groupSelEl.addEventListener('change', render);
       const fileSelEl = document.getElementById(FILE_SEL_ID);
       if (fileSelEl) fileSelEl.addEventListener('change', render);
+      const sampleInputEl = document.getElementById(SAMPLE_INPUT_ID);
+      if (sampleInputEl) sampleInputEl.addEventListener('change', render);
   
       await render();
     
@@ -108,8 +124,8 @@ export default {
   },
 };
 
-async function renderHistogram(container, ctx, { mode, selectedGroups, selectedFile, hasRange }) {
-  const { q, sample, groupExpr: geFn } = ctx.sql;
+async function renderHistogram(container, ctx, { mode, selectedGroups, selectedFile, hasRange, samplesPerGroup }) {
+  const { q, groupExpr: geFn } = ctx.sql;
   const { append: appendPlot, plotlyLegendConfig } = ctx.plot;
   const { extractBinary } = ctx.data;
   const gcExpr   = geFn();
@@ -122,7 +138,12 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
     extraWhere += ` ${connector} ${q(ctx.state.groupCol)} IN (${list})`;
   }
 
-  const result    = await ctx.query(`SELECT ${gcExpr}, "histogram_counts"${rangeSel} FROM pp_data ${extraWhere} ${sample(SAMPLE_N)}`);
+  // Per-group reservoir sample: QUALIFY runs after SELECT so __group__ alias is visible.
+  const result    = await ctx.query(
+    `SELECT ${gcExpr}, "histogram_counts"${rangeSel}
+     FROM pp_data ${extraWhere}
+     QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= ${samplesPerGroup}`
+  );
   const arrowRows = result.toArray();
 
   if (!arrowRows.length) {
@@ -172,6 +193,17 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
         traces.unshift({ type: 'bar', name: `File: ${selectedFile.split('/').pop()}`, x: xs, y: ys, width: Array(nBins).fill(width), marker: { color: 'black' }, opacity: 0.3 });
       }
     }
+  }
+
+  const totalFetched = arrowRows.length;
+  const maxPossible  = samplesPerGroup * visibleGroups.length;
+  if (totalFetched < maxPossible) {
+    // All groups fit within the cap — no note needed (sampling had no effect)
+  } else {
+    const note = document.createElement('p');
+    note.style.cssText = 'font-size:0.82em;color:#888;margin:4px 0 0';
+    note.textContent   = `Showing up to ${samplesPerGroup.toLocaleString()} samples per group.`;
+    container.appendChild(note);
   }
 
   const showLegend = visibleGroups.length > 1 || !!selectedFile;
