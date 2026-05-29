@@ -22,7 +22,8 @@ export default {
     try {
       const { q, groupCol: gcFn, andWhere } = ctx.sql;
       const { append: appendPlot, niceName } = ctx.plot;
-  
+      const invariants = [];  // collects single-value DIST_COLS + META_COLS shared properties
+
       for (const col of DIST_COLS) {
         if (!ctx.schema.allCols.includes(col)) continue;
   
@@ -50,10 +51,17 @@ export default {
         container.appendChild(ratioText);
   
         if (!rows.length) continue;
-  
+
         const cats   = [...new Set(rows.map(r => String(r.__cat__)))].sort();
+
+        // Single unique value — no plot needed; show in shared properties table instead.
+        if (cats.length === 1) {
+          invariants.push({ Property: niceName(col), Value: cats[0] });
+          continue;
+        }
+
         const groups = ctx.groups;
-  
+
         const traces = groups.map(g => ({
           type:   'bar',
           name:   ctx.groupLabel(g),
@@ -77,7 +85,6 @@ export default {
       }
   
       const available  = META_COLS.filter(c => ctx.schema.allCols.includes(c) && !DIST_COLS.includes(c));
-      const invariants = [];
   
       if (available.length) {
         const exprs = available.map(c => {
