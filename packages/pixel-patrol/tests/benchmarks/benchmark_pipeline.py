@@ -239,7 +239,7 @@ def run_one(
         n_records_done[0] = done
 
     t_total = time.perf_counter()
-    _coordinate_pipeline(
+    _, pipeline_stats = _coordinate_pipeline(
         client=client,
         task_stream=task_stream,
         files_meta=files_meta,
@@ -248,6 +248,8 @@ def run_one(
         config=config,
         parts_dir=parts_dir,
         on_progress=_count_progress,
+        n_workers=n_workers,
+        is_distributed=False,
     )
     wall_total = time.perf_counter() - t_total
 
@@ -360,7 +362,11 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--scenarios", nargs="+", help="Scenario names to run (default: all)")
-    parser.add_argument("--workers",   nargs="+", type=int, help="Worker counts (default: 1 2 4)")
+    parser.add_argument("--workers",   nargs="+", type=int,
+                        help="Worker counts for LocalCluster (default: 1 2 4). Ignored with --scheduler.")
+    parser.add_argument("--scheduler", type=str, default=None,
+                        help="Connect to an existing Dask scheduler (e.g. tcp://host:8786). "
+                             "Runs all scenarios once against the remote cluster.")
     parser.add_argument("--skip-file", action="store_true", help="Skip from-file runs")
     args = parser.parse_args()
 
@@ -369,7 +375,6 @@ def main() -> None:
     results_dir  = bench_dir / "results"
     results_dir.mkdir(exist_ok=True)
 
-    worker_counts: List[int] = sorted(set(args.workers or [1, 2, 4]))
     selected  = {sc["name"] for sc in SCENARIOS} if not args.scenarios else set(args.scenarios)
     scenarios = [sc for sc in SCENARIOS if sc["name"] in selected]
 
@@ -377,47 +382,48 @@ def main() -> None:
         if "file" in sc["modes"] and not args.skip_file:
             d = datasets_dir / sc["name"]
             if not d.exists() or not any(d.glob("*.npy")):
-                print(f"[warn] dataset missing for '{sc['name']}' — run make_datasets.py first. Skipping file mode.")
+                print(f"[warn] dataset missing for '{sc['name']}' — skipping file mode.")
                 scenarios[i] = {**sc, "modes": tuple(m for m in sc["modes"] if m != "file")}
 
     all_results: List[dict] = []
 
-    for n_workers in worker_counts:
-        print(f"\n{'━'*60}")
-        print(f"  Starting cluster: {n_workers} worker(s)")
-        print(f"{'━'*60}")
-        with LocalCluster(
-            n_workers=n_workers, threads_per_worker=1, processes=True, silence_logs=40
-        ) as cluster, Client(cluster) as client:
+    def _run_scenarios(client: Client, n_workers: int) -> None:
+        for sc in scenarios:
+            modes = [m for m in sc["modes"] if not (args.skip_file and m == "file")]
+            if not modes:
+                continue
+            task_info_by_mode: Dict[str, Dict] = {}
+            for mode in modes:
+                try:
+                    task_info_by_mode[mode] = _count_tasks(sc, mode, datasets_dir)
+                except Exception:
+                    task_info_by_mode[mode] = {"n_tasks": -1, "task_types": {}}
+            for mode in modes:
+                print(f"  running {sc['name']} [{mode}, w={n_workers}] …", end="", flush=True)
+                try:
+                    result = run_one(sc, mode, n_workers, client, datasets_dir,
+                                     task_info_by_mode[mode], processors=sc.get("processors"))
+                    all_results.append(result)
+                    print(f"  {result['timing_s']['wall_total']:.2f}s")
+                except Exception as exc:
+                    print(f"  ERROR: {exc}")
 
-            print(f"  Dashboard → {cluster.dashboard_link}")
-            client.submit(lambda: None, pure=False).result()
-
-            for sc in scenarios:
-                modes = [m for m in sc["modes"] if not (args.skip_file and m == "file")]
-                if not modes:
-                    continue
-
-                task_info_by_mode: Dict[str, Dict] = {}
-                for mode in modes:
-                    try:
-                        task_info_by_mode[mode] = _count_tasks(sc, mode, datasets_dir)
-                    except Exception:
-                        task_info_by_mode[mode] = {"n_tasks": -1, "task_types": {}}
-
-                for mode in modes:
-                    label = f"{sc['name']} [{mode}, w={n_workers}]"
-                    print(f"  running {label} …", end="", flush=True)
-                    try:
-                        result = run_one(
-                            sc, mode, n_workers, client, datasets_dir,
-                            task_info_by_mode[mode],
-                            processors=sc.get("processors"),
-                        )
-                        all_results.append(result)
-                        print(f"  {result['timing_s']['wall_total']:.2f}s")
-                    except Exception as exc:
-                        print(f"  ERROR: {exc}")
+    if args.scheduler:
+        print(f"\nConnecting to scheduler at {args.scheduler} …")
+        with Client(args.scheduler) as client:
+            n_workers = sum(client.nthreads().values())
+            print(f"  {n_workers} worker(s) available")
+            _run_scenarios(client, n_workers)
+    else:
+        worker_counts: List[int] = sorted(set(args.workers or [1, 2, 4]))
+        for n_workers in worker_counts:
+            print(f"\n{'━'*60}\n  LocalCluster: {n_workers} worker(s)\n{'━'*60}")
+            with LocalCluster(
+                n_workers=n_workers, threads_per_worker=1, processes=True, silence_logs=40
+            ) as cluster, Client(cluster) as client:
+                print(f"  Dashboard → {cluster.dashboard_link}")
+                client.submit(lambda: None, pure=False).result()
+                _run_scenarios(client, n_workers)
 
     baseline: Dict[Tuple[str, str], float] = {
         (r["scenario"]["name"], r["run"]["mode"]): r["timing_s"]["wall_total"]

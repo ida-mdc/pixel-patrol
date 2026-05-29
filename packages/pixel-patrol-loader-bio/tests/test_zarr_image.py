@@ -50,7 +50,7 @@ def zarr_folder(tmp_path: Path) -> Path:
 def test_zarr_path_recognition_as_file(zarr_folder: Path):
     parent_dir = zarr_folder.parent
     loader = ZarrLoader()
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[parent_dir],
         loader=loader,
         processors=discover_processor_plugins(),
@@ -64,7 +64,7 @@ def test_zarr_path_recognition_as_file(zarr_folder: Path):
 @pytest.mark.parametrize("loader", [ZarrLoader(), BioIoLoader()])
 def test_extract_metadata_from_zarr(zarr_folder: Path, loader):
     processors = discover_processor_plugins()
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[zarr_folder.parent],
         loader=loader,
         processors=processors,
