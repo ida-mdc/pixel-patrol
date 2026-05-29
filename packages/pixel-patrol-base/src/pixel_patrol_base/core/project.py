@@ -148,6 +148,8 @@ class Project:
         config = self._prepare_processing_config(processing_config)
         parts_dir = self.output_path.parent / f"_parts_{self.output_path.stem}"
 
+        processing.cleanup_chunks_dir(parts_dir)  # clear any stale parts from a previous run
+
         processors = discover_processor_plugins()
         if config.processors_included:
             processors = [p for p in processors if p.NAME in config.processors_included]
