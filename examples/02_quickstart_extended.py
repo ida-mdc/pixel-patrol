@@ -27,11 +27,23 @@ def main():
     api.add_paths(project, paths)
     api.process_files(
         project,
-        max_workers=4,
+        # --- Parallelism ---
+        max_workers=4,          # Dask worker count; None = auto (all CPUs)
+                                # To use an external Dask cluster (e.g. SLURM):
+                                #   connect before calling: with Client("tcp://host:8786"): api.process_files(...)
+        # --- Task sizing ---
+        mb_per_task=512,        # MB budget per Dask task.
+                                # Default (512 MB) works well for small files.
+                                # For containers with large images (e.g. 6 MP), use 50 MB or less
+                                # to keep individual task durations under ~2 minutes.
+        # --- File selection ---
         selected_file_extensions={"tif", "png", "jpeg"},
+        # --- Report metadata ---
         flavor="Example Datasets",
         description="Authors: Annona Buddha and Banana Java",
     )
+    # Tip: run with --log-file from the CLI to write a debug log alongside the parquet:
+    #   pixel-patrol process datasets/bioio --output out/quickstart_extended.parquet --log-file
 
     # get the results dataframe
     records_df = api.get_records_df(project)
