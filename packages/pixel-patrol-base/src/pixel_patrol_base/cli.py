@@ -1,5 +1,7 @@
+import logging
 import os
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 from threading import Timer
 
@@ -63,6 +65,8 @@ def cli():
               help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
               help='Flush intermediate results to disk every N rows (default: 2048).')
+@click.option('--log-file', is_flag=True, default=False,
+              help='Write a debug log file alongside the output parquet (auto-named).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
@@ -71,14 +75,31 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               max_workers: int | None,
               scheduler: str | None,
               mb_per_task: float | None,
-              rows_per_part: int | None):
+              rows_per_part: int | None,
+              log_file: bool):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
     """
     base_directory = base_directory.resolve()
 
+    if log_file:
+        output_path_resolved = Path(output).resolve()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = output_path_resolved.with_name(f"{output_path_resolved.stem}_{ts}.log")
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        for h in root.handlers:
+            if not isinstance(h, logging.FileHandler):
+                h.setLevel(logging.INFO)
+        fh = logging.FileHandler(log_path)
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+                                          datefmt="%H:%M:%S"))
+        root.addHandler(fh)
+        click.echo(f"Debug log → '{log_path}'")
+
     if name is None:
-        name = base_directory.name # Use the name of the base directory
+        name = base_directory.name
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
 
     my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
