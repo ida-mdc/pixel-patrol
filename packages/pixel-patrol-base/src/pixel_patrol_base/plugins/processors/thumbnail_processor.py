@@ -51,7 +51,7 @@ def _normalize(arr: da.Array) -> tuple[da.Array, float, float]:
     If every value is NaN (or min/max are otherwise non-finite), returns a solid
     black image and ``(0.0, 0.0)`` for the norm metadata (no meaningful stretch).
     """
-    mn, mx = da.compute(da.nanmin(arr), da.nanmax(arr))
+    mn, mx = da.compute(da.nanmin(arr), da.nanmax(arr), scheduler='synchronous')
     mn, mx = float(mn), float(mx)
     if not np.isfinite(mn) or not np.isfinite(mx):
         return da.full_like(arr, np.uint8(0), dtype=np.uint8), 0.0, 0.0
@@ -183,7 +183,7 @@ class ThumbnailProcessor:
         normalized, norm_min, norm_max = _normalize(arr)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="invalid value encountered in cast")
-            patch = normalized.compute()
+            patch = normalized.compute(scheduler='synchronous')
 
         dims = list(reduced_order)
         if patch.ndim == 2:

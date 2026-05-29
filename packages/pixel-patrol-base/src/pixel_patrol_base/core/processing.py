@@ -387,7 +387,10 @@ def _iter_leaf_blocks(
 
 def _build_record(record: Record, data: Any, origin: Tuple[int, ...]) -> Record:
     """Build a new Record from a source record template, raw data, and a global origin."""
-    arr = data.compute() if hasattr(data, "compute") else np.asarray(data)
+    # Use synchronous scheduler to avoid routing zarr chunk reads through the
+    # distributed scheduler (which would submit one task per zarr chunk and
+    # produce huge graphs for arrays with many small chunks).
+    arr = data.compute(scheduler='synchronous') if hasattr(data, "compute") else np.asarray(data)
     meta = {
         **record.meta,
         "shape": list(arr.shape),
