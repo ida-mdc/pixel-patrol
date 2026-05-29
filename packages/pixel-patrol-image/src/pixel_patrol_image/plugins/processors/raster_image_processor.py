@@ -3,6 +3,7 @@ Image-specific raster metric processors: base class and concrete processors
 that require Y and X axes (transposed to last before kernel computation).
 """
 
+import warnings
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -31,13 +32,17 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
     Metric functions reduce over the last two (spatial) axes, returning a value
     per non-spatial leading dim. nanmean collapses those to one scalar for the row.
     """
-    match spec.name:
-        case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES)))
-        case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
-        case "local_std_ratio":    return float(np.nanmean(local_std_ratio(arr, _XY_AXES, ctx.cache)))
-        case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
-        case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
-        case _:                    return None
+    with np.errstate(invalid='ignore', divide='ignore'), \
+         warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
+        warnings.filterwarnings('ignore', 'All-NaN slice encountered', RuntimeWarning)
+        match spec.name:
+            case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES)))
+            case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
+            case "local_std_ratio":    return float(np.nanmean(local_std_ratio(arr, _XY_AXES, ctx.cache)))
+            case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
+            case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
+            case _:                    return None
 
 
 class RasterImageProcessor:
