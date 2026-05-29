@@ -71,14 +71,12 @@ def test_processor_schemata():
     assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
     records_df, metadata = api.load(parquet_files[0])
 
-    print(records_df.columns)
-
     processors = discover_processor_plugins()
     df_columns = set(records_df.columns)
 
     # Load a sample record to check if processors should run
     sample_file = list(images_dir.glob("*.tif"))[0]
-    sample_record = project.loader.load(str(sample_file))
+    sample_record = project.loader.load(sample_file)
 
     for processor in processors:
         # Check if processor should run on the test dataset

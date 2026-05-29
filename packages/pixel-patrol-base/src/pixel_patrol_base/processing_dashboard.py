@@ -10,7 +10,6 @@ import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-import polars as pl
 import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc, Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
@@ -179,10 +178,12 @@ def _get_available_loaders() -> List[Dict[str, Any]]:
 def create_processing_app() -> Dash:
     """Create and configure the processing dashboard app."""
 
-    # Setup warning capture
-    handler = DashWarningHandler()
-    handler.setLevel(logging.WARNING)
-    logging.getLogger("pixel_patrol_base").addHandler(handler)
+    # Setup warning capture — guard against duplicate handlers if called multiple times
+    base_logger = logging.getLogger("pixel_patrol_base")
+    if not any(isinstance(h, DashWarningHandler) for h in base_logger.handlers):
+        handler = DashWarningHandler()
+        handler.setLevel(logging.WARNING)
+        base_logger.addHandler(handler)
 
     external_stylesheets = [
         dbc.themes.BOOTSTRAP,
@@ -197,15 +198,15 @@ def create_processing_app() -> Dash:
         assets_folder=str(ASSETS_DIR),
     )
 
-    app.layout = _create_layout(app)
-
-    # Register callbacks
-    _register_callbacks(app)
+    # Compute once; pass to layout and callbacks to avoid repeated entrypoint discovery
+    available_loaders = _get_available_loaders()
+    app.layout = _create_layout(app, available_loaders)
+    _register_callbacks(app, available_loaders)
 
     return app
 
 
-def _create_layout(app: Dash) -> html.Div:
+def _create_layout(app: Dash, available_loaders: List[Dict[str, Any]]) -> html.Div:
     """Create the main layout for the processing dashboard."""
     return html.Div(
         [
@@ -355,25 +356,14 @@ def _create_layout(app: Dash) -> html.Div:
                                                                                 id="loader",
                                                                                 options=[
                                                                                     {
-                                                                                        "label": loader[
-                                                                                            "label"
-                                                                                        ],
-                                                                                        "value": loader[
-                                                                                            "value"
-                                                                                        ],
+                                                                                        "label": loader["label"],
+                                                                                        "value": loader["value"],
                                                                                     }
-                                                                                    for loader in _get_available_loaders()
+                                                                                    for loader in available_loaders
                                                                                 ],
                                                                                 value=(
-                                                                                    _get_available_loaders()[
-                                                                                        1
-                                                                                    ][
-                                                                                        "value"
-                                                                                    ]
-                                                                                    if len(
-                                                                                        _get_available_loaders()
-                                                                                    )
-                                                                                    > 1
+                                                                                    available_loaders[1]["value"]
+                                                                                    if len(available_loaders) > 1
                                                                                     else ""
                                                                                 ),
                                                                             ),
@@ -535,7 +525,7 @@ def _create_layout(app: Dash) -> html.Div:
     )
 
 
-def _register_callbacks(app: Dash):
+def _register_callbacks(app: Dash, available_loaders: List[Dict[str, Any]]):
     """Register all callbacks for the processing dashboard."""
 
     @app.callback(
@@ -808,13 +798,9 @@ def _register_callbacks(app: Dash):
     )
     def update_file_extensions_placeholder(loader_value: str):
         """Update file extensions placeholder based on selected loader."""
-        loaders = _get_available_loaders()
-
-        selected_loader = None
-        for loader in loaders:
-            if loader["value"] == loader_value:
-                selected_loader = loader
-                break
+        selected_loader = next(
+            (l for l in available_loaders if l["value"] == loader_value), None
+        )
 
         if selected_loader and selected_loader["extensions"]:
             extensions_str = ", ".join(selected_loader["extensions"])
@@ -891,36 +877,14 @@ def _run_processing(
             message="Processing files...",
         )
 
-        # Get file count for progress tracking
-        from pixel_patrol_base.core.file_system import walk_filesystem
-        basic_df = walk_filesystem(
-            project.get_paths() if project.get_paths() else [project.get_base_dir()],
-            loader=project.get_loader(),
-            accepted_extensions=extensions if isinstance(extensions, set) else "all"
-        )
-
-        total_files = 0
-        if basic_df is not None and not basic_df.is_empty():
-            total_files = basic_df.filter(pl.col("type") == "file").height
-            update_processing_state(
-                status="running",
-                progress=20,
-                message=f"Found {total_files} files. Processing...",
-                total_files=total_files,
-            )
-
-        # Progress callback
+        # Progress callback — total is always -1 until the pipeline exhausts the file stream,
+        # so we show a running count rather than a percentage estimate.
         def progress_callback(current: int, total: int) -> None:
-            display_total = total_files if total_files > 0 else max(total, 1)
-            display_current = min(current, display_total)
-            progress_pct = 20 + int((display_current / display_total) * 65) if display_total > 0 else 20
-
             update_processing_state(
                 status="running",
-                progress=progress_pct,
-                message=f"Processing record {display_current}/{display_total}...",
-                processed_files=display_current,
-                total_files=display_total,
+                progress=min(20 + current, 85),
+                message=f"Processing record {current}...",
+                processed_files=current,
             )
 
         # Process files — saves the parquet with metadata to project.output_path
@@ -932,21 +896,11 @@ def _run_processing(
             description=description,
         )
 
-        # Update progress after processing
-        if project.records_df is not None:
-            actual_processed = project.records_df.height
-            update_processing_state(
-                status="running",
-                progress=90,
-                message=f"Processed {actual_processed} records. Finalizing...",
-                processed_files=actual_processed if total_files == 0 else total_files,
-            )
-        else:
-            update_processing_state(
-                status="running",
-                progress=90,
-                message="Processing complete. Finalizing...",
-            )
+        update_processing_state(
+            status="running",
+            progress=90,
+            message="Processing complete. Finalizing...",
+        )
 
         final_parquet = project.output_path
         if not final_parquet.exists():

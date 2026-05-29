@@ -123,9 +123,9 @@ class TimedRunMethod:
 def create_wrapped_processor_class(cls):
     """Create a wrapped processor class with timing instrumentation."""
     cls_name = cls.__name__
-    original_run = cls.run
+    original_run_chunk = cls.run_chunk
 
-    attrs = {"run": TimedRunMethod(cls_name, original_run)}
+    attrs = {"run_chunk": TimedRunMethod(cls_name, original_run_chunk)}
     wrapped_cls = type(f"Timed_{cls_name}", (cls,), attrs)
 
     if hasattr(cls, "NAME"):
@@ -135,13 +135,18 @@ def create_wrapped_processor_class(cls):
 
 
 class InstrumentedRegisterFunction:
-    """Callable that returns instrumented processor classes."""
+    """Callable that returns instrumented processor instances.
+
+    Replaces plugin_registry.discover_processor_plugins so every processor's
+    run_chunk is wrapped with TimedRunMethod before the pipeline runs.
+    Returns instances (not classes) to match discover_processor_plugins' contract.
+    """
 
     def __init__(self, processor_classes: List):
         self.processor_classes = processor_classes
 
     def __call__(self):
-        return [create_wrapped_processor_class(cls) for cls in self.processor_classes]
+        return [create_wrapped_processor_class(cls)() for cls in self.processor_classes]
 
 
 # ============================================================================
@@ -172,8 +177,8 @@ def run_processor_cycle(
     stats_registry.clear()
 
     all_processor_classes = discover_all_processor_classes()
-    original_register = plugin_registry.register_processor_plugins
-    plugin_registry.register_processor_plugins = InstrumentedRegisterFunction(all_processor_classes)
+    original_discover = plugin_registry.discover_processor_plugins
+    plugin_registry.discover_processor_plugins = InstrumentedRegisterFunction(all_processor_classes)
 
     try:
         gc.collect()
@@ -224,8 +229,7 @@ def run_processor_cycle(
             )
 
     finally:
-        # Restore original registration
-        plugin_registry.register_processor_plugins = original_register
+        plugin_registry.discover_processor_plugins = original_discover
 
 
 def run_scenario(

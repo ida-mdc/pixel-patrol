@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def create_project(name: str,
                    base_dir: Union[str, Path],
-                   loader: str = None,
+                   loader: Optional[str] = None,
                    output_path: Optional[Union[str, Path]] = None
                    ) -> Project:
     logger.debug(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
@@ -103,7 +103,7 @@ def process_files(
 
 
 def view(
-        source: Union[Project, Path],
+        source: Union[Project, Path, str],
         port: int = 8052,
         open_browser: bool = True,
         group_col: Optional[str] = None,
@@ -189,7 +189,7 @@ def build_viewer(output: Union[str, Path]) -> Path:
 def load(src: Path) -> tuple:
     """
     Load a saved project parquet file.
-    Returns (records_df, metadata, project_name).
+    Returns (records_df, metadata).
 
     Args:
         src: Path to the .parquet file saved by process_files.
