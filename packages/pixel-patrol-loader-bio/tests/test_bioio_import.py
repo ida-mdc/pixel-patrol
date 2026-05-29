@@ -29,7 +29,7 @@ def _process_single_file(
     if not file_path.exists():
         return []
     ext = file_path.suffix.lower().lstrip(".")
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[file_path.parent],
         loader=loader,
         processors=processors,

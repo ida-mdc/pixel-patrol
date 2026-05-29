@@ -26,7 +26,7 @@ def processors():
 
 def test_build_records_df_returns_none_when_no_matching_files(tmp_path, loader, processors):
     (tmp_path / "document.txt").write_text("not an image")
-    result = build_records_df(
+    result, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
         processors=processors,
@@ -71,7 +71,7 @@ def test_full_records_df_computes_real_mean_intensity(tmp_path, loader, processo
     b = np.full((2, 2, 1), 255, dtype=np.uint8)
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[img_dir],
         loader=loader,
         processors=processors,
@@ -99,7 +99,7 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader, proce
     path = tmp_path / "5d.tif"
     tifffile.imwrite(str(path), arr, photometric='minisblack')
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
         processors=processors,
@@ -160,7 +160,7 @@ def test_full_records_df_handles_png_gray(tmp_path, loader, processors):
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
         processors=processors,

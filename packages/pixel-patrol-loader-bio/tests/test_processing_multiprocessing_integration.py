@@ -59,12 +59,12 @@ def test_build_records_df_multiprocessing_on_real_images(tmp_path):
         selected_file_extensions=loader.SUPPORTED_EXTENSIONS,
     )
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processors=discover_processor_plugins(),
         config=config,
-        parts_dir=tmp_path / "_batches",
+
     )
 
     assert df is not None
@@ -92,12 +92,12 @@ def test_build_records_df_multiprocessing_reports_progress(tmp_path):
     def progress_callback(current: int, total: int) -> None:
         progress_calls.append((current, total))
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processors=discover_processor_plugins(),
         config=config,
-        parts_dir=tmp_path / "_batches",
+
         on_progress=progress_callback,
     )
 
@@ -122,12 +122,12 @@ def test_build_records_df_multiprocessing_includes_processor_outputs(tmp_path):
     loader = BioIoLoader()
     config = ProcessingConfig(max_workers=2, rows_per_part=1)
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[sample_dir],
         loader=loader,
         processors=discover_processor_plugins(),
         config=config,
-        parts_dir=tmp_path / "_batches",
+
     )
 
     assert df is not None
