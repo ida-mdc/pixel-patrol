@@ -4,6 +4,7 @@ from pathlib import Path
 from threading import Timer
 
 import click
+from dask.distributed import Client
 
 from pixel_patrol_base.api import (
     create_project,
@@ -55,9 +56,11 @@ def cli():
 @click.option('--parquet-row-group-size', type=int, default=None, show_default=True,
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
-              help='Maximum number of processing workers. Use 1 to disable multiprocessing.')
+              help='Maximum number of local processing workers. Use 1 to disable multiprocessing.')
+@click.option('--scheduler', type=str, default=None,
+              help='Connect to an existing Dask scheduler (e.g. tcp://host:8786).')
 @click.option('--mb-per-task', type=float, default=None, show_default=True,
-              help='MB budget per Dask task (default: 512). Increase for datasets with many small images; decrease for very large images.')
+              help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
               help='Flush intermediate results to disk every N rows (default: 2048).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
@@ -66,6 +69,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None,
               max_workers: int | None,
+              scheduler: str | None,
               mb_per_task: float | None,
               rows_per_part: int | None):
     """
@@ -92,13 +96,10 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         output_path = output_path.with_suffix(".parquet")
         click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
 
-    click.echo("Processing images...")
-    process_files(
-        my_project,
+    _process_kwargs = dict(
         selected_file_extensions=selected_extensions,
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
-        max_workers=max_workers,
         mb_per_task=mb_per_task,
         rows_per_part=rows_per_part,
         flavor=flavor or None,
@@ -106,10 +107,19 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         parquet_row_group_size=parquet_row_group_size,
     )
 
+    try:
+        if scheduler:
+            click.echo(f"Connecting to Dask scheduler at '{scheduler}'...")
+            with Client(scheduler) as _client:
+                process_files(my_project, **_process_kwargs)
+        else:
+            process_files(my_project, max_workers=max_workers, **_process_kwargs)
+    except KeyboardInterrupt:
+        click.echo("\nCancelled.")
+        raise SystemExit(1)
+
     if Path(output).exists():
         click.echo(f"Output saved to: '{output}'")
-    else:
-        click.echo(f"Processing complete. Expected output: '{output}'")
 
 
 @cli.command()
@@ -239,6 +249,7 @@ def _parse_filter(filter_col, filter_op, filter_value) -> dict | None:
     if filter_col and filter_op and filter_value:
         return {filter_col: {"op": filter_op, "value": filter_value}}
     return None
+
 
 if __name__ == '__main__':
     cli()
