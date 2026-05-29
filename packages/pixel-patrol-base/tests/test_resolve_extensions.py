@@ -144,20 +144,20 @@ def test_list_raises():
 # --- no loader ---
 
 def test_prepare_no_loader_defaults_to_all(project_no_loader: Project):
-    config = project_no_loader._prepare_processing_config(None)
+    config, _ = project_no_loader._prepare_processing_config(None)
     assert config.selected_file_extensions == "all"
 
 
 def test_prepare_no_loader_explicit_set_accepted(project_no_loader: Project):
     pc = ProcessingConfig(selected_file_extensions={"png", "tif"})
-    config = project_no_loader._prepare_processing_config(pc)
+    config, _ = project_no_loader._prepare_processing_config(pc)
     assert config.selected_file_extensions == {"png", "tif"}
 
 
 def test_prepare_no_loader_empty_set_warns(project_no_loader: Project, caplog):
     pc = ProcessingConfig(selected_file_extensions=set())
     with caplog.at_level(logging.WARNING):
-        config = project_no_loader._prepare_processing_config(pc)
+        config, _ = project_no_loader._prepare_processing_config(pc)
     assert config.selected_file_extensions == set()
     assert "empty set" in caplog.text
 
@@ -165,14 +165,14 @@ def test_prepare_no_loader_empty_set_warns(project_no_loader: Project, caplog):
 # --- with loader ---
 
 def test_prepare_with_loader_defaults_to_supported(project_with_loader: Project, stub_loader):
-    config = project_with_loader._prepare_processing_config(None)
+    config, _ = project_with_loader._prepare_processing_config(None)
     assert config.selected_file_extensions == stub_loader.SUPPORTED_EXTENSIONS
 
 
 def test_prepare_with_loader_explicit_set_filtered(project_with_loader: Project, caplog):
     pc = ProcessingConfig(selected_file_extensions={"tif", "xyz"})
     with caplog.at_level(logging.WARNING):
-        config = project_with_loader._prepare_processing_config(pc)
+        config, _ = project_with_loader._prepare_processing_config(pc)
     assert config.selected_file_extensions == {"tif"}
     assert "xyz" in caplog.text
 
@@ -180,7 +180,7 @@ def test_prepare_with_loader_explicit_set_filtered(project_with_loader: Project,
 def test_prepare_with_loader_only_unsupported_warns(project_with_loader: Project, caplog):
     pc = ProcessingConfig(selected_file_extensions={"xyz", "abc"})
     with caplog.at_level(logging.WARNING):
-        config = project_with_loader._prepare_processing_config(pc)
+        config, _ = project_with_loader._prepare_processing_config(pc)
     assert config.selected_file_extensions == set()
     assert "No loader-supported file extensions provided" in caplog.text
 
@@ -188,7 +188,7 @@ def test_prepare_with_loader_only_unsupported_warns(project_with_loader: Project
 def test_prepare_with_loader_empty_set_warns(project_with_loader: Project, caplog):
     pc = ProcessingConfig(selected_file_extensions=set())
     with caplog.at_level(logging.WARNING):
-        config = project_with_loader._prepare_processing_config(pc)
+        config, _ = project_with_loader._prepare_processing_config(pc)
     assert config.selected_file_extensions == set()
     assert "empty set" in caplog.text
 
