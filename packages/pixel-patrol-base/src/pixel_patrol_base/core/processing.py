@@ -266,14 +266,9 @@ def _plan_tasks(
     """
     budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
     _MAX_FILES_PER_BATCH = config.max_files_per_task
-    # Extensions that may hold multiple sub-images — always need read_header.
-    # Populated from the loader's CONTAINER_EXTENSIONS attribute; defaults to
-    # empty so loaders without the attribute behave as before.
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
-    # Files clearly below this size threshold skip read_header() when their
-    # extension is not a container format — they cannot exceed the budget even
-    # at 8× compression and are guaranteed to be single images.
     _small_file_threshold: int = budget_bytes // 8
+    _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
     batch_bytes: int = 0
 
@@ -315,6 +310,19 @@ def _plan_tasks(
         if info.n_images > 1:
             if pending := _flush_batch():
                 yield pending
+            if not _container_hint_done:
+                _container_hint_done = True
+                image_bytes = int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize
+                if image_bytes > 0:
+                    images_per_task = budget_bytes / image_bytes
+                    if images_per_task > 20:
+                        logger.warning(
+                            "Container file with n_images=%d, ~%.1f MB/image; "
+                            "mb_per_task=%.0f gives ~%d images/task — tasks may take many minutes. "
+                            "Consider --mb-per-task 50 or lower.",
+                            info.n_images, image_bytes / 1024 / 1024,
+                            config.mb_per_task, int(images_per_task),
+                        )
             yield from _plan_sub_image_tasks(file_index, str(file_path), info, budget_bytes)
             continue
 
@@ -780,6 +788,8 @@ class _ResultsWriter:
         self._buffer_rows    = 0
         self._part_paths:    List[Path] = []
         self._part_counter   = 0
+        self._total_rows     = 0
+        self._t_start        = time.monotonic()
 
     def add(self, record_df: pl.DataFrame) -> None:
         """Append one complete record's rows to the buffer."""
@@ -797,10 +807,18 @@ class _ResultsWriter:
         write_kwargs: Dict[str, Any] = {"compression": "zstd"}
         if self._row_group_size is not None:
             write_kwargs["row_group_size"] = self._row_group_size
+        rows_this_part = self._buffer_rows
         pl.concat(self._buffer, how="diagonal_relaxed").write_parquet(part_path, **write_kwargs)
         self._part_paths.append(part_path)
+        self._total_rows  += rows_this_part
         self._buffer      = []
         self._buffer_rows = 0
+        elapsed = time.monotonic() - self._t_start
+        rate    = self._total_rows / elapsed if elapsed > 0 else 0
+        logger.info(
+            "Part %04d written: %d rows | cumulative %d rows | elapsed %.1fs | avg %.0f rows/s",
+            self._part_counter, rows_this_part, self._total_rows, elapsed, rate,
+        )
         self._part_counter += 1
 
     def finalize(self) -> Optional[pl.DataFrame]:
@@ -819,13 +837,18 @@ class _ResultsWriter:
         """
         self.flush()
         if not self._part_paths and not self._buffer:
+            logger.warning("Finalize: no parts and no buffer — returning empty DataFrame")
             return pl.DataFrame()
         if self._part_paths:
             # Data is on disk — do not collect; caller streams from parts_dir.
             return None
         # In-memory path (parts_dir=None, small dataset).
+        t0 = time.monotonic()
         combined = pl.concat(self._buffer, how="diagonal_relaxed")
-        return _post_process(combined)
+        logger.info("Finalize: concat done in %.1fs — %d rows, post-processing ...", time.monotonic() - t0, len(combined))
+        result = _post_process(combined)
+        logger.info("Finalize: complete — %d rows total, elapsed %.1fs", len(result), time.monotonic() - self._t_start)
+        return result
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -856,7 +879,20 @@ def _coordinate_pipeline(
     future_to_task: Dict[Any, Task] = {}
     completed_records = 0
     n_tasks_submitted = 0
-    all_timing: Dict[str, float] = {}
+    task_type_counts:  Dict[str, int]   = {}
+    all_timing:        Dict[str, float] = {}
+    error_records     = 0
+    t_pipeline_start  = time.monotonic()
+    _LOG_EVERY        = 200
+
+    # Count memory-pressure pause events from Dask's distributed logger.
+    class _PauseCounter(logging.Handler):
+        count = 0
+        def emit(self, record: logging.LogRecord) -> None:
+            if "Pausing worker" in record.getMessage():
+                _PauseCounter.count += 1
+    _pause_handler = _PauseCounter(logging.WARNING)
+    logging.getLogger("distributed.worker.memory").addHandler(_pause_handler)
 
     # Scatter the loader and processors to all workers once so they are not
     # re-serialised with every task submission.  broadcast=True sends the data
@@ -865,6 +901,15 @@ def _coordinate_pipeline(
     # Note: client.scatter(list) scatters each element individually, so we wrap
     # processors in a single-element list and unpack with [0] to scatter the
     # whole list as one object.
+    worker_info = client.scheduler_info().get("workers", {})
+    logger.info(
+        "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
+        len(worker_info), max_pending, config.rows_per_part,
+    )
+    for addr, w in worker_info.items():
+        logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
+                    addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
+
     loader_ref     = client.scatter(loader,        broadcast=True)
     processors_ref = client.scatter([processors],  broadcast=True)[0]
 
@@ -879,6 +924,8 @@ def _coordinate_pipeline(
         f = client.submit(_executor_for[type(t)], t, loader_ref, processors_ref, config, pure=False)
         future_to_task[f] = t
         n_tasks_submitted += 1
+        key = type(t).__name__
+        task_type_counts[key] = task_type_counts.get(key, 0) + 1
         return f
 
     pbar = tqdm(
@@ -921,7 +968,9 @@ def _coordinate_pipeline(
     initial_futures = [_submit(t) for t in itertools.islice(task_iter, max_pending)]
     if not initial_futures:
         pbar.close()
+        logger.warning("Pipeline: no tasks were generated — nothing to process")
         return None, {}
+    logger.info("Pipeline: %d initial futures submitted", len(initial_futures))
 
     ac = as_completed(initial_futures)
     all_submitted = False
@@ -943,10 +992,13 @@ def _coordinate_pipeline(
             if isinstance(task, BatchTask):
                 for ip in task.files:
                     logger.warning("Skipping '%s' — worker error: %s", ip.file_path, exc)
+                    error_records += 1
             else:
                 logger.warning("Skipping '%s' — worker error: %s", task.file_path, exc)
+                error_records += 1
             continue
 
+        before = completed_records
         if isinstance(task, MemoryChunkTask):
             result = results[0]
             if assembler.add(result, task.n_memory_chunks):
@@ -956,8 +1008,24 @@ def _coordinate_pipeline(
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
 
+        if completed_records > before and completed_records % _LOG_EVERY == 0:
+            elapsed = time.monotonic() - t_pipeline_start
+            rate    = completed_records / elapsed if elapsed > 0 else 0
+            logger.info(
+                "Progress: %d records done | %.1f rec/s | %d errors | %d futures pending | %d parts written",
+                completed_records, rate, error_records, len(future_to_task), writer._part_counter,
+            )
+
     pbar.close()
     wall_s = time.perf_counter() - t_wall_start
+    elapsed_total = time.monotonic() - t_pipeline_start
+    logger.info(
+        "Pipeline done: %d records, %d errors, %d parts, %.1fs total (%.1f rec/s avg)",
+        completed_records, error_records, writer._part_counter,
+        elapsed_total, completed_records / elapsed_total if elapsed_total > 0 else 0,
+    )
+
+    logging.getLogger("distributed.worker.memory").removeHandler(_pause_handler)
 
     try:
         worker_info = client.scheduler_info().get("workers", {})
@@ -967,17 +1035,26 @@ def _coordinate_pipeline(
         n_workers_actual = n_workers
         worker_nodes = []
 
+    try:
+        import psutil as _psutil
+        rss_by_worker = client.run(lambda: _psutil.Process().memory_info().rss)
+        peak_worker_rss_mb = max(v / 1024 / 1024 for v in rss_by_worker.values()) if rss_by_worker else 0.0
+    except Exception:
+        peak_worker_rss_mb = 0.0
+
     stats: Dict[str, Any] = {
-        "wall_s":        wall_s,
-        "n_files":       len(files_meta),
-        "n_tasks":       n_tasks_submitted,
-        "n_workers":     n_workers_actual,
-        "worker_nodes":  worker_nodes,
-        "is_distributed": is_distributed,
-        "load_cpu_s":    all_timing.get("load", 0.0),
+        "wall_s":                    wall_s,
+        "n_files":                   len(files_meta),
+        "n_tasks":                   n_tasks_submitted,
+        "task_types":                task_type_counts,
+        "n_workers":                 n_workers_actual,
+        "worker_nodes":              worker_nodes,
+        "is_distributed":            is_distributed,
+        "peak_worker_rss_mb":        round(peak_worker_rss_mb, 1),
+        "n_memory_pressure_events":  _pause_handler.count,
+        "load_cpu_s":                all_timing.get("load", 0.0),
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
-
     result_df = writer.finalize()
     if result_df is None:
         return None, stats  # parts on disk; caller uses save_parquet_from_parts
@@ -1179,7 +1256,18 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
         # own handler immediately after the cluster is started.
         _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        cluster = LocalCluster(n_workers=config.max_workers, threads_per_worker=1, processes=True)
+        cluster = LocalCluster(
+            n_workers=config.max_workers,
+            threads_per_worker=1,
+            processes=True,
+            env={
+                "OMP_NUM_THREADS":      "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "MKL_NUM_THREADS":      "1",
+                "NUMEXPR_MAX_THREADS":  "1",
+                "NUMEXPR_NUM_THREADS":  "1",
+            },
+        )
         signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         try:
