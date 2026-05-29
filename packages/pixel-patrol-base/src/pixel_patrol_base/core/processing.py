@@ -267,6 +267,10 @@ def _plan_tasks(
     budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
     _MAX_FILES_PER_BATCH = config.max_files_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
+    # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
+    # can be orders of magnitude smaller than the uncompressed array — never skip
+    # read_header for them or they'll be mis-classified as small files.
+    _folder_exts: frozenset    = frozenset(getattr(loader, "FOLDER_EXTENSIONS", ()))
     _small_file_threshold: int = budget_bytes // 8
     _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
@@ -288,7 +292,7 @@ def _plan_tasks(
         size_bytes: int = file_meta.get("size_bytes", 0)
         ext: str = file_meta.get("file_extension", "")
 
-        if 0 < size_bytes < _small_file_threshold and ext not in _container_exts:
+        if 0 < size_bytes < _small_file_threshold and ext not in _container_exts and ext not in _folder_exts:
             file_index = len(files_meta)
             files_meta.append(file_meta)
             batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
