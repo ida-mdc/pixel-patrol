@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Union, Iterable, List, Optional, Callable, Set, Dict
 import polars as pl
@@ -18,15 +19,15 @@ def create_project(name: str,
                    loader: Optional[str] = None,
                    output_path: Optional[Union[str, Path]] = None
                    ) -> Project:
-    logger.debug(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
+    logger.info(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
     return Project(name, base_dir, loader, output_path)
 
 def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> Project:
-    logger.debug(f"API Call: Adding paths to project '{project.name}'.")
+    logger.info(f"API Call: Adding paths to project '{project.name}'.")
     return project.add_paths(paths)
 
 def delete_path(project: Project, path: str) -> Project:
-    logger.debug(f"API Call: deleting paths from project '{project.name}'.")
+    logger.info(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
 
 
@@ -48,6 +49,8 @@ def process_files(
         # --- Metadata ---
         flavor: Optional[str] = None,
         description: Optional[str] = None,
+        # --- Logging ---
+        log_file: bool = False,
 ) -> Project:
     """
     Process files in the project.
@@ -73,10 +76,14 @@ def process_files(
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
         description:                Free-form description string embedded in the parquet metadata.
+        log_file:                   Write a DEBUG-level log file alongside the output parquet.
+                                    INFO and WARNING still appear in the terminal as usual.
 
     Returns:
         The project with processed records_df.
     """
+    if log_file:
+        _setup_file_logging(project)
     config_kwargs = {}
     if rows_per_part is not None:
         config_kwargs["rows_per_part"] = rows_per_part
@@ -98,7 +105,7 @@ def process_files(
         ),
         **config_kwargs,
     )
-    logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
+    logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
 
@@ -179,10 +186,10 @@ def build_viewer(output: Union[str, Path]) -> Path:
     output = Path(output)
     if output.suffix.lower() in {".html", ".htm"}:
         out = build_single_file_viewer_html(output)
-        logger.debug(f"API Call: Single-file viewer written to '{out}'.")
+        logger.info("Single-file viewer written to: '%s'", out)
     else:
         out = build_github_pages_site(output)
-        logger.debug(f"API Call: Viewer site written to '{out}'.")
+        logger.info("Static viewer site written to: '%s'", out)
     return out
 
 
@@ -194,9 +201,9 @@ def load(src: Path) -> tuple:
     Args:
         src: Path to the .parquet file saved by process_files.
     """
-    logger.debug(f"API Call: Loading project from '{src}'.")
+    logger.info(f"API Call: Loading project from '{src}'.")
     records_df, metadata = load_parquet(src)
-    logger.debug(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
+    logger.info(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
     return records_df, metadata
 
 
@@ -211,6 +218,26 @@ def get_paths(project: Project) -> List[Path]:
 
 def get_records_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_records_df()
+
+
+def _setup_file_logging(project: Project) -> None:
+    """Attach a DEBUG-level FileHandler to the root logger, adjacent to the output parquet.
+
+    Existing handlers (e.g. the terminal StreamHandler) are kept at INFO so
+    terminal output is unchanged — only the file receives DEBUG messages.
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = project.output_path.with_name(f"{project.output_path.stem}_{ts}.log")
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    for h in root.handlers:
+        if not isinstance(h, logging.FileHandler):
+            h.setLevel(logging.INFO)
+    fh = logging.FileHandler(log_path)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s", datefmt="%H:%M:%S"))
+    root.addHandler(fh)
+    logger.info("Debug log → '%s'", log_path)
 
 
 def _resolve_parquet_path(source: Union[Project, Path, str]) -> Path:

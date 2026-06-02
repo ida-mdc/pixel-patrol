@@ -1,6 +1,4 @@
-import logging
 import webbrowser
-from datetime import datetime
 from pathlib import Path
 from threading import Timer
 
@@ -88,22 +86,6 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     """
     base_directory = base_directory.resolve()
 
-    if log_file:
-        output_path_resolved = Path(output).resolve()
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = output_path_resolved.with_name(f"{output_path_resolved.stem}_{ts}.log")
-        root = logging.getLogger()
-        root.setLevel(logging.DEBUG)
-        for h in root.handlers:
-            if not isinstance(h, logging.FileHandler):
-                h.setLevel(logging.INFO)
-        fh = logging.FileHandler(log_path)
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-                                          datefmt="%H:%M:%S"))
-        root.addHandler(fh)
-        click.echo(f"Debug log → '{log_path}'")
-
     if name is None:
         name = base_directory.name
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
@@ -111,17 +93,11 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
 
     if paths:
-        click.echo(f"Adding paths: {', '.join(paths)} (relative to '{base_directory}')")
         add_paths(my_project, paths)
     else:
         add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extensions) if file_extensions else "all"
-
-    output_path = Path(output).resolve()
-    if output_path.suffix.lower() != ".parquet":
-        output_path = output_path.with_suffix(".parquet")
-        click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
 
     _process_kwargs = dict(
         selected_file_extensions=selected_extensions,
@@ -134,6 +110,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         flavor=flavor or None,
         description=description or None,
         parquet_row_group_size=parquet_row_group_size,
+        log_file=log_file,
     )
 
     try:
@@ -146,9 +123,6 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     except KeyboardInterrupt:
         click.echo("\nCancelled.")
         raise SystemExit(1)
-
-    if output_path.exists():
-        click.echo(f"Output saved to: '{output_path}'")
 
 
 @cli.command()
@@ -250,11 +224,7 @@ def build_viewer_html(output: Path):
     If OUTPUT ends in .html/.htm, writes a single self-contained HTML file.
     Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
-    out = api_build_viewer(output)
-    if Path(out).is_dir():
-        click.echo(f"Static viewer site written to: {out}")
-    else:
-        click.echo(f"Single-file viewer written to: {out}")
+    api_build_viewer(output)
 
 
 def _parse_leaf_block_shape(items: tuple) -> dict:

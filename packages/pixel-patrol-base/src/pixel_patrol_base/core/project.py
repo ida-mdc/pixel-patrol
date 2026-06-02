@@ -206,6 +206,7 @@ class Project:
                     parts_on_disk, self.output_path, self.metadata, **rgs_kwargs
                 )
                 processing.cleanup_chunks_dir(parts_dir)
+                logger.info("Output → '%s'", self.output_path)
             except Exception as e:
                 logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
             return
@@ -218,6 +219,7 @@ class Project:
         try:
             save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
             processing.cleanup_chunks_dir(parts_dir)
+            logger.info("Output → '%s'", self.output_path)
         except Exception as e:
             logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
