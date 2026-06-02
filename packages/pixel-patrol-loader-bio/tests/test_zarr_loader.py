@@ -5,7 +5,7 @@ import pytest
 import zarr
 from zarr.storage import LocalStore
 
-from pixel_patrol_loader_zarr.plugins.loaders.zarr_loader import ZarrLoader
+from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
 
 
 @pytest.fixture

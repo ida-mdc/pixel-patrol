@@ -1,16 +1,26 @@
 # PixelPatrol Bio-Image Loader Extension (`pixel-patrol-loader-bio`)
 
-This is an extension for **PixelPatrol** that enables loading of **advanced, multi-dimensional life-science imaging formats** via [BioIO](https://github.com/bioio-devs/bioio).
+This extension provides three loaders for multi-dimensional life-science imaging formats.
 
-If you work with microscopy, high-content screening, or proprietary instrument formats, this is the loader you need.
+## Loaders
 
-## Supported formats
-
+### `bioio` — BioIO (CZI, LIF, ND2, TIFF, rasters)
+Uses the [BioIO](https://github.com/bioio-devs/bioio) library for broad format support.
 - `.czi` — Zeiss CZI
 - `.lif` — Leica LIF
 - `.nd2` — Nikon ND2
-- `.tif`, `.tiff`, `.ome.tif` — TIFF via BioIO (for TIFF-only use, `pixel-patrol-loader-tifffile` is lighter)
+- `.tif`, `.tiff`, `.ome.tif` — TIFF via BioIO
 - `.jpg`, `.jpeg`, `.png`, `.bmp` — common raster formats
+- `.zarr`, `.ome.zarr` — zarr stores via BioIO
+
+### `tifffile` — TiffFile (TIFF / OME-TIFF)
+Direct TIFF loading via [tifffile](https://github.com/cgohlke/tifffile) with lazy Zarr-backed access.
+- `.tif`, `.tiff`, `.ome.tif` — including multi-series OME-TIFF
+- Lighter than `bioio` for TIFF-only datasets
+
+### `zarr` — Zarr (zarr / OME-Zarr)
+Native zarr store loading with OME-NGFF axis support.
+- `.zarr`, `.ome.zarr`
 
 ## Installation
 

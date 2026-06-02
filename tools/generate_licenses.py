@@ -34,8 +34,6 @@ FIRST_PARTY = [
     "pixel-patrol-aqqua",
     "pixel-patrol-image",
     "pixel-patrol-loader-bio",
-    "pixel-patrol-loader-tifffile",
-    "pixel-patrol-loader-zarr",
     "pixel-patrol-tensorboard",
 ]
 

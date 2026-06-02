@@ -21,7 +21,8 @@ def main():
     loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
     # OR e.g.
     # loader = None    # for basic file info only (no image data/metadata); only pixel-patrol-base package needed
-    # loader = 'zarr'   # for zarr files; requires pixel-patrol-loader-zarr package
+    # loader = 'zarr'      # for zarr files; requires pixel-patrol-loader-bio package
+    # loader = 'tifffile'  # lightweight TIFF loader; requires pixel-patrol-loader-bio package
 
     project = api.create_project("Quickstart Extended", base_dir=base_path, loader=loader, output_path=output_path)
     api.add_paths(project, paths)

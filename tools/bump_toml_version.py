@@ -9,8 +9,6 @@ PACKAGES = [
     "pixel-patrol",
     "pixel-patrol-image",
     "pixel-patrol-loader-bio",
-    "pixel-patrol-loader-tifffile",
-    "pixel-patrol-loader-zarr",
     "pixel-patrol-aqqua",
 ]
 
