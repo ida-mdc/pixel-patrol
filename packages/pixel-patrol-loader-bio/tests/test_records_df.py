@@ -10,7 +10,11 @@ from pixel_patrol_base.core.processing import build_records_df
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import postprocess_basic_file_metadata_df
+import zarr
+from zarr.storage import LocalStore
 from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.plugins.loaders.tifffile_loader import TifffileLoader
+from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
 from datetime import datetime
 
 
@@ -172,3 +176,34 @@ def test_full_records_df_handles_png_gray(tmp_path, loader, processors):
     expected_gray = np.uint8(raw_gray)
     global_row = df.filter(pl.col("obs_level") == 0)["mean_intensity"][0]
     assert global_row == expected_gray
+
+
+def test_build_records_df_tifffile(tmp_path):
+    im = np.zeros((4, 8, 8), dtype=np.uint16)
+    tifffile.imwrite(tmp_path / "img.tif", im, imagej=True, metadata={"axes": "CYX"})
+    df, _ = build_records_df(
+        bases=[tmp_path],
+        loader=TifffileLoader(),
+        processors=discover_processor_plugins(),
+        config=ProcessingConfig(selected_file_extensions={"tif"}),
+    )
+    assert df is not None
+    assert len(df) > 0
+
+
+def test_build_records_df_zarr(tmp_path):
+    zarr_path = tmp_path / "img.zarr"
+    store = LocalStore(str(zarr_path))
+    root = zarr.group(store=store)
+    arr = root.create_array("0", shape=(2, 8, 8), chunks=(2, 8, 8), dtype="uint16", overwrite=True)
+    arr[:] = np.zeros((2, 8, 8), dtype="uint16")
+    root.attrs.put({"multiscales": [{"version": "0.4", "datasets": [{"path": "0"}],
+        "axes": [{"name": "c"}, {"name": "y"}, {"name": "x"}]}]})
+    df, _ = build_records_df(
+        bases=[tmp_path],
+        loader=ZarrLoader(),
+        processors=discover_processor_plugins(),
+        config=ProcessingConfig(selected_file_extensions={"zarr"}),
+    )
+    assert df is not None
+    assert len(df) > 0

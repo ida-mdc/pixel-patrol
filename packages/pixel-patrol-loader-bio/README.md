@@ -1,32 +1,40 @@
 # PixelPatrol Bio-Image Loader Extension (`pixel-patrol-loader-bio`)
 
-This is an extension for **PixelPatrol** that enables pre-validation for **advanced, multi-dimensional life-science imaging data**.
+This extension provides three loaders for multi-dimensional life-science imaging formats.
 
-If you work with microscopy, high-content screening, or other complex bio-imaging formats, this is probably the plugin you need for your image data to be loaded.
+## Loaders
 
-## 🔬 Why You Need This Extension
+### `bioio` — BioIO (CZI, LIF, ND2, TIFF, rasters)
+Uses the [BioIO](https://github.com/bioio-devs/bioio) library for broad format support.
+- `.czi` — Zeiss CZI
+- `.lif` — Leica LIF
+- `.nd2` — Nikon ND2
+- `.tif`, `.tiff`, `.ome.tif` — TIFF via BioIO
+- `.jpg`, `.jpeg`, `.png`, `.bmp` — common raster formats
+- `.zarr`, `.ome.zarr` — zarr stores via BioIO
 
-The `pixel-patrol-loader-bio` extension adds essential compatibility by integrating BioIO and zarr formats.
+### `tifffile` — TiffFile (TIFF / OME-TIFF)
+Direct TIFF loading via [tifffile](https://github.com/cgohlke/tifffile) with lazy Zarr-backed access.
+- `.tif`, `.tiff`, `.ome.tif` — including multi-series OME-TIFF
+- Lighter than `bioio` for TIFF-only datasets
 
-## 🚀 Installation
+### `zarr` — Zarr (zarr / OME-Zarr)
+Native zarr store loading with OME-NGFF axis support.
+- `.zarr`, `.ome.zarr`
 
-### Recommended (Full) Installation
-
-For the easiest start, we recommend installing the main `pixel-patrol` package. This automatically includes the base functionality (`pixel-patrol-base`), this bio-loader extension, and the basic image analysis plugins (`pixel-patrol-image`):
-
-```bash
-uv pip install pixel-patrol
-```
-
-### Minimal Installation (Loader Only)
-
-If you only want this specific loader plugin and the core PixelPatrol functionality, you can install just this package. This is useful if you plan to manage other extensions yourself:
+## Installation
 
 ```bash
 uv pip install pixel-patrol-loader-bio
 ```
 
+Or as part of the full stack:
+
+```bash
+uv pip install pixel-patrol
+```
+
 ## Getting Started
 
-Please look at the documentation of `pixel-patrol` for usage instructions.  
+Please see the `pixel-patrol` documentation for usage instructions.  
 https://github.com/ida-mdc/pixel-patrol/
