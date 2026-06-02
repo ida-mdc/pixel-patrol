@@ -28,16 +28,20 @@ class MockLoader:
     CONTAINER_EXTENSIONS: Set[str] = {"lmdb"}
 
     def __init__(self, entries: Dict[str, MockEntry]) -> None:
-        self._entries = entries
+        self._entries = {k.replace("\\", "/"): v for k, v in entries.items()}
+
+    @staticmethod
+    def _key(file_path: Path) -> str:
+        return str(file_path).replace("\\", "/")
 
     def read_header(self, file_path: Path) -> FileInfo:
-        e = self._entries.get(str(file_path))
+        e = self._entries.get(self._key(file_path))
         if e is None or e.fail:
             raise FileNotFoundError(file_path)
         return FileInfo(shape=e.shape, dtype=np.dtype(e.dtype), dim_order=e.dim_order, n_images=e.n_images)
 
     def load(self, file_path: Path) -> Record:
-        e = self._entries.get(str(file_path))
+        e = self._entries.get(self._key(file_path))
         if e is None or e.fail:
             raise FileNotFoundError(file_path)
         arr = np.zeros(e.shape, dtype=e.dtype)
@@ -45,7 +49,7 @@ class MockLoader:
         return record_from(arr, meta, kind="intensity")
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
-        e = self._entries.get(str(file_path))
+        e = self._entries.get(self._key(file_path))
         if e is None or e.fail:
             raise FileNotFoundError(file_path)
         arr = np.zeros(e.shape, dtype=e.dtype)
