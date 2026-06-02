@@ -62,3 +62,13 @@ def test_read_header(zarr_folder: Path, loader):
 def test_is_folder_supported(zarr_folder: Path, loader):
     assert loader.is_folder_supported(zarr_folder) is True
     assert loader.is_folder_supported(zarr_folder.parent) is False
+
+
+def test_load_invalid_path_raises(tmp_path: Path, loader):
+    with pytest.raises(Exception):
+        loader.load(tmp_path / "nonexistent.zarr")
+
+
+def test_n_images_always_one(zarr_folder: Path, loader):
+    info = loader.read_header(zarr_folder)
+    assert info.n_images == 1

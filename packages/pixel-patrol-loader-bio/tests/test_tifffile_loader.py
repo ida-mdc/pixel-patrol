@@ -81,3 +81,20 @@ def test_dask_chunks_reasonable(tmp_path: Path, loader):
     ch = rec.data.chunks
     assert len(ch) == 3
     assert all(c is not None for c in ch)
+
+
+def test_load_invalid_file_raises(tmp_path: Path, loader):
+    path = tmp_path / "garbage.tif"
+    path.write_bytes(b"not a tiff file")
+    with pytest.raises(Exception):
+        loader.load(path)
+
+
+def test_load_2d_no_axes_metadata(tmp_path: Path, loader):
+    path = tmp_path / "plain.tif"
+    im = np.zeros((32, 32), dtype=np.uint8)
+    import tifffile as tf
+    tf.imwrite(path, im)
+    rec = loader.load(path)
+    assert rec.data.ndim == 2
+    assert "Y" in rec.dim_order or len(rec.dim_order) == 2
