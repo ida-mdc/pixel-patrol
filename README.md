@@ -165,6 +165,9 @@ Key options:
 * `--max-workers N` – Number of parallel Dask workers (default: CPU count).
 * `--mb-per-task N` – Memory budget per task in MB (default: 512). Lower for very large images.
 * `--max-images-per-task N` – Max images per task for both regular and container files (default: 200). Lower values give more frequent progress updates.
+* `--leaf-block-shape DIM=SIZE` – Spatial chunk size per dimension, e.g. `--leaf-block-shape Z=1`. Repeatable. Only relevant for large volumetric files (zarr, OME-TIFF).
+* `--rows-per-part N` – Flush intermediate results to disk every N rows (default: 10000). Lower values reduce memory use on very large datasets.
+* `--parquet-row-group-size N` – Rows per parquet row group (default: 2048). Smaller values speed up thumbnail sampling in the viewer.
 * `--log-file` – Write a debug log file alongside the output parquet.
 
 Example (BioIO loader, two conditions, filtering to tif and png):
