@@ -44,7 +44,7 @@ from numpy_loader import NumpyLoader
 from pixel_patrol_base.core.contracts import ChunkKind
 from pixel_patrol_base.core.file_system import _discover_files
 from pixel_patrol_base.core.processing import (
-    BatchTask, MemoryChunkTask, SubImageTask,
+    BatchTask, ContainerTask, MemoryChunkTask,
     _coordinate_pipeline, _plan_tasks,
 )
 from pixel_patrol_base.core.processing_config import ProcessingConfig
@@ -129,7 +129,7 @@ SCENARIOS: List[Dict[str, Any]] = [
     },
     {
         "name":       "container_subimages",
-        "desc":       "1 file × 5000 sub-images × (64×64) → SubImageTasks",
+        "desc":       "1 file × 5000 sub-images × (64×64) → ContainerTasks",
         "n_files":    1,
         "shape":      (64, 64),
         "dtype":      np.float32,
@@ -143,7 +143,7 @@ SCENARIOS: List[Dict[str, Any]] = [
 _TASK_TYPE_NAMES = {
     BatchTask:       "BatchTask",
     MemoryChunkTask: "MemoryChunkTask",
-    SubImageTask:    "SubImageTask",
+    ContainerTask:   "ContainerTask",
 }
 
 

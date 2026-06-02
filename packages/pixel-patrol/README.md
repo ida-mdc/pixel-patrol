@@ -164,6 +164,7 @@ Key options:
 * `--processors-include NAME` / `--processors-exclude NAME` – Run only specific processors or skip named ones.
 * `--max-workers N` – Number of parallel Dask workers (default: CPU count).
 * `--mb-per-task N` – Memory budget per task in MB (default: 512). Lower for very large images.
+* `--max-images-per-task N` – Max images per task for both regular and container files (default: 200). Lower values give more frequent progress updates.
 * `--log-file` – Write a debug log file alongside the output parquet.
 
 Example (BioIO loader, two conditions, filtering to tif and png):
