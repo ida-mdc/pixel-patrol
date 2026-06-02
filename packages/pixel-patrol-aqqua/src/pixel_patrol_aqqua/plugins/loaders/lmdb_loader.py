@@ -73,7 +73,7 @@ def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
         logger.warning("LmdbLoader: no meta parquet found for '%s'", lmdb_path.name)
         return {}
 
-    logger.info("LmdbLoader: loading meta parquet '%s'", parquet_path.name)
+    logger.debug("LmdbLoader: loading meta parquet '%s'", parquet_path.name)
     df = pl.read_parquet(parquet_path)
 
     if "image-uuid" not in df.columns:
@@ -90,7 +90,7 @@ def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
             if k != "image-uuid" and v is not None
         }
 
-    logger.info("LmdbLoader: loaded %d meta rows from '%s'", len(result), parquet_path.name)
+    logger.debug("LmdbLoader: loaded %d meta rows from '%s'", len(result), parquet_path.name)
     return result
 
 

@@ -989,7 +989,7 @@ def _coordinate_pipeline(
         pbar.close()
         logger.warning("Pipeline: no tasks were generated — nothing to process")
         return None, {}
-    logger.info("Pipeline: %d initial futures submitted", len(initial_futures))
+    logger.debug("Pipeline: %d initial futures submitted", len(initial_futures))
 
     ac = as_completed(initial_futures)
     all_submitted = False
@@ -1030,7 +1030,7 @@ def _coordinate_pipeline(
         if completed_records > before and completed_records % _LOG_EVERY == 0:
             elapsed = time.monotonic() - t_pipeline_start
             rate    = completed_records / elapsed if elapsed > 0 else 0
-            logger.info(
+            logger.debug(
                 "Progress: %d images done | %.1f img/s | %d errors | %d futures pending | %d parts written",
                 completed_records, rate, error_records, len(future_to_task), writer._part_counter,
             )
