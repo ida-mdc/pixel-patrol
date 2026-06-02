@@ -957,7 +957,7 @@ def _coordinate_pipeline(
         desc="Processing",
         disable=on_progress is not None,
         dynamic_ncols=True,
-        bar_format="{l_bar}{bar}| {n_fmt}{unit} [{elapsed}, {rate_fmt}]",
+        bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]",
     )
 
     def _update_pbar_postfix() -> None:
@@ -1309,7 +1309,7 @@ def _collect_file_metadata_only(
     rows: List[dict] = []
     pbar = tqdm(unit=" files", unit_scale=False, desc="Scanning",
                 disable=on_progress is not None, dynamic_ncols=True,
-                bar_format="{l_bar}{bar}| {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
+                bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
     for _, file_meta in _discover_files(bases, config.selected_file_extensions):
         rows.append({"obs_level": 0, **file_meta})
         pbar.update(1)
