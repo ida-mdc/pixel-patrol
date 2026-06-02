@@ -1,12 +1,12 @@
-"""
-Configuration for project metadata and file processing
-"""
+"""Configuration for Pixel Patrol processing runs."""
+
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Set, Union, Optional
+from typing import Dict, Optional, Set, Union
 
-from pixel_patrol_base.config import DEFAULT_RECORDS_FLUSH_EVERY_N
+from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
@@ -15,40 +15,43 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProcessingConfig:
 
+    # ── Processor selection ──────────────────────────────────────────────────
     processors_included: Set[str] = field(default_factory=set)
     processors_excluded: Set[str] = field(default_factory=set)
 
-    # --- File selection ---
-    # "all" or a set of extensions without dot, e.g. {"tif", "png"}
-    selected_file_extensions: Union[Set[str], str] = 'all'
+    # ── File selection ───────────────────────────────────────────────────────
+    selected_file_extensions: Union[Set[str], str] = "all"
 
-    # --- Run behaviour ---
-    processing_max_workers: Optional[int] = None
-    records_flush_every_n: Optional[int] = None
-    parquet_row_group_size: Optional[int] = None  # None → use parquet_io default (2048)
+    # ── Dask cluster ─────────────────────────────────────────────────────────
+    max_workers: Optional[int] = 5  # TODO: None auto-detection gives unexpected thread/process split; fix in next version
 
-    # --- Project Metadata ---
+    # ── Task planning ────────────────────────────────────────────────────────
+    mb_per_task:          float                   = 512.0
+    max_images_per_task:  int                     = DEFAULT_MAX_IMAGES_PER_TASK
+    slice_size:           Optional[Dict[str, int]] = None
+
+    # ── Output ───────────────────────────────────────────────────────────────
+    rows_per_part:        int            = DEFAULT_ROWS_PER_PART
+    parquet_row_group_size: Optional[int] = None  # None → parquet_io default (2048)
+
+    # ── Project metadata ─────────────────────────────────────────────────────
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
 
-
-    def __post_init__(self):
-
+    def __post_init__(self) -> None:
         if self.processors_included and self.processors_excluded:
             logger.warning(
-                "ProcessingConfig: Both processors_included and processors_excluded are set. "
+                "ProcessingConfig: both processors_included and processors_excluded are set; "
                 "processors_excluded will be ignored."
             )
-
-        if self.processing_max_workers is not None:
-            if not isinstance(self.processing_max_workers, int) or self.processing_max_workers < 1:
-                raise ValueError("processing_max_workers must be a positive integer or None.")
-
-        if self.records_flush_every_n is None:
-            self.records_flush_every_n = DEFAULT_RECORDS_FLUSH_EVERY_N
-
-        if self.processing_max_workers is not None:
-            if not isinstance(self.processing_max_workers, int) or self.processing_max_workers < 1:
-                raise ValueError("processing_max_workers must be a positive integer or None.")
-
-        if not isinstance(self.records_flush_every_n, int) or self.records_flush_every_n < 1:
-            raise ValueError("records_flush_every_n must be a positive integer.")
+        if self.max_workers is not None and self.max_workers < 1:
+            raise ValueError("max_workers must be a positive integer or None.")
+        if self.mb_per_task <= 0:
+            raise ValueError("mb_per_task must be positive.")
+        if self.max_images_per_task < 1:
+            raise ValueError("max_images_per_task must be a positive integer.")
+        if self.slice_size is not None:
+            for dim, sz in self.slice_size.items():
+                if sz != -1 and sz < 1:
+                    raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")
+        if self.rows_per_part < 1:
+            raise ValueError("rows_per_part must be a positive integer.")

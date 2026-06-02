@@ -17,8 +17,8 @@ jobs:
         os: ${{ fromJson( (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]' ) }}
         package:
           - pixel-patrol-base
+          - pixel-patrol-aqqua
           - pixel-patrol-loader-bio
-          - pixel-patrol-image
           - pixel-patrol
           - pixel-patrol-tensorboard
     runs-on: ${{ matrix.os }}

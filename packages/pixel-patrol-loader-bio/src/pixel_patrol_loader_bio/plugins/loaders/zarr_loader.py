@@ -1,13 +1,14 @@
 import logging
 import string
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, List, Mapping
+from typing import Any, Dict, Iterator, Optional, Set, List, Mapping, Tuple
 
 import dask.array as da
 import numpy as np
 import zarr
 
-from pixel_patrol_base.core.record import record_from
+from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,9 @@ class ZarrLoader:
 
     NAME = "zarr"
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
+    FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
+    CONTAINER_EXTENSIONS: Set[str] = set()
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -182,17 +185,27 @@ class ZarrLoader:
         (r"^[A-Za-z]_size$", int),
     ]
 
-    FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
-
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
 
-    def load(self, source: str):
-        path = Path(source)
-
-        arr = _load_zarr_array(path)
+    def read_header(self, file_path: Path) -> FileInfo:
+        """Read shape/dtype from Zarr metadata without loading pixel data."""
+        arr = _load_zarr_array(file_path)
         if arr is None:
-            raise RuntimeError(f"Cannot read Zarr array at: {source}")
+            raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
+        meta = _extract_zarr_metadata(arr, file_path)
+        shape = tuple(int(x) for x in arr.shape)
+        dim_order = tuple(meta["dim_order"])
+        dtype = np.dtype(str(arr.dtype))
+        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
 
-        meta = _extract_zarr_metadata(arr, path)
+    def load(self, file_path: Path) -> Record:
+        arr = _load_zarr_array(file_path)
+        if arr is None:
+            raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
+        meta = _extract_zarr_metadata(arr, file_path)
         return record_from(arr, meta, kind="intensity")
+
+    def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        """Not applicable: ZarrLoader always returns n_images=1 so this is never called."""
+        raise NotImplementedError("ZarrLoader does not support container files (n_images=1 always)")

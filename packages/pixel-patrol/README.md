@@ -1,4 +1,4 @@
-# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/prevalidation.png" width="80">  PixelPatrol 
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/prevalidation.png" width="80">  PixelPatrol 
 ### Scientific Dataset Quality Control and Data Exploration Tool
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80"> 
@@ -7,15 +7,15 @@ PixelPatrol is an early-version tool designed for the systematic validation of s
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/overview.png" width="">   
 
-*PixelPatrol's main dashboard provides an interface for dataset exploration.*
+*PixelPatrol's main viewer provides an interface for dataset exploration.*
 
 ## Features
 
 * **Dataset-wide Visualization and Interactive Exploration**
 * **Detailed Statistical Summaries**: Generates plots and distributions covering image dimensions.
 * **Early Identification of Issues**: Helps in finding outliers and identifying potential issues, discrepancies, or unexpected characteristics, including those related to metadata and acquisition parameters.
-* **Interactive Project Set-Up**: A user-friendly visual interface to configure your project.
-* **Dashboard Report**: Interactive reports are served as a web application using Dash.
+* **Interactive Processing Dashboard**: A visual web interface to configure and launch processing (`pixel-patrol launch`).
+* **Interactive Viewer**: Reports open as a fast static web app served locally — or deploy to GitHub Pages / any static host for sharing without a running server.
 * **Interactive comparison across experimental conditions** or other user defined metrics.
 
 ### Coming soon:
@@ -78,7 +78,7 @@ uv pip install pixel-patrol
 pixel-patrol --help
 ```
 
-The first command downloads the latest release and adds `pixel-patrol` to your PATH; the second command confirms it’s ready.
+The first command downloads the latest release and adds `pixel-patrol` to your PATH; the second command confirms it's ready.
 
 #### Option B — Build your own stack (`pixel-patrol-base` + add-ons)
 
@@ -100,12 +100,12 @@ See `examples/minimal-extension` for a minimal template.
 
 1. Install PixelPatrol (Instructions are in the previous section).
 2. Have all the files you would like to inspect under a common base directory.
-3. You can also specify subdirectory within the base directory - only those directories will be processed.
-4. Process your data - choose your way:  
-   * Visual Interface: Run `pixel-patrol launch` to configure and process your data using a web interface.
-   * OR use command Line:** Run `pixel-patrol export` via the CLI for automated or batch processing.
-   * OR use the Pixel-Patrol API.
-5. Explore the interactive dashboard in your browser.
+3. You can also specify subdirectories within the base directory — only those directories will be processed.
+4. Process your data — choose your way:
+   * **Visual Interface**: Run `pixel-patrol launch` to configure and launch processing via a web interface.
+   * **Command Line**: Run `pixel-patrol process` to process your dataset and save a `.parquet` report file.
+   * **Python API**: Use `api.process_files(project)` directly in a script.
+5. Open the viewer: run `pixel-patrol view <report.parquet>` to explore your data interactively in the browser.
 
 ## Example visualizations
 
@@ -130,94 +130,93 @@ pixel-patrol launch
 
 ## Command-Line Interface
 
-With the CLI you can use all of pixel-patrol Python API building blocks by calling two commands one after the other.       
-1. First run `pixel-patrol export` to create a pixel-patrol project and saving it as a ZIP file.   
-2. Then pass that ZIP to `pixel-patrol report` when you want to explore the generated report in the dashboard.
+The typical two-step workflow:
+
+1. Run `pixel-patrol process` to scan your dataset and write a `.parquet` report file.
+2. Run `pixel-patrol view` to open that report in the interactive viewer.
 
 ### Common commands
 
 ```bash
 pixel-patrol --help
-pixel-patrol export --help
-pixel-patrol report --help
+pixel-patrol process --help
+pixel-patrol view --help
 ```
 
-### `pixel-patrol export`
+### `pixel-patrol process`
 
-Processes a directory tree, applies the selected loader and settings, and saves a portable ZIP archive.
+Scans a directory tree, applies the selected loader and processors, and writes a `.parquet` report file.
 
 ```bash
-pixel-patrol export <BASE_DIRECTORY> -o <OUTPUT_ZIP> [OPTIONS]
+pixel-patrol process <BASE_DIRECTORY> -o <OUTPUT.parquet> [OPTIONS]
 ```
 
 Key options:
 
-* `BASE_DIRECTORY` – the root folder that contains your dataset. Use an absolute path or a path relative to your current working directory.
-* `-o, --output-zip PATH` **(required)** – where to store the generated pixel-patrol project zip.
-* `--name TEXT` – give your pixel-patrol project a name (defaults to the folder name).
-* `-p, --paths PATH` – Optional. Subdirectories or absolute paths to treat as experimental conditions; use multiple `-p` flags for multiple paths. When you pass a relative path it is resolved against `BASE_DIRECTORY`. If omitted, everything under `BASE_DIRECTORY` is processed as a single condition.
-* `-l, --loader TEXT` – Optional but recommended. Loader plug-in (e.g. `bioio`, `zarr`). If omitted pixel-patrol only shows basic file info.  
-* `-e, --file-extension EXT` – Optional. One or more file extensions to include (meaning filter for). When unspecified the loader’s supported extensions (or `all` for no loader) are used.
-* `--cmap NAME` – Optional Matplotlib colormap for visualizations (`rainbow` by default).
-* `--flavor TEXT` – optional label shown next to the Pixel Patrol title inside the report.
+* `BASE_DIRECTORY` – the root folder that contains your dataset.
+* `-o, --output PATH` **(required)** – where to save the generated `.parquet` report file.
+* `--name TEXT` – project name (defaults to the folder name).
+* `-p, --paths PATH` – Optional. Subdirectories to treat as experimental conditions; use multiple `-p` flags for multiple paths. Resolved relative to `BASE_DIRECTORY`. If omitted, everything under `BASE_DIRECTORY` is processed.
+* `-l, --loader TEXT` – Optional but recommended. Loader plug-in (e.g. `bioio`, `zarr`). If omitted, only basic file info is collected.
+* `-e, --file-extensions EXT` – Optional. File extensions to include (e.g. `tif`, `png`). Defaults to all extensions supported by the loader.
+* `--flavor TEXT` – Optional label shown next to the Pixel Patrol title in the viewer.
+* `--description TEXT` – Optional free-form description embedded in the report metadata.
+* `--processors-include NAME` / `--processors-exclude NAME` – Run only specific processors or skip named ones.
+* `--max-workers N` – Number of parallel Dask workers (default: CPU count).
+* `--mb-per-task N` – Memory budget per task in MB (default: 512). Lower for very large images.
+* `--max-images-per-task N` – Max images per task for both regular and container files (default: 200). Lower values give more frequent progress updates.
+* `--slice-size DIM=SIZE` – Spatial chunk size per dimension, e.g. `--slice-size Z=1`. Repeatable.
+* `--rows-per-part N` – Flush intermediate results to disk every N rows (default: 10000). Lower values reduce memory use on very large datasets.
+* `--parquet-row-group-size N` – Rows per parquet row group (default: 2048). Smaller values speed up thumbnail sampling in the viewer.
+* `--log-file` – Write a debug log file alongside the output parquet.
 
-Example (BioIO loader, two conditions to compare - by specifying the path to their directories, only processing file extensions tif and png:
-
-```bash
-pixel-patrol export examples/datasets/bioio -o examples/out/test_project.zip \
-  --loader bioio --name "test_project" -p tifs -p pngs \
-  -e tif -e png --cmap viridis
-```
-
-#### Intermediate chunk files
-
-PixelPatrol writes intermediate Parquet "chunk" files.
-
-- Default chunk dir: adjacent to the requested ZIP: `<output_parent>/<project_name>_batches/`.
-- To override: pass `--chunk-dir /path/to/dir`.
-
-**Important (resume is experimental / limited):**
-Resume only works safely if you rerun on the *same* dataset layout and use the *same* chunk directory.  
-Use by setting `project.settings.resume = True`
-
-### `pixel-patrol report`
-
-Launches the Dash dashboard from a previously exported project ZIP file. The command prints the URL and attempts to open the browser automatically.
+Example (BioIO loader, two conditions, filtering to tif and png):
 
 ```bash
-pixel-patrol report <REPORT_ZIP> [OPTIONS]
+pixel-patrol process examples/datasets/bioio -o examples/out/my_report.parquet \
+  --loader bioio --name "my_project" -p tifs -p pngs -e tif -e png
 ```
 
-If the default port is unavailable, supply `--port 8051` (or any free port). The command can be rerun at any time; the ZIP file is never modified.  
-Always run `export` before `report`; the exported ZIP is the on-disk representation of a Pixel Patrol project.
+### `pixel-patrol view`
 
-
-#### Example with custom global grouping and filters:
-```bash
-pixel-patrol report examples/out/quickstart_project.zip \
---group-by size_readable \
---filter-col file_extension \
---filter-op in \
---filter "tif, png"
---dim z=1 --dim t=0
-```
-
-#### For all filtering options, see:
-```bash
-pixel-patrol report --help
-```
-
-#### Export report as static HTML
-
-*CLI:*
-- Use `pixel-patrol report <REPORT_ZIP> --export-html report.html [--port PORT]` to render and save a static HTML snapshot of the dashboard.   
-- This calls the same exporter the API exposes and writes a self-contained HTML file.
+Opens a `.parquet` report in the interactive viewer. Starts a local HTTP server and opens the browser automatically.
 
 ```bash
-pixel-patrol report examples/out/my_project.zip --export-html out/report.html
+pixel-patrol view <REPORT.parquet> [OPTIONS]
 ```
 
-Note: the exporter requires `Playwright` dependency, without it an ImportError is raised.
+Key options:
+
+* `--port N` – Port for the local server (default: 8052).
+* `--no-browser` – Start the server without opening the browser.
+* `--group-by COL` – Column to group by on first load.
+* `--filter-col COL`, `--filter-op OP`, `--filter-val VAL` – Apply an initial filter (ops: `eq`, `in`, `gt`, `lt`, `contains`, …).
+* `--dim KEY=VALUE` – Pre-select a dimension slice, e.g. `--dim z=1 --dim t=0`. Repeatable.
+* `--widgets-exclude NAME` – Hide a viewer plugin by ID. Repeatable.
+* `--palette NAME` – Color palette (default: `tab10`).
+
+Example:
+
+```bash
+pixel-patrol view examples/out/my_report.parquet \
+  --group-by file_extension \
+  --filter-col dtype --filter-op eq --filter-val uint8 \
+  --dim z=1 --dim t=0
+```
+
+### `pixel-patrol build-viewer-html`
+
+Packages the viewer as a self-contained static file or a GitHub Pages–style site so you can share or host your report without running a server.
+
+```bash
+# Single self-contained HTML file (share alongside the .parquet):
+pixel-patrol build-viewer-html -o viewer.html
+
+# GitHub Pages / static host site folder:
+pixel-patrol build-viewer-html -o gh-pages-out/
+```
+
+Open the HTML file directly in the browser, or deploy the site folder to any static host and load your report via a `?data=` URL pointing to the parquet.
 
 ### Troubleshooting
 
@@ -225,15 +224,24 @@ Note: the exporter requires `Playwright` dependency, without it an ImportError i
 
 ## API Use
 
-The `examples/` directory demonstrates how to use pixel-patrol API and for advanced users also how to extend pixel-patrol (loaders, processors, and widgets) by creating a package.
+The `examples/` directory demonstrates how to use the Pixel Patrol API and — for advanced users — how to extend it with custom loaders, processors, and widgets.
 
-* `examples/01_quickstart.py` or `examples/01_quickstart_extended.py` – end-to-end walkthrough using the base API. Process the bundled sample data and launch the dashboard:
+* `examples/01_quickstart_simple.py` – minimal end-to-end walkthrough: create a project, process files, open the viewer.
   ```bash
-  uv run examples/01_quickstart.py
+  cd examples && uv run 01_quickstart_simple.py
   ```
-  The scripts highlight each API step (create project → add paths → configure settings → process → show → export/import).
-  Feel free to adapt the scripts to your datasets and needed settings.  
 
+* `examples/02_quickstart_extended.py` – same flow with more configuration options demonstrated.
 
-* `examples/minimal-extension/` – For people who want to extend pixel-patrol, it offers an example minimal plug-in package that registers a custom loader (`markdown-diary`), processor, and widgets.   
-Use this as a starting point for your own plug-ins: update the `pyproject.toml` metadata (name, version, entry points) to match your project, replace the `MARKDOWN_DIARY` identifiers with your loader ID, and adjust the processor/widget code to emit the fields you care about. Entry points must be registered under `pixel_patrol.loader_plugins`, `pixel_patrol.processor_plugins`, or `pixel_patrol.widget_plugins` so Pixel Patrol can discover them automatically.
+The core API steps:
+
+```python
+from pixel_patrol_base import api
+
+project = api.create_project("my_project", base_dir="path/to/data", loader="bioio")
+api.add_paths(project, ["condition_a", "condition_b"])  # optional
+api.process_files(project, selected_file_extensions={"tif", "png"})
+api.view(project)  # opens the viewer in the browser
+```
+
+* `examples/minimal-extension/` – complete plug-in package example: a custom loader (reads Markdown diary files), a custom processor (mood sentiment score), and two JavaScript viewer plugins (word frequency chart, mood trend chart). Use this as a starting point for your own plug-ins: update `pyproject.toml` metadata (name, version, entry points) and replace the example identifiers with your own. Python entry points are registered under `pixel_patrol.loader_plugins` and `pixel_patrol.processor_plugins`; viewer JS plugins are declared in `viewer/extension.json` and registered under `pixel_patrol.viewer_extensions`.

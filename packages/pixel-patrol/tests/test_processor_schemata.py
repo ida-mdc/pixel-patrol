@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+import polars as pl
 import tifffile
-from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.specs import is_record_matching_processor
 
 from pixel_patrol_base import api
-from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.core.feature_schema import validate_processor_output
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.specs import is_record_matching_processor
+from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
 
 def generate_image_dataset(
@@ -58,7 +59,8 @@ def test_processor_schemata():
     )
     project.process_records(processing_config=processing_config)
 
-    if project.records_df is None or project.records_df.is_empty():
+    df = project.records_df
+    if df is None or df.is_empty():
         print("    [Error] No records processed!")
         return
 
@@ -69,14 +71,12 @@ def test_processor_schemata():
     assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
     records_df, metadata = api.load(parquet_files[0])
 
-    print(records_df.columns)
-
     processors = discover_processor_plugins()
     df_columns = set(records_df.columns)
 
     # Load a sample record to check if processors should run
     sample_file = list(images_dir.glob("*.tif"))[0]
-    sample_record = project.loader.load(str(sample_file))
+    sample_record = project.loader.load(sample_file)
 
     for processor in processors:
         # Check if processor should run on the test dataset
@@ -91,10 +91,8 @@ def test_processor_schemata():
             )
 
 
-
 def test_all_processors_return_dict():
-    """Every processor's run() must return a dict so that ``extracted.update(out)``
-    in ``_extract_record_properties`` is always safe.
+    """Every processor's run_chunk() must return a dict.
 
     This creates a small synthetic image, loads it into a Record, and runs every
     matching processor — verifying each returns a plain dict.
@@ -117,14 +115,11 @@ def test_all_processors_return_dict():
         if not is_record_matching_processor(record, processor.INPUT):
             continue
 
-        result = processor.run(record)
-        assert isinstance(result, list), (
+        result = processor.run_chunk(record)
+        assert isinstance(result, dict), (
             f"Processor '{processor.NAME}' returned {type(result).__name__} "
-            f"instead of list. Processors must return List[Dict] in long-format."
+            f"instead of dict. Processors must return Dict from run_chunk()."
         )
-        for row in result:
-            assert isinstance(row, dict)
-            assert "obs_level" in row, f"Processor '{processor.NAME}' row missing obs_level"
 
 
 

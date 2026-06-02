@@ -11,6 +11,10 @@ dependencies = [
     "pixel-patrol-base==0.5.0",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.uv]
 package = true
 
@@ -28,6 +32,9 @@ dev = [
     "pytest>=8.3.5",
     "pytest-mock>=3.14.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }

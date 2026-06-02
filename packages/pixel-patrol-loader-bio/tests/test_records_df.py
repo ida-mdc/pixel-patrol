@@ -1,6 +1,4 @@
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import polars as pl
@@ -8,271 +6,37 @@ import pytest
 import tifffile
 from PIL import Image
 
-from pixel_patrol_loader_bio.config import STANDARD_DIM_ORDER
+from pixel_patrol_base.core.processing import build_records_df
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
-from pixel_patrol_base.core.processing import (
-    build_records_df,
-    _build_deep_record_df,
-    load_and_process_records_from_file,
-    PATHS_DF_EXPECTED_SCHEMA,
-)
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 from pixel_patrol_base.utils.df_utils import postprocess_basic_file_metadata_df
+import zarr
+from zarr.storage import LocalStore
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.plugins.loaders.tifffile_loader import TifffileLoader
+from pixel_patrol_loader_bio.plugins.loaders.zarr_loader import ZarrLoader
+from datetime import datetime
+
 
 @pytest.fixture
 def loader():
-    """Provides a fresh BioIoLoader for each test function."""
     return BioIoLoader()
+
 
 @pytest.fixture
 def processors():
-    """Provides a fresh list of processor plugins for each test function."""
     return discover_processor_plugins()
 
 
-def test_build_records_df_from_file_system_no_images(tmp_path):
-    non_image_dir = tmp_path / "non_image_files"
-    non_image_dir.mkdir()
-    (non_image_dir / "document.txt").write_text("This is a text file.")
-    (non_image_dir / "data.csv").write_text("1,2,3\n4,5,6")
-
-    paths = [non_image_dir]
-    extensions = {"png", "jpg"}
-
-    with patch('pixel_patrol_base.core.processing._build_deep_record_df', return_value=pl.DataFrame()) as mock_get_deep_records_df:
-        records_df = build_records_df(paths,
-                                      loader="bioio",
-                                      processing_config=ProcessingConfig(selected_file_extensions=extensions))
-        assert records_df is None
-        mock_get_deep_records_df.assert_not_called()
-
-
-def test_build_deep_record_df_returns_dataframe_with_required_columns(tmp_path, monkeypatch, loader):
-    p1 = tmp_path / "img1.jpg"; p1.touch()
-    p2 = tmp_path / "img2.jpg"; p2.touch()
-    paths = [p1, p2]
-
-    def fake_load_and_process(file_path, loader_inst, processors, show_processor_progress=True):
-        assert loader_inst.NAME == "bioio"
-        return [{"width": 100, "height": 200}]
-
-    monkeypatch.setattr("pixel_patrol_base.core.processing.load_and_process_records_from_file",
-                        fake_load_and_process)
-    # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
-
-    # Build a basic DataFrame expected by the processing core
-    basic_df = pl.DataFrame({"path": paths}).with_row_index("row_index").with_columns(
-        pl.col("row_index").cast(pl.Int64)
+def test_build_records_df_returns_none_when_no_matching_files(tmp_path, loader, processors):
+    (tmp_path / "document.txt").write_text("not an image")
+    result, _ = build_records_df(
+        bases=[tmp_path],
+        loader=loader,
+        processors=processors,
+        config=ProcessingConfig(selected_file_extensions={"png", "jpg"}),
     )
-
-    df = _build_deep_record_df(basic_df, loader)
-
-    assert isinstance(df, pl.DataFrame)
-    assert set(df.columns) == {"row_index", "path", "width", "height"}
-    assert df.height == 2
-    assert df["width"].to_list() == [100, 100]
-    assert df["height"].to_list() == [200, 200]
-
-
-def test_load_and_process_returns_empty_for_nonexistent_file(tmp_path, loader):
-    missing = tmp_path / "no.png"
-    assert load_and_process_records_from_file(missing, loader=loader, processors=[]) == []
-
-
-def test_get_all_image_properties_returns_empty_if_loading_fails(tmp_path, monkeypatch, loader, processors):
-    img_file = tmp_path / "img.jpg"
-    img_file.write_bytes(b"not really an image") # type: ignore
-    monkeypatch.setattr("pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image", lambda p: None)
-    assert load_and_process_records_from_file(img_file, loader=loader, processors=[]) == []
-
-
-class DummyImg:
-    # Mocks the 'dims' object required by bioio_loader
-    dims = type("D", (), {"order": STANDARD_DIM_ORDER})()
-
-    # Properties required by the loader to determine array properties
-    shape = tuple(
-        2 if d in ("Y", "X") else 1
-        for d in STANDARD_DIM_ORDER
-    )
-
-    # FIXED: dask_data must be a NumPy array with the correct shape/ndim, not None.
-    # This prevents _validate_and_fix_meta from incorrectly setting ndim to 0.
-    dask_data = np.zeros(shape, dtype=np.uint8)
-
-    # Other metadata properties used by the loader
-    channel_names = ["ch1", "ch2"]
-    ome_metadata = {}
-
-    physical_pixel_sizes = type(
-        "P",
-        (),
-        {"X": 0.5, "Y": 0.75, "Z": 1.0, "T": 1.0}
-    )()
-
-    # Mock methods required by the bioio_loader logic
-    def get_image_data(self):
-        # Return the actual array data
-        return np.asarray(self.dask_data)
-
-    def get_channel_names(self):
-        return self.channel_names
-
-    def get_physical_pixel_sizes(self):
-        # Mocks the method for other tests, uses the new attribute values
-        sizes = self.physical_pixel_sizes
-        return {'X': sizes.X, 'Y': sizes.Y, 'Z': sizes.Z, 'T': sizes.T}
-
-    def get_image_metadata(self):
-        return self.ome_metadata
-
-
-def test_get_all_image_properties_extracts_standard_and_requested_metadata(tmp_path, monkeypatch, loader, processors):
-    img_file = tmp_path / "img.png"
-    img_file.touch()
-
-    monkeypatch.setattr(
-        "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
-        lambda p: DummyImg()
-    )
-    result = load_and_process_records_from_file(
-        img_file, loader=loader, processors=[]
-    )
-    assert isinstance(result, list)
-    assert len(result) == 1
-    props = result[0]
-    expected_shape = [2, 2]
-
-    assert props["shape"] == expected_shape
-    assert props["ndim"] == 2
-    assert props["dim_order"] == "YX"
-
-    assert props["pixel_size_X"] == 0.5
-    assert props["channel_names"] == ["ch1", "ch2"]
-
-
-def test_get_deep_image_df_ignores_paths_with_no_metadata(tmp_path, monkeypatch, loader, processors):
-    p_valid = tmp_path / "valid.jpg"
-    p_valid.touch()
-    p_invalid = tmp_path / "invalid.png"
-    p_invalid.touch()
-
-    def fake_load_and_process(file_path, _loader, _processors, show_processor_progress=True):
-        if Path(file_path) == p_valid:
-            return [{"width": 10, "height": 20}]
-        return []
-
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing.load_and_process_records_from_file",
-        fake_load_and_process
-    )
-    # Force single-worker mode so the monkeypatched function is executed in-process
-    monkeypatch.setattr("pixel_patrol_base.core.processing._resolve_worker_count", lambda *args: 1)
-
-    basic_df = (
-        pl.DataFrame({"path": [str(p_valid), str(p_invalid)]})
-        .with_row_index("row_index")
-        .with_columns(pl.col("row_index").cast(pl.Int64))
-    )
-
-    df = _build_deep_record_df(basic_df, loader_instance=loader)
-
-    assert isinstance(df, pl.DataFrame)
-    assert df.height == 2
-    assert df["path"].to_list() == [str(p_valid), str(p_invalid)]
-    assert df["width"].to_list() == [10, None]
-    assert df["height"].to_list() == [20, None]
-
-
-def test_build_records_df_from_file_system_with_images_returns_expected_columns_and_values(tmp_path, monkeypatch):
-    base = tmp_path / "root"
-    base.mkdir()
-    img1 = base / "graphic.png"
-    img1.write_text("dummy")
-    img2 = base / "photo1.jpg"
-    img2.write_text("dummy")
-    (base / "notes.txt").write_text("not an image")
-
-    expected_paths = [str(img1), str(img2)]
-
-    def fake_build_deep_record_df(basic, loader_instance, processing_config=None, progress_callback=None, flush_dir=None):
-        width_map = {str(img1): 64, str(img2): 128}
-        height_map = {str(img1): 48, str(img2): 256}
-        return basic.with_columns(
-            pl.col("path")
-            .map_elements(lambda p: width_map.get(str(p)), return_dtype=pl.Int64)
-            .alias("width"),
-            pl.col("path")
-            .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
-            .alias("height"),
-        )
-
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._build_deep_record_df",
-        fake_build_deep_record_df
-    )
-
-    result = build_records_df(
-        bases=[base],
-        loader="bioio",
-        processing_config=ProcessingConfig(selected_file_extensions={"png", "jpg"})
-    )
-
-    assert result is not None
-
-    expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
-    assert expected_cols.issubset(set(result.columns))
-
-    assert set(result["path"].to_list()) == set(expected_paths)
-
-    result_dict = {
-        row["path"]: (row["width"], row["height"]) for row in result.iter_rows(named=True)
-    }
-    expected_dict = dict(zip(expected_paths, zip([64, 128], [48, 256])))
-    assert result_dict == expected_dict
-
-
-def test_build_records_df_from_file_system_merges_basic_and_deep_metadata_correctly(tmp_path, monkeypatch):
-    base = tmp_path / "root"
-    base.mkdir()
-    img1 = base / "one.jpg"
-    img1.write_text("x")
-    img2 = base / "two.png"
-    img2.write_text("y")
-
-    def fake_build_deep_record_df(basic, loader, processing_config=None, progress_callback=None, flush_dir=None):
-        width_map = {str(img1): 10, str(img2): 20}
-        height_map = {str(img1): 15, str(img2): 25}
-        return basic.with_columns(
-            pl.col("path")
-            .map_elements(lambda p: width_map.get(str(p)), return_dtype=pl.Int64)
-            .alias("width"),
-            pl.col("path")
-            .map_elements(lambda p: height_map.get(str(p)), return_dtype=pl.Int64)
-            .alias("height"),
-        )
-
-    monkeypatch.setattr(
-        "pixel_patrol_base.core.processing._build_deep_record_df",
-        fake_build_deep_record_df
-    )
-
-    result = build_records_df(
-        bases=[base],
-        loader="bioio",
-        processing_config=ProcessingConfig(selected_file_extensions={"jpg", "png"}),
-        progress_callback=None
-    )
-
-    expected_cols = set(PATHS_DF_EXPECTED_SCHEMA.keys()) | {"width", "height"}
-    assert expected_cols.issubset(set(result.columns))
-
-    df = result.sort("path")
-    assert df["path"].to_list() == [str(img1), str(img2)]
-    assert df["width"].to_list() == [10, 20]
-    assert df["height"].to_list() == [15, 25]
+    assert result is None
 
 
 def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
@@ -295,26 +59,27 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
 
     out = postprocess_basic_file_metadata_df(df)
 
-    assert set(PATHS_DF_EXPECTED_SCHEMA.keys()).issubset(set(out.columns))
+    assert "modification_month" in out.columns
+    assert "size_readable" in out.columns
     assert out["modification_month"].to_list() == [3, 7]
     assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 
-def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
+def test_full_records_df_computes_real_mean_intensity(tmp_path, loader, processors):
     img_dir = tmp_path / "imgs"
     img_dir.mkdir()
 
-    a = np.zeros((2,2,1), dtype=np.uint8)
-    from PIL import Image
+    a = np.zeros((2, 2, 1), dtype=np.uint8)
     Image.fromarray(a.squeeze(), mode="L").save(img_dir / "zero.png")
 
-    b = np.full((2,2,1), 255, dtype=np.uint8)
+    b = np.full((2, 2, 1), 255, dtype=np.uint8)
     Image.fromarray(b.squeeze(), mode="L").save(img_dir / "full.png")
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[img_dir],
         loader=loader,
-        processing_config=ProcessingConfig(selected_file_extensions={"png"}),
+        processors=processors,
+        config=ProcessingConfig(selected_file_extensions={"png"}),
     )
     assert isinstance(df, pl.DataFrame)
     paths = df["path"].to_list()
@@ -322,29 +87,29 @@ def test_full_records_df_computes_real_mean_intensity(tmp_path, loader):
 
     assert "mean_intensity" in df.columns
 
-    mip = { Path(p).name: v for p, v in zip(df["path"].to_list(), df["mean_intensity"].to_list()) }
+    mip = {Path(p).name: v for p, v in zip(df["path"].to_list(), df["mean_intensity"].to_list())}
     assert mip["zero.png"] == 0.0
     assert mip["full.png"] == 255.0
 
 
-def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
+def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader, processors):
     t_size, c_size, z_size, y_size, x_size = 2, 3, 4, 2, 2
     arr = np.zeros((t_size, c_size, z_size, y_size, x_size), dtype=np.uint8)
     for t in range(t_size):
         for c in range(c_size):
             for z in range(z_size):
-                arr[t, c, z, ...] = (t*z_size + z)*10 + c*5
+                arr[t, c, z, ...] = (t * z_size + z) * 10 + c * 5
 
     path = tmp_path / "5d.tif"
     tifffile.imwrite(str(path), arr, photometric='minisblack')
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
-        processing_config=ProcessingConfig(selected_file_extensions={"tif"}),
+        processors=processors,
+        config=ProcessingConfig(selected_file_extensions={"tif"}),
     )
 
-    # In long format, per-slice data is in separate rows with dim_* coordinates.
     assert {"dim_t", "dim_c", "dim_z", "mean_intensity"}.issubset(set(df.columns))
 
     def mean_at(t, c, z):
@@ -383,12 +148,14 @@ def test_full_records_df_handles_5d_tif_t_z_c_dimensions(tmp_path, loader):
         block_vals = [(t * z_size + z) * 10 + c * 5 for t in range(t_size) for c in range(c_size)]
         assert mean_single(1, z=z) == pytest.approx(sum(block_vals) / len(block_vals))
 
-    all_vals = [(t * z_size + z) * 10 + c * 5
-                for t in range(t_size) for c in range(c_size) for z in range(z_size)]
+    all_vals = [
+        (t * z_size + z) * 10 + c * 5
+        for t in range(t_size) for c in range(c_size) for z in range(z_size)
+    ]
     assert mean_single(0) == pytest.approx(sum(all_vals) / len(all_vals))
 
 
-def test_full_records_df_handles_png_gray(tmp_path, loader):
+def test_full_records_df_handles_png_gray(tmp_path, loader, processors):
     arr = np.zeros((2, 2, 3), dtype=np.uint8)
     arr[..., 0] = 10
     arr[..., 1] = 20
@@ -397,10 +164,11 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
     path = tmp_path / "rgb.png"
     Image.fromarray(arr).save(str(path))
 
-    df = build_records_df(
+    df, _ = build_records_df(
         bases=[tmp_path],
         loader=loader,
-        processing_config=ProcessingConfig(selected_file_extensions={"png"}),
+        processors=processors,
+        config=ProcessingConfig(selected_file_extensions={"png"}),
     )
 
     assert "mean_intensity" in df.columns
@@ -408,3 +176,34 @@ def test_full_records_df_handles_png_gray(tmp_path, loader):
     expected_gray = np.uint8(raw_gray)
     global_row = df.filter(pl.col("obs_level") == 0)["mean_intensity"][0]
     assert global_row == expected_gray
+
+
+def test_build_records_df_tifffile(tmp_path):
+    im = np.zeros((4, 8, 8), dtype=np.uint16)
+    tifffile.imwrite(tmp_path / "img.tif", im, imagej=True, metadata={"axes": "CYX"})
+    df, _ = build_records_df(
+        bases=[tmp_path],
+        loader=TifffileLoader(),
+        processors=discover_processor_plugins(),
+        config=ProcessingConfig(selected_file_extensions={"tif"}),
+    )
+    assert df is not None
+    assert len(df) > 0
+
+
+def test_build_records_df_zarr(tmp_path):
+    zarr_path = tmp_path / "img.zarr"
+    store = LocalStore(str(zarr_path))
+    root = zarr.group(store=store)
+    arr = root.create_array("0", shape=(2, 8, 8), chunks=(2, 8, 8), dtype="uint16", overwrite=True)
+    arr[:] = np.zeros((2, 8, 8), dtype="uint16")
+    root.attrs.put({"multiscales": [{"version": "0.4", "datasets": [{"path": "0"}],
+        "axes": [{"name": "c"}, {"name": "y"}, {"name": "x"}]}]})
+    df, _ = build_records_df(
+        bases=[tmp_path],
+        loader=ZarrLoader(),
+        processors=discover_processor_plugins(),
+        config=ProcessingConfig(selected_file_extensions={"zarr"}),
+    )
+    assert df is not None
+    assert len(df) > 0

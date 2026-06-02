@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Union, Iterable, List, Optional, Callable, Set, Dict
 import polars as pl
@@ -15,76 +16,100 @@ logger = logging.getLogger(__name__)
 
 def create_project(name: str,
                    base_dir: Union[str, Path],
-                   loader: str = None,
+                   loader: Optional[str] = None,
                    output_path: Optional[Union[str, Path]] = None
                    ) -> Project:
-    logger.info(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
+    logger.debug(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
     return Project(name, base_dir, loader, output_path)
 
 def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> Project:
-    logger.info(f"API Call: Adding paths to project '{project.name}'.")
+    logger.debug(f"API Call: Adding paths to project '{project.name}'.")
     return project.add_paths(paths)
 
 def delete_path(project: Project, path: str) -> Project:
-    logger.info(f"API Call: deleting paths from project '{project.name}'.")
+    logger.debug(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
 
 
 def process_files(
         project: Project,
-        progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
         # --- Processor selection ---
         processors_included: Optional[Set[str]] = None,
         processors_excluded: Optional[Set[str]] = None,
         # --- File selection ---
         selected_file_extensions: Union[Set[str], str, None] = None,
         # --- Run behaviour ---
-        processing_max_workers: Optional[int] = None,
-        records_flush_every_n: Optional[int] = None,
+        max_workers: Optional[int] = None,
+        mb_per_task: Optional[float] = None,
+        max_images_per_task: Optional[int] = None,
+        slice_size: Optional[Dict[str, int]] = None,
+        rows_per_part: Optional[int] = None,
         parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
         flavor: Optional[str] = None,
         description: Optional[str] = None,
+        # --- Logging ---
+        log_file: bool = False,
 ) -> Project:
     """
     Process files in the project.
 
     Args:
         project:                    The project to process.
-        progress_callback:          Optional callback(current, total, current_file) -> None,
-                                    called for each file processed.
+        progress_callback:          Optional callback(done: int, total: int) called per
+                                    completed record.
         processors_included:        Only run these processors (e.g. {"basic-stats"}).
                                     If set, processors_excluded is ignored.
         processors_excluded:        Exclude these processors (e.g. {"histogram"}).
         selected_file_extensions:   Extensions to process, e.g. {"tif", "png"}, or "all".
                                     Defaults to "all".
-        processing_max_workers:     Thread-pool size. None = default.
-        records_flush_every_n:      Flush intermediate results to disk every N records.
+        max_workers:                Dask worker count. None = auto-detect CPU count.
+        mb_per_task:                MB budget per task (controls batch size). None = default (512).
+                                    Increase for many small images; decrease for very large images.
+        max_images_per_task:         Max images per task (batch and container files). None = default (200). Lower values
+                                    give more frequent progress updates on large flat datasets.
+        slice_size:                 Per-dim block size for spatial chunking of large single files,
+                                    e.g. {"Z": 1, "Y": 256}. None = auto.
+        rows_per_part:              Flush intermediate results to disk every N rows.
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
         description:                Free-form description string embedded in the parquet metadata.
+        log_file:                   Write a DEBUG-level log file alongside the output parquet.
+                                    INFO and WARNING still appear in the terminal as usual.
 
     Returns:
         The project with processed records_df.
     """
+    if log_file:
+        _setup_file_logging(project)
+    config_kwargs = {}
+    if rows_per_part is not None:
+        config_kwargs["rows_per_part"] = rows_per_part
+    if mb_per_task is not None:
+        config_kwargs["mb_per_task"] = mb_per_task
+    if max_images_per_task is not None:
+        config_kwargs["max_images_per_task"] = max_images_per_task
+    if slice_size is not None:
+        config_kwargs["slice_size"] = slice_size
     processing_config = ProcessingConfig(
         processors_included=processors_included or set(),
         processors_excluded=processors_excluded or set(),
         selected_file_extensions=selected_file_extensions or "all",
-        processing_max_workers=processing_max_workers,
-        records_flush_every_n=records_flush_every_n,
+        max_workers=max_workers,
         parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",
             description=description or "",
         ),
+        **config_kwargs,
     )
-    logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
+    logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
 
 def view(
-        source: Union[Project, Path],
+        source: Union[Project, Path, str],
         port: int = 8052,
         open_browser: bool = True,
         group_col: Optional[str] = None,
@@ -160,24 +185,24 @@ def build_viewer(output: Union[str, Path]) -> Path:
     output = Path(output)
     if output.suffix.lower() in {".html", ".htm"}:
         out = build_single_file_viewer_html(output)
-        logger.info(f"API Call: Single-file viewer written to '{out}'.")
+        logger.info("Single-file viewer written to: '%s'", out)
     else:
         out = build_github_pages_site(output)
-        logger.info(f"API Call: Viewer site written to '{out}'.")
+        logger.info("Static viewer site written to: '%s'", out)
     return out
 
 
 def load(src: Path) -> tuple:
     """
     Load a saved project parquet file.
-    Returns (records_df, metadata, project_name).
+    Returns (records_df, metadata).
 
     Args:
         src: Path to the .parquet file saved by process_files.
     """
-    logger.info(f"API Call: Loading project from '{src}'.")
+    logger.debug(f"API Call: Loading project from '{src}'.")
     records_df, metadata = load_parquet(src)
-    logger.info(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
+    logger.debug(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
     return records_df, metadata
 
 
@@ -192,6 +217,26 @@ def get_paths(project: Project) -> List[Path]:
 
 def get_records_df(project: Project) -> Optional[pl.DataFrame]:
     return project.get_records_df()
+
+
+def _setup_file_logging(project: Project) -> None:
+    """Attach a DEBUG-level FileHandler to the root logger, adjacent to the output parquet.
+
+    Existing handlers (e.g. the terminal StreamHandler) are kept at INFO so
+    terminal output is unchanged — only the file receives DEBUG messages.
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = project.output_path.with_name(f"{project.output_path.stem}_{ts}.log")
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    for h in root.handlers:
+        if not isinstance(h, logging.FileHandler):
+            h.setLevel(logging.INFO)
+    fh = logging.FileHandler(log_path)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s", datefmt="%H:%M:%S"))
+    root.addHandler(fh)
+    logger.info("Debug log → '%s'", log_path)
 
 
 def _resolve_parquet_path(source: Union[Project, Path, str]) -> Path:
