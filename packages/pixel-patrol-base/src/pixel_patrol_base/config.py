@@ -8,9 +8,9 @@ SPRITE_SIZE = 64
 ## Processing defaults
 # rows accumulated per output part file before flushing to disk
 DEFAULT_ROWS_PER_PART: int = 10_000
-# max files per batch task; caps batch size for small-file datasets to keep
-# workers returning results frequently and the progress bar responsive
-DEFAULT_MAX_FILES_PER_TASK: int = 50
+# max images per task (applies to both batch tasks and container sub-images);
+# caps task size to keep workers returning results frequently
+DEFAULT_MAX_IMAGES_PER_TASK: int = 200
 
 # Legacy alias — kept so any direct import still works during the transition
 DEFAULT_RECORDS_FLUSH_EVERY_N: int = DEFAULT_ROWS_PER_PART

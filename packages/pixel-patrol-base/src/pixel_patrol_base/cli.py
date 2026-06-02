@@ -60,8 +60,8 @@ def cli():
               help='Connect to an existing Dask scheduler (e.g. tcp://host:8786).')
 @click.option('--mb-per-task', type=float, default=None, show_default=True,
               help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
-@click.option('--max-files-per-task', type=int, default=None, show_default=True,
-              help='Max files per batch task (default: 50). Lower values give more frequent progress on large flat datasets.')
+@click.option('--max-images-per-task', type=int, default=None, show_default=True,
+              help='Max images per task for both batch and container files (default: 200). Lower values give more frequent progress updates.')
 @click.option('--leaf-block-shape', 'leaf_block_shape', multiple=True,
               help='Spatial chunk size per dim, e.g. --leaf-block-shape Z=1 --leaf-block-shape Y=256. '
                    'Only relevant for large volumetric files (zarr, OME-TIFF).')
@@ -77,7 +77,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               max_workers: int | None,
               scheduler: str | None,
               mb_per_task: float | None,
-              max_files_per_task: int | None,
+              max_images_per_task: int | None,
               leaf_block_shape: tuple[str, ...],
               rows_per_part: int | None,
               log_file: bool):
@@ -104,7 +104,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         mb_per_task=mb_per_task,
-        max_files_per_task=max_files_per_task,
+        max_images_per_task=max_images_per_task,
         leaf_block_shape=_parse_leaf_block_shape(leaf_block_shape) if leaf_block_shape else None,
         rows_per_part=rows_per_part,
         flavor=flavor or None,
