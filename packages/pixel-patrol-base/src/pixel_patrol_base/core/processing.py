@@ -360,7 +360,7 @@ def _plan_tasks(
         if uncompressed > budget_bytes:
             if pending := _flush_batch():
                 yield pending
-            specs = _compute_memory_chunk_specs(file_path, info, config.mb_per_task, config.leaf_block_shape)
+            specs = _compute_memory_chunk_specs(file_path, info, config.mb_per_task, config.slice_size)
             if specs:
                 n = len(specs)
                 for spec in specs:
@@ -494,7 +494,7 @@ def _process_memory_chunk(
     ]
     leaf_rows: List[dict] = []
 
-    for leaf_arr, leaf_global_origin in _iter_leaf_blocks(arr, dim_order, config.leaf_block_shape, mem_origin):
+    for leaf_arr, leaf_global_origin in _iter_leaf_blocks(arr, dim_order, config.slice_size, mem_origin):
         leaf_record = _build_record(mem_record, leaf_arr, leaf_global_origin)
         leaf_row: dict = {}
         for proc in leaf_procs:

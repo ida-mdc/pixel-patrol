@@ -43,7 +43,7 @@ def process_files(
         max_workers: Optional[int] = None,
         mb_per_task: Optional[float] = None,
         max_images_per_task: Optional[int] = None,
-        leaf_block_shape: Optional[Dict[str, int]] = None,
+        slice_size: Optional[Dict[str, int]] = None,
         rows_per_part: Optional[int] = None,
         parquet_row_group_size: Optional[int] = None,
         # --- Metadata ---
@@ -69,9 +69,8 @@ def process_files(
                                     Increase for many small images; decrease for very large images.
         max_images_per_task:         Max images per task (batch and container files). None = default (200). Lower values
                                     give more frequent progress updates on large flat datasets.
-        leaf_block_shape:           Per-dim block size for spatial chunking of large single files,
-                                    e.g. {"Z": 1, "Y": 256}. None = auto. Only relevant for
-                                    large volumetric images (zarr, OME-TIFF).
+        slice_size:                 Per-dim block size for spatial chunking of large single files,
+                                    e.g. {"Z": 1, "Y": 256}. None = auto.
         rows_per_part:              Flush intermediate results to disk every N rows.
         parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
         flavor:                     Config flavour label embedded in the parquet metadata.
@@ -91,8 +90,8 @@ def process_files(
         config_kwargs["mb_per_task"] = mb_per_task
     if max_images_per_task is not None:
         config_kwargs["max_images_per_task"] = max_images_per_task
-    if leaf_block_shape is not None:
-        config_kwargs["leaf_block_shape"] = leaf_block_shape
+    if slice_size is not None:
+        config_kwargs["slice_size"] = slice_size
     processing_config = ProcessingConfig(
         processors_included=processors_included or set(),
         processors_excluded=processors_excluded or set(),
