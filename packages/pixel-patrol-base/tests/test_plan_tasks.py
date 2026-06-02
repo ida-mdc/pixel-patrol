@@ -140,7 +140,7 @@ def test_header_failure_skips_file():
 
 def test_header_failure_large_file_skipped():
     loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, ("Y", "X"), fail=True)})
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/big.npy", 1024 * 1024)], loader, config)
     assert len(tasks) == 0
     assert len(fi) == 0
@@ -150,7 +150,7 @@ def test_header_failure_large_file_skipped():
 
 def test_large_single_image_yields_chunk_tasks():
     loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, ("Y", "X"))})
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/big.npy", 512 * 512 * 4)], loader, config)
     assert all(isinstance(t, MemoryChunkTask) for t in tasks)
     assert len(tasks) > 1
@@ -163,7 +163,7 @@ def test_large_file_flushes_pending_batch_first():
         "/small.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
         "/big.npy":   MockEntry((512, 512), np.float32, ("Y", "X")),
     })
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, _ = _run([("/small.npy", 16384), ("/big.npy", 512 * 512 * 4)], loader, config)
     assert isinstance(tasks[0], BatchTask)
     assert len(tasks[0].files) == 1
@@ -172,7 +172,7 @@ def test_large_file_flushes_pending_batch_first():
 
 def test_unsplittable_large_file_falls_to_batch():
     loader = MockLoader({"/pinned.npy": MockEntry((512, 512), np.float32, ("Y", "X"))})
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": -1, "X": -1})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": -1, "X": -1})
     tasks, _ = _run([("/pinned.npy", 512 * 512 * 4)], loader, config)
     assert len(tasks) == 1
     assert isinstance(tasks[0], BatchTask)
@@ -180,7 +180,7 @@ def test_unsplittable_large_file_falls_to_batch():
 
 def test_non_divisible_large_file_falls_to_batch_with_warning():
     loader = MockLoader({"/weird.npy": MockEntry((100, 512), np.float32, ("Y", "X"))})
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 32})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 32})
     with capture_warnings() as warnings:
         tasks, _ = _run([("/weird.npy", 100 * 512 * 4)], loader, config)
     assert len(tasks) == 1
@@ -194,7 +194,7 @@ def test_chunk_tasks_followed_by_more_batching():
         "/small1.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
         "/small2.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
     })
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, _ = _run([
         ("/big.npy", 512 * 512 * 4),
         ("/small1.npy", 16384),
@@ -269,7 +269,7 @@ def test_mixed_small_large_container_ordering():
         "/container.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=4),
         "/final.npy":      MockEntry((64, 64), np.float32, ("Y", "X")),
     })
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([
         ("/small.npy",      16384),
         ("/big.npy",        512 * 512 * 4),
@@ -300,7 +300,7 @@ def test_all_task_types_have_correct_file_indices():
         "/f1.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=3),
         "/f2.npy":  MockEntry((512, 512), np.float32, ("Y", "X")),
     })
-    config = ProcessingConfig(mb_per_task=0.1, leaf_block_shape={"Y": 64})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/f0.npy", 16384), ("/f1.lmdb", 3000), ("/f2.npy", 512 * 512 * 4)], loader, config)
 
     assert len(fi) == 3

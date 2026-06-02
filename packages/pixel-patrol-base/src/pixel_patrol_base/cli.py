@@ -62,9 +62,8 @@ def cli():
               help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max images per task for both batch and container files (default: 200). Lower values give more frequent progress updates.')
-@click.option('--leaf-block-shape', 'leaf_block_shape', multiple=True,
-              help='Spatial chunk size per dim, e.g. --leaf-block-shape Z=1 --leaf-block-shape Y=256. '
-                   'Only relevant for large volumetric files (zarr, OME-TIFF).')
+@click.option('--slice-size', 'slice_size', multiple=True,
+              help='Spatial chunk size per dim, e.g. --slice-size Z=1 --slice-size Y=256.')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
               help='Flush intermediate results to disk every N rows (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,
@@ -78,7 +77,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               scheduler: str | None,
               mb_per_task: float | None,
               max_images_per_task: int | None,
-              leaf_block_shape: tuple[str, ...],
+              slice_size: tuple[str, ...],
               rows_per_part: int | None,
               log_file: bool):
     """
@@ -105,7 +104,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         processors_excluded=set(processors_exclude) if processors_exclude else None,
         mb_per_task=mb_per_task,
         max_images_per_task=max_images_per_task,
-        leaf_block_shape=_parse_leaf_block_shape(leaf_block_shape) if leaf_block_shape else None,
+        slice_size=_parse_slice_size(slice_size) if slice_size else None,
         rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
@@ -227,7 +226,7 @@ def build_viewer_html(output: Path):
     api_build_viewer(output)
 
 
-def _parse_leaf_block_shape(items: tuple) -> dict:
+def _parse_slice_size(items: tuple) -> dict:
     """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means full extent."""
     result = {}
     for item in items:

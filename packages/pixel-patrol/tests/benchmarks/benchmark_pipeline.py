@@ -113,7 +113,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  ("Z", "Y", "X"),
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 1.0, "leaf_block_shape": {"Z": 1, "Y": 128}},
+        "config_kw":  {"mb_per_task": 1.0, "slice_size": {"Z": 1, "Y": 128}},
         "modes":      ("memory", "file"),
     },
     {
@@ -124,7 +124,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  ("Z", "C", "Y", "X"),
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 64, "leaf_block_shape": {"Z": 1, "Y": 1024}},
+        "config_kw":  {"mb_per_task": 64, "slice_size": {"Z": 1, "Y": 1024}},
         "modes":      ("memory",),
     },
     {
@@ -282,7 +282,7 @@ def run_one(
             "dtype":             np.dtype(sc["dtype"]).name,
             "total_data_mb":     round(total_data_mb, 2),
             "mb_per_task":       sc["config_kw"].get("mb_per_task"),
-            "leaf_block_shape":  sc["config_kw"].get("leaf_block_shape"),
+            "slice_size":  sc["config_kw"].get("slice_size"),
         },
         "run": {
             "mode":      mode,

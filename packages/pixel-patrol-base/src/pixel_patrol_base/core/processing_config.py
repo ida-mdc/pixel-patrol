@@ -28,7 +28,7 @@ class ProcessingConfig:
     # ── Task planning ────────────────────────────────────────────────────────
     mb_per_task:          float                   = 512.0
     max_images_per_task:  int                     = DEFAULT_MAX_IMAGES_PER_TASK
-    leaf_block_shape:     Optional[Dict[str, int]] = None
+    slice_size:           Optional[Dict[str, int]] = None
 
     # ── Output ───────────────────────────────────────────────────────────────
     rows_per_part:        int            = DEFAULT_ROWS_PER_PART
@@ -49,9 +49,9 @@ class ProcessingConfig:
             raise ValueError("mb_per_task must be positive.")
         if self.max_images_per_task < 1:
             raise ValueError("max_images_per_task must be a positive integer.")
-        if self.leaf_block_shape is not None:
-            for dim, sz in self.leaf_block_shape.items():
+        if self.slice_size is not None:
+            for dim, sz in self.slice_size.items():
                 if sz != -1 and sz < 1:
-                    raise ValueError(f"leaf_block_shape['{dim}'] must be -1 or a positive integer.")
+                    raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")
         if self.rows_per_part < 1:
             raise ValueError("rows_per_part must be a positive integer.")

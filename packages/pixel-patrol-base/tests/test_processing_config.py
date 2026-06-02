@@ -12,7 +12,7 @@ def test_defaults():
     assert config.selected_file_extensions == "all"
     assert config.max_workers is None
     assert config.mb_per_task == 512.0
-    assert config.leaf_block_shape is None
+    assert config.slice_size is None
     assert config.rows_per_part == DEFAULT_ROWS_PER_PART
 
 
@@ -93,21 +93,21 @@ def test_mb_per_task_negative_raises():
         ProcessingConfig(mb_per_task=-1.0)
 
 
-# --- leaf_block_shape ---
+# --- slice_size ---
 
-def test_leaf_block_shape_none():
-    config = ProcessingConfig(leaf_block_shape=None)
-    assert config.leaf_block_shape is None
-
-
-def test_leaf_block_shape_valid():
-    config = ProcessingConfig(leaf_block_shape={"Z": 1, "Y": -1, "X": -1})
-    assert config.leaf_block_shape == {"Z": 1, "Y": -1, "X": -1}
+def test_slice_size_none():
+    config = ProcessingConfig(slice_size=None)
+    assert config.slice_size is None
 
 
-def test_leaf_block_shape_invalid_raises():
+def test_slice_size_valid():
+    config = ProcessingConfig(slice_size={"Z": 1, "Y": -1, "X": -1})
+    assert config.slice_size == {"Z": 1, "Y": -1, "X": -1}
+
+
+def test_slice_size_invalid_raises():
     with pytest.raises(ValueError):
-        ProcessingConfig(leaf_block_shape={"Z": 0})
+        ProcessingConfig(slice_size={"Z": 0})
 
 
 # --- rows_per_part ---
