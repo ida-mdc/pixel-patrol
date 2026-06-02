@@ -951,7 +951,7 @@ def _coordinate_pipeline(
         return f
 
     pbar = tqdm(
-        unit=" records",
+        unit=" images",
         unit_scale=False,
         desc="Processing",
         disable=on_progress is not None,
@@ -1030,7 +1030,7 @@ def _coordinate_pipeline(
             elapsed = time.monotonic() - t_pipeline_start
             rate    = completed_records / elapsed if elapsed > 0 else 0
             logger.info(
-                "Progress: %d records done | %.1f rec/s | %d errors | %d futures pending | %d parts written",
+                "Progress: %d images done | %.1f img/s | %d errors | %d futures pending | %d parts written",
                 completed_records, rate, error_records, len(future_to_task), writer._part_counter,
             )
 
@@ -1038,7 +1038,7 @@ def _coordinate_pipeline(
     wall_s = time.perf_counter() - t_wall_start
     elapsed_total = time.monotonic() - t_pipeline_start
     logger.info(
-        "Pipeline done: %d records, %d errors, %d parts, %.1fs total (%.1f rec/s avg)",
+        "Pipeline done: %d images, %d errors, %d parts, %.1fs total (%.1f img/s avg)",
         completed_records, error_records, writer._part_counter,
         elapsed_total, completed_records / elapsed_total if elapsed_total > 0 else 0,
     )
