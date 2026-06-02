@@ -66,7 +66,7 @@ def cli():
               help='Spatial chunk size per dim, e.g. --leaf-block-shape Z=1 --leaf-block-shape Y=256. '
                    'Only relevant for large volumetric files (zarr, OME-TIFF).')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
-              help='Flush intermediate results to disk every N rows (default: 2048).')
+              help='Flush intermediate results to disk every N rows (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,
               help='Write a debug log file alongside the output parquet (auto-named).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],

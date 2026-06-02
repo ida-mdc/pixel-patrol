@@ -19,15 +19,15 @@ def create_project(name: str,
                    loader: Optional[str] = None,
                    output_path: Optional[Union[str, Path]] = None
                    ) -> Project:
-    logger.info(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
+    logger.debug(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
     return Project(name, base_dir, loader, output_path)
 
 def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> Project:
-    logger.info(f"API Call: Adding paths to project '{project.name}'.")
+    logger.debug(f"API Call: Adding paths to project '{project.name}'.")
     return project.add_paths(paths)
 
 def delete_path(project: Project, path: str) -> Project:
-    logger.info(f"API Call: deleting paths from project '{project.name}'.")
+    logger.debug(f"API Call: deleting paths from project '{project.name}'.")
     return project.delete_path(path)
 
 
@@ -105,7 +105,7 @@ def process_files(
         ),
         **config_kwargs,
     )
-    logger.info(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
+    logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)
 
 
@@ -201,9 +201,9 @@ def load(src: Path) -> tuple:
     Args:
         src: Path to the .parquet file saved by process_files.
     """
-    logger.info(f"API Call: Loading project from '{src}'.")
+    logger.debug(f"API Call: Loading project from '{src}'.")
     records_df, metadata = load_parquet(src)
-    logger.info(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
+    logger.debug(f"API Call: Loaded '{metadata.project_name}' from '{src}'.")
     return records_df, metadata
 
 

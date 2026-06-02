@@ -865,7 +865,7 @@ class _ResultsWriter:
         # In-memory path (parts_dir=None, small dataset).
         t0 = time.monotonic()
         combined = pl.concat(self._buffer, how="diagonal_relaxed")
-        logger.info("Finalize: concat done in %.1fs — %d rows, post-processing ...", time.monotonic() - t0, len(combined))
+        logger.debug("Finalize: concat done in %.1fs — %d rows, post-processing ...", time.monotonic() - t0, len(combined))
         result = _post_process(combined)
         logger.info("Finalize: complete — %d rows total, elapsed %.1fs", len(result), time.monotonic() - self._t_start)
         return result
@@ -1405,6 +1405,6 @@ def cleanup_chunks_dir(parts_dir: Optional[Path]) -> None:
         return
     try:
         shutil.rmtree(parts_dir)
-        logger.info("Processing Core: removed intermediate parts directory '%s'.", parts_dir)
+        logger.debug("Processing Core: removed intermediate parts directory '%s'.", parts_dir)
     except OSError as exc:
         logger.warning("Processing Core: could not remove '%s': %s", parts_dir, exc)
