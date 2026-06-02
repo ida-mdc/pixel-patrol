@@ -20,6 +20,7 @@ jobs:
           - pixel-patrol-aqqua
           - pixel-patrol-loader-bio
           - pixel-patrol-loader-tifffile
+          - pixel-patrol-loader-zarr
           - pixel-patrol
           - pixel-patrol-tensorboard
     runs-on: ${{ matrix.os }}

@@ -9,7 +9,7 @@ import zarr
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.record import record_from, Record
-from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
+from pixel_patrol_loader_zarr.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +169,8 @@ class ZarrLoader:
     NAME = "zarr"
 
     SUPPORTED_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
+    FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
+    CONTAINER_EXTENSIONS: Set[str] = set()
 
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "dim_order": str,
@@ -182,8 +184,6 @@ class ZarrLoader:
     OUTPUT_SCHEMA_PATTERNS = [
         (r"^[A-Za-z]_size$", int),
     ]
-
-    FOLDER_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
 
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
