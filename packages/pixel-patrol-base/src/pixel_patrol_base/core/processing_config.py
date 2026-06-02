@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
-from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_FILES_PER_TASK
+from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class ProcessingConfig:
 
     # ── Task planning ────────────────────────────────────────────────────────
     mb_per_task:          float                   = 512.0
-    max_files_per_task:   int                     = DEFAULT_MAX_FILES_PER_TASK
+    max_images_per_task:  int                     = DEFAULT_MAX_IMAGES_PER_TASK
     leaf_block_shape:     Optional[Dict[str, int]] = None
 
     # ── Output ───────────────────────────────────────────────────────────────
@@ -47,8 +47,8 @@ class ProcessingConfig:
             raise ValueError("max_workers must be a positive integer or None.")
         if self.mb_per_task <= 0:
             raise ValueError("mb_per_task must be positive.")
-        if self.max_files_per_task < 1:
-            raise ValueError("max_files_per_task must be a positive integer.")
+        if self.max_images_per_task < 1:
+            raise ValueError("max_images_per_task must be a positive integer.")
         if self.leaf_block_shape is not None:
             for dim, sz in self.leaf_block_shape.items():
                 if sz != -1 and sz < 1:

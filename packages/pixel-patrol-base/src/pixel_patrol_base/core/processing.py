@@ -19,7 +19,7 @@ CALL GRAPH
     └─ _coordinate_pipeline          submit + gather loop
           ├─ _execute_batch_task     [worker] small files
           ├─ _execute_memory_chunk_task [worker] one memory chunk (sub-region)
-          ├─ _execute_sub_image_task [worker] sub-image batch
+          ├─ _execute_container_task [worker] container file batch
           ├─ _RecordAssembler        collects memory chunks per record
           ├─ _rollup                 MemoryChunkResults → obs_row dicts
           ├─ _join_file_metadata     merge file metadata into obs rows
@@ -114,14 +114,14 @@ class MemoryChunkTask:
 
 
 @dataclass(frozen=True)
-class SubImageTask:
+class ContainerTask:
     """A budget-sized batch of sub-images from a container file (LMDB, multi-series OME-TIFF, …)."""
     file_index:   int
     file_path:   str
     image_slice: Tuple[int, int]   # (start, stop) half-open
 
 
-Task = Union[BatchTask, MemoryChunkTask, SubImageTask]
+Task = Union[BatchTask, MemoryChunkTask, ContainerTask]
 
 
 @dataclass
@@ -253,15 +253,16 @@ def _compute_memory_chunk_specs(
     return specs
 
 
-def _plan_sub_image_tasks(
-    file_index:    int,
-    file_path:    str,
-    info:         FileInfo,
-    budget_bytes: int,
-) -> List[SubImageTask]:
-    """Partition info.n_images into budget-sized batches; return one SubImageTask per batch."""
+def _plan_container_tasks(
+    file_index:         int,
+    file_path:         str,
+    info:              FileInfo,
+    budget_bytes:      int,
+    max_images_per_task: int,
+) -> List[ContainerTask]:
+    """Partition info.n_images into budget-sized batches; return one ContainerTask per batch."""
     per_image_bytes = max(1, int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize)
-    images_per_task = max(1, budget_bytes // per_image_bytes)
+    images_per_task = max(1, min(budget_bytes // per_image_bytes, max_images_per_task))
     image_slices: List[Tuple[int, int]] = []
     pos = 0
     n = info.n_images
@@ -269,7 +270,7 @@ def _plan_sub_image_tasks(
         image_slices.append((pos, min(pos + images_per_task, n)))
         pos += images_per_task
     return [
-        SubImageTask(file_index=file_index, file_path=file_path, image_slice=slc)
+        ContainerTask(file_index=file_index, file_path=file_path, image_slice=slc)
         for slc in image_slices
     ]
 
@@ -283,13 +284,13 @@ def _plan_tasks(
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
 
     Routing (evaluated in order):
-      n_images > 1  → flush pending batch; yield SubImageTasks.
+      n_images > 1  → flush pending batch; yield ContainerTasks.
       uncompressed size > budget → flush pending batch; try spatial chunking;
                                    if unsplittable, fall through to batch.
       otherwise     → accumulate in current batch; flush when budget fills.
     """
     budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
-    _MAX_FILES_PER_BATCH = config.max_files_per_task
+    _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
     # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
     # can be orders of magnitude smaller than the uncompressed array — never skip
@@ -310,7 +311,7 @@ def _plan_tasks(
         return task
 
     def _should_flush() -> bool:
-        return batch_bytes >= budget_bytes or len(batch_files) >= _MAX_FILES_PER_BATCH
+        return batch_bytes >= budget_bytes or len(batch_files) >= _MAX_IMAGES_PER_TASK
 
     for file_path, file_meta in file_stream:
         size_bytes: int = file_meta.get("size_bytes", 0)
@@ -342,7 +343,7 @@ def _plan_tasks(
                 _container_hint_done = True
                 image_bytes = int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize
                 if image_bytes > 0:
-                    images_per_task = min(budget_bytes // image_bytes, info.n_images)
+                    images_per_task = min(budget_bytes // image_bytes, info.n_images, _MAX_IMAGES_PER_TASK)
                     if images_per_task > 20:
                         logger.warning(
                             "Container file with n_images=%d, ~%.1f MB/image; "
@@ -351,7 +352,7 @@ def _plan_tasks(
                             info.n_images, image_bytes / 1024 / 1024,
                             config.mb_per_task, images_per_task,
                         )
-            yield from _plan_sub_image_tasks(file_index, str(file_path), info, budget_bytes)
+            yield from _plan_container_tasks(file_index, str(file_path), info, budget_bytes, _MAX_IMAGES_PER_TASK)
             continue
 
         uncompressed = int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize
@@ -564,8 +565,8 @@ def _execute_memory_chunk_task(
     return [result]
 
 
-def _execute_sub_image_task(
-    task:       SubImageTask,
+def _execute_container_task(
+    task:       ContainerTask,
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
@@ -938,7 +939,7 @@ def _coordinate_pipeline(
     _executor_for: Dict[type, Any] = {
         BatchTask:       _execute_batch_task,
         MemoryChunkTask: _execute_memory_chunk_task,
-        SubImageTask:    _execute_sub_image_task,
+        ContainerTask:    _execute_container_task,
     }
 
     def _submit(t: Task) -> Any:
