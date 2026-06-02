@@ -342,14 +342,14 @@ def _plan_tasks(
                 _container_hint_done = True
                 image_bytes = int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize
                 if image_bytes > 0:
-                    images_per_task = budget_bytes / image_bytes
+                    images_per_task = min(budget_bytes // image_bytes, info.n_images)
                     if images_per_task > 20:
                         logger.warning(
                             "Container file with n_images=%d, ~%.1f MB/image; "
                             "mb_per_task=%.0f gives ~%d images/task — tasks may take many minutes. "
                             "Consider --mb-per-task 50 or lower.",
                             info.n_images, image_bytes / 1024 / 1024,
-                            config.mb_per_task, int(images_per_task),
+                            config.mb_per_task, images_per_task,
                         )
             yield from _plan_sub_image_tasks(file_index, str(file_path), info, budget_bytes)
             continue
