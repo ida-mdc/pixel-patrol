@@ -9,7 +9,7 @@ import zarr
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.record import record_from, Record
-from pixel_patrol_loader_zarr.plugins.loaders._utils import is_zarr_store
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 

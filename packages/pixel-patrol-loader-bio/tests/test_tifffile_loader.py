@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from pixel_patrol_loader_tifffile.plugins.loaders.tifffile_loader import TifffileLoader
+from pixel_patrol_loader_bio.plugins.loaders.tifffile_loader import TifffileLoader
 
 
 @pytest.fixture

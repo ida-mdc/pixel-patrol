@@ -12,17 +12,7 @@ from bioio_base.exceptions import UnsupportedFileFormatError
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.record import record_from, Record
-import zarr as _zarr
-
-
-def is_zarr_store(path: Path) -> bool:
-    try:
-        store_obj = _zarr.open(store=str(path.absolute()), mode='r')
-        if isinstance(store_obj, _zarr.Group):
-            return bool(store_obj.attrs)
-        return True
-    except Exception:
-        return False
+from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
 
