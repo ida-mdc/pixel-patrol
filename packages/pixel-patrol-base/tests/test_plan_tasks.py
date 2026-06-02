@@ -1,4 +1,4 @@
-"""Unit tests for _plan_tasks, _plan_sub_image_tasks, and FileInfo.n_images routing."""
+"""Unit tests for _plan_tasks, _plan_container_tasks, and FileInfo.n_images routing."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -10,8 +10,8 @@ import pytest
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.processing import (
-    BatchTask, MemoryChunkTask, SubImageTask, Task,
-    _plan_sub_image_tasks, _plan_tasks,
+    BatchTask, ContainerTask, MemoryChunkTask, Task,
+    _plan_container_tasks, _plan_tasks,
 )
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from _processing_mocks import MockEntry, MockLoader, capture_warnings
@@ -38,42 +38,50 @@ def _run(pairs: List[Tuple[str, int]], loader: MockLoader,
     return tasks, files_meta
 
 
-# ── _plan_sub_image_tasks unit tests ─────────────────────────────────────────
+# ── _plan_container_tasks unit tests ─────────────────────────────────────────
 
-def test_sub_image_tasks_all_fit_in_one_task():
+def test_container_tasks_all_fit_in_one_task():
     info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=5)
-    tasks = _plan_sub_image_tasks(0, "/f.lmdb", info, 102400)
+    tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 1
     assert tasks[0].image_slice == (0, 5)
 
 
-def test_sub_image_tasks_splits_evenly():
+def test_container_tasks_splits_evenly():
     info = FileInfo(shape=(40, 40), dtype=np.float32, dim_order=("Y", "X"), n_images=20)
-    tasks = _plan_sub_image_tasks(0, "/f.lmdb", info, 102400)
+    tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 2
     assert tasks[0].image_slice == (0, 16)
     assert tasks[1].image_slice == (16, 20)
 
 
-def test_sub_image_tasks_one_per_image_when_large():
+def test_container_tasks_one_per_image_when_large():
     info = FileInfo(shape=(128, 128), dtype=np.float32, dim_order=("Y", "X"), n_images=100)
-    tasks = _plan_sub_image_tasks(0, "/f.lmdb", info, 102400)
+    tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 100
     assert [t.image_slice[0] for t in tasks] == list(range(100))
 
 
-def test_sub_image_tasks_image_exceeds_budget():
+def test_container_tasks_image_exceeds_budget():
     info = FileInfo(shape=(512, 512), dtype=np.float32, dim_order=("Y", "X"), n_images=1)
-    tasks = _plan_sub_image_tasks(0, "/f.lmdb", info, 10)
+    tasks = _plan_container_tasks(0, "/f.lmdb", info, 10, 1000)
     assert len(tasks) == 1
     assert tasks[0].image_slice == (0, 1)
 
 
-def test_sub_image_tasks_file_index_and_path():
+def test_container_tasks_file_index_and_path():
     info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=3)
-    tasks = _plan_sub_image_tasks(42, "/custom/path.lmdb", info, 102400)
+    tasks = _plan_container_tasks(42, "/custom/path.lmdb", info, 102400, 1000)
     assert all(t.file_index == 42 for t in tasks)
     assert all(t.file_path == "/custom/path.lmdb" for t in tasks)
+
+
+def test_container_tasks_capped_by_max_images_per_task():
+    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=100)
+    tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 10)
+    assert len(tasks) == 10
+    assert tasks[0].image_slice == (0, 10)
+    assert tasks[-1].image_slice == (90, 100)
 
 
 # ── _plan_tasks: batch routing ───────────────────────────────────────────────
@@ -199,14 +207,14 @@ def test_chunk_tasks_followed_by_more_batching():
     assert len(batch_tasks[0].files) == 2
 
 
-# ── _plan_tasks: SubImageTask routing ────────────────────────────────────────
+# ── _plan_tasks: ContainerTask routing ────────────────────────────────────────
 
 def test_container_file_all_images_one_task():
     loader = MockLoader({"/c.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=5)})
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, fi = _run([("/c.lmdb", 5000)], loader, config)
     assert len(tasks) == 1
-    assert isinstance(tasks[0], SubImageTask)
+    assert isinstance(tasks[0], ContainerTask)
     assert tasks[0].image_slice == (0, 5)
     assert fi[0]["name"] == "c.lmdb"
 
@@ -216,7 +224,7 @@ def test_container_file_split_into_multiple_tasks():
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, _ = _run([("/c.lmdb", 20 * 40 * 40 * 4)], loader, config)
     assert len(tasks) == 2
-    assert all(isinstance(t, SubImageTask) for t in tasks)
+    assert all(isinstance(t, ContainerTask) for t in tasks)
     assert tasks[0].image_slice == (0, 16)
     assert tasks[1].image_slice == (16, 20)
     assert all(t.file_index == 0 for t in tasks)
@@ -227,7 +235,7 @@ def test_container_file_one_task_per_image_when_large():
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, _ = _run([("/c.lmdb", 10 * 200 * 200 * 4)], loader, config)
     assert len(tasks) == 10
-    assert all(isinstance(t, SubImageTask) for t in tasks)
+    assert all(isinstance(t, ContainerTask) for t in tasks)
     for i, t in enumerate(tasks):
         assert t.image_slice == (i, i + 1)
 
@@ -241,7 +249,7 @@ def test_container_flushes_pending_batch_before_sub_image_tasks():
     tasks, _ = _run([("/small.npy", 10240), ("/container.lmdb", 5000)], loader, config)
     assert len(tasks) == 2
     assert isinstance(tasks[0], BatchTask)
-    assert isinstance(tasks[1], SubImageTask)
+    assert isinstance(tasks[1], ContainerTask)
 
 
 def test_container_header_failure_skips_file():
@@ -272,18 +280,18 @@ def test_mixed_small_large_container_ordering():
     assert len(fi) == 4
     batch_tasks   = [t for t in tasks if isinstance(t, BatchTask)]
     chunk_tasks   = [t for t in tasks if isinstance(t, MemoryChunkTask)]
-    sub_img_tasks = [t for t in tasks if isinstance(t, SubImageTask)]
+    container_tasks = [t for t in tasks if isinstance(t, ContainerTask)]
 
     assert len(batch_tasks) >= 2
     assert len(chunk_tasks) > 0
-    assert len(sub_img_tasks) == 1
+    assert len(container_tasks) == 1
 
     assert isinstance(tasks[0], BatchTask)
     assert all(isinstance(t, MemoryChunkTask) for t in tasks[1: 1 + len(chunk_tasks)])
-    assert isinstance(tasks[-2], SubImageTask)
+    assert isinstance(tasks[-2], ContainerTask)
     assert isinstance(tasks[-1], BatchTask)
     assert all(t.file_index == 1 for t in chunk_tasks)
-    assert sub_img_tasks[0].file_index == 2
+    assert container_tasks[0].file_index == 2
 
 
 def test_all_task_types_have_correct_file_indices():
@@ -301,9 +309,9 @@ def test_all_task_types_have_correct_file_indices():
     assert fi[2]["name"] == "f2.npy"
 
     batch_tasks   = [t for t in tasks if isinstance(t, BatchTask)]
-    sub_img_tasks = [t for t in tasks if isinstance(t, SubImageTask)]
+    container_tasks = [t for t in tasks if isinstance(t, ContainerTask)]
     chunk_tasks   = [t for t in tasks if isinstance(t, MemoryChunkTask)]
 
     assert any(ip.file_index == 0 for bt in batch_tasks for ip in bt.files)
-    assert all(t.file_index == 1 for t in sub_img_tasks)
+    assert all(t.file_index == 1 for t in container_tasks)
     assert all(t.file_index == 2 for t in chunk_tasks)
