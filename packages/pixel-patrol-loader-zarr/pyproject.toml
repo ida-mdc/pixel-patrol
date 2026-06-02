@@ -1,0 +1,38 @@
+[project]
+name = "pixel-patrol-loader-zarr"
+version = "0.5.0"
+description = "PixelPatrol add-on package for loading Zarr / OME-Zarr images"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "pixel-patrol-base==0.5.0",
+    "zarr==3.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_loader_zarr"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_zarr_builtins = "pixel_patrol_loader_zarr.plugin_registry:register_loader_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
