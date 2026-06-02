@@ -207,6 +207,5 @@ class ZarrLoader:
         return record_from(arr, meta, kind="intensity")
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
-        """Not used: ZarrLoader always returns n_images=1 so load_range is never called."""
+        """Not applicable: ZarrLoader always returns n_images=1 so this is never called."""
         raise NotImplementedError("ZarrLoader does not support container files (n_images=1 always)")
-        yield  # make this a generator
