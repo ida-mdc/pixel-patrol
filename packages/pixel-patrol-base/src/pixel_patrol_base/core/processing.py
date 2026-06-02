@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any, Callable, Dict, Generator, Iterator, List,
-    NamedTuple, Optional, Tuple, Union,
+    NamedTuple, Optional, Tuple, Union, Set
 )
 
 import numpy as np
@@ -56,7 +56,20 @@ from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
 
+# Dask sets distributed.* loggers to INFO at import time — suppress after importing.
+for _name in ("distributed", "distributed.worker", "distributed.scheduler",
+              "distributed.nanny", "asyncio", "tornado", "numexpr", "numexpr.utils"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
+
+
+def _silence_numcodecs_warning():
+    """Same showwarning patch as core/__init__.py, applied to each Dask worker process."""
+    import warnings
+    _sw = warnings.showwarning
+    warnings.showwarning = lambda m, c, f, l, *a, **kw: None if c is DeprecationWarning and "numcodecs" in str(f) else _sw(m, c, f, l, *a, **kw)
+
 
 # Fields that are PP-internal per-chunk values, not image-level metadata.
 # Excluded from image_meta so they don't overwrite PP-computed per-row fields.
@@ -914,8 +927,9 @@ def _coordinate_pipeline(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
         len(worker_info), max_pending, config.rows_per_part,
     )
+    _worker_log = logger.info if is_distributed else logger.debug
     for addr, w in worker_info.items():
-        logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
+        _worker_log("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
                     addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
 
     loader_ref     = client.scatter(loader,        broadcast=True)
@@ -1268,6 +1282,7 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         )
         signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
+        client.run(_silence_numcodecs_warning)
         try:
             yield client, False
         finally:
