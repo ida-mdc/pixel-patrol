@@ -577,11 +577,11 @@ class ProcessorResultsWriter:
             writer.writerow(row)
 
 
-def _get_fieldnames() -> List[str]:
+def _e2e_fieldnames() -> List[str]:
     return [
         "test_name", "branch", "iteration",
         "num_files", "t", "c", "z", "y", "x",
-        "processing_time_sec", "import_time_sec", "widget_time_sec",
+        "processing_time_sec", "widget_time_sec",
         "n_records", "n_columns",
     ]
 
@@ -592,47 +592,33 @@ class E2EResultsWriter:
     def __init__(self, output_dir: Path = DEFAULT_RESULTS_DIR):
         self.csv_path = output_dir / "e2e_results.csv"
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Clear previous results and write header
-        self._write_header()
-
-    def _write_header(self) -> None:
         with open(self.csv_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=_get_fieldnames())
-            writer.writeheader()
+            csv.DictWriter(f, fieldnames=_e2e_fieldnames()).writeheader()
 
     def write_result(
         self,
-        config: DatasetConfig,
-        branch: Optional[str],
-        iteration: int,
+        config:          DatasetConfig,
+        branch:          Optional[str],
+        iteration:       int,
         processing_time: float,
-        import_time: float,
-        widget_time: float,
-        n_records: int,
-        n_columns: int,
+        widget_time:     float,
+        n_records:       int,
+        n_columns:       int,
     ) -> None:
-        """Write an e2e benchmark result row."""
         row = {
-            "test_name": config.name,
-            "branch": branch or "",
-            "iteration": iteration,
-            "num_files": config.num_files,
-            "t": config.t,
-            "c": config.c,
-            "z": config.z,
-            "y": config.y,
-            "x": config.x,
+            "test_name":           config.name,
+            "branch":              branch or "",
+            "iteration":           iteration,
+            "num_files":           config.num_files,
+            "t": config.t, "c": config.c, "z": config.z,
+            "y": config.y, "x": config.x,
             "processing_time_sec": f"{processing_time:.4f}",
-            "import_time_sec": f"{import_time:.4f}",
-            "widget_time_sec": f"{widget_time:.4f}",
-            "n_records": n_records,
-            "n_columns": n_columns,
+            "widget_time_sec":     f"{widget_time:.4f}",
+            "n_records":           n_records,
+            "n_columns":           n_columns,
         }
-
         with open(self.csv_path, 'a', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=_get_fieldnames())
-            writer.writerow(row)
+            csv.DictWriter(f, fieldnames=_e2e_fieldnames()).writerow(row)
 
 
 # ============================================================================

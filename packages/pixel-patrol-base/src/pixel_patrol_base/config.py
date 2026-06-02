@@ -6,11 +6,13 @@ MAX_COLS_DISPLAYED = 200
 SPRITE_SIZE = 64
 
 ## Processing defaults
-# rows kept in-memory before optional disk flush
-DEFAULT_RECORDS_FLUSH_EVERY_N: int = 10000  
-# When combining multiple parquet chunks into a single one in memory, we might need more RAM than the raw size of the files.
-COMBINE_HEADROOM_RATIO = 1.5
-# Maximum number of intermediate flushes allowed to avoid overwhelming the system with too many tasks.
-MAX_INTERMEDIATE_FLUSHES = 1000
+# rows accumulated per output part file before flushing to disk
+DEFAULT_ROWS_PER_PART: int = 10_000
+# max images per task (applies to both batch tasks and container sub-images);
+# caps task size to keep workers returning results frequently
+DEFAULT_MAX_IMAGES_PER_TASK: int = 200
+
+# Legacy alias — kept so any direct import still works during the transition
+DEFAULT_RECORDS_FLUSH_EVERY_N: int = DEFAULT_ROWS_PER_PART
 
 HISTOGRAM_BINS = 256

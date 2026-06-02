@@ -51,8 +51,9 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
   const sigCb = el('show-significance-cb');
   if (sigCb) sigCb.checked = state.showSignificance;
 
-  // ── Widget toggles ────────────────────────────────────────────────────
+  // ── Widget toggles (collapsed by default; Apply required to take effect) ─
   buildWidgetToggles(plugins, schema);
+  initWidgetCollapseToggle();
 
   // ── Apply button ──────────────────────────────────────────────────────
   el('apply-btn').onclick = () => {
@@ -64,6 +65,7 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     };
     state.dimensions       = readDimensions(schema.dimensionInfo);
     state.showSignificance = el('show-significance-cb')?.checked ?? false;
+    applyWidgetToggles(plugins, schema);
     emit('query');
   };
 
@@ -114,6 +116,8 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('reset-btn').style.display = 'none';
 
     el('widget-toggles')?.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.disabled = true; });
+    const widgetHeader = el('widget-section-header');
+    if (widgetHeader) widgetHeader.style.pointerEvents = 'none';
 
     if (bakedBtn) bakedBtn.style.display = 'none';
   }
@@ -195,15 +199,33 @@ function buildWidgetToggles(plugins, schema) {
     `;
   }).join('');
 
+  // No onchange handler — changes are applied only when the Apply button is clicked.
+}
+
+/** Read current checkbox values into state.hiddenWidgets. */
+function applyWidgetToggles(plugins, schema) {
+  const applicable = plugins.filter(p => {
+    try { return p.requires(schema); } catch { return false; }
+  });
   for (const p of applicable) {
     const cb = document.getElementById(`wt-${p.id}`);
     if (!cb) continue;
-    cb.onchange = () => {
-      if (cb.checked) state.hiddenWidgets.delete(p.id);
-      else            state.hiddenWidgets.add(p.id);
-      emit('render');
-    };
+    if (cb.checked) state.hiddenWidgets.delete(p.id);
+    else            state.hiddenWidgets.add(p.id);
   }
+}
+
+/** Toggle the widget-toggles section open/closed. */
+function initWidgetCollapseToggle() {
+  const header  = el('widget-section-header');
+  const content = el('widget-toggles');
+  const icon    = el('widget-toggle-icon');
+  if (!header || !content) return;
+  header.addEventListener('click', () => {
+    const nowVisible = content.style.display === 'none';
+    content.style.display = nowVisible ? '' : 'none';
+    if (icon) icon.className = `bi bi-chevron-${nowVisible ? 'up' : 'down'} text-muted`;
+  });
 }
 
 function readDimensions(dimensionInfo) {

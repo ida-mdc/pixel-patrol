@@ -6,8 +6,20 @@ import os
 
 
 from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes
-from pixel_patrol_base.core.processing import PATHS_DF_EXPECTED_SCHEMA
 from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
+
+_AGGREGATE_SCHEMA = {
+    "path":              pl.String,
+    "name":              pl.String,
+    "type":              pl.String,
+    "parent":            pl.String,
+    "depth":             pl.Int64,
+    "size_bytes":        pl.Int64,
+    "modification_date": pl.Datetime(time_unit="us", time_zone=None),
+    "file_extension":    pl.String,
+    "size_readable":     pl.String,
+    "imported_path":     pl.String,
+}
 
 # --- Fixtures for _fetch_single_directory_tree ---
 
@@ -278,7 +290,7 @@ def test_aggregate_folder_sizes(request, input_df_fixture, expected_sizes_map):
 
 def test_aggregate_folder_sizes_empty_input_df():
     """Tests aggregation with an empty input DataFrame."""
-    empty_df = pl.DataFrame([], schema=PATHS_DF_EXPECTED_SCHEMA)
+    empty_df = pl.DataFrame([], schema=_AGGREGATE_SCHEMA)
     aggregated_df = _aggregate_folder_sizes(empty_df)
     assert aggregated_df.is_empty()
     assert aggregated_df.schema == empty_df.schema

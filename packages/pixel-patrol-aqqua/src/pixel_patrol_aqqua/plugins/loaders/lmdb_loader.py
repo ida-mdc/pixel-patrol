@@ -4,15 +4,18 @@ Reads images stored in LMDB databases using the AqQua Dataset format
 """
 
 import logging
+import re
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import blosc2
 import lmdb
 import numpy as np
 import polars as pl
 
-from pixel_patrol_base.core.record import record_from
+from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.record import record_from, Record
 
 logger = logging.getLogger(__name__)
 
@@ -46,26 +49,65 @@ def _uncompress_blosc2(raw_bytes: bytes) -> blosc2.NDArray:
     return blosc2.ndarray_from_cframe(raw_bytes, True)
 
 
-def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
-    """Build a flat metadata dict from a blosc2 NDArray.
+@lru_cache(maxsize=16)
+def _load_meta_parquet(lmdb_path: Path) -> Dict[str, Dict[str, Any]]:
+    """Load the matching meta parquet sidecar for an LMDB file.
 
-    The blosc2 array carries a ``.meta`` mapping with dataset-specific
-    fields. We pull everything from ``.meta`` and add shape/dtype info
-    derived from the array itself.
+    Expects a sibling file with the same numeric ID suffix:
+        *-images-{ID}.lmdb  →  *-meta-{ID}.parquet
+
+    Returns:
+        Dict mapping image-uuid -> flat metadata dict (excluding image-uuid itself).
+
+    Result is cached per worker process (lru_cache), so each LMDB file's parquet
+    is read from disk only once per worker, not once per load_range() call.
     """
-    metadata: Dict[str, Any] = {}
+    match = re.search(r"-(\d+)\.lmdb$", lmdb_path.name)
+    if not match:
+        logger.warning("LmdbLoader: could not extract numeric ID from '%s'", lmdb_path.name)
+        return {}
 
-    # ---- blosc2 user metadata ----
+    numeric_id = match.group(1)
+    parquet_path = next(lmdb_path.parent.glob(f"*-meta-{numeric_id}.parquet"), None)
+    if parquet_path is None:
+        logger.warning("LmdbLoader: no meta parquet found for '%s'", lmdb_path.name)
+        return {}
+
+    logger.debug("LmdbLoader: loading meta parquet '%s'", parquet_path.name)
+    df = pl.read_parquet(parquet_path)
+
+    if "image-uuid" not in df.columns:
+        logger.warning("LmdbLoader: meta parquet '%s' has no 'image-uuid' column", parquet_path.name)
+        return {}
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in df.iter_rows(named=True):
+        uuid = row.get("image-uuid")
+        if uuid is None:
+            continue
+        result[str(uuid)] = {
+            k: v for k, v in row.items()
+            if k != "image-uuid" and v is not None
+        }
+
+    logger.debug("LmdbLoader: loaded %d meta rows from '%s'", len(result), parquet_path.name)
+    return result
+
+
+def _extract_blosc2_user_meta(array: blosc2.NDArray) -> Dict[str, Any]:
+    """Extract the blosc2 user-metadata fields (no numpy conversion needed)."""
+    metadata: Dict[str, Any] = {}
     if hasattr(array, "meta") and array.meta is not None:
         for key, value in dict(array.meta).items():
             if key in SKIP_KEYS:
                 continue
-
             metadata[str(key)] = value if isinstance(value, (str, int, float, bool, list)) else str(value)
+    return metadata
 
 
-    # ---- array-derived fields ----
-    np_arr = np.asarray(array)
+def _extract_array_meta(np_arr: np.ndarray) -> Dict[str, Any]:
+    """Extract shape/dtype/dim_order metadata from an already-converted numpy array."""
+    metadata: Dict[str, Any] = {}
     metadata["shape"] = list(np_arr.shape)
     metadata["ndim"] = int(np_arr.ndim)
     metadata["num_pixels"] = int(np_arr.size)
@@ -78,18 +120,27 @@ def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
         metadata["Y_size"] = int(h)
         metadata["X_size"] = int(w)
     elif np_arr.ndim == 3:
-        # Assume (H, W, C) — the typical storage order for colour images
         h, w, c = np_arr.shape
-        metadata["dim_order"] = "YXC"
+        metadata["dim_order"] = "YXS"
         metadata["Y_size"] = int(h)
         metadata["X_size"] = int(w)
         metadata["C_size"] = int(c)
     else:
-        metadata["dim_order"] = "".join(
-            f"D{i}" for i in range(np_arr.ndim)
-        )
+        metadata["dim_order"] = "".join(f"D{i}" for i in range(np_arr.ndim))
 
     return metadata
+
+
+def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
+    """Build a flat metadata dict from a blosc2 NDArray.
+
+    Combines blosc2 user metadata with shape/dtype info.
+    Used by read_header() and load() where a single conversion is fine.
+    For load_range(), use _extract_blosc2_user_meta() + _extract_array_meta()
+    directly to avoid converting to numpy twice.
+    """
+    np_arr = np.asarray(array)
+    return {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_arr)}
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +166,8 @@ class LmdbLoader:
         (r"^[A-Za-z]+_size$", int),
     ]
 
-    FOLDER_EXTENSIONS: Set[str] = {"lmdb"}
+    FOLDER_EXTENSIONS:    Set[str] = {"lmdb"}
+    CONTAINER_EXTENSIONS: Set[str] = {"lmdb", "mdb"}
 
     @staticmethod
     def is_folder_supported(path: Path) -> bool:
@@ -123,52 +175,72 @@ class LmdbLoader:
         return path.is_dir() and (path / "data.mdb").exists()
 
     @staticmethod
-    def load(source: str) -> Optional[Dict[str, Any]]:
-        """Load all images from a single LMDB file.
-        """
-        lmdb_path = Path(source)
+    def read_header(lmdb_path: Path) -> FileInfo:
+        """Open the LMDB, count entries, and peek the first entry for shape/dtype."""
         env, db, txn = _open_lmdb_readonly(lmdb_path)
         try:
-            n_entries = txn.stat(db)["entries"]
-            logger.info(
-                "LmdbLoader: opening '%s' — %d image(s)", lmdb_path.name, n_entries
-            )
-
-            if n_entries == 0:
-                return None
-
-            records: Dict[str, Any] = {}
+            n_images = txn.stat(db)["entries"]
+            if n_images == 0:
+                raise RuntimeError(f"LmdbLoader: empty database at '{lmdb_path}'")
             with txn.cursor() as cursor:
                 cursor.first()
-                while True:
+                array = _uncompress_blosc2(cursor.value())
+            meta = _extract_metadata(array)
+            shape = tuple(int(x) for x in meta["shape"])
+            dim_order = tuple(meta["dim_order"])
+            dtype = np.dtype(str(meta["dtype"]))
+            return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
+        finally:
+            env.close()
+
+    @staticmethod
+    def load(lmdb_path: Path) -> Record:
+        """Load the first image from the LMDB as a Record."""
+        env, db, txn = _open_lmdb_readonly(lmdb_path)
+        try:
+            with txn.cursor() as cursor:
+                cursor.first()
+                array = _uncompress_blosc2(cursor.value())
+        finally:
+            env.close()
+        np_array = np.asarray(array)
+        meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
+        return record_from(np_array, meta, kind="intensity")
+
+    @staticmethod
+    def load_range(lmdb_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        """Yield (child_id, Record) for images [start, stop) from the LMDB."""
+        parquet_meta = _load_meta_parquet(lmdb_path)
+        env, db, txn = _open_lmdb_readonly(lmdb_path)
+        try:
+            with txn.cursor() as cursor:
+                if not cursor.first():
+                    return
+                for idx in range(stop):
+                    if idx < start:
+                        if not cursor.next():
+                            return
+                        continue
                     raw_key = cursor.key()
                     int_key = int.from_bytes(raw_key, byteorder="little")
                     child_id = str(int_key)
-
                     try:
                         array = _uncompress_blosc2(cursor.value())
-                        meta = _extract_metadata(array)
-                        data = np.asarray(array)
-
-                        records[child_id] = record_from(
-                            data, meta, kind="intensity"
-                        )
+                        # Convert to numpy once; reuse for both metadata extraction
+                        # and the Record payload — avoids decompressing blosc2 twice.
+                        np_array = np.asarray(array)
+                        meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
+                        uuid = meta.get("image-uuid")
+                        if uuid and str(uuid) in parquet_meta:
+                            # blosc2 meta takes precedence on key conflicts
+                            meta = {**parquet_meta[str(uuid)], **meta}
+                        yield child_id, record_from(np_array, meta, kind="intensity")
                     except Exception as e:
                         logger.exception(
                             "LmdbLoader: failed to read image key %s in '%s': %s",
-                            child_id,
-                            lmdb_path.name,
-                            e,
+                            child_id, lmdb_path.name, e,
                         )
-
                     if not cursor.next():
-                        break
-
-            logger.info(
-                "LmdbLoader: loaded %d record(s) from '%s'",
-                len(records),
-                lmdb_path.name,
-            )
-            return records if records else None
+                        return
         finally:
             env.close()

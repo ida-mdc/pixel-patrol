@@ -106,6 +106,7 @@ def resolve_parquet_output_path(path: Union[str, Path]) -> Path:
     p = Path(path).resolve()
     if p.suffix.lower() != ".parquet":
         p = p.with_suffix(".parquet")
+        logger.warning("Output path has no .parquet extension; using: '%s'", p)
     p.parent.mkdir(parents=True, exist_ok=True)
     if not os.access(p.parent, os.W_OK):
         raise PermissionError(f"Output directory is not writable: {p.parent}")

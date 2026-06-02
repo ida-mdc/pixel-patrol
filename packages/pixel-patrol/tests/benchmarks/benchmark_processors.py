@@ -123,9 +123,9 @@ class TimedRunMethod:
 def create_wrapped_processor_class(cls):
     """Create a wrapped processor class with timing instrumentation."""
     cls_name = cls.__name__
-    original_run = cls.run
+    original_run_chunk = cls.run_chunk
 
-    attrs = {"run": TimedRunMethod(cls_name, original_run)}
+    attrs = {"run_chunk": TimedRunMethod(cls_name, original_run_chunk)}
     wrapped_cls = type(f"Timed_{cls_name}", (cls,), attrs)
 
     if hasattr(cls, "NAME"):
@@ -135,13 +135,18 @@ def create_wrapped_processor_class(cls):
 
 
 class InstrumentedRegisterFunction:
-    """Callable that returns instrumented processor classes."""
+    """Callable that returns instrumented processor instances.
+
+    Replaces plugin_registry.discover_processor_plugins so every processor's
+    run_chunk is wrapped with TimedRunMethod before the pipeline runs.
+    Returns instances (not classes) to match discover_processor_plugins' contract.
+    """
 
     def __init__(self, processor_classes: List):
         self.processor_classes = processor_classes
 
     def __call__(self):
-        return [create_wrapped_processor_class(cls) for cls in self.processor_classes]
+        return [create_wrapped_processor_class(cls)() for cls in self.processor_classes]
 
 
 # ============================================================================
@@ -160,51 +165,37 @@ def run_processor_cycle(
     """Run processor benchmark for one iteration."""
 
     from pixel_patrol_base import api, plugin_registry
-    from pixel_patrol_base.core.project_settings import Settings
+    from pixel_patrol_base.core.processing_config import ProcessingConfig
 
-    # Validate imports are from expected location (only on first iteration to avoid spam)
     if iteration == 1 and expected_worktree is not None:
-        print(f"  [Validate] Checking imports are from worktree...")
         if not validate_import_source("pixel_patrol_base", expected_worktree):
             raise RuntimeError(
                 f"Import validation failed: pixel_patrol_base not loaded from "
-                f"expected worktree {expected_worktree}. Branch comparison would be invalid."
+                f"expected worktree {expected_worktree}."
             )
-        print(f"  [Validate] ✓ Imports verified from correct branch")
 
     stats_registry.clear()
 
-    # Discover and instrument processors
     all_processor_classes = discover_all_processor_classes()
-    original_register = plugin_registry.register_processor_plugins
-    plugin_registry.register_processor_plugins = InstrumentedRegisterFunction(all_processor_classes)
+    original_discover = plugin_registry.discover_processor_plugins
+    plugin_registry.discover_processor_plugins = InstrumentedRegisterFunction(all_processor_classes)
 
     try:
         gc.collect()
 
-        if PSUTIL_AVAILABLE:
-            mem_before = psutil.Process().memory_info().rss
-        else:
-            mem_before = 0
+        mem_before = psutil.Process().memory_info().rss if PSUTIL_AVAILABLE else 0
 
-        # Create and run project
         project = api.create_project(
             f"bench_{config.name}_{iteration}",
             base_dir=images_dir,
             loader=DEFAULT_LOADER,
         )
-        project.set_settings(Settings(
-            selected_file_extensions={"tif"},
-        ))
 
         t0 = time.perf_counter()
-        project.process_records()
+        project.process_records(ProcessingConfig(selected_file_extensions={"tif"}))
         wall_time = time.perf_counter() - t0
 
-        if PSUTIL_AVAILABLE:
-            mem_after = psutil.Process().memory_info().rss
-        else:
-            mem_after = 0
+        mem_after = psutil.Process().memory_info().rss if PSUTIL_AVAILABLE else 0
         memory_delta = mem_after - mem_before
 
         # Get results
@@ -238,8 +229,7 @@ def run_processor_cycle(
             )
 
     finally:
-        # Restore original registration
-        plugin_registry.register_processor_plugins = original_register
+        plugin_registry.discover_processor_plugins = original_discover
 
 
 def run_scenario(

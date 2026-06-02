@@ -132,7 +132,12 @@ def test_project_process_saves_parquet(project_with_all_data: Project, tmp_path:
     assert project_with_all_data.output_path.exists()
 
     loaded_df, loaded_meta = load_parquet(project_with_all_data.output_path)
-    assert loaded_df.height == project_with_all_data.records_df.height
+    # records_df is None when the streaming write path was taken (large datasets);
+    # in that case just verify the parquet is non-empty.
+    if project_with_all_data.records_df is not None:
+        assert loaded_df.height == project_with_all_data.records_df.height
+    else:
+        assert loaded_df.height > 0
     assert loaded_meta.project_name == project_with_all_data.name
 
 

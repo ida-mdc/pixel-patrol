@@ -1,9 +1,9 @@
-import os
 import webbrowser
 from pathlib import Path
 from threading import Timer
 
 import click
+from dask.distributed import Client
 
 from pixel_patrol_base.api import (
     create_project,
@@ -55,56 +55,73 @@ def cli():
 @click.option('--parquet-row-group-size', type=int, default=None, show_default=True,
               help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
-              help='Maximum number of processing workers. Use 1 to disable multiprocessing.')
+              help='Maximum number of local processing workers. Use 1 to disable multiprocessing.')
+@click.option('--scheduler', type=str, default=None,
+              help='Connect to an existing Dask scheduler (e.g. tcp://host:8786).')
+@click.option('--mb-per-task', type=float, default=None, show_default=True,
+              help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
+@click.option('--max-images-per-task', type=int, default=None, show_default=True,
+              help='Max images per task for both batch and container files (default: 200). Lower values give more frequent progress updates.')
+@click.option('--slice-size', 'slice_size', multiple=True,
+              help='Spatial chunk size per dim, e.g. --slice-size Z=1 --slice-size Y=256.')
+@click.option('--rows-per-part', type=int, default=None, show_default=True,
+              help='Flush intermediate results to disk every N rows (default: 10000).')
+@click.option('--log-file', is_flag=True, default=False,
+              help='Write a debug log file alongside the output parquet (auto-named).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
               processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
               parquet_row_group_size: int | None,
-              max_workers: int | None):
+              max_workers: int | None,
+              scheduler: str | None,
+              mb_per_task: float | None,
+              max_images_per_task: int | None,
+              slice_size: tuple[str, ...],
+              rows_per_part: int | None,
+              log_file: bool):
     """
     Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
     """
     base_directory = base_directory.resolve()
 
     if name is None:
-        name = base_directory.name # Use the name of the base directory
+        name = base_directory.name
         click.echo(f"Project name not provided, deriving from base directory: '{name}'")
 
-    click.echo(f"Creating project: '{name}' from base directory '{base_directory}'")
     my_project = create_project(name, str(base_directory), loader=loader, output_path=output)
 
     if paths:
-        click.echo(f"Adding explicitly specified paths: {', '.join(paths)}. Resolution will be relative to '{base_directory}'")
         add_paths(my_project, paths)
     else:
-        # If no paths, we want to add the base directory itself.
-        click.echo(f"No --paths specified. Processing all images in '{base_directory}'.")
         add_paths(my_project, base_directory)
 
     selected_extensions = set(file_extensions) if file_extensions else "all"
 
-    output_path = Path(output).resolve()
-    if output_path.suffix.lower() != ".parquet":
-        output_path = output_path.with_suffix(".parquet")
-        click.echo(f"Output path has no .parquet extension, using: '{output_path}'")
-
-    click.echo("Processing images...")
-    process_files(
-        my_project,
+    _process_kwargs = dict(
         selected_file_extensions=selected_extensions,
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
-        processing_max_workers=max_workers,
+        mb_per_task=mb_per_task,
+        max_images_per_task=max_images_per_task,
+        slice_size=_parse_slice_size(slice_size) if slice_size else None,
+        rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
         parquet_row_group_size=parquet_row_group_size,
+        log_file=log_file,
     )
 
-    if Path(output).exists():
-        click.echo(f"Output saved to: '{output}'")
-    else:
-        click.echo(f"Processing complete. Expected output: '{output}'")
+    try:
+        if scheduler:
+            click.echo(f"Connecting to Dask scheduler at '{scheduler}'...")
+            with Client(scheduler) as _client:
+                process_files(my_project, **_process_kwargs)
+        else:
+            process_files(my_project, max_workers=max_workers, **_process_kwargs)
+    except KeyboardInterrupt:
+        click.echo("\nCancelled.")
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -121,8 +138,7 @@ def launch(port: int):
     click.echo("Attempting to open dashboard in your default browser...")
 
     def _open_browser():
-        if not os.environ.get("WERKZEUG_RUN_MAIN"):
-            webbrowser.open_new_tab(dashboard_url)
+        webbrowser.open_new_tab(dashboard_url)
 
     Timer(1, _open_browser).start()
 
@@ -207,11 +223,21 @@ def build_viewer_html(output: Path):
     If OUTPUT ends in .html/.htm, writes a single self-contained HTML file.
     Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
-    out = api_build_viewer(output)
-    if Path(out).is_dir():
-        click.echo(f"Static viewer site written to: {out}")
-    else:
-        click.echo(f"Single-file viewer written to: {out}")
+    api_build_viewer(output)
+
+
+def _parse_slice_size(items: tuple) -> dict:
+    """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means full extent."""
+    result = {}
+    for item in items:
+        if "=" not in item:
+            raise click.BadParameter(f"Expected format DIM=SIZE (e.g. Z=1), got: {item!r}")
+        k, v = item.split("=", 1)
+        try:
+            result[k.strip()] = int(v.strip())
+        except ValueError:
+            raise click.BadParameter(f"Size must be an integer, got: {v!r}")
+    return result
 
 
 def _parse_dims(dims: tuple) -> dict:
@@ -234,6 +260,7 @@ def _parse_filter(filter_col, filter_op, filter_value) -> dict | None:
     if filter_col and filter_op and filter_value:
         return {filter_col: {"op": filter_op, "value": filter_value}}
     return None
+
 
 if __name__ == '__main__':
     cli()

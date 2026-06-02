@@ -14,11 +14,16 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pyyaml>=6.0.2",
     "statsmodels>=0.14.4",
-    "dask>=2025.5.1",
+    "dask[distributed]>=2025.5.1",
     "duckdb>=1.2.0",
+    "psutil>=6.0.0",
     "tqdm>=4.67.1",
     "yaspin>=3.4.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.uv]
 package = true
@@ -50,6 +55,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
 filterwarnings = [
     "error::DeprecationWarning",
     "error::PendingDeprecationWarning",
