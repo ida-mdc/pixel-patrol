@@ -11,6 +11,10 @@ dependencies = [
     "pixel-patrol-loader-bio==0.5.0",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.uv]
 package = true
 
@@ -26,7 +30,6 @@ dev = [
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }
 pixel-patrol-image = { path = "../pixel-patrol-image" }
-pixel-patrol-loader-zarr = { path = "../pixel-patrol-loader-zarr" }
 pixel-patrol-loader-bio = { path = "../pixel-patrol-loader-bio" }
 
 [tool.setuptools.package-data]
