@@ -23,6 +23,9 @@ PACKAGES=(
     "pixel-patrol-aqqua"
 )
 
+CURRENT_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
+[ "$CURRENT_BRANCH" = "main" ] || { echo "ERROR: must be on main branch (currently on '$CURRENT_BRANCH')"; exit 1; }
+
 [ -n "${PYPI_API_TOKEN:-}" ] || { echo "ERROR: PYPI_API_TOKEN is not set"; exit 1; }
 
 # read version from pixel-patrol-base as the canonical source
@@ -33,6 +36,11 @@ print(doc["project"]["version"])
 EOF
 )
 echo "=== Releasing v$VERSION ==="
+
+# ── copy root README into pixel-patrol package (rewrites image URLs for PyPI) ─
+echo ""
+echo "=== Copying README to pixel-patrol package ==="
+python "$SCRIPT_DIR/cp_readme_to_pp_package.py"
 
 # ── build viewer ──────────────────────────────────────────────────────────────
 echo ""
