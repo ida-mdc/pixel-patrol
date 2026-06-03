@@ -902,7 +902,6 @@ def _coordinate_pipeline(
     config:       ProcessingConfig,
     parts_dir:    Optional[Path],
     on_progress:  Optional[Callable[[int, int], None]],
-    n_workers:    int = 1,
     is_distributed: bool = False,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Drive the full submit → gather → rollup → join → accumulate cycle.
@@ -1387,7 +1386,6 @@ def build_records_df(
         return _collect_file_metadata_only(bases, cfg, on_progress)
 
     with _get_or_create_client(cfg) as (client, is_distributed):
-        n_workers = sum(client.nthreads().values())
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
@@ -1405,7 +1403,6 @@ def build_records_df(
             config=cfg,
             parts_dir=parts_dir,
             on_progress=on_progress,
-            n_workers=n_workers,
             is_distributed=is_distributed,
         )
 
