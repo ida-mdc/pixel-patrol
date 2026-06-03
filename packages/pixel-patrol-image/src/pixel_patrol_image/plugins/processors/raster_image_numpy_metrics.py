@@ -153,6 +153,9 @@ def calc_blocking(arr: np.ndarray) -> np.ndarray:
 
 def calc_ringing(arr: np.ndarray) -> np.ndarray:
     """Variance of high-pass (pixel minus 3×3 box average)."""
+    h, w = arr.shape[-2], arr.shape[-1]
+    if h < 3 or w < 3:
+        return np.full(arr.shape[:-2], np.nan)
     arr_f = arr.astype(np.float32, copy=False)
     kernel_avg = (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
                   arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
@@ -172,13 +175,3 @@ def laplacian_variance(arr: np.ndarray) -> np.ndarray:
     return np.nanvar(lap, axis=(-2, -1))
 
 
-def noise_std(arr: np.ndarray) -> np.ndarray:
-    """Std of high-frequency residual (image minus 3×3 box average) — proxy for noise level."""
-    h, w = arr.shape[-2], arr.shape[-1]
-    if h < 3 or w < 3:
-        return np.full(arr.shape[:-2], np.nan)
-    arr_f = arr.astype(np.float32, copy=False)
-    box_avg = (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
-               arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
-               arr_f[..., 2:, :-2]  + arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:]) / 9.0
-    return np.nanstd(arr_f[..., 1:-1, 1:-1] - box_avg, axis=(-2, -1))

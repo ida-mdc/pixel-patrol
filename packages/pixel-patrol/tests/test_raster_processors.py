@@ -61,7 +61,7 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("michelson_contrast", "mscn_variance", "local_std_ratio", "laplacian_variance", "noise_std"):
+    for k in ("michelson_contrast", "mscn_variance", "local_std_ratio", "laplacian_variance"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -166,7 +166,27 @@ def test_quality_metrics_finite(quality_proc):
     assert np.isfinite(row["mscn_variance"])
     assert np.isfinite(row["local_std_ratio"])
     assert np.isfinite(row["laplacian_variance"])
-    assert np.isfinite(row["noise_std"])
+
+
+def test_laplacian_variance_sharper_image_scores_higher(quality_proc):
+    rng = np.random.default_rng(42)
+    sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    # Blur by repeated box-averaging — reduces second-derivative energy.
+    blurred = sharp.copy()
+    for _ in range(8):
+        blurred[1:-1, 1:-1] = (
+            blurred[:-2, :-2] + blurred[:-2, 1:-1] + blurred[:-2, 2:] +
+            blurred[1:-1, :-2] + blurred[1:-1, 1:-1] + blurred[1:-1, 2:] +
+            blurred[2:, :-2]  + blurred[2:, 1:-1]  + blurred[2:, 2:]
+        ) / 9.0
+    row_sharp   = _chunk(quality_proc, sharp,   "YX")
+    row_blurred = _chunk(quality_proc, blurred, "YX")
+    assert row_sharp["laplacian_variance"] > row_blurred["laplacian_variance"]
+
+
+def test_laplacian_variance_small_image_returns_nan(quality_proc):
+    row = _chunk(quality_proc, np.ones((2, 2), dtype=np.float32), "YX")
+    assert np.isnan(row.get("laplacian_variance", np.nan))
 
 
 # ---------------------------------------------------------------------------
