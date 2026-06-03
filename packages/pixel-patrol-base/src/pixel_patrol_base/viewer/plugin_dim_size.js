@@ -18,7 +18,7 @@ export default {
 
   async render(container, ctx) {
     try {
-      const { q, sample, groupCol: gcFn } = ctx.sql;
+      const { q, sample, groupCol: gcFn, andWhere } = ctx.sql;
       const { append: appendPlot, niceName, plotlyLegendConfig } = ctx.plot;
       const gcExpr   = gcFn();
       const sizeCols = ctx.schema.allCols.filter(c => c.endsWith('_size') && !c.startsWith('__'));
@@ -48,6 +48,12 @@ export default {
       const HEATMAP_BINS  = 70;
       const hasXY = sizeCols.includes('X_size') && sizeCols.includes('Y_size');
       if (hasXY) {
+        const xyInvRes = await ctx.queryRows(`
+          SELECT COUNT(DISTINCT "X_size") AS ndx, COUNT(DISTINCT "Y_size") AS ndy
+          FROM pp_data ${andWhere(ctx.where, '"X_size" > 1 AND "Y_size" > 1')}
+        `);
+        const xyBothInvariant = Number(xyInvRes[0]?.ndx ?? 0) <= 1 && Number(xyInvRes[0]?.ndy ?? 0) <= 1;
+        if (!xyBothInvariant) {
         const xyCond  = `"X_size" > 1 AND "Y_size" > 1`;
         const xyWhere = ctx.where ? `${ctx.where} AND ${xyCond}` : `WHERE ${xyCond}`;
   
@@ -126,12 +132,11 @@ export default {
             }, 'margin-bottom:24px');
           }
         }
+        } // end if (!xyBothInvariant)
       }
-  
+
       const dimsToPlot = sizeCols.filter(c => c !== 'num_pixels');
       if (dimsToPlot.length) {
-        const { andWhere } = ctx.sql;
-
         // Classify each dim: invariant (1 unique value > 1) vs variant (multiple values).
         const dimStats = await Promise.all(dimsToPlot.map(async col => {
           const res = await ctx.queryRows(`
