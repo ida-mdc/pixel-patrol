@@ -33,7 +33,6 @@ REQUIRED_METHODS = [
     "is_folder_supported",
     "read_header",
     "load",
-    "load_range",
 ]
 
 
@@ -168,11 +167,38 @@ def test_read_header_signature(loader_class):
     )
 
 
-def test_load_range_signature(loader_class):
-    """load_range must accept (path, start, stop) — i.e. at least three non-self parameters."""
+def test_container_extensions_if_declared(loader_class):
+    """If CONTAINER_EXTENSIONS is declared it must be a set of lowercase strings
+    that are all present in SUPPORTED_EXTENSIONS."""
+    if not hasattr(loader_class, "CONTAINER_EXTENSIONS"):
+        return
+    exts = loader_class.CONTAINER_EXTENSIONS
+    assert isinstance(exts, set), (
+        f"{loader_class.__name__}.CONTAINER_EXTENSIONS must be a set, got {type(exts).__name__}"
+    )
+    for ext in exts:
+        assert isinstance(ext, str) and ext == ext.lower(), (
+            f"{loader_class.__name__}.CONTAINER_EXTENSIONS entry '{ext}' must be a lowercase string"
+        )
+    extra = exts - loader_class.SUPPORTED_EXTENSIONS
+    assert not extra, (
+        f"{loader_class.__name__}.CONTAINER_EXTENSIONS contains entries not in "
+        f"SUPPORTED_EXTENSIONS: {extra}"
+    )
+
+
+def test_load_range_required_when_container_extensions_nonempty(loader_class):
+    """Loaders that declare non-empty CONTAINER_EXTENSIONS must implement load_range
+    with the correct signature (path, start, stop)."""
+    exts = getattr(loader_class, "CONTAINER_EXTENSIONS", set())
+    if not exts:
+        return
+    assert hasattr(loader_class, "load_range") and callable(loader_class.load_range), (
+        f"{loader_class.__name__} declares CONTAINER_EXTENSIONS={exts!r} "
+        f"but does not implement load_range"
+    )
     sig = inspect.signature(loader_class.load_range)
-    params = [p for p in sig.parameters.values()
-              if p.name != "self"]
+    params = [p for p in sig.parameters.values() if p.name != "self"]
     assert len(params) >= 3, (
-        f"{loader_class.__name__}.load_range must accept at least (path, start, stop) arguments"
+        f"{loader_class.__name__}.load_range must accept at least (path, start, stop)"
     )
