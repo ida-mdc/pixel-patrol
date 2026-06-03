@@ -166,7 +166,7 @@ class ThumbnailProcessor:
         if np.issubdtype(chunk.dtype, np.floating):
             arr = da.where(da.isnull(arr), 0.0, arr)
 
-        keep_dims = {"X", "Y", color_dim} if color_dim else {"X", "Y", "C", "S"}
+        keep_dims = {"X", "Y", color_dim} if color_dim else {"X", "Y", "S"}
         arr, reduced_order = _reduce_to_spatial(arr, dim_str, keep_dims=keep_dims)
         if arr.size == 0:
             return {}
@@ -176,15 +176,6 @@ class ThumbnailProcessor:
             if arr.shape[c_ax] == 1:
                 arr = arr.squeeze(axis=c_ax)
                 reduced_order = reduced_order.replace(color_dim, "", 1)
-        elif "C" in reduced_order:
-            c_ax = list(reduced_order).index("C")
-            n_c = arr.shape[c_ax]
-            if n_c > 4:
-                arr = da.mean(arr, axis=c_ax)
-                reduced_order = reduced_order.replace("C", "", 1)
-            elif n_c == 1:
-                arr = arr.squeeze(axis=c_ax)
-                reduced_order = reduced_order.replace("C", "", 1)
 
         normalized, norm_min, norm_max = _normalize(arr)
         with warnings.catch_warnings():

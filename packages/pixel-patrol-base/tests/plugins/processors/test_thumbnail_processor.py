@@ -207,14 +207,15 @@ def test_z_dimension_center_slice(proc):
     assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
 
 
-def test_channel_dimension_2ch_kept_as_color(proc):
-    """2 channels kept as R and G; channel 1 (G) is the bright one."""
+def test_channel_dimension_center_sliced_to_grayscale(proc):
+    """C is center-sliced like any other non-spatial dim; result is grayscale (R=G=B)."""
     data = np.zeros((2, 20, 20), dtype=np.uint8)
-    data[1] = 200
+    data[1] = 200  # center slice of C=2 picks index 1 (bright)
     thumb = _thumbnail(proc, data, "CYX")
     arr = np.array(_decode_thumbnail(thumb))
-    # channel 0 → R = 0, channel 1 → G = 255
-    assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, 1] == 255
+    mid = SPRITE_SIZE // 2
+    assert arr[mid, mid, 0] == arr[mid, mid, 1] == arr[mid, mid, 2]  # grayscale
+    assert arr[mid, mid, 0] == 255  # bright channel selected
 
 
 def test_s_dimension_2ch_kept_as_color(proc):
@@ -227,10 +228,10 @@ def test_s_dimension_2ch_kept_as_color(proc):
     assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, 1] == 255
 
 
-def test_multiple_dimensions_center_slice_t_z_mean_c(proc):
+def test_multiple_dimensions_center_sliced(proc):
     nt, nc, nz = 3, 2, 5
     data = np.zeros((nt, nc, nz, 20, 20), dtype=np.uint8)
-    data[nt // 2, :, nz // 2] = 200
+    data[nt // 2, :, nz // 2] = 200  # all C bright at center T and Z
     thumb = _thumbnail(proc, data, "TCZYX")
     arr = np.array(_decode_thumbnail(thumb))[:, :, 0]
     assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2] == 255
@@ -254,16 +255,17 @@ def test_rgba_via_s_dimension_drops_alpha(proc):
     np.testing.assert_array_equal(arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, :3], [127, 191, 255])
 
 
-def test_c_dimension_with_3_channels_produces_color(proc):
+def test_c_dimension_with_3_channels_center_sliced_to_grayscale(proc):
     data = np.zeros((3, 64, 64), dtype=np.uint8)
     data[0] = 100; data[1] = 150; data[2] = 200
     thumb = _thumbnail(proc, data, "CYX")
     arr = np.array(_decode_thumbnail(thumb))
-    # With 3 channels kept as colour, RGB channels are not equal
-    assert not np.array_equal(arr[:, :, 0], arr[:, :, 1])
+    mid = SPRITE_SIZE // 2
+    # center slice of C=3 picks index 1 (value 150); result is grayscale
+    assert arr[mid, mid, 0] == arr[mid, mid, 1] == arr[mid, mid, 2]
 
 
-def test_c_dimension_mean_when_more_than_4_channels(proc):
+def test_c_dimension_more_than_4_channels_center_sliced_to_grayscale(proc):
     data = np.random.randint(0, 256, (5, 20, 20), dtype=np.uint8)
     thumb = _thumbnail(proc, data, "CYX")
     arr = np.array(_decode_thumbnail(thumb))
