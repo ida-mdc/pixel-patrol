@@ -134,7 +134,7 @@ export default {
       if (invariants.length) {
         const h = document.createElement('h6');
         h.style.cssText = 'margin-top:20px;margin-bottom:10px';
-        h.textContent = 'Properties shared between all files';
+        h.textContent = 'Properties shared by all files that report it';
         container.appendChild(h);
         const table = document.createElement('table');
         table.className = 'stat-table';
