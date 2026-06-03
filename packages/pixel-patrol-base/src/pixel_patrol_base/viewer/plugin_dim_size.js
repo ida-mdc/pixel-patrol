@@ -152,7 +152,7 @@ export default {
         if (invariantDims.length) {
           const h = document.createElement('h6');
           h.style.cssText = 'margin-top:8px;margin-bottom:8px';
-          h.textContent = 'Dimension Sizes (same across all files)';
+          h.textContent = 'Dimension Sizes — same across all files that report it';
           container.appendChild(h);
           const table = document.createElement('table');
           table.className = 'stat-table';
