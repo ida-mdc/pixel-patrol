@@ -111,9 +111,9 @@ def mscn_variance(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     return np.where(all_nan, np.nan, np.nanvar(c_safe, axis=axes))
 
 
-def local_std_ratio(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-                    cache: Optional[Dict] = None) -> np.ndarray:
-    """Mean local 3×3 std / spatial std."""
+def texture_heterogeneity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                          cache: Optional[Dict] = None) -> np.ndarray:
+    """Coefficient of variation of local 3×3 stds — how unevenly distributed texture is."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
@@ -122,13 +122,13 @@ def local_std_ratio(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     if np.any(all_nan):
         loc_std_safe = np.where(all_nan[..., np.newaxis, np.newaxis], 0.0, loc_std)
         mean_local_std = np.where(all_nan, np.nan, np.nanmean(loc_std_safe, axis=axes))
+        std_local_std  = np.where(all_nan, np.nan, np.nanstd(loc_std_safe, axis=axes))
     else:
         mean_local_std = np.nanmean(loc_std, axis=axes)
-    with np.errstate(all="ignore"):
-        spatial_std = np.nanstd(arr, axis=axes)
-    result = np.full_like(spatial_std, np.nan)
-    valid = spatial_std > 0
-    result[valid] = mean_local_std[valid] / spatial_std[valid]
+        std_local_std  = np.nanstd(loc_std, axis=axes)
+    result = np.full_like(mean_local_std, np.nan)
+    valid = mean_local_std > 0
+    result[valid] = std_local_std[valid] / mean_local_std[valid]
     return result
 
 
@@ -153,8 +153,25 @@ def calc_blocking(arr: np.ndarray) -> np.ndarray:
 
 def calc_ringing(arr: np.ndarray) -> np.ndarray:
     """Variance of high-pass (pixel minus 3×3 box average)."""
+    h, w = arr.shape[-2], arr.shape[-1]
+    if h < 3 or w < 3:
+        return np.full(arr.shape[:-2], np.nan)
     arr_f = arr.astype(np.float32, copy=False)
     kernel_avg = (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
                   arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
                   arr_f[..., 2:, :-2]  + arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:]) / 9.0
     return np.nanvar(arr_f[..., 1:-1, 1:-1] - kernel_avg, axis=(-2, -1))
+
+
+def laplacian_variance(arr: np.ndarray) -> np.ndarray:
+    """Variance of the discrete Laplacian — proxy for sharpness (higher = sharper)."""
+    h, w = arr.shape[-2], arr.shape[-1]
+    if h < 3 or w < 3:
+        return np.full(arr.shape[:-2], np.nan)
+    arr_f = arr.astype(np.float32, copy=False)
+    lap = (arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 2:] +
+           arr_f[..., :-2, 1:-1] + arr_f[..., 2:, 1:-1] -
+           4.0 * arr_f[..., 1:-1, 1:-1])
+    return np.nanvar(lap, axis=(-2, -1))
+
+

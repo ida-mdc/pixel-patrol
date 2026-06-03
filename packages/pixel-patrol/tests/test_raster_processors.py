@@ -61,7 +61,7 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("michelson_contrast", "mscn_variance", "local_std_ratio"):
+    for k in ("michelson_contrast", "mscn_variance", "texture_heterogeneity", "laplacian_variance"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -101,7 +101,7 @@ def test_lowercase_dim_order(quality_proc):
     row = _chunk(quality_proc, data, "yx")
     assert np.isfinite(row["michelson_contrast"])
     assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["local_std_ratio"])
+    assert np.isfinite(row["texture_heterogeneity"])
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +164,61 @@ def test_quality_metrics_finite(quality_proc):
     row = _chunk(quality_proc, data, "YX")
     assert np.isfinite(row["michelson_contrast"])
     assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["local_std_ratio"])
+    assert np.isfinite(row["texture_heterogeneity"])
+    assert np.isfinite(row["laplacian_variance"])
+
+
+def test_laplacian_variance_sharper_image_scores_higher(quality_proc):
+    rng = np.random.default_rng(42)
+    sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    # Blur by repeated box-averaging — reduces second-derivative energy.
+    blurred = sharp.copy()
+    for _ in range(8):
+        blurred[1:-1, 1:-1] = (
+            blurred[:-2, :-2] + blurred[:-2, 1:-1] + blurred[:-2, 2:] +
+            blurred[1:-1, :-2] + blurred[1:-1, 1:-1] + blurred[1:-1, 2:] +
+            blurred[2:, :-2]  + blurred[2:, 1:-1]  + blurred[2:, 2:]
+        ) / 9.0
+    row_sharp   = _chunk(quality_proc, sharp,   "YX")
+    row_blurred = _chunk(quality_proc, blurred, "YX")
+    assert row_sharp["laplacian_variance"] > row_blurred["laplacian_variance"]
+
+
+def test_laplacian_variance_small_image_returns_nan(quality_proc):
+    row = _chunk(quality_proc, np.ones((2, 2), dtype=np.float32), "YX")
+    assert np.isnan(row.get("laplacian_variance", np.nan))
+
+
+def test_michelson_contrast_high_frequency_scores_higher(quality_proc):
+    # Checkerboard has local range = 1 in every 3×3 window; a smooth gradient
+    # has tiny local range per window, so the ratio to global std is much smaller.
+    checker = (np.indices((32, 32), dtype=np.float32).sum(axis=0) % 2)
+    smooth  = np.linspace(0, 1, 32 * 32, dtype=np.float32).reshape(32, 32)
+    row_checker = _chunk(quality_proc, checker, "YX")
+    row_smooth  = _chunk(quality_proc, smooth,  "YX")
+    assert row_checker["michelson_contrast"] > row_smooth["michelson_contrast"]
+
+
+def test_mscn_variance_noise_scores_higher_than_gradient(quality_proc):
+    # For a linear gradient each pixel equals its 3×3 local mean exactly, so
+    # every MSCN coefficient is zero and variance is exactly zero.
+    gradient = np.linspace(0, 255, 32 * 32, dtype=np.float32).reshape(32, 32)
+    noise    = np.random.default_rng(0).integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    row_gradient = _chunk(quality_proc, gradient, "YX")
+    row_noise    = _chunk(quality_proc, noise,    "YX")
+    assert row_noise["mscn_variance"] > row_gradient["mscn_variance"]
+
+
+def test_texture_heterogeneity_patchy_scores_higher(quality_proc):
+    # Patchy image: flat top half (local std = 0) + noisy bottom half (local std > 0)
+    # → wide spread of local stds → high CoV. Uniform noise → consistent local stds → low CoV.
+    rng  = np.random.default_rng(1)
+    noise = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    patchy = noise.copy()
+    patchy[:16, :] = 0.0
+    row_patchy  = _chunk(quality_proc, patchy, "YX")
+    row_uniform = _chunk(quality_proc, noise,  "YX")
+    assert row_patchy["texture_heterogeneity"] > row_uniform["texture_heterogeneity"]
 
 
 # ---------------------------------------------------------------------------
