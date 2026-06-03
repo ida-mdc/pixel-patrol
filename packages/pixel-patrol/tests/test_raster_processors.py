@@ -61,7 +61,7 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("michelson_contrast", "mscn_variance", "local_std_ratio"):
+    for k in ("michelson_contrast", "mscn_variance", "local_std_ratio", "laplacian_variance", "noise_std"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -165,6 +165,8 @@ def test_quality_metrics_finite(quality_proc):
     assert np.isfinite(row["michelson_contrast"])
     assert np.isfinite(row["mscn_variance"])
     assert np.isfinite(row["local_std_ratio"])
+    assert np.isfinite(row["laplacian_variance"])
+    assert np.isfinite(row["noise_std"])
 
 
 # ---------------------------------------------------------------------------
