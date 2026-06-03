@@ -31,9 +31,11 @@ from __future__ import annotations
 import itertools
 import math
 import logging
+import os
 import shutil
 import signal
 import time
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,6 +44,7 @@ from typing import (
     NamedTuple, Optional, Tuple, Union, Set
 )
 
+import dask
 import numpy as np
 import polars as pl
 import psutil
@@ -66,7 +69,6 @@ logger = logging.getLogger(__name__)
 
 def _silence_numcodecs_warning():
     """Same showwarning patch as core/__init__.py, applied to each Dask worker process."""
-    import warnings
     _sw = warnings.showwarning
     warnings.showwarning = lambda m, c, f, l, *a, **kw: None if c is DeprecationWarning and "numcodecs" in str(f) else _sw(m, c, f, l, *a, **kw)
 
@@ -78,6 +80,23 @@ _IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
 # Columns exempt from integer dtype shrinkage in _post_process.
 # size_bytes is a cumulative sum across many files and can exceed int32 range.
 _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
+
+# X/Y are the spatial plane dims — never split by default (full extent = -1).
+_FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
+
+# Log a progress line every N completed records.
+_LOG_EVERY = 200
+
+# OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
+# so they take effect before worker subprocesses initialize their thread pools.
+# (LocalCluster env= arrives post-spawn and is too late for BLAS initialization.)
+_WORKER_THREAD_ENV = {
+    "OMP_NUM_THREADS":      "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS":      "1",
+    "NUMEXPR_MAX_THREADS":  "1",
+    "NUMEXPR_NUM_THREADS":  "1",
+}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -150,7 +169,6 @@ def _resolve_leaf_block_shape(
     dim via user_spec (e.g. leaf_block_shape={'X': 256, 'Z': 1}).
     -1 means full extent; positive N means split into blocks of N.
     """
-    _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
     return {
         dim: (
             user_spec[dim]
@@ -893,7 +911,9 @@ def _coordinate_pipeline(
     stay busy while _plan_tasks is still generating tasks from the file stream.
     Returns (result_df, stats_dict) where stats_dict carries timing and throughput data.
     """
-    max_pending = 2 * sum(client.nthreads().values())
+    _nthreads       = client.nthreads()
+    n_workers_live  = len(_nthreads)
+    max_pending     = 2 * sum(_nthreads.values())
     writer      = _ResultsWriter(config.rows_per_part, parts_dir, config.parquet_row_group_size)
     assembler   = _RecordAssembler()
     future_to_task: Dict[Any, Task] = {}
@@ -903,7 +923,6 @@ def _coordinate_pipeline(
     all_timing:        Dict[str, float] = {}
     error_records     = 0
     t_pipeline_start  = time.monotonic()
-    _LOG_EVERY        = 200
 
     # Count memory-pressure pause events from Dask's distributed logger.
     class _PauseCounter(logging.Handler):
@@ -923,15 +942,15 @@ def _coordinate_pipeline(
     # Note: client.scatter(list) scatters each element individually, so we wrap
     # processors in a single-element list and unpack with [0] to scatter the
     # whole list as one object.
-    worker_info = client.scheduler_info().get("workers", {})
     logger.info(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
-        len(worker_info), max_pending, config.rows_per_part,
+        n_workers_live, max_pending, config.rows_per_part,
     )
-    _worker_log = logger.info if is_distributed else logger.debug
-    for addr, w in worker_info.items():
-        _worker_log("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
-                    addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
+    if is_distributed:
+        worker_info = client.scheduler_info().get("workers", {})
+        for addr, w in worker_info.items():
+            logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
+                        addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
 
     loader_ref     = client.scatter(loader,        broadcast=True)
     processors_ref = client.scatter([processors],  broadcast=True)[0]
@@ -1047,11 +1066,11 @@ def _coordinate_pipeline(
     logging.getLogger("distributed.worker.memory").removeHandler(_pause_handler)
 
     try:
-        worker_info = client.scheduler_info().get("workers", {})
-        n_workers_actual = len(worker_info)
-        worker_nodes = sorted({addr.split("//")[-1].split(":")[0] for addr in worker_info})
+        _final_nthreads = client.nthreads()
+        n_workers_actual = len(_final_nthreads)
+        worker_nodes = sorted({addr.split("//")[-1].split(":")[0] for addr in _final_nthreads})
     except Exception:
-        n_workers_actual = n_workers
+        n_workers_actual = n_workers_live
         worker_nodes = []
 
     try:
@@ -1264,23 +1283,18 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         logger.debug("_get_or_create_client: reusing existing client %s", client.scheduler_info()["address"])
         yield client, True
     except ValueError:
-        logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", config.max_workers)
+        n_workers = config.max_workers if config.max_workers is not None else os.cpu_count()
+        logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
         # own handler immediately after the cluster is started.
         _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        cluster = LocalCluster(
-            n_workers=config.max_workers,
-            threads_per_worker=1,
-            processes=True,
-            env={
-                "OMP_NUM_THREADS":      "1",
-                "OPENBLAS_NUM_THREADS": "1",
-                "MKL_NUM_THREADS":      "1",
-                "NUMEXPR_MAX_THREADS":  "1",
-                "NUMEXPR_NUM_THREADS":  "1",
-            },
-        )
+        with dask.config.set({"distributed.nanny.pre-spawn-environ": _WORKER_THREAD_ENV}):
+            cluster = LocalCluster(
+                n_workers=n_workers,
+                threads_per_worker=1,
+                processes=True,
+            )
         signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         client.run(_silence_numcodecs_warning)
