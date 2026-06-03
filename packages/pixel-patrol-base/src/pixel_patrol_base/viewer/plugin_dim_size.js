@@ -130,38 +130,68 @@ export default {
   
       const dimsToPlot = sizeCols.filter(c => c !== 'num_pixels');
       if (dimsToPlot.length) {
-        const dimRows = await ctx.queryRows(`
-          SELECT ${gcExpr} AS __group__, ${dimsToPlot.map(q).join(', ')}
-          FROM pp_data ${ctx.where}
-          ${sample(5000)}
-        `);
-  
-        const titleDiv = document.createElement('h6');
-        titleDiv.style.cssText = 'margin-top:8px;margin-bottom:12px';
-        titleDiv.textContent = 'Individual Dimension Sizes per Dataset';
-        container.appendChild(titleDiv);
-  
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
-        container.appendChild(wrap);
-  
-        for (const col of dimsToPlot) {
-          const validRows = dimRows.filter(r => r[col] != null && Number(r[col]) > 1);
-          if (!validRows.length) continue;
-          const traces = ctx.groups.map(g => {
-            const vals = validRows.filter(r => String(r.__group__) === g).map(r => Number(r[col]));
-            if (!vals.length) return null;
-            return {
-              type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: false },
-              points: vals.length < 500 ? 'all' : 'outliers', pointpos: 0, jitter: 0.3,
-              marker: { color: ctx.color.group(g), size: 3 }, line: { color: ctx.color.group(g) }, showlegend: false,
-            };
-          }).filter(Boolean);
-          if (!traces.length) continue;
-          appendPlot(wrap, traces, {
-            title: { text: niceName(col), font: { size: 12 } }, yaxis: { title: 'pixels' },
-            xaxis: { title: ctx.plot.groupingLabel(''), type: 'category' }, height: 280, margin: { l: 44, r: 10, t: 36, b: 40 },
-          }, 'flex:0 0 280px;min-width:220px;margin-bottom:16px');
+        const { andWhere } = ctx.sql;
+
+        // Classify each dim: invariant (1 unique value > 1) vs variant (multiple values).
+        const dimStats = await Promise.all(dimsToPlot.map(async col => {
+          const res = await ctx.queryRows(`
+            SELECT COUNT(DISTINCT ${q(col)}) AS nd, MIN(${q(col)}) AS val
+            FROM pp_data ${andWhere(ctx.where, `${q(col)} > 1`)}
+          `);
+          return { col, nd: Number(res[0]?.nd ?? 0), val: res[0]?.val };
+        }));
+
+        const invariantDims = dimStats.filter(d => d.nd === 1);
+        const variantDims   = dimStats.filter(d => d.nd > 1).map(d => d.col);
+
+        if (invariantDims.length) {
+          const h = document.createElement('h6');
+          h.style.cssText = 'margin-top:8px;margin-bottom:8px';
+          h.textContent = 'Dimension Sizes (same across all files)';
+          container.appendChild(h);
+          const table = document.createElement('table');
+          table.className = 'stat-table';
+          table.innerHTML = `
+            <thead><tr><th>Dimension</th><th>Size (pixels)</th></tr></thead>
+            <tbody>${invariantDims.map(d => `<tr><td>${niceName(d.col)}</td><td>${d.val}</td></tr>`).join('')}</tbody>
+          `;
+          container.appendChild(table);
+        }
+
+        if (variantDims.length) {
+          const dimRows = await ctx.queryRows(`
+            SELECT ${gcExpr} AS __group__, ${variantDims.map(q).join(', ')}
+            FROM pp_data ${ctx.where}
+            ${sample(5000)}
+          `);
+
+          const titleDiv = document.createElement('h6');
+          titleDiv.style.cssText = 'margin-top:16px;margin-bottom:12px';
+          titleDiv.textContent = 'Dimension Size Distribution';
+          container.appendChild(titleDiv);
+
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
+          container.appendChild(wrap);
+
+          for (const col of variantDims) {
+            const validRows = dimRows.filter(r => r[col] != null && Number(r[col]) > 1);
+            if (!validRows.length) continue;
+            const traces = ctx.groups.map(g => {
+              const vals = validRows.filter(r => String(r.__group__) === g).map(r => Number(r[col]));
+              if (!vals.length) return null;
+              return {
+                type: 'violin', y: vals, name: ctx.groupLabel(g), box: { visible: true }, meanline: { visible: false },
+                points: vals.length < 500 ? 'all' : 'outliers', pointpos: 0, jitter: 0.3,
+                marker: { color: ctx.color.group(g), size: 3 }, line: { color: ctx.color.group(g) }, showlegend: false,
+              };
+            }).filter(Boolean);
+            if (!traces.length) continue;
+            appendPlot(wrap, traces, {
+              title: { text: niceName(col), font: { size: 12 } }, yaxis: { title: 'pixels' },
+              xaxis: { title: ctx.plot.groupingLabel(''), type: 'category' }, height: 280, margin: { l: 44, r: 10, t: 36, b: 40 },
+            }, 'flex:0 0 280px;min-width:220px;margin-bottom:16px');
+          }
         }
       }
     
