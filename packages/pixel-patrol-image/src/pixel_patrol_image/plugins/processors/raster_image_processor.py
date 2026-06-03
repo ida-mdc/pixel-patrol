@@ -16,9 +16,11 @@ from pixel_patrol_image.plugins.processors.raster_image_numpy_metrics import (
     _XY_AXES,
     calc_blocking,
     calc_ringing,
+    laplacian_variance,
     local_std_ratio,
     michelson_contrast,
     mscn_variance,
+    noise_std,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
     RasterMetricSpec,
@@ -40,6 +42,8 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
             case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES)))
             case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
             case "local_std_ratio":    return float(np.nanmean(local_std_ratio(arr, _XY_AXES, ctx.cache)))
+            case "laplacian_variance": return float(np.nanmean(laplacian_variance(arr)))
+            case "noise_std":          return float(np.nanmean(noise_std(arr)))
             case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
             case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
             case _:                    return None
@@ -83,6 +87,8 @@ class QualityMetricsProcessor(RasterImageProcessor):
         RasterMetricSpec(name="michelson_contrast", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
         RasterMetricSpec(name="mscn_variance",      data_type=np.float32, aggregate_rows=_weighted_mean_agg),
         RasterMetricSpec(name="local_std_ratio",    data_type=np.float32, aggregate_rows=_weighted_mean_agg),
+        RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
+        RasterMetricSpec(name="noise_std",          data_type=np.float32, aggregate_rows=_weighted_mean_agg),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
 
