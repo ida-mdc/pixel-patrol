@@ -77,6 +77,12 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     y_full = max(r["dim_y"] + r["Y_size"] for r in valid)
     x_full = max(r["dim_x"] + r["X_size"] for r in valid)
 
+    scale  = min(SPRITE_SIZE / y_full, SPRITE_SIZE / x_full)
+    h_used = max(1, round(y_full * scale))
+    w_used = max(1, round(x_full * scale))
+    y_pad  = (SPRITE_SIZE - h_used) // 2
+    x_pad  = (SPRITE_SIZE - w_used) // 2
+
     by_pos: dict = defaultdict(list)
     for r in valid:
         by_pos[(r["dim_y"], r["dim_x"])].append(r)
@@ -88,10 +94,10 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
         y_off, x_off = r["dim_y"], r["dim_x"]
         y_ext, x_ext = r["Y_size"], r["X_size"]
 
-        cy  = round(y_off / y_full * SPRITE_SIZE)
-        cy2 = min(round((y_off + y_ext) / y_full * SPRITE_SIZE), SPRITE_SIZE)
-        cx  = round(x_off / x_full * SPRITE_SIZE)
-        cx2 = min(round((x_off + x_ext) / x_full * SPRITE_SIZE), SPRITE_SIZE)
+        cy  = y_pad + round(y_off * scale)
+        cy2 = min(y_pad + h_used, max(cy + 1, y_pad + round((y_off + y_ext) * scale)))
+        cx  = x_pad + round(x_off * scale)
+        cx2 = min(x_pad + w_used, max(cx + 1, x_pad + round((x_off + x_ext) * scale)))
         ah, aw = cy2 - cy, cx2 - cx
         if ah <= 0 or aw <= 0 or patch.size == 0:
             continue

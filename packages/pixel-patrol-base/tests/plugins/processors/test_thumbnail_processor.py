@@ -302,20 +302,32 @@ def test_square_image_fills_thumbnail(proc):
     assert alpha[SPRITE_SIZE // 2, -1] == 255
 
 
-def test_wide_image_fills_canvas_proportionally(proc):
-    """A 1×256 image fills the full canvas height (proportional placement, no letterbox)."""
+def test_wide_image_letterboxed(proc):
+    """A 1×256 image fills the full canvas width and is letterboxed top/bottom."""
     data = np.full((1, 256), 200, dtype=np.uint8)
     thumb = _thumbnail(proc, data, "YX")
     alpha = np.array(_decode_thumbnail(thumb))[:, :, 3]
-    assert alpha[0, SPRITE_SIZE // 2] == 255
+    opaque_rows = np.where(alpha.any(axis=1))[0]
+    # exactly one row of content, all columns opaque in that row
+    assert len(opaque_rows) == 1
+    assert alpha[opaque_rows[0], :].all()
+    # top and bottom edges are transparent (letterbox)
+    assert alpha[0, SPRITE_SIZE // 2] == 0
+    assert alpha[-1, SPRITE_SIZE // 2] == 0
 
 
-def test_tall_image_fills_canvas_proportionally(proc):
-    """A 256×1 image fills the full canvas width (proportional placement, no pillarbox)."""
+def test_tall_image_pillarboxed(proc):
+    """A 256×1 image fills the full canvas height and is pillarboxed left/right."""
     data = np.full((256, 1), 200, dtype=np.uint8)
     thumb = _thumbnail(proc, data, "YX")
     alpha = np.array(_decode_thumbnail(thumb))[:, :, 3]
-    assert alpha[SPRITE_SIZE // 2, 0] == 255
+    opaque_cols = np.where(alpha.any(axis=0))[0]
+    # exactly one column of content, all rows opaque in that column
+    assert len(opaque_cols) == 1
+    assert alpha[:, opaque_cols[0]].all()
+    # left and right edges are transparent (pillarbox)
+    assert alpha[SPRITE_SIZE // 2, 0] == 0
+    assert alpha[SPRITE_SIZE // 2, -1] == 0
 
 
 # ---------------------------------------------------------------------------
