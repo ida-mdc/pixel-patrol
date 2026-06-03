@@ -24,6 +24,13 @@ export default {
         FROM pp_data ${pathWhere}
       `))[0];
       const numFiles    = Number(countRow?.n ?? 0);
+
+      if (numFiles === 1) {
+        const pathRow = (await ctx.queryRows(`SELECT "path"::VARCHAR AS p FROM pp_data ${pathWhere} LIMIT 1`))[0];
+        container.innerHTML = `<div class="p-2 text-break"><strong>File:</strong> ${pathRow?.p ?? ''}</div>`;
+        return;
+      }
+
       const foldersOnly = numFiles > MAX_FILES_FOR_SUNBURST;
 
       const rows = foldersOnly
