@@ -87,6 +87,10 @@ _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
 
+# Per-worker RAM multiplier: ~5× covers decompression + processor peak overhead,
+# ÷0.60 keeps actual usage below Dask's 80% pause threshold.
+_WORKER_MEMORY_MULTIPLIER = 8
+
 # OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
 # so they take effect before worker subprocesses initialize their thread pools.
 # (LocalCluster env= arrives post-spawn and is too late for BLAS initialization.)
@@ -1282,7 +1286,16 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         logger.debug("_get_or_create_client: reusing existing client %s", client.scheduler_info()["address"])
         yield client, True
     except ValueError:
-        n_workers = config.max_workers if config.max_workers is not None else os.cpu_count()
+        n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
+        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
+        n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
+        n_workers = min(n_workers_cpu, n_workers_ram)
+        if n_workers < n_workers_cpu:
+            logger.info(
+                "n_workers capped to %d by available RAM (%.1f GB); requested %d. "
+                "Reduce --mb-per-task for more workers.",
+                n_workers, psutil.virtual_memory().available / 2**30, n_workers_cpu,
+            )
         logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
