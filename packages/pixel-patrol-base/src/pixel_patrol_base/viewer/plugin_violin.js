@@ -11,7 +11,8 @@ const BASIC_METRIC_BASES = new Set([
 
 // Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
 const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'local_std_ratio', 'blocking_index', 'ringing_index',
+  'michelson_contrast', 'mscn_variance', 'local_std_ratio', 'laplacian_variance', 'noise_std',
+  'blocking_index', 'ringing_index',
 ]);
 
 function matchesBases(col, bases) {
@@ -50,6 +51,8 @@ const QUALITY_INFO = [
   '- **Michelson contrast** – Global contrast ratio; higher values indicate greater dynamic range.',
   '- **MSCN variance** – Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
   '- **Local std ratio** – Ratio of local to global standard deviation; captures texture uniformity.',
+  '- **Laplacian variance** – Variance of the discrete Laplacian; higher values indicate a sharper image.',
+  '- **Noise std** – Std of the high-frequency residual; higher values indicate more noise.',
   '- **Blocking index** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
   '- **Ringing index** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
   '', SIGNIFICANCE_HELP,
