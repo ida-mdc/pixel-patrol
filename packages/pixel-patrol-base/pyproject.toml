@@ -4,7 +4,14 @@ version = "0.6.0"
 description = "Image prevalidation tool"
 readme = "README.md"
 license = { file = "LICENSE" }
+authors = [
+    { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
+]
 requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
 dependencies = [
     "click>=8.2.1",
     "dash-ag-grid>=32.3.0",
