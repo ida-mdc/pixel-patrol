@@ -1,1148 +1,176 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pixel Patrol — Know your data before you analyse it</title>
-  <meta name="description" content="Pixel Patrol helps researchers check image datasets for quality issues before running computationally expensive analysis." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pixel Patrol</title>
+  <meta name="description" content="Scan image datasets and explore quality metrics, dimensions, and thumbnails in an interactive browser report."/>
+  <link rel="icon" type="image/png" href="assets/icon.png"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --white:   #ffffff;
-      --bg:      #f7f8fa;
-      --border:  #e4e7eb;
-      --text:    #1a1d23;
-      --muted:   #6b7280;
-      --faint:   #9ca3af;
-      --blue:    #2563eb;
-      --blue-lt: #eff4ff;
-      --radius:  10px;
-    }
-
-    html { scroll-behavior: smooth; }
-
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--white);
-      color: var(--text);
-      line-height: 1.65;
-      font-size: 16px;
-    }
-
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    img { max-width: 100%; display: block; }
-
-    .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+    body { display: flex; flex-direction: column; min-height: 100vh; }
 
     /* ── Nav ── */
-    nav {
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      background: rgba(255,255,255,0.96);
-      backdrop-filter: blur(8px);
-      z-index: 50;
-    }
-
-    .nav-inner {
-      max-width: 1000px;
-      margin: 0 auto;
+    .pp-nav {
+      border-bottom: 1px solid #dee2e6;
       padding: 0 24px;
-      height: 56px;
+      height: 52px;
       display: flex;
       align-items: center;
+      gap: 10px;
+      background: #fff;
     }
-
-    .nav-logo {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      color: var(--text);
-      text-decoration: none;
-    }
-
-    .nav-logo img { width: 26px; height: 26px; border-radius: 6px; }
-
-    .nav-links {
-      display: flex;
-      gap: 24px;
-      list-style: none;
-      margin-left: 32px;
-    }
-
-    .nav-links a { font-size: 0.88rem; color: var(--muted); font-weight: 500; }
-    .nav-links a:hover { color: var(--text); text-decoration: none; }
-
-    .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 18px;
-      border-radius: var(--radius);
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.15s;
-    }
-
-    .btn-primary { background: var(--blue); color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; text-decoration: none; }
-
-    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    .btn-ghost:hover { border-color: #9ca3af; color: var(--text); text-decoration: none; }
+    .pp-nav-logo { width: 26px; height: 26px; border-radius: 6px; }
+    .pp-nav-title { font-weight: 600; font-size: 0.95rem; color: #212529; text-decoration: none; }
+    .pp-nav-title:hover { color: #0d6efd; }
+    .pp-nav-links { margin-left: auto; display: flex; gap: 20px; align-items: center; }
+    .pp-nav-links a { font-size: 0.88rem; color: #6c757d; text-decoration: none; }
+    .pp-nav-links a:hover { color: #212529; }
 
     /* ── Hero ── */
-    .hero {
-      padding: 80px 0 72px;
-    }
+    .hero { padding: 72px 0 64px; }
+    .hero-img { max-width: 300px; width: 100%; }
 
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 56px;
-      align-items: center;
-    }
-
-    .hero h1 {
-      font-size: clamp(1.9rem, 4vw, 2.8rem);
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      line-height: 1.2;
-      margin-bottom: 20px;
-    }
-
-    .hero-sub {
-      font-size: 1.05rem;
-      color: var(--muted);
-      line-height: 1.75;
-      margin-bottom: 32px;
-    }
-
-    .hero-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 28px;
-    }
-
-    .install-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      padding: 9px 16px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.84rem;
-      color: var(--muted);
-      cursor: pointer;
-      transition: border-color 0.15s;
-      width: fit-content;
-    }
-
-    .install-pill:hover { border-color: var(--blue); }
-    .install-pill .cmd { color: var(--text); }
-    .install-pill svg { color: var(--faint); flex-shrink: 0; }
-
-    .hero-image img {
-      width: 100%;
-      max-width: 320px;
-      margin: 0 auto;
-    }
-
-    /* ── Story sections ── */
-    .story-section {
-      padding: 80px 0;
-      border-top: 1px solid var(--border);
-    }
-
-    .story-section.alt { background: var(--bg); }
-
-    .story-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 64px;
-      align-items: center;
-    }
-
-    .story-grid.flip { direction: rtl; }
-    .story-grid.flip > * { direction: ltr; }
-
-    .story-label {
-      text-transform: uppercase;
-      font-size: 0.73rem;
-      font-weight: 700;
-      letter-spacing: 0.09em;
-      color: var(--blue);
-      margin-bottom: 12px;
-    }
-
-    .story-title {
-      font-size: clamp(1.3rem, 2.5vw, 1.7rem);
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.25;
-      margin-bottom: 16px;
-    }
-
-    .story-body {
-      font-size: 0.97rem;
-      color: var(--muted);
-      line-height: 1.8;
-    }
-
-    .story-body p + p { margin-top: 12px; }
-
-    .story-image img {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-    }
-
-    .story-image.no-border img { border: none; }
-
-    /* ── Steps (how it works) ── */
-    .steps-section { padding: 80px 0; border-top: 1px solid var(--border); }
-
-    .steps-head { text-align: center; margin-bottom: 0; }
-
-    .steps-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      max-width: 760px;
-      margin: 40px auto 0;
-    }
-
-    .step { text-align: center; }
-
-    .step-icon {
-      width: 120px;
-      height: 120px;
-      margin: 0 auto 16px;
-    }
-
-    .step-icon img { width: 100%; height: 100%; object-fit: contain; }
-
+    /* ── How it works ── */
+    .how-section { padding: 56px 0; background: #f8f9fa; border-top: 1px solid #dee2e6; }
+    .step-icon { width: 80px; height: 80px; object-fit: contain; margin: 0 auto 12px; }
     .step-num {
-      display: inline-flex;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--blue-lt);
-      color: var(--blue);
-      font-size: 0.78rem;
-      font-weight: 700;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 10px;
-    }
-
-    .step h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
-    .step p { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
-
-    /* ── Examples ── */
-    .examples-stack { display: flex; flex-direction: column; gap: 16px; }
-
-    .example-card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--bg);
-    }
-
-    .example-card img {
-      width: 100%;
-      display: block;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .example-caption {
-      padding: 8px 12px;
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .example-caption strong { font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
-
-    .example-caption cite {
-      font-size: 0.75rem;
-      color: var(--faint);
-      font-style: normal;
-      text-align: right;
-    }
-
-    .example-caption cite a { color: var(--faint); text-decoration: underline; }
-
-    /* ── Getting started ── */
-    .install-section { padding: 80px 0; border-top: 1px solid var(--border); }
-
-    .tab-row {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 24px;
-    }
-
-    .tab-btn {
-      padding: 8px 18px;
-      border: none;
-      background: none;
-      font-size: 0.88rem;
-      font-weight: 500;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      font-family: 'Inter', sans-serif;
-      transition: color 0.12s;
-    }
-
-    .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
-
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-
-    pre {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px 22px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.83rem;
-      line-height: 1.8;
-      overflow-x: auto;
-      position: relative;
-    }
-
-    pre .c { color: var(--faint); }
-
-    .copy-btn {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: var(--white);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 3px 10px;
-      font-size: 0.75rem;
-      color: var(--muted);
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-    }
-
-    .copy-btn:hover { border-color: var(--blue); color: var(--blue); }
-
-    /* ── CLI cards ── */
-    .cli-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-    }
-
-    .cli-card {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      background: var(--white);
-    }
-
-    .cli-card code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 3px 8px;
-      color: var(--blue);
-      display: inline-block;
-      margin-bottom: 11px;
-    }
-
-    .cli-card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
-    .cli-card p { font-size: 0.84rem; color: var(--muted); line-height: 1.55; }
-
-    .badge {
-      display: inline-block;
-      margin-top: 10px;
-      font-size: 0.73rem;
-      font-weight: 600;
-      padding: 2px 9px;
-      border-radius: 999px;
-      background: var(--blue-lt);
-      color: var(--blue);
-    }
-
-    /* ── Feature highlights ── */
-    .highlights-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-      margin-top: 48px;
-    }
-
-    .highlight {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      background: var(--white);
-    }
-
-    .highlight-icon { font-size: 1.4rem; margin-bottom: 10px; }
-    .highlight h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
-    .highlight p { font-size: 0.83rem; color: var(--muted); line-height: 1.55; }
-
-    /* ── Plugin cards ── */
-    .plugins-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      margin-top: 32px;
-    }
-
-    .plugin-card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px 18px;
-      background: var(--white);
-    }
-
-    .plugin-card h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 4px; }
-    .plugin-card p { font-size: 0.81rem; color: var(--muted); line-height: 1.5; }
-
-    .plugin-tag {
-      display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      padding: 1px 7px;
-      border-radius: 999px;
+      display: inline-flex; width: 22px; height: 22px; border-radius: 50%;
+      background: #e7f0ff; color: #0d6efd;
+      font-size: 0.72rem; font-weight: 700;
+      align-items: center; justify-content: center;
       margin-bottom: 8px;
     }
 
-    .plugin-tag.core { background: var(--blue-lt); color: var(--blue); }
-    .plugin-tag.addon { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-
-    /* ── Screenshots gallery ── */
-    .gallery-section { padding: 80px 0; border-top: 1px solid var(--border); background: var(--bg); }
-
-    .screenshots-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 18px;
+    /* ── Footer (matches viewer) ── */
+    .pp-footer { background: #212529; margin-top: auto; }
+    .pp-footer-inner {
+      max-width: 1400px; margin: 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 24px; flex-wrap: wrap; gap: 12px;
     }
+    .pp-footer-left  { display: flex; align-items: center; }
+    .pp-footer-right { display: flex; align-items: center; gap: 20px; }
+    .pp-footer-logo  { height: 36px; width: auto; margin-right: 14px; }
+    .pp-footer-text  { font-size: 12px; line-height: 1.4; color: #adb5bd; }
+    .pp-footer-link  { color: #adb5bd; text-decoration: none; font-size: 12px; }
+    .pp-footer-link:hover { color: #dee2e6; }
+    .pp-footer-link-light { color: #dee2e6; text-decoration: none; }
+    .pp-footer-link-light:hover { text-decoration: underline; }
 
-    .screenshot-card {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      background: var(--white);
-    }
-
-    .screenshot-card img {
-      width: 100%;
-      border-bottom: 1px solid var(--border);
-      cursor: zoom-in;
-    }
-
-    .screenshot-caption { padding: 13px 16px; }
-    .screenshot-caption strong { display: block; font-size: 0.88rem; margin-bottom: 2px; }
-    .screenshot-caption span { font-size: 0.82rem; color: var(--muted); }
-
-    /* ── Footer ── */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 36px 0 28px;
-    }
-
-    .footer-inner {
-      max-width: 1000px;
-      margin: 0 auto;
-      padding: 0 24px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 24px;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .footer-brand {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      font-weight: 600;
-      font-size: 0.9rem;
-      color: var(--text);
-    }
-
-    .footer-brand img { width: 24px; height: 24px; border-radius: 5px; }
-
-    .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
-    .footer-links a { font-size: 0.84rem; color: var(--muted); }
-    .footer-links a:hover { color: var(--text); text-decoration: none; }
-
-    .footer-helmholtz img { height: 26px; opacity: 0.6; }
-
-    .footer-note {
-      width: 100%;
-      padding-top: 16px;
-      font-size: 0.78rem;
-      color: var(--faint);
-      border-top: 1px solid var(--border);
-    }
-
-    /* ── Lightbox ── */
-    .lightbox {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.72);
-      z-index: 999;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .lightbox.open { display: flex; }
-
-    .lightbox img {
-      max-width: 90vw;
-      max-height: 88vh;
-      border-radius: 10px;
-      box-shadow: 0 16px 64px rgba(0,0,0,0.5);
-    }
-
-    .lightbox-close {
-      position: fixed;
-      top: 16px;
-      right: 20px;
-      font-size: 1.8rem;
-      color: #fff;
-      cursor: pointer;
-      background: none;
-      border: none;
-      line-height: 1;
-      opacity: 0.8;
-    }
-
-    @media (max-width: 720px) {
-      .nav-links { display: none; }
-      .hero-grid { grid-template-columns: 1fr; }
-      .hero-image { display: none; }
-      .story-grid { grid-template-columns: 1fr; gap: 32px; }
-      .story-grid.flip { direction: ltr; }
-      .steps-grid { grid-template-columns: repeat(2, 1fr); }
-      .footer-inner { flex-direction: column; align-items: flex-start; }
+    @media (max-width: 767px) {
+      .hero { padding: 48px 0 40px; }
+      .hero-img { max-width: 200px; }
     }
   </style>
 </head>
 <body>
 
 <!-- Nav -->
-<nav>
-  <div class="nav-inner">
-    <a class="nav-logo" href="#">
-      <img src="assets/icon.png" alt="Pixel Patrol" />
-      Pixel Patrol
+<header class="pp-nav">
+  <img class="pp-nav-logo" src="assets/icon.png" alt="Pixel Patrol"/>
+  <a class="pp-nav-title" href="#">Pixel Patrol</a>
+  <nav class="pp-nav-links">
+    <a href="./docs/">Documentation</a>
+    <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
+      <i class="bi bi-github me-1"></i>GitHub
     </a>
-    <ul class="nav-links">
-      <li><a href="#problem">Why?</a></li>
-      <li><a href="#how-it-works">How it works</a></li>
-      <li><a href="#viewer">The viewer</a></li>
-      <li><a href="#gallery">Gallery</a></li>
-      <li><a href="#performance">Performance</a></li>
-      <li><a href="#install">Install</a></li>
-    </ul>
-    <div class="nav-right">
-      <a class="btn btn-ghost" href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.34C3.73 14.34 3.26 13 3.26 13c-.37-.93-.9-1.18-.9-1.18-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>
-      <a class="btn btn-primary" href="#install">Get started</a>
-    </div>
-  </div>
-</nav>
+  </nav>
+</header>
 
 <!-- Hero -->
 <section class="hero">
   <div class="container">
-    <div class="hero-grid">
-      <div class="hero-text">
-        <h1>Know your data<br/>before you analyze it</h1>
-        <p class="hero-sub">
-          You've collected hundreds, maybe thousands of image files.
-          Are they all what you think they are?
-          Pixel Patrol scans your dataset and gives you a clear,
-          interactive report before you spend hours running a pipeline
-          on data not suitable for your purpose.
+    <div class="row align-items-center g-5">
+
+      <div class="col-lg-6">
+        <h1 class="fw-bold mb-3" style="font-size:clamp(1.7rem,4vw,2.4rem);letter-spacing:-0.02em;line-height:1.2">
+          Understand your image<br/>dataset before you use it.
+        </h1>
+        <p class="text-muted mb-4" style="font-size:1.02rem;line-height:1.75">
+          Pixel Patrol scans a folder of images and extracts structured metadata —
+          dimensions, file sizes, bit depths, pixel statistics, quality metrics, and thumbnails —
+          into a portable Parquet file. A browser-based viewer lets you explore the results
+          interactively: filter, group, spot outliers, and share reports without any server.
         </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#install">Install Pixel Patrol</a>
-          <a class="btn btn-ghost" href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">View on GitHub</a>
-        </div>
-        <button class="install-pill" onclick="copyInstall(this)">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 5h6M5 8h4"/></svg>
-          <span class="cmd">uv pip install pixel-patrol</span>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M2 11V3a1 1 0 0 1 1-1h8"/></svg>
-        </button>
-      </div>
-      <div class="hero-image">
-        <img src="assets/prevalidation.png" alt="Researcher surrounded by stacks of image datasets" />
-      </div>
-    </div>
-  </div>
-</section>
 
-<!-- Problem -->
-<section class="story-section" id="problem">
-  <div class="container">
-    <h2 class="story-title">Image collections vary in ways that are easy to miss.</h2>
-
-    <div style="display:grid;grid-template-columns:1.2fr 0.9fr 0.9fr;gap:40px;align-items:start">
-      <div>
-        <div class="story-body">
-          <ul style="margin:10px 0 12px 18px;line-height:1.9">
-            <li>Different dimensions, bit depths, or channel counts</li>
-            <li>Metadata from different microscopes or acquisition dates</li>
-            <li>Empty frames, missing time points, or truncated Z-stacks</li>
-            <li>Intensity shifts between batches that affect downstream statistics</li>
-          </ul>
-        </div>
+        <a href="./viewer/" class="btn btn-primary btn-lg mb-3">
+          <i class="bi bi-folder2-open me-2"></i>Open Report File
+        </a>
+        <p class="text-muted small mb-1">
+          Or pass a URL:
+          <code style="font-size:0.8em">viewer/?data=https://…/report.parquet</code>
+        </p>
+        <p class="text-muted small">
+          <i class="bi bi-shield-check me-1"></i>Your data stays local — nothing is uploaded.
+        </p>
       </div>
 
-      <div class="example-card">
-        <img src="https://ida-mdc.gitlab.io/workshops/prevalidation/img/photobleaching.gif"
-             alt="Time-lapse showing fluorescence signal fading over time" />
-        <div class="example-caption">
-          <strong>Photobleaching</strong>
-          <cite><a href="https://www.nature.com/articles/nbt1278" target="_blank" rel="noopener">Frigault et al., <em>Nature Biotechnology</em> 2009</a></cite>
-        </div>
+      <div class="col-lg-6 text-center d-none d-lg-block">
+        <img class="hero-img" src="assets/prevalidation.png" alt="Researcher with image datasets"/>
       </div>
 
-      <div class="example-card">
-        <img src="assets/google-maps-stitching-example.png"
-             alt="Aerial image with a visible stitching seam" />
-        <div class="example-caption">
-          <strong>Stitching artefact</strong>
-          <cite><a href="https://www.google.com/maps/@24.277037,90.856176,1570m/data=!3m1!1e3?entry=ttu&g_ep=EgoyMDI2MDMwNS4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener">© Google Maps</a></cite>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Solution -->
-<section class="story-section alt" id="solution">
-  <div class="container">
-    <div class="story-grid flip">
-      <div class="story-text">
-        <h2 class="story-title">Pixel Patrol: the full picture.</h2>
-        <div class="story-body">
-          <p>Pixel Patrol reads every image in your dataset in parallel and extracts
-          the facts: dimensions, file size, bit depth, channel count, pixel statistics,
-          and any embedded metadata — whatever the format provides.</p>
-          <p>The results go into a single <strong>Parquet file</strong>. A fast,
-          DuckDB-powered browser viewer then lets you filter, group, spot outliers,
-          and compare experimental conditions side by side.</p>
-          <p>The Parquet file is portable. Share it with a colleague and they can
-          drop it straight into the hosted viewer — no Python, no installation.</p>
-        </div>
-      </div>
-      <div class="story-image">
-        <img src="assets/mosaic_large.png" alt="Mosaic of thousands of image thumbnails from a large dataset" onclick="openLightbox(this.src)" style="cursor:zoom-in" />
-      </div>
     </div>
   </div>
 </section>
 
 <!-- How it works -->
-<section class="steps-section" id="how-it-works">
+<section class="how-section">
   <div class="container">
-    <div class="steps-head">
-      <div class="story-label" style="text-align:center">How it works</div>
-      <h2 class="story-title" style="text-align:center">Four steps from folder to insight</h2>
-    </div>
-
-    <div class="steps-grid">
-      <div class="step">
-        <div class="step-icon"><img src="assets/icons_1.png" alt="Your dataset" /></div>
+    <h2 class="fw-bold mb-1" style="font-size:1.2rem">How it works</h2>
+    <p class="text-muted mb-4" style="font-size:0.9rem">Four steps from folder to insight.</p>
+    <div class="row g-4 text-center" style="max-width:700px">
+      <div class="col-6 col-md-3">
+        <img class="step-icon d-block" src="assets/icons_1.png" alt="Your dataset"/>
         <div class="step-num">1</div>
-        <h3>Your dataset</h3>
-        <p>Point Pixel Patrol at your folder. Label subfolders as separate conditions if you want to compare them.</p>
+        <h6 class="fw-semibold mb-1">Your dataset</h6>
+        <p class="text-muted small mb-0">Point Pixel Patrol at your image folder.</p>
       </div>
-      <div class="step">
-        <div class="step-icon"><img src="assets/icons_2.png" alt="Process" /></div>
+      <div class="col-6 col-md-3">
+        <img class="step-icon d-block" src="assets/icons_2.png" alt="Process"/>
         <div class="step-num">2</div>
-        <h3>Process</h3>
-        <p>Pixel Patrol reads every file in parallel and saves all extracted data to a portable Parquet file.</p>
+        <h6 class="fw-semibold mb-1">Process</h6>
+        <p class="text-muted small mb-0">Every file is read in parallel and saved to a Parquet file.</p>
       </div>
-      <div class="step">
-        <div class="step-icon"><img src="assets/icons_3.png" alt="Structured data" /></div>
+      <div class="col-6 col-md-3">
+        <img class="step-icon d-block" src="assets/icons_3.png" alt="Structured data"/>
         <div class="step-num">3</div>
-        <h3>Structured data</h3>
-        <p>Every file becomes a row: dimensions, file size, bit depth, channel count, and any embedded metadata.</p>
+        <h6 class="fw-semibold mb-1">Structured data</h6>
+        <p class="text-muted small mb-0">Dimensions, file size, bit depth, metadata — one row per file.</p>
       </div>
-      <div class="step">
-        <div class="step-icon"><img src="assets/icons_4.png" alt="Explore" /></div>
+      <div class="col-6 col-md-3">
+        <img class="step-icon d-block" src="assets/icons_4.png" alt="Explore"/>
         <div class="step-num">4</div>
-        <h3>Explore</h3>
-        <p>Open the interactive dashboard. Filter, group, spot outliers, and export a shareable HTML report.</p>
+        <h6 class="fw-semibold mb-1">Explore</h6>
+        <p class="text-muted small mb-0">Open the interactive dashboard. Filter, group, spot outliers.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Viewer section -->
-<section class="story-section alt" id="viewer">
-  <div class="container">
-    <div class="story-label">The viewer</div>
-    <h2 class="story-title">A browser-native viewer powered by DuckDB</h2>
-
-    <div class="story-grid" style="margin-top:32px">
-      <div class="story-text">
-        <div class="story-body">
-          <p>The Pixel Patrol viewer is a standalone web app built on
-          <strong>DuckDB WASM</strong> and <strong>Plotly</strong>.
-          It runs entirely in the browser — no server required for most datasets.</p>
-          <p>Drag and drop a <code style="font-family:monospace;font-size:0.9em">.parquet</code> file to open it instantly.
-          For large files, <code style="font-family:monospace;font-size:0.9em">pixel-patrol view</code> starts a
-          local HTTP server backed by native DuckDB for significantly faster queries.</p>
-          <p>The viewer is <strong>extensible</strong>: plugins are shipped as JavaScript modules
-          and loaded from installed Python packages or any URL. No viewer rebuild needed to add a custom widget.</p>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap">
-          <a class="btn btn-primary" href="https://ida-mdc.github.io/pixel-patrol/" target="_blank" rel="noopener">Open demo viewer</a>
-          <a class="btn btn-ghost" href="https://github.com/ida-mdc/pixel-patrol/tree/main/viewer" target="_blank" rel="noopener">Viewer source</a>
-        </div>
-      </div>
-      <div class="story-image">
-        <img src="assets/overview.png" alt="Pixel Patrol viewer dashboard" onclick="openLightbox(this.src)" style="cursor:zoom-in" />
+<!-- Footer (matches viewer) -->
+<footer class="pp-footer">
+  <div class="pp-footer-inner">
+    <div class="pp-footer-left">
+      <a href="https://helmholtz-imaging.de" target="_blank" rel="noopener">
+        <img src="assets/Helmholtz-Imaging_Mark.png" alt="Helmholtz Imaging" class="pp-footer-logo"/>
+      </a>
+      <div class="pp-footer-text">
+        Pixel Patrol is developed by
+        <a href="https://helmholtz-imaging.de" target="_blank" rel="noopener" class="pp-footer-link-light">Helmholtz Imaging</a>.
       </div>
     </div>
-
-    <!-- Built-in plugins -->
-    <div style="margin-top:56px">
-      <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:6px">Built-in visualization plugins</h3>
-      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:0">Plugins from <code style="font-family:monospace;font-size:0.9em">pixel-patrol-base</code> are always available. Install add-on packages to unlock more.</p>
-
-      <div class="plugins-grid">
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>File Data Summary</h4>
-          <p>Per-file tabular overview of all collected columns.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>Dimension Size Distribution</h4>
-          <p>Distributions of X, Y, Z, T, and channel dimensions across the dataset.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>File Statistics</h4>
-          <p>File size distribution and aggregated stats grouped by any column.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>Pixel Value Histograms</h4>
-          <p>Intensity histograms per group, revealing exposure or bit-depth issues.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>Image Mosaic</h4>
-          <p>Thumbnail grid of every file — sort by any metric to surface outliers visually.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>File Structure Sunburst</h4>
-          <p>Directory tree visualised as a sunburst, sized by file count or total size.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag core">core</span>
-          <h4>Metadata</h4>
-          <p>Embedded acquisition metadata extracted from each file, searchable and filterable.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag addon">pixel-patrol-image</span>
-          <h4>Stats Across Dims</h4>
-          <p>How pixel statistics (mean, std, min, max) and quality metrics change over T, Z, C slices.</p>
-        </div>
-        <div class="plugin-card">
-          <span class="plugin-tag addon">pixel-patrol-image</span>
-          <h4>Violin / Group Comparison</h4>
-          <p>Violin and box plots comparing any metric across experimental groups, with optional statistical significance brackets.</p>
-        </div>
-      </div>
+    <div class="pp-footer-right">
+      <a href="mailto:support@helmholtz-imaging.de" class="pp-footer-link">support@helmholtz-imaging.de</a>
+      <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener" class="pp-footer-link">
+        <i class="bi bi-github me-1"></i>GitHub
+      </a>
+      <a href="https://pypi.org/project/pixel-patrol/" target="_blank" rel="noopener" class="pp-footer-link">PyPI</a>
+      <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/LICENSE" target="_blank" rel="noopener" class="pp-footer-link">License</a>
     </div>
-  </div>
-</section>
-
-<!-- Gallery -->
-<section class="gallery-section" id="gallery">
-  <div class="container">
-    <div style="margin-bottom:36px">
-      <div class="story-label">Gallery</div>
-      <h2 class="story-title">What you'll see</h2>
-      <p style="color:var(--muted);font-size:0.97rem;line-height:1.7;">
-        Screenshots from Pixel Patrol running on sample microscopy datasets. Click any image to enlarge.
-      </p>
-    </div>
-
-    <div class="screenshots-grid">
-      <div class="screenshot-card">
-        <img src="assets/overview.png" alt="Main dashboard" onclick="openLightbox(this.src)" />
-        <div class="screenshot-caption">
-          <strong>Main dashboard</strong>
-          <span>Full dataset overview with interactive filters and grouped statistics.</span>
-        </div>
-      </div>
-      <div class="screenshot-card">
-        <img src="assets/size_plot.png" alt="Size distribution chart" onclick="openLightbox(this.src)" />
-        <div class="screenshot-caption">
-          <strong>Size distribution</strong>
-          <span>See the spread of file sizes across your dataset — outliers stand out immediately.</span>
-        </div>
-      </div>
-      <div class="screenshot-card">
-        <img src="assets/mosiac.png" alt="Mosaic thumbnail view" onclick="openLightbox(this.src)" />
-        <div class="screenshot-caption">
-          <strong>Mosaic view</strong>
-          <span>A thumbnail grid that makes structural differences visible at a glance.</span>
-        </div>
-      </div>
-      <div class="screenshot-card">
-        <img src="assets/example_stats_plot.png" alt="Dimension statistics" onclick="openLightbox(this.src)" />
-        <div class="screenshot-caption">
-          <strong>Dimension statistics</strong>
-          <span>Compare X, Y, Z, T, and channel counts across every file in one chart.</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Performance -->
-<section class="story-section" id="performance">
-  <div class="container">
-    <div class="story-label">Performance</div>
-    <h2 class="story-title">Tested on real datasets</h2>
-    <p style="color:var(--muted);font-size:0.97rem;line-height:1.7;max-width:580px;margin-bottom:40px">
-      Benchmarks run with 100 parallel workers. Processing time scales with dataset size and file complexity,
-      not just file count.
-    </p>
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
-
-      <!-- Many small images -->
-      <div style="border:1px solid var(--border);border-radius:14px;padding:28px;background:var(--white)">
-        <div style="font-size:0.73rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--blue);margin-bottom:12px">Many small images</div>
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:-0.03em;line-height:1">1.1M</span>
-          <span style="font-size:0.9rem;color:var(--muted)">files · 7.8 GB</span>
-        </div>
-        <div style="font-size:0.82rem;color:var(--faint);margin-bottom:20px">21,930 tasks</div>
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Wall time</div>
-            <div style="font-size:1.1rem;font-weight:600">1h 00m</div>
-          </div>
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Throughput</div>
-            <div style="font-size:1.1rem;font-weight:600">303 files/s</div>
-          </div>
-          <div style="padding-top:10px;border-top:1px solid var(--border)">
-            <div style="font-size:0.8rem;color:var(--muted);line-height:1.6">
-              CPU mean 48% · RAM mean 10.2 GB<br/>
-              100 workers · 27 nodes
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Large 3D Volumes -->
-      <div style="border:1px solid var(--border);border-radius:14px;padding:28px;background:var(--white)">
-        <div style="font-size:0.73rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--blue);margin-bottom:12px">Large 3D volumes</div>
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:-0.03em;line-height:1">3</span>
-          <span style="font-size:0.9rem;color:var(--muted)">files · 1,200 GB</span>
-        </div>
-        <div style="font-size:0.82rem;color:var(--faint);margin-bottom:20px">1,950 tasks</div>
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Wall time</div>
-            <div style="font-size:1.1rem;font-weight:600">1h 45m</div>
-          </div>
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Throughput</div>
-            <div style="font-size:1.1rem;font-weight:600">18.4 tasks/min</div>
-          </div>
-          <div style="padding-top:10px;border-top:1px solid var(--border)">
-            <div style="font-size:0.8rem;color:var(--muted);line-height:1.6">
-              CPU mean 35% · RAM mean 2.4 GB<br/>
-              100 workers · 21 nodes
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Large 2D Multichannel -->
-      <div style="border:1px solid var(--border);border-radius:14px;padding:28px;background:var(--white)">
-        <div style="font-size:0.73rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--blue);margin-bottom:12px">Large 2D multichannel</div>
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:-0.03em;line-height:1">2</span>
-          <span style="font-size:0.9rem;color:var(--muted)">files · 596 GB</span>
-        </div>
-        <div style="font-size:0.82rem;color:var(--faint);margin-bottom:20px">538 tasks</div>
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Wall time</div>
-            <div style="font-size:1.1rem;font-weight:600">8m 47s</div>
-          </div>
-          <div>
-            <div style="font-size:0.73rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">Throughput</div>
-            <div style="font-size:1.1rem;font-weight:600">61.2 tasks/min</div>
-          </div>
-          <div style="padding-top:10px;border-top:1px solid var(--border)">
-            <div style="font-size:0.8rem;color:var(--muted);line-height:1.6">
-              CPU mean 12% · RAM mean 0.75 GB<br/>
-              100 workers · 30 nodes
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- Install & CLI -->
-<section class="install-section" id="install">
-  <div class="container">
-    <div style="margin-bottom:36px">
-      <div class="story-label">Get started</div>
-      <h2 class="story-title">Install</h2>
-      <p style="color:var(--muted);font-size:0.97rem;line-height:1.7;max-width:540px">
-        Pixel Patrol requires Python 3.11 or higher. We recommend
-        <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>
-        for fast, reproducible environments.
-      </p>
-    </div>
-
-    <div class="tab-row">
-      <button class="tab-btn active" onclick="switchTab(event,'t-uv')">uv (recommended)</button>
-      <button class="tab-btn" onclick="switchTab(event,'t-pip')">pip</button>
-      <button class="tab-btn" onclick="switchTab(event,'t-modular')">Modular install</button>
-    </div>
-
-    <div id="t-uv" class="tab-panel active">
-      <pre><button class="copy-btn" onclick="copyPre(this)">Copy</button><span class="c"># macOS / Linux:</span>
-curl -Ls https://astral.sh/uv/install.sh | sh
-<span class="c"># Windows:</span>
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-<span class="c"># Create a virtual environment and install:</span>
-uv venv --python 3.12 pixel-patrol-env
-source pixel-patrol-env/bin/activate  <span class="c"># Windows: pixel-patrol-env\Scripts\Activate.ps1</span>
-uv pip install pixel-patrol
-
-pixel-patrol --help</pre>
-    </div>
-
-    <div id="t-pip" class="tab-panel">
-      <pre><button class="copy-btn" onclick="copyPre(this)">Copy</button>python -m venv pixel-patrol-env
-source pixel-patrol-env/bin/activate  <span class="c"># Windows: pixel-patrol-env\Scripts\Activate.ps1</span>
-pip install pixel-patrol
-
-pixel-patrol --help</pre>
-    </div>
-
-    <div id="t-modular" class="tab-panel">
-      <pre><button class="copy-btn" onclick="copyPre(this)">Copy</button><span class="c"># Core only — add exactly what you need:</span>
-uv pip install pixel-patrol-base
-
-<span class="c"># Optional add-ons:</span>
-uv pip install pixel-patrol-loader-bio   <span class="c"># BioIO + Zarr (CZI, ND2, LIF, TIFF, …)</span>
-uv pip install pixel-patrol-image        <span class="c"># image quality metrics + extra widgets</span></pre>
-    </div>
-
-    <!-- CLI commands -->
-    <div style="margin-top:48px">
-      <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:6px">CLI commands</h3>
-      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:24px">Two commands cover the standard workflow; the rest are convenience tools.</p>
-
-      <div style="display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
-          <div style="padding:18px 20px;background:var(--bg);border-right:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">
-            <span class="badge" style="margin:0;white-space:nowrap;flex-shrink:0">Step 1</span>
-            <code style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:var(--blue);white-space:nowrap">pixel-patrol process &lt;dir&gt; -o out.parquet</code>
-          </div>
-          <div style="padding:18px 20px;background:var(--white)">
-            <strong style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px">Process a dataset</strong>
-            <p style="font-size:0.85rem;color:var(--muted);margin:0;line-height:1.6">Reads every file in the directory tree in parallel and writes a portable Parquet file containing per-file statistics, thumbnails, and metadata. Use <code style="font-family:monospace;font-size:0.9em">-p</code> to label subdirectories as separate conditions.</p>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
-          <div style="padding:18px 20px;background:var(--bg);border-right:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">
-            <span class="badge" style="margin:0;white-space:nowrap;flex-shrink:0">Step 2</span>
-            <code style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:var(--blue);white-space:nowrap">pixel-patrol view out.parquet</code>
-          </div>
-          <div style="padding:18px 20px;background:var(--white)">
-            <strong style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px">Open the viewer</strong>
-            <p style="font-size:0.85rem;color:var(--muted);margin:0;line-height:1.6">Starts a local HTTP server backed by native DuckDB and opens the viewer in your browser. Supports <code style="font-family:monospace;font-size:0.9em">--group-by</code>, <code style="font-family:monospace;font-size:0.9em">--filter-col</code>, <code style="font-family:monospace;font-size:0.9em">--dim</code>, and other flags to pre-configure the view.</p>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
-          <div style="padding:18px 20px;background:var(--bg);border-right:1px solid var(--border);display:flex;align-items:center">
-            <code style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:var(--blue);white-space:nowrap">pixel-patrol launch</code>
-          </div>
-          <div style="padding:18px 20px;background:var(--white)">
-            <strong style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px">Processing dashboard</strong>
-            <p style="font-size:0.85rem;color:var(--muted);margin:0;line-height:1.6">Opens a Dash web UI for configuring processing parameters and monitoring progress in real-time. Opens the viewer automatically once processing completes.</p>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0">
-          <div style="padding:18px 20px;background:var(--bg);border-right:1px solid var(--border);display:flex;align-items:center">
-            <code style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:var(--blue);white-space:nowrap">pixel-patrol build-viewer-html -o out.html</code>
-          </div>
-          <div style="padding:18px 20px;background:var(--white)">
-            <strong style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px">Build static viewer</strong>
-            <p style="font-size:0.85rem;color:var(--muted);margin:0;line-height:1.6">Exports the viewer as a self-contained HTML file or a GitHub Pages-style folder. Use this to host the viewer on a static site without a running Python process.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Workflow example -->
-    <div style="margin-top:40px">
-      <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:16px">Quick example</h3>
-      <pre><button class="copy-btn" onclick="copyPre(this)">Copy</button><span class="c"># 1. Process a folder with two experimental conditions:</span>
-pixel-patrol process examples/datasets/bioio -o project.parquet \
-  --loader bioio --name "my-project" \
-  -p condition_a -p condition_b \
-  -e tif -e nd2
-
-<span class="c"># 2. Explore the result:</span>
-pixel-patrol view project.parquet
-
-<span class="c"># 3. Open with a specific grouping pre-selected:</span>
-pixel-patrol view project.parquet --group-by condition --dim z=5 --dim t=0</pre>
-    </div>
-
-    <!-- Feature highlights -->
-    <div style="margin-top:20px;padding-top:40px;border-top:1px solid var(--border)">
-      <div class="highlights-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
-        <div class="highlight">
-          <div class="highlight-icon">📊</div>
-          <h4>Statistical testing</h4>
-          <p>The group comparison widget runs Mann-Whitney U tests with Bonferroni correction to flag significant differences between experimental conditions.</p>
-        </div>
-        <div class="highlight">
-          <div class="highlight-icon">📤</div>
-          <h4>Shareable reports</h4>
-          <p>The Parquet file is the report. Anyone can open it in the hosted viewer, or you can export a fully self-contained HTML file for offline sharing.</p>
-        </div>
-        <div class="highlight">
-          <div class="highlight-icon">🔌</div>
-          <h4>Extensible by design</h4>
-          <p>Add custom loaders, processors, and viewer widgets as Python packages. Entry points are discovered automatically — no fork or rebuild needed.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Extend section -->
-    <div style="margin-top:40px;padding-top:40px;border-top:1px solid var(--border)">
-      <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:6px">Extend Pixel Patrol</h3>
-      <p style="color:var(--muted);font-size:0.9rem;line-height:1.65;max-width:600px">
-        Pixel Patrol is designed to be extended. The
-        <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension" target="_blank" rel="noopener"><code style="font-family:monospace;font-size:0.9em">examples/minimal-extension</code></a>
-        template shows how to register a custom loader, processor, and viewer widget as a standalone Python package.
-        Entry points under <code style="font-family:monospace;font-size:0.9em">pixel_patrol.loader_plugins</code>,
-        <code style="font-family:monospace;font-size:0.9em">pixel_patrol.processor_plugins</code>, and
-        <code style="font-family:monospace;font-size:0.9em">pixel_patrol.viewer_extensions</code>
-        are discovered automatically at runtime.
-      </p>
-    </div>
-  </div>
-</section>
-
-<!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
-  <img id="lightbox-img" src="" alt="" onclick="event.stopPropagation()" />
-</div>
-
-<!-- Footer -->
-<footer>
-  <div class="footer-inner">
-    <div class="footer-brand">
-      <img src="assets/icon.png" alt="Pixel Patrol" />
-      Pixel Patrol
-    </div>
-    <div class="footer-links">
-      <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://pypi.org/project/pixel-patrol/" target="_blank" rel="noopener">PyPI</a>
-      <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples" target="_blank" rel="noopener">Examples</a>
-      <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
-    </div>
-    <div class="footer-helmholtz">
-      <img src="assets/Helmholtz-Imaging_Mark.png" alt="Helmholtz Imaging" />
-    </div>
-    <p class="footer-note">
-      Developed at Helmholtz Imaging · v0.5.0 · Python 3.11+
-    </p>
   </div>
 </footer>
 
-<script>
-  function switchTab(e, id) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    e.target.classList.add('active');
-    document.getElementById(id).classList.add('active');
-  }
-
-  function copyInstall(el) {
-    navigator.clipboard.writeText('uv pip install pixel-patrol').then(() => {
-      const cmd = el.querySelector('.cmd');
-      cmd.textContent = 'Copied!';
-      setTimeout(() => { cmd.textContent = 'uv pip install pixel-patrol'; }, 1600);
-    });
-  }
-
-  function copyPre(btn) {
-    const text = btn.parentElement.innerText.replace(/^Copy\n/, '').replace(/^Copied!\n/, '');
-    navigator.clipboard.writeText(text).then(() => {
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
-    });
-  }
-
-  function openLightbox(src) {
-    document.getElementById('lightbox-img').src = src;
-    document.getElementById('lightbox').classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeLightbox() {
-    document.getElementById('lightbox').classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
-</script>
 </body>
 </html>

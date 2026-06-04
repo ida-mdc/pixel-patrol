@@ -6,6 +6,8 @@ on:
     paths:
       - 'viewer/**'
       - 'packages/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
       - '.github/workflows/deploy-viewer.yml'
   workflow_dispatch:
 
@@ -47,9 +49,13 @@ jobs:
           pip install \
             -e packages/pixel-patrol-base \
             -e packages/pixel-patrol-loader-bio \
-            -e packages/pixel-patrol-image
+            -e packages/pixel-patrol-image \
+            mkdocs-material
 
-      - name: Assemble static site from bundled viewer + discovered extensions
+      - name: Build docs site (landing page + markdown docs)
+        run: mkdocs build --site-dir gh-pages-site
+
+      - name: Add viewer at /viewer/ and inject extensions
         run: python -c "from pixel_patrol_base.viewer_pages import build_github_pages_site; build_github_pages_site('gh-pages-site')"
 
       - uses: actions/upload-pages-artifact@v3
