@@ -5,13 +5,16 @@ SRC = ROOT / "README.md"
 DST = ROOT / "packages/pixel-patrol/README.md"
 
 # PyPI fetches images over HTTP so we need absolute GitHub raw URLs
-GITHUB_RAW = "https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol"
+GITHUB_RAW = "https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main"
 
 def rewrite_readme_assets_paths(lines):
-    # Root README references packages/pixel-patrol/readme_assets/foo.png
-
     return [
-        line.replace("packages/pixel-patrol/readme_assets/", f"{GITHUB_RAW}/readme_assets/")
+        line
+        .replace("packages/pixel-patrol/readme_assets/", f"{GITHUB_RAW}/packages/pixel-patrol/readme_assets/")
+        .replace(
+            "packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/",
+            f"{GITHUB_RAW}/packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/",
+        )
         for line in lines
     ]
 
