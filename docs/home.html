@@ -34,14 +34,7 @@
 
     /* ── How it works ── */
     .how-section { padding: 56px 0; background: #f8f9fa; border-top: 1px solid #dee2e6; }
-    .step-icon { width: 80px; height: 80px; object-fit: contain; margin: 0 auto 12px; }
-    .step-num {
-      display: inline-flex; width: 22px; height: 22px; border-radius: 50%;
-      background: #e7f0ff; color: #0d6efd;
-      font-size: 0.72rem; font-weight: 700;
-      align-items: center; justify-content: center;
-      margin-bottom: 8px;
-    }
+    .pipeline-img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 
     /* ── Footer (matches viewer) ── */
     .pp-footer { background: #212529; margin-top: auto; }
@@ -118,32 +111,21 @@
 <!-- How it works -->
 <section class="how-section">
   <div class="container">
-    <h2 class="fw-bold mb-1" style="font-size:1.2rem">How it works</h2>
+    <h2 class="fw-bold mb-1" style="font-size:1.2rem">Our automated pipeline</h2>
     <p class="text-muted mb-4" style="font-size:0.9rem">Four steps from folder to insight.</p>
-    <div class="row g-4 text-center" style="max-width:700px">
+    <img class="pipeline-img mb-4" src="assets/pipeline.png" alt="Pipeline: Pick images → Process images → Collect metadata and metrics → Visualize as interactive report"/>
+    <div class="row g-5 text-center">
       <div class="col-6 col-md-3">
-        <img class="step-icon d-block" src="assets/icons_1.png" alt="Your dataset"/>
-        <div class="step-num">1</div>
-        <h6 class="fw-semibold mb-1">Your dataset</h6>
-        <p class="text-muted small mb-0">Point Pixel Patrol to your image folder.</p>
+        <p class="text-muted small mb-0">Point Pixel Patrol to any folder of images. It supports common formats and walks subdirectories automatically, so no manual file listing is needed.</p>
       </div>
       <div class="col-6 col-md-3">
-        <img class="step-icon d-block" src="assets/icons_2.png" alt="Process"/>
-        <div class="step-num">2</div>
-        <h6 class="fw-semibold mb-1">Process</h6>
-        <p class="text-muted small mb-0">Files are read in parallel and results are saved to a Parquet file.</p>
+        <p class="text-muted small mb-0">Images are scanned in parallel using configurable plugins that extract pixel statistics, quality metrics, and file metadata in one pass.</p>
       </div>
       <div class="col-6 col-md-3">
-        <img class="step-icon d-block" src="assets/icons_3.png" alt="Structured data"/>
-        <div class="step-num">3</div>
-        <h6 class="fw-semibold mb-1">Parquet file</h6>
-        <p class="text-muted small mb-0">Holds metrics and statistics per image.</p>
+        <p class="text-muted small mb-0">All results are written to a compact Parquet file stored alongside your data, ready to share or load into other tools.</p>
       </div>
       <div class="col-6 col-md-3">
-        <img class="step-icon d-block" src="assets/icons_4.png" alt="Explore"/>
-        <div class="step-num">4</div>
-        <h6 class="fw-semibold mb-1">Explore</h6>
-        <p class="text-muted small mb-0">Browser-based interactive dashboard. Group, filter, inspect.</p>
+        <p class="text-muted small mb-0">Open the report in any browser — no server needed. Group by dimension, filter outliers, compare conditions, and inspect individual images.</p>
       </div>
     </div>
   </div>
