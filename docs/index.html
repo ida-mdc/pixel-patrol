@@ -86,13 +86,13 @@
 
       <div class="col-lg-6">
         <h1 class="fw-bold mb-3" style="font-size:clamp(1.7rem,4vw,2.4rem);letter-spacing:-0.02em;line-height:1.2">
-          Understand your image<br/>dataset before you use it.
+          Understand your image dataset
         </h1>
         <p class="text-muted mb-4" style="font-size:1.02rem;line-height:1.75">
-          Pixel Patrol scans a folder of images and extracts structured metadata —
-          dimensions, file sizes, bit depths, pixel statistics, quality metrics, and thumbnails —
-          into a portable Parquet file. A browser-based viewer lets you explore the results
-          interactively: filter, group, spot outliers, and share reports without any server.
+          Image datasets are rarely as clean or consistent as they appear.
+          Pixel Patrol analyses your images and generates a shareable, interactive browser report -
+          file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics.
+          Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
         </p>
 
         <a href="./viewer/" class="btn btn-primary btn-lg mb-3">
@@ -103,7 +103,7 @@
           <code style="font-size:0.8em">viewer/?data=https://…/report.parquet</code>
         </p>
         <p class="text-muted small">
-          <i class="bi bi-shield-check me-1"></i>Your data stays local — nothing is uploaded.
+          <i class="bi bi-shield-check me-1"></i>Your data stays local - nothing is uploaded.
         </p>
       </div>
 
@@ -125,25 +125,25 @@
         <img class="step-icon d-block" src="assets/icons_1.png" alt="Your dataset"/>
         <div class="step-num">1</div>
         <h6 class="fw-semibold mb-1">Your dataset</h6>
-        <p class="text-muted small mb-0">Point Pixel Patrol at your image folder.</p>
+        <p class="text-muted small mb-0">Point Pixel Patrol to your image folder.</p>
       </div>
       <div class="col-6 col-md-3">
         <img class="step-icon d-block" src="assets/icons_2.png" alt="Process"/>
         <div class="step-num">2</div>
         <h6 class="fw-semibold mb-1">Process</h6>
-        <p class="text-muted small mb-0">Every file is read in parallel and saved to a Parquet file.</p>
+        <p class="text-muted small mb-0">Files are read in parallel and results are saved to a Parquet file.</p>
       </div>
       <div class="col-6 col-md-3">
         <img class="step-icon d-block" src="assets/icons_3.png" alt="Structured data"/>
         <div class="step-num">3</div>
-        <h6 class="fw-semibold mb-1">Structured data</h6>
-        <p class="text-muted small mb-0">Dimensions, file size, bit depth, metadata — one row per file.</p>
+        <h6 class="fw-semibold mb-1">Parquet file</h6>
+        <p class="text-muted small mb-0">Holds metrics and statistics per image.</p>
       </div>
       <div class="col-6 col-md-3">
         <img class="step-icon d-block" src="assets/icons_4.png" alt="Explore"/>
         <div class="step-num">4</div>
         <h6 class="fw-semibold mb-1">Explore</h6>
-        <p class="text-muted small mb-0">Open the interactive dashboard. Filter, group, spot outliers.</p>
+        <p class="text-muted small mb-0">Browser-based interactive dashboard. Group, filter, inspect.</p>
       </div>
     </div>
   </div>
