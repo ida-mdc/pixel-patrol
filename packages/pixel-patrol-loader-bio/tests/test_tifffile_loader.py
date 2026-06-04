@@ -98,3 +98,39 @@ def test_load_2d_no_axes_metadata(tmp_path: Path, loader):
     rec = loader.load(path)
     assert rec.data.ndim == 2
     assert "Y" in rec.dim_order or len(rec.dim_order) == 2
+
+
+def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader):
+    """Regression test: da.from_zarr fails for zarr arrays extracted from a Group
+    (multiscale OME-TIFF store), silently falling back to series.asarray() which
+    loads the entire array into memory.  da.from_array must be used instead."""
+    path = tmp_path / "pyramid.ome.tif"
+    rng = np.random.default_rng(42)
+    n_channels, tile = 4, 16
+    im = rng.integers(0, 255, (n_channels, 64, 64), dtype=np.uint16)
+
+    with tifffile.TiffWriter(path, bigtiff=True) as tif:
+        opts = dict(photometric="minisblack", metadata={"axes": "CYX"})
+        tif.write(im, subifds=1, tile=(tile, tile), **opts)
+        tif.write(im[:, ::2, ::2], subfiletype=1, tile=(tile, tile), **opts)
+
+    # Confirm the TIFF has multiple resolution levels (triggers the multiscale
+    # zarr store, which is the path that previously caused the failure).
+    with tifffile.TiffFile(path) as tf:
+        assert len(tf.series[0].levels) > 1, "fixture must produce a multiscale series"
+
+    rec = loader.load(path)
+
+    # Result must be a lazy dask array, not an in-memory numpy array.
+    import dask.array as da
+    assert isinstance(rec.data, da.Array), "load() must return a lazy dask array"
+
+    # Chunks should reflect tiling: one chunk per channel, one tile per spatial chunk.
+    # A single-chunk array (shape == chunk shape) means the fallback fired and the
+    # entire image was loaded into memory.
+    assert rec.data.chunks[0] == (1,) * n_channels, "channel dim must be chunked per page"
+    assert rec.data.chunks[1][0] == tile, "Y dim must be chunked at tile size"
+    assert rec.data.chunks[2][0] == tile, "X dim must be chunked at tile size"
+
+    # Data must round-trip correctly.
+    np.testing.assert_array_equal(rec.data.compute(), im)
