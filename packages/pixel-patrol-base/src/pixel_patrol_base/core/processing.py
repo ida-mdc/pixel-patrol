@@ -209,51 +209,47 @@ def _compute_memory_chunk_specs(
 ) -> Optional[List[MemoryChunkSpec]]:
     """Return one MemoryChunkSpec per memory chunk for a file described by info.
 
-    Returns None when uncompressed size ≤ budget, all dims are pinned to -1,
-    or the resulting n_chunks would be ≤ 1.
+    Splits dims in two tiers — explicit-block-size dims first, then spatial defaults
+    (X/Y) — so spatial dims are only touched as a last resort. Within each tier the
+    required reduction is distributed geometrically across all dims in that tier,
+    largest first, so no single dim absorbs all the splitting.
+    Returns None when the file already fits within the budget.
     """
     dim_order    = info.dim_order
     shape        = info.shape
     dtype_bytes  = np.dtype(info.dtype).itemsize
     budget_bytes = int(mb_per_task * 1024 * 1024)
 
-    total_bytes = int(np.prod(shape)) * dtype_bytes
+    total_bytes = math.prod(shape) * dtype_bytes
     if total_bytes <= budget_bytes:
         return None
 
+    dim_sizes        = dict(zip(dim_order, shape))
     leaf_block_sizes = _resolve_leaf_block_shape(dim_order, leaf_block_shape)
-    dim_idx          = {d: i for i, d in enumerate(dim_order)}
 
-    splittable = [d for d in dim_order if leaf_block_sizes[d] != -1]
-    if not splittable:
-        logger.warning(
-            "_compute_memory_chunk_specs: %s (%.1f MB) exceeds budget but all dims are "
-            "pinned (-1); file will be processed as a single batch item.",
-            file_path, total_bytes / (1024 * 1024),
-        )
-        return None
+    constrained   = sorted([d for d in dim_order if leaf_block_sizes[d] != -1],
+                            key=lambda d: -dim_sizes[d])
+    unconstrained = sorted([d for d in dim_order if leaf_block_sizes[d] == -1],
+                            key=lambda d: -dim_sizes[d])
 
-    divisible_dims = sorted(
-        [d for d in splittable if shape[dim_idx[d]] % leaf_block_sizes[d] == 0],
-        key=lambda d: shape[dim_idx[d]],
-        reverse=True,
-    )
+    chunk_sizes: Dict[str, int] = dict(dim_sizes)
 
-    chunk_dim_sizes: Dict[str, int] = {d: shape[dim_idx[d]] for d in dim_order}
+    for tier in (constrained, unconstrained):
+        for i, dim in enumerate(tier):
+            current_bytes = math.prod(chunk_sizes.values()) * dtype_bytes
+            if current_bytes <= budget_bytes:
+                break
+            full_size   = dim_sizes[dim]
+            other_bytes = current_bytes // full_size   # exact: full_size divides current_bytes
+            block       = max(1, leaf_block_sizes[dim])  # -1 → no alignment constraint
+            n_target    = math.ceil((current_bytes / budget_bytes) ** (1.0 / (len(tier) - i)))
+            if block * other_bytes >= budget_bytes:
+                chunk_sizes[dim] = block                 # minimum; may still exceed budget
+            else:
+                n_blocks         = max(1, full_size // (block * n_target))
+                chunk_sizes[dim] = min(full_size, n_blocks * block)
 
-    for dim in divisible_dims:
-        leaf_block_dim_size = leaf_block_sizes[dim]
-        full_dim_size       = shape[dim_idx[dim]]
-        other_dims_elements = int(np.prod([chunk_dim_sizes[d] for d in dim_order if d != dim]))
-        min_chunk_bytes     = other_dims_elements * leaf_block_dim_size * dtype_bytes
-        if min_chunk_bytes >= budget_bytes:
-            chunk_dim_sizes[dim] = leaf_block_dim_size
-        else:
-            n_blocks = budget_bytes // min_chunk_bytes
-            chunk_dim_sizes[dim] = min(full_dim_size, n_blocks * leaf_block_dim_size)
-            break
-
-    per_dim_ranges = [_split_into_ranges(shape[dim_idx[d]], chunk_dim_sizes[d]) for d in dim_order]
+    per_dim_ranges = [_split_into_ranges(dim_sizes[d], chunk_sizes[d]) for d in dim_order]
     n_chunks = math.prod(len(r) for r in per_dim_ranges)
 
     if n_chunks <= 1:
