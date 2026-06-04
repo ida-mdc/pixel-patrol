@@ -9,9 +9,6 @@ authors = [
 ]
 requires-python = ">=3.11"
 
-[project.urls]
-Homepage = "https://ida-mdc.github.io/pixel-patrol/"
-Repository = "https://github.com/ida-mdc/pixel-patrol"
 dependencies = [
     "click>=8.2.1",
     "dash-ag-grid>=32.3.0",
@@ -27,6 +24,10 @@ dependencies = [
     "tqdm>=4.67.1",
     "yaspin>=3.4.0",
 ]
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
 requires = ["hatchling"]

@@ -141,6 +141,19 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
 
+    # Promote the custom landing page from docs/ to the site root.
+    # mkdocs builds into out_dir/docs/; home.html and assets are copied there
+    # verbatim. Move them up so the root serves the Bootstrap landing page.
+    home_html = out_dir / "docs" / "home.html"
+    if home_html.is_file():
+        shutil.copy2(home_html, out_dir / "index.html")
+    docs_assets = out_dir / "docs" / "assets"
+    if docs_assets.is_dir():
+        dst_assets = out_dir / "assets"
+        if dst_assets.exists():
+            shutil.rmtree(dst_assets)
+        shutil.copytree(docs_assets, dst_assets)
+
     # Viewer lives at /viewer/ so the site root is free for the landing page.
     viewer_dir = out_dir / "viewer"
     if viewer_dir.exists():
