@@ -141,12 +141,14 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
 
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    shutil.copytree(dist_dir, out_dir)
+    # Viewer lives at /viewer/ so the site root is free for the landing page.
+    viewer_dir = out_dir / "viewer"
+    if viewer_dir.exists():
+        shutil.rmtree(viewer_dir)
+    shutil.copytree(dist_dir, viewer_dir)
 
     extension_dirs = _discover_installed_extensions()
-    ext_root = out_dir / "extensions"
+    ext_root = viewer_dir / "extensions"
     ext_root.mkdir(parents=True, exist_ok=True)
 
     urls: list[str] = []
@@ -156,11 +158,11 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
         shutil.copytree(ext_dir, dst_dir)
         urls.append(f"./extensions/{dst_name}/extension.json")
 
-    (out_dir / "pp_extension_urls.json").write_text(
+    (viewer_dir / "pp_extension_urls.json").write_text(
         json.dumps(urls, indent=2) + "\n",
         encoding="utf-8",
     )
-    _inject_extension_urls(out_dir / "index.html", urls)
+    _inject_extension_urls(viewer_dir / "index.html", urls)
     return out_dir
 
 
