@@ -227,9 +227,14 @@ def _compute_memory_chunk_specs(
     dim_sizes        = dict(zip(dim_order, shape))
     leaf_block_sizes = _resolve_leaf_block_shape(dim_order, leaf_block_shape)
 
+
+    # Dims the user explicitly pinned to -1 are never split, not even as a fallback.
+    user_pinned   = {d for d in dim_order
+                     if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1}
     constrained   = sorted([d for d in dim_order if leaf_block_sizes[d] != -1],
                             key=lambda d: -dim_sizes[d])
-    unconstrained = sorted([d for d in dim_order if leaf_block_sizes[d] == -1],
+    unconstrained = sorted([d for d in dim_order
+                            if leaf_block_sizes[d] == -1 and d not in user_pinned],
                             key=lambda d: -dim_sizes[d])
 
     chunk_sizes: Dict[str, int] = dict(dim_sizes)
