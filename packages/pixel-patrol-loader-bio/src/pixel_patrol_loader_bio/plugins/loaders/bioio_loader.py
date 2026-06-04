@@ -4,10 +4,12 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import bioio_imageio
+import bioio_ome_tiff
 import bioio_tifffile
 import numpy as np
 import dask.array as da
 import polars as pl
+import tifffile
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
@@ -77,13 +79,23 @@ def normalize_metadata(metadata):
 _TIFF_EXTENSIONS = {".tif", ".tiff"}
 
 
+def _is_ome_tiff(file_path: Path) -> bool:
+    try:
+        with tifffile.TiffFile(file_path) as tif:
+            return tif.is_ome
+    except Exception:
+        return False
+
+
 def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
     """
     Try BioImage, then fall back to imageio reader; return None if both fail.
     """
     try:
+        file_path = Path(file_path)
         if file_path.suffix.lower() in _TIFF_EXTENSIONS:
-            return BioImage(file_path, reader=bioio_tifffile.Reader)
+            reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
+            return BioImage(file_path, reader=reader)
         return BioImage(file_path)
     except UnsupportedFileFormatError:
         try:
