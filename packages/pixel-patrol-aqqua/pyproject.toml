@@ -9,14 +9,15 @@ authors = [
 ]
 requires-python = ">=3.11"
 
-[project.urls]
-Homepage = "https://ida-mdc.github.io/pixel-patrol/"
-Repository = "https://github.com/ida-mdc/pixel-patrol"
 dependencies = [
     "lmdb==1.7.5",
     "blosc2==4.0.0",
     "pixel-patrol-base==0.6.0",
 ]
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
 requires = ["hatchling"]

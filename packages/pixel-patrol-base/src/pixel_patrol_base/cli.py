@@ -35,37 +35,49 @@ def cli():
 @click.option('--name', type=str, required=False,
               help='Optional: Name of the project. If not provided, derived from BASE_DIRECTORY.')
 @click.option('--paths', '-p', multiple=True, type=str,
-              help='Optional: Paths (subdirectories) to treat as **experimental conditions**, relative to BASE_DIRECTORY. '
-                   'Can be specified multiple times. If omitted, all immediate subdirectories '
-                   'of BASE_DIRECTORY will be included, or if BASE_DIRECTORY has no subdirectories, '
-                   'it is treated as a single condition.')
+              help='Subdirectory to process, relative to BASE_DIRECTORY. Repeatable. '
+                   'If specified, only files within those paths are processed and they become '
+                   'the default grouping when the report opens. If omitted, all supported files '
+                   'under BASE_DIRECTORY are processed together.')
 @click.option('--loader', '-l', type=str, show_default=True,
-              help='Recommended: Pixel Patrol file loader (e.g., bioio, zarr). If omitted, only basic file info is collected.')
+              help='Loader plugin to use (e.g. bioio, zarr, tifffile). '
+                   'The loader opens image files and extracts image metadata. '
+                   'Without a loader, only basic file info is collected (name, size, extension).')
 @click.option('--file-extensions', '-e', multiple=True,
-              help='Optional: File extensions to include (e.g., png, jpg). Can be specified multiple times. '
-                   'If not specified, all supported extensions will be used.')
+              help='File extension to include (e.g. tif, nd2). Repeatable. '
+                   'Defaults to all extensions supported by the loader.')
 @click.option('--flavor', type=str, default="", show_default=True,
-              help='Name of pixel patrol configuration, will be displayed next to the tool name.')
+              help='Label shown next to the Pixel Patrol title in the viewer.')
 @click.option('--description', type=str, default="",
-              help='Optional: Description of this project (free-form, e.g., "Authors: Annona Buddha and Banana Java").')
+              help='Free-form description embedded in the report metadata.')
 @click.option('--processors-include', multiple=True, type=str,
-              help='Only use these processors (e.g., basic-stats). Can be specified multiple times. If specified, --processors-exclude is ignored.')
+              help='Run only these processors by ID (e.g. raster-basic, thumbnail). Repeatable. '
+                   'If specified, --processors-exclude is ignored.')
 @click.option('--processors-exclude', multiple=True, type=str,
-              help='Exclude these processors (e.g., histogram). Can be specified multiple times.')
+              help='Skip these processors by ID. Repeatable.')
 @click.option('--parquet-row-group-size', type=int, default=None, show_default=True,
-              help='Number of rows per parquet row group (default: 2048). Smaller values reduce I/O when the viewer samples thumbnails.')
+              help='Rows per row group in the final parquet (default: 2048). '
+                   'Smaller values speed up thumbnail sampling in the viewer.')
 @click.option('--max-workers', type=int, default=None, show_default=True,
-              help='Maximum number of local processing workers. Use 1 to disable multiprocessing.')
+              help='Number of parallel Dask workers. Auto-detected from available CPUs and RAM. '
+                   'Use 1 to disable parallelism.')
 @click.option('--scheduler', type=str, default=None,
-              help='Connect to an existing Dask scheduler (e.g. tcp://host:8786).')
+              help='Connect to an existing Dask scheduler instead of spawning a local one '
+                   '(e.g. tcp://host:8786). Useful for HPC clusters.')
 @click.option('--mb-per-task', type=float, default=None, show_default=True,
-              help='MB budget per Dask task (default: 512). Controls when a large file is split into chunks.')
+              help='Work budget per Dask task in MB (default: 512). Controls batch sizes for '
+                   'small files, spatial splitting for large files, and sub-image batching for '
+                   'container files. Decrease for large 3D volumes or containers with many images; '
+                   'increase for datasets with many small files.')
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
-              help='Max images per task for both batch and container files (default: 200). Lower values give more frequent progress updates.')
+              help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,
-              help='Spatial chunk size per dim, e.g. --slice-size Z=1 --slice-size Y=256.')
+              help='Leaf block size per dimension for leaf processors, e.g. --slice-size Z=1 --slice-size Y=256. '
+                   'Controls the granularity of per-dimension statistics in the output. '
+                   'By default X and Y are full extent (one 2D plane per block) and all other '
+                   'dims (Z, T, C, S) step by 1. Use -1 for full extent. Repeatable.')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
-              help='Flush intermediate results to disk every N rows (default: 10000).')
+              help='Number of rows buffered in memory before being flushed to a temporary file on disk (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,
               help='Write a debug log file alongside the output parquet (auto-named).')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
@@ -81,7 +93,13 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               rows_per_part: int | None,
               log_file: bool):
     """
-    Processes images from the BASE_DIRECTORY and specified --paths and saves a parquet file
+    Scan images in BASE_DIRECTORY, process them, and write a .parquet report file.
+
+    The two-step workflow:
+
+    \b
+      pixel-patrol process path/to/images/ -o report.parquet --loader bioio
+      pixel-patrol view report.parquet
     """
     base_directory = base_directory.resolve()
 

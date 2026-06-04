@@ -1,0 +1,48 @@
+/* Match landing page primary blue */
+:root {
+  --md-primary-fg-color:              #2563eb;
+  --md-primary-fg-color--light:       #3b82f6;
+  --md-primary-fg-color--dark:        #1d4ed8;
+  --md-accent-fg-color:               #2563eb;
+  --md-accent-fg-color--transparent:  #2563eb1a;
+}
+
+/* White header — matches landing page nav */
+.md-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #dee2e6;
+  box-shadow: none;
+  color: #212529;
+}
+
+.md-header__inner {
+  height: 64px;
+  padding: 0 16px;
+}
+
+.md-header__button.md-logo img {
+  height: 36px;
+  width: 36px;
+}
+
+.md-header__title,
+.md-header__button,
+.md-header__button.md-icon {
+  color: #212529;
+}
+
+.md-header__button:hover,
+.md-header__button:focus {
+  color: #2563eb;
+  opacity: 1;
+}
+
+/* Search bar in white header */
+.md-search__input {
+  background-color: #f7f8fa;
+  color: #212529;
+}
+
+.md-search__input::placeholder {
+  color: #9ca3af;
+}

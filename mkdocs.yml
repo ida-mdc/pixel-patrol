@@ -1,37 +1,52 @@
-site_name: Pixel Patrol
-site_url: https://ida-mdc.github.io/pixel-patrol/
+site_name: Pixel Patrol Documentation
+site_url: https://ida-mdc.github.io/pixel-patrol/docs/
 repo_url: https://github.com/ida-mdc/pixel-patrol
 repo_name: ida-mdc/pixel-patrol
 docs_dir: docs
 
 theme:
   name: material
+  logo: assets/icon.png
+  favicon: assets/icon.png
+  font:
+    text: Inter
+    code: JetBrains Mono
   palette:
     - scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
     - navigation.sections
+    - navigation.expand
     - navigation.top
+    - toc.integrate
     - search.highlight
     - content.code.copy
 
+extra:
+  homepage: ../
+
+extra_css:
+  - stylesheets/extra.css
+
 nav:
+  - Quickstart: index.md
   - Installation: installation.md
-  - Getting Started: quickstart.md
+  - Processing: processing.md
+  - Report Viewer: viewer.md
   - CLI Reference: cli.md
-  - API: api.md
+  - Python API: api.md
   - Extensions: extensions.md
+  - Contributing: contributing.md
 
 markdown_extensions:
   - admonition

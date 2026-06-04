@@ -52,8 +52,8 @@ jobs:
             -e packages/pixel-patrol-image \
             mkdocs-material
 
-      - name: Build docs site (landing page + markdown docs)
-        run: mkdocs build --site-dir gh-pages-site
+      - name: Build docs site
+        run: mkdocs build --site-dir gh-pages-site/docs
 
       - name: Add viewer at /viewer/ and inject extensions
         run: python -c "from pixel_patrol_base.viewer_pages import build_github_pages_site; build_github_pages_site('gh-pages-site')"
