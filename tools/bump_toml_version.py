@@ -10,6 +10,7 @@ PACKAGES = [
     "pixel-patrol-image",
     "pixel-patrol-loader-bio",
     "pixel-patrol-aqqua",
+    "pixel-patrol-slurm",
 ]
 
 def load_toml(p: Path):
