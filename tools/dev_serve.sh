@@ -9,6 +9,9 @@
 set -e
 OUT=/tmp/pp-dev
 
+# Clean root HTML files so deleted pages don't linger between rebuilds
+rm -f "$OUT"/*.html
+
 uv run --with mkdocs-material mkdocs build --site-dir "$OUT/docs" --quiet
 uv run python3 -c "
 from pixel_patrol_base.viewer_pages import build_github_pages_site

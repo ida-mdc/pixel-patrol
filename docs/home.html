@@ -8,19 +8,13 @@
   <link rel="icon" type="image/png" href="assets/icon.png"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <style>
-    body { display: flex; flex-direction: column; min-height: 100vh; }
+    body { font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
 
-    /* ── Nav ── */
-    .pp-nav {
-      border-bottom: 1px solid #dee2e6;
-      padding: 0 24px;
-      height: 64px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: #fff;
-    }
+    /* Nav */
+    .pp-nav { border-bottom: 1px solid #dee2e6; padding: 0 24px; height: 64px; display: flex; align-items: center; gap: 10px; background: #fff; }
     .pp-nav-logo { width: 36px; height: 36px; border-radius: 6px; }
     .pp-nav-title { font-weight: 600; font-size: 1.1rem; color: #212529; text-decoration: none; }
     .pp-nav-title:hover { color: #0d6efd; }
@@ -28,26 +22,46 @@
     .pp-nav-links a { font-size: 1rem; color: #6c757d; text-decoration: none; }
     .pp-nav-links a:hover { color: #212529; }
 
-    /* ── Hero ── */
+    /* Sections */
+    .section { padding: 72px 0; }
+    .section-alt { background: #f8f9fa; }
+    .section-label { text-transform: uppercase; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; color: #2563eb; margin-bottom: 12px; }
+    .section-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 16px; }
+    .section-lead { font-size: 1.02rem; line-height: 1.8; color: #495057; max-width: 720px; }
+
+    /* Hero */
     .hero { padding: 72px 0 64px; }
-    .hero-img { max-width: 380px; width: 100%; }
+    .hero-img { max-width: 460px; width: 100%; }
 
-    /* ── How it works ── */
-    .how-section { padding: 56px 0; background: #f8f9fa; border-top: 1px solid #dee2e6; }
-    .pipeline-img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+    /* Pipeline */
+    .pipeline-img { max-width: 1260px; width: 100%; height: auto; display: block; margin: 0 auto; }
 
-    /* ── Footer (matches viewer) ── */
+    /* Carousel */
+    .carousel-img { width: 100%; height: 500px; object-fit: contain; background: #f8f9fa; border-radius: 8px; }
+    .carousel-caption-custom { font-size: 0.85rem; color: #6c757d; text-align: center; margin-top: 10px; }
+    .carousel-control-prev-icon, .carousel-control-next-icon { filter: invert(1) grayscale(100%) brightness(0); }
+
+    /* Feature cards */
+    .feature-card { border: 1px solid #dee2e6; border-radius: 12px; padding: 24px; background: #fff; height: 100%; }
+    .feature-icon { font-size: 1.4rem; margin-bottom: 10px; color: #2563eb; }
+    .feature-card h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 5px; }
+    .feature-card p { font-size: 0.86rem; color: #6c757d; line-height: 1.55; margin: 0; }
+
+    /* Performance cards */
+    .perf-card { border: 1px solid #dee2e6; border-radius: 14px; padding: 28px; background: #fff; }
+    .perf-label { font-size: 0.73rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2563eb; margin-bottom: 12px; }
+    .perf-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .perf-sub { font-size: 0.9rem; color: #6c757d; }
+    .perf-detail { font-size: 0.8rem; color: #9ca3af; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6; line-height: 1.7; }
+
+    /* Footer */
     .pp-footer { background: #212529; margin-top: auto; }
-    .pp-footer-inner {
-      max-width: 1400px; margin: 0 auto;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 24px; flex-wrap: wrap; gap: 12px;
-    }
-    .pp-footer-left  { display: flex; align-items: center; }
+    .pp-footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; flex-wrap: wrap; gap: 12px; }
+    .pp-footer-left { display: flex; align-items: center; }
     .pp-footer-right { display: flex; align-items: center; gap: 20px; }
-    .pp-footer-logo  { height: 36px; width: auto; margin-right: 14px; }
-    .pp-footer-text  { font-size: 12px; line-height: 1.4; color: #adb5bd; }
-    .pp-footer-link  { color: #adb5bd; text-decoration: none; font-size: 12px; }
+    .pp-footer-logo { height: 36px; width: auto; margin-right: 14px; }
+    .pp-footer-text { font-size: 12px; line-height: 1.4; color: #adb5bd; }
+    .pp-footer-link { color: #adb5bd; text-decoration: none; font-size: 12px; }
     .pp-footer-link:hover { color: #dee2e6; }
     .pp-footer-link-light { color: #dee2e6; text-decoration: none; }
     .pp-footer-link-light:hover { text-decoration: underline; }
@@ -55,6 +69,7 @@
     @media (max-width: 767px) {
       .hero { padding: 48px 0 40px; }
       .hero-img { max-width: 200px; }
+      .carousel-img { height: 240px; }
     }
   </style>
 </head>
@@ -66,7 +81,6 @@
   <a class="pp-nav-title" href="#">Pixel Patrol</a>
   <nav class="pp-nav-links">
     <a href="./why.html">Why?</a>
-    <a href="./about.html">About</a>
     <a href="./docs/">Documentation</a>
     <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
       <i class="bi bi-github me-1"></i>GitHub
@@ -78,18 +92,16 @@
 <section class="hero">
   <div class="container">
     <div class="row align-items-center g-5">
-
       <div class="col-lg-6">
         <h1 class="fw-bold mb-3" style="font-size:clamp(1.7rem,4vw,2.4rem);letter-spacing:-0.02em;line-height:1.2">
-          Understand your image dataset
+          Become an expert in your own dataset
         </h1>
         <p class="text-muted mb-4" style="font-size:1.02rem;line-height:1.75">
-          Image datasets are rarely as clean or consistent as they appear.
-          Pixel Patrol analyses your images and generates a shareable, interactive browser report -
-          file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics.
-          Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
+          <strong>Image datasets</strong> are rarely as clean or consistent as they appear.
+          Pixel Patrol scans your collection - from a single image to millions of files - and produces a structured,
+          interactive browser report: file metadata, pixel statistics, quality metrics, and per-dimension breakdowns.
+          <strong>Get immediate results, compare conditions, catch outliers, verify batch consistency</strong>, and get the full picture before you use your dataset.
         </p>
-
         <div class="d-flex flex-wrap gap-2 mb-3">
           <button class="btn btn-primary btn-lg" onclick="document.getElementById('home-file-input').click()">
             <i class="bi bi-folder2-open me-2"></i>Open Report File
@@ -100,47 +112,205 @@
             <i class="bi bi-play-circle me-2"></i>View Example Report
           </a>
         </div>
-        <p class="text-muted small mb-1">
-          Or pass a URL:
-          <code style="font-size:0.8em">viewer/?data=https://…/report.parquet</code>
-        </p>
         <p class="text-muted small">
           <i class="bi bi-shield-check me-1"></i>Your data stays local - nothing is uploaded.
         </p>
       </div>
-
       <div class="col-lg-6 text-center d-none d-lg-block">
         <img class="hero-img" src="assets/prevalidation.png" alt="Researcher with image datasets"/>
       </div>
-
     </div>
   </div>
 </section>
 
-<!-- How it works -->
-<section class="how-section">
+<!-- Report carousel -->
+<section class="section section-alt">
   <div class="container">
-    <h2 class="fw-bold mb-1" style="font-size:1.2rem">Our automated pipeline</h2>
-    <p class="text-muted mb-4" style="font-size:0.9rem">Four steps from folder to insight.</p>
-    <img class="pipeline-img mb-4" src="assets/pipeline.png" alt="Pipeline: Pick images → Process images → Collect metadata and metrics → Visualize as interactive report"/>
-    <div class="row g-5 text-center">
+    <div class="section-label">From a Pixel Patrol Report</div>
+    <h2 class="section-title mb-4">Some Example Visualizations</h2>
+    <div id="reportCarousel" class="carousel slide" data-bs-ride="carousel" style="max-width:1060px;margin:0 auto">
+      <div class="carousel-indicators" style="bottom:-28px">
+        <button type="button" data-bs-target="#reportCarousel" data-bs-slide-to="0" class="active" style="background:#adb5bd;width:10px;height:10px;border-radius:50%;border:none"></button>
+        <button type="button" data-bs-target="#reportCarousel" data-bs-slide-to="1" style="background:#adb5bd;width:10px;height:10px;border-radius:50%;border:none"></button>
+        <button type="button" data-bs-target="#reportCarousel" data-bs-slide-to="2" style="background:#adb5bd;width:10px;height:10px;border-radius:50%;border:none"></button>
+        <button type="button" data-bs-target="#reportCarousel" data-bs-slide-to="3" style="background:#adb5bd;width:10px;height:10px;border-radius:50%;border:none"></button>
+      </div>
+      <div class="carousel-inner rounded-3 border" style="background:#f8f9fa">
+        <div class="carousel-item active">
+          <img src="assets/car1.png" class="carousel-img d-block mx-auto" alt="Distribution of X and Y Dimension Sizes"/>
+        </div>
+        <div class="carousel-item">
+          <img src="assets/car2.png" class="carousel-img d-block mx-auto" alt="Total Size per Group"/>
+        </div>
+        <div class="carousel-item">
+          <img src="assets/car3.png" class="carousel-img d-block mx-auto" alt="Distribution of Max Intensity"/>
+        </div>
+        <div class="carousel-item">
+          <img src="assets/car4.png" class="carousel-img d-block mx-auto" alt="Image Mosaic"/>
+        </div>
+      </div>
+      <button class="carousel-control-prev" type="button" data-bs-target="#reportCarousel" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon"></span>
+      </button>
+      <button class="carousel-control-next" type="button" data-bs-target="#reportCarousel" data-bs-slide="next">
+        <span class="carousel-control-next-icon"></span>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- Pipeline -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Our automated pipeline</h2>
+    <p class="section-lead mb-3">Set up a directory and a few parameters. Pixel Patrol handles the rest.</p>
+    <img class="pipeline-img mb-2" src="assets/pipeline.png" alt="Pipeline: Pick images → Process images → Collect metadata and metrics → Visualize as interactive report"/>
+    <div class="row g-3 text-center mt-0">
       <div class="col-6 col-md-3">
-        <p class="text-muted small mb-0">Point Pixel Patrol to any folder of images. It supports common formats and walks subdirectories automatically, so no manual file listing is needed.</p>
+        <p class="text-muted small mb-0">Point to any folder. Common formats supported, subdirectories walked automatically.</p>
       </div>
       <div class="col-6 col-md-3">
-        <p class="text-muted small mb-0">Images are scanned in parallel using configurable plugins that extract pixel statistics, quality metrics, and file metadata in one pass.</p>
+        <p class="text-muted small mb-0">Files scanned in parallel. Pixel statistics, quality metrics, and metadata extracted in one pass.</p>
       </div>
       <div class="col-6 col-md-3">
-        <p class="text-muted small mb-0">All results are written to a compact Parquet file stored alongside your data, ready to share or load into other tools.</p>
+        <p class="text-muted small mb-0">Results written to a compact, portable Parquet file - ready to share or load into other tools.</p>
       </div>
       <div class="col-6 col-md-3">
-        <p class="text-muted small mb-0">Open the report in any browser — no server needed. Group by dimension, filter outliers, compare conditions, and inspect individual images.</p>
+        <p class="text-muted small mb-0">Open in any browser. Group, filter, compare distributions, inspect images.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Footer (matches viewer) -->
+<!-- Key features -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="mb-5">
+      <div class="section-label">Key Features</div>
+      <h2 class="section-title">Built for real-world datasets.</h2>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-share"></i></div>
+          <h4>Shareable reports</h4>
+          <p>The Parquet file is the report. Anyone opens it in the <a href="./viewer/" style="color:#2563eb">hosted viewer</a> - no installation required.</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-bar-chart"></i></div>
+          <h4>Group comparison and filtering</h4>
+          <p>Compare conditions with violin plots, histograms, and distributions. Change groupings interactively - no reprocessing needed.</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-layers"></i></div>
+          <h4>Per-dimension statistics</h4>
+          <p>Statistics per Z, T, C slice - not just per file. Detect drift, photobleaching, and channel artifacts at a glance.</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-cpu"></i></div>
+          <h4>Parallel processing and HPC support</h4>
+          <p>Runs across all CPUs using Dask. Connect to an HPC cluster to process terabyte-scale datasets in minutes.</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-hdd-stack"></i></div>
+          <h4>Any dataset size and format</h4>
+          <p>Large images processed in chunks. Container files (LMDB, OME-TIFF) supported, each sub-image as an individual entry.</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="bi bi-puzzle"></i></div>
+          <h4>Extensible by design</h4>
+          <p>Add loaders, processors, and viewer widgets as Python packages. Discovered automatically at runtime.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Performance -->
+<section class="section">
+  <div class="container">
+    <div class="mb-5">
+      <div class="section-label">Performance</div>
+      <h2 class="section-title">Tested on real datasets.</h2>
+      <p class="section-lead">
+        Benchmarks run on HPC infrastructure with 100 parallel workers across multiple nodes.
+      </p>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="perf-card">
+          <div class="perf-label">Many small images</div>
+          <div class="d-flex align-items-baseline gap-2 mb-1">
+            <span class="perf-value">1.1M</span>
+            <span class="perf-sub">files · 7.8 GB</span>
+          </div>
+          <div class="perf-detail">
+            ~100-400 px per image<br/>
+            Wall time: <strong>1h 00m</strong> · 303 files/s<br/>
+            CPU mean 48% · RAM mean 10.2 GB<br/>
+            100 workers · 27 nodes
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="perf-card">
+          <div class="perf-label">Large 3D volumes</div>
+          <div class="d-flex align-items-baseline gap-2 mb-1">
+            <span class="perf-value">3</span>
+            <span class="perf-sub">files · 1,200 GB</span>
+          </div>
+          <div class="perf-detail">
+            9,000 × 8,000 × 2,000 px per image<br/>
+            Wall time: <strong>1h 45m</strong> · 18.4 tasks/min<br/>
+            CPU mean 35% · RAM mean 2.4 GB<br/>
+            100 workers · 21 nodes
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="perf-card">
+          <div class="perf-label">Large 2D multichannel</div>
+          <div class="d-flex align-items-baseline gap-2 mb-1">
+            <span class="perf-value">2</span>
+            <span class="perf-sub">files · 596 GB</span>
+          </div>
+          <div class="perf-detail">
+            50,000 × 50,000 × 40 px per image<br/>
+            Wall time: <strong>8m 47s</strong> · 61.2 tasks/min<br/>
+            CPU mean 12% · RAM mean 0.75 GB<br/>
+            100 workers · 30 nodes
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="section section-alt">
+  <div class="container text-center" style="max-width:580px">
+    <h2 class="section-title">Ready to understand your dataset?</h2>
+    <p class="section-lead mx-auto mb-4" style="max-width:500px">
+      Install Pixel Patrol and run it on your own data in minutes.
+    </p>
+    <a href="./docs/" class="btn btn-primary btn-lg">
+      <i class="bi bi-book me-2"></i>Get Started
+    </a>
+  </div>
+</section>
+
+<!-- Footer -->
 <footer class="pp-footer">
   <div class="pp-footer-inner">
     <div class="pp-footer-left">
@@ -163,6 +333,7 @@
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function ppStoreAndOpen(file) {
   var req = indexedDB.open('pp_file_transfer', 1);

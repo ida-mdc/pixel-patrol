@@ -34,8 +34,9 @@
 
     /* Artifact grid */
     .artifact-card { border: 1px solid #dee2e6; border-radius: 12px; overflow: hidden; background: #fff; height: 100%; }
-    .artifact-img { width: 100%; aspect-ratio: 4/3; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #adb5bd; font-size: 0.85rem; text-align: center; padding: 16px; border-bottom: 1px solid #dee2e6; }
-    .artifact-img img { width: 100%; height: 100%; object-fit: cover; }
+    .artifact-img { width: 100%; aspect-ratio: 4/3; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #adb5bd; font-size: 0.85rem; text-align: center; padding: 16px; border-bottom: 1px solid #dee2e6; overflow: hidden; position: relative; }
+    .artifact-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .artifact-credit { font-size: 0.72rem; color: #9ca3af; margin-top: 4px; font-style: italic; }
     .artifact-body { padding: 16px; }
     .artifact-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
     .artifact-desc { font-size: 0.85rem; color: #6c757d; line-height: 1.55; margin: 0; }
@@ -66,7 +67,6 @@
   <a class="pp-nav-title" href="./">Pixel Patrol</a>
   <nav class="pp-nav-links">
     <a href="./why.html" class="active">Why?</a>
-    <a href="./about.html">About</a>
     <a href="./docs/">Documentation</a>
     <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
       <i class="bi bi-github me-1"></i>GitHub
@@ -79,11 +79,11 @@
   <div class="container">
     <div class="hero-label">Why Prevalidation Matters</div>
     <h1 class="section-title" style="font-size:clamp(1.9rem,4vw,2.6rem);max-width:700px">Scientific datasets are messy.</h1>
-    <p class="section-lead mb-5" style="max-width:680px">
-      Hidden quality issues - artifacts, inconsistencies, signal drift, batch effects - can silently undermine your analysis. They are easy to miss and hard to fix after the fact. Discovering them early, before you invest weeks in a pipeline, changes everything.
+    <p class="section-lead mb-3" style="max-width:680px">
+      Hidden quality issues - artifacts, inconsistencies, signal drift, batch effects - can silently undermine your analysis. Discovering them early, before you invest weeks in a pipeline, changes everything.
     </p>
     <p class="section-lead mb-0" style="max-width:680px">
-      These are not edge cases. Most real imaging datasets contain at least one of the issues below - and many contain several. They don't always invalidate your analysis, but knowing they exist shapes how you design it, how you interpret results, and how carefully you draw conclusions.
+      These are not edge cases. Most real datasets have issues. They don't always invalidate your analysis, but knowing they exist shapes how you design it, how you interpret results, and how carefully you draw conclusions.
     </p>
   </div>
 </section>
@@ -96,13 +96,10 @@
     </div>
 
     <div class="row g-3">
-      <!-- Low contrast -->
+
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add low contrast example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
+          <div class="artifact-img"><img src="assets/artifacts/low_contrast.png" alt="Low contrast microscopy image"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Low Contrast</div>
             <p class="artifact-desc">Signal too faint or too close to background. Subtle but can bias segmentation and quantification.</p>
@@ -110,55 +107,31 @@
         </div>
       </div>
 
-      <!-- Noise -->
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add noise example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
+          <div class="artifact-img"><img src="assets/artifacts/noise_weigert_2018.png" alt="Noisy fluorescence image"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Noise</div>
             <p class="artifact-desc">Excessive photon noise, readout noise, or structured noise patterns that obscure biological signal.</p>
+            <p class="artifact-credit">Weigert et al. 2018</p>
           </div>
         </div>
       </div>
 
-      <!-- Compression artifacts -->
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add compression artifact example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
-          <div class="artifact-body">
-            <div class="artifact-title">Compression Artifacts</div>
-            <p class="artifact-desc">JPEG or lossy compression introduces blocky patterns and ringing that can be mistaken for structure.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stitching artifacts -->
-      <div class="col-6 col-md-4 col-lg-3">
-        <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add stitching artifact example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
+          <div class="artifact-img"><img src="assets/artifacts/stitching_chua_2024.png" alt="Stitching artifact in microscopy"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Stitching Artifacts</div>
             <p class="artifact-desc">Visible seams, intensity jumps, or misalignments at tile boundaries in large mosaic images.</p>
+            <p class="artifact-credit">Chua et al. 2024</p>
           </div>
         </div>
       </div>
 
-      <!-- Contamination -->
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add contamination/dirt example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
+          <div class="artifact-img"><img src="assets/artifacts/dirt.jpg" alt="Contamination and dirt in microscopy image"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Contamination / Dirt</div>
             <p class="artifact-desc">Dust, debris, or foreign objects on the sample or optics that appear consistently across images.</p>
@@ -166,13 +139,31 @@
         </div>
       </div>
 
-      <!-- Signal drift -->
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add signal drift / photobleaching example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
+          <div class="artifact-img"><img src="assets/artifacts/vignetting_peng_2017.png" alt="Vignetting in fluorescence microscopy"/></div>
+          <div class="artifact-body">
+            <div class="artifact-title">Vignetting</div>
+            <p class="artifact-desc">Uneven illumination causing brighter centers and darker edges. Can introduce systematic intensity bias across the field of view.</p>
+            <p class="artifact-credit">Peng et al. 2017</p>
           </div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="artifact-card">
+          <div class="artifact-img"><img src="assets/artifacts/domain_artifact_noda_2022.png" alt="Domain-specific MRI artifact"/></div>
+          <div class="artifact-body">
+            <div class="artifact-title">Domain-specific Artifacts</div>
+            <p class="artifact-desc">Acquisition-specific issues such as MRI motion artifacts, CT beam hardening, or modality-specific distortions.</p>
+            <p class="artifact-credit">Noda et al. 2022</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="artifact-card">
+          <div class="artifact-img"><img src="assets/artifacts/signal_drift.png" alt="Signal drift across Z-stack"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Signal Drift / Photobleaching</div>
             <p class="artifact-desc">Intensity changes over time or across Z-slices due to photobleaching, focus drift, or instrument instability.</p>
@@ -180,13 +171,9 @@
         </div>
       </div>
 
-      <!-- Batch effects -->
       <div class="col-6 col-md-4 col-lg-3">
         <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add batch effect example image -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
+          <div class="artifact-img"><img src="assets/artifacts/batch_effects.png" alt="Unexpected batch effect between conditions"/></div>
           <div class="artifact-body">
             <div class="artifact-title">Batch Effects</div>
             <p class="artifact-desc">Systematic intensity or quality differences between acquisition sessions that can confound group comparisons.</p>
@@ -194,19 +181,6 @@
         </div>
       </div>
 
-      <!-- Inconsistent dimensions -->
-      <div class="col-6 col-md-4 col-lg-3">
-        <div class="artifact-card">
-          <div class="artifact-img">
-            <!-- TODO: add dimension inconsistency example -->
-            <span><i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:8px"></i>Example image<br/>coming soon</span>
-          </div>
-          <div class="artifact-body">
-            <div class="artifact-title">Inconsistent Dimensions</div>
-            <p class="artifact-desc">Files with unexpected sizes, missing Z-slices, or truncated time series that silently break downstream pipelines.</p>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -281,7 +255,7 @@
   <div class="container" style="max-width: 760px">
     <div class="text-center mb-4">
       <div class="hero-label">The Core Principle</div>
-      <h2 class="section-title">Become an expert of your own dataset.</h2>
+      <h2 class="section-title">Become an expert in your own dataset.</h2>
     </div>
     <div style="background:#eff4ff; border-radius:10px; padding:24px 28px; text-align:center">
       <p style="font-size:1.1rem; font-weight:600; color:#1a1d23; line-height:1.75; margin:0">Invest the time to understand your dataset's nuances, strengths, and limitations. Conclusions are genuinely supported by data only when you understand what that data actually is.</p>
@@ -289,7 +263,7 @@
     <p class="mt-4 text-muted text-center" style="font-size:0.97rem">
       Pixel Patrol is the tool that makes this possible at scale - automatically, across hundreds or thousands of images, with a shareable report you can discuss with your team.
       <br/><br/>
-      <a href="./about.html" class="btn btn-primary btn-lg me-2">About Pixel Patrol</a>
+      <a href="./" class="btn btn-primary btn-lg me-2">About Pixel Patrol</a>
       <a href="./docs/" class="btn btn-outline-secondary btn-lg">Documentation</a>
     </p>
   </div>
