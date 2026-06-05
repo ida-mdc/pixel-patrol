@@ -398,6 +398,158 @@ def test_multi_xy_chunks_cover_full_canvas(proc):
     assert arr[half:, half:,   3].min() == 255, "bottom-right quadrant empty"
 
 
+def _content_region(y_full: int, x_full: int):
+    """Return (y_pad, x_pad, h_used, w_used) for the letterboxed content area."""
+    scale  = min(SPRITE_SIZE / y_full, SPRITE_SIZE / x_full)
+    h_used = max(1, round(y_full * scale))
+    w_used = max(1, round(x_full * scale))
+    y_pad  = (SPRITE_SIZE - h_used) // 2
+    x_pad  = (SPRITE_SIZE - w_used) // 2
+    return y_pad, x_pad, h_used, w_used
+
+
+def _assert_content_covered(arr, y_pad, x_pad, h_used, w_used):
+    """Assert the content region is fully opaque and outside padding is transparent."""
+    alpha = arr[:, :, 3]
+    assert alpha[y_pad:y_pad + h_used, x_pad:x_pad + w_used].min() == 255, \
+        "gap in content area"
+    if y_pad > 0:
+        assert alpha[:y_pad, :].max() == 0, "top padding not transparent"
+    if y_pad + h_used < SPRITE_SIZE:
+        assert alpha[y_pad + h_used:, :].max() == 0, "bottom padding not transparent"
+    if x_pad > 0:
+        assert alpha[:, :x_pad].max() == 0, "left padding not transparent"
+    if x_pad + w_used < SPRITE_SIZE:
+        assert alpha[:, x_pad + w_used:].max() == 0, "right padding not transparent"
+
+
+def test_non_square_tiled_landscape_no_gaps(proc):
+    """4 non-square tiles for a landscape (Y=20, X=40) image: content fully covered, letterboxed."""
+    rows = []
+    for y_off, x_off in [(0, 0), (0, 20), (10, 0), (10, 20)]:
+        data = np.full((10, 20), 200, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    assert "thumbnail" in result
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+    y_pad, x_pad, h_used, w_used = _content_region(20, 40)
+    _assert_content_covered(arr, y_pad, x_pad, h_used, w_used)
+    # Landscape image → top/bottom letterbox, full width used
+    assert y_pad > 0, "landscape image should have top/bottom padding"
+    assert x_pad == 0, "landscape image should use full canvas width"
+
+
+def test_non_square_tiled_portrait_no_gaps(proc):
+    """4 non-square tiles for a portrait (Y=40, X=20) image: content fully covered, letterboxed."""
+    rows = []
+    for y_off, x_off in [(0, 0), (0, 10), (20, 0), (20, 10)]:
+        data = np.full((20, 10), 200, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    assert "thumbnail" in result
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+    y_pad, x_pad, h_used, w_used = _content_region(40, 20)
+    _assert_content_covered(arr, y_pad, x_pad, h_used, w_used)
+    # Portrait image → left/right letterbox, full height used
+    assert x_pad > 0, "portrait image should have left/right padding"
+    assert y_pad == 0, "portrait image should use full canvas height"
+
+
+def test_non_square_tiled_strips_no_gaps(proc):
+    """2 horizontal strips (non-square tiles) for a non-square image: no gaps in content area."""
+    # Image: Y=100, X=50 (portrait) split into 2 strips of 50×50
+    rows = []
+    for y_off in [0, 50]:
+        data = np.full((50, 50), 200, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, 0], "YX"))
+    result = _aggregate(proc, rows)
+    assert "thumbnail" in result
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+    y_pad, x_pad, h_used, w_used = _content_region(100, 50)
+    _assert_content_covered(arr, y_pad, x_pad, h_used, w_used)
+
+
+def test_non_square_tiled_boundary_tiles_no_gaps(proc):
+    """Non-uniform boundary tiles (last tile smaller) produce no gaps."""
+    # Image: Y=256, X=300; split into tiles with remainder at boundary
+    rows = []
+    for (y_off, y_size), (x_off, x_size) in [
+        ((0, 128), (0, 150)), ((0, 128), (150, 150)),
+        ((128, 128), (0, 150)), ((128, 128), (150, 150)),
+    ]:
+        data = np.full((y_size, x_size), 200, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    assert "thumbnail" in result
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+    y_pad, x_pad, h_used, w_used = _content_region(256, 300)
+    _assert_content_covered(arr, y_pad, x_pad, h_used, w_used)
+
+
+def test_tiled_pixel_values_x_direction(proc):
+    """Left tiles are dark, right tiles are bright: content appears in the correct X half."""
+    # Landscape 20×40 image: tiles at x=0..20 are black, tiles at x=20..40 are white
+    rows = []
+    for y_off, x_off, val in [(0, 0, 0), (0, 20, 255), (10, 0, 0), (10, 20, 255)]:
+        data = np.full((10, 20), val, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+
+    y_pad, x_pad, h_used, w_used = _content_region(20, 40)
+    mid_x = x_pad + w_used // 2
+    left  = arr[y_pad:y_pad + h_used, x_pad:mid_x,          0]
+    right = arr[y_pad:y_pad + h_used, mid_x:x_pad + w_used, 0]
+    assert left.max()  == 0,   "left tiles (value=0) should be black in assembled thumbnail"
+    assert right.min() == 255, "right tiles (value=255) should be white in assembled thumbnail"
+
+
+def test_tiled_pixel_values_y_direction(proc):
+    """Top tiles are dark, bottom tiles are bright: content appears in the correct Y half."""
+    # Portrait 40×20 image: tiles at y=0..20 are black, tiles at y=20..40 are white
+    rows = []
+    for y_off, x_off, val in [(0, 0, 0), (0, 10, 0), (20, 0, 255), (20, 10, 255)]:
+        data = np.full((20, 10), val, dtype=np.uint8)
+        rows.append(_run_chunk_with_origin(proc, data, [y_off, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+
+    y_pad, x_pad, h_used, w_used = _content_region(40, 20)
+    mid_y = y_pad + h_used // 2
+    top    = arr[y_pad:mid_y,          x_pad:x_pad + w_used, 0]
+    bottom = arr[mid_y:y_pad + h_used, x_pad:x_pad + w_used, 0]
+    assert top.max()    == 0,   "top tiles (value=0) should be black in assembled thumbnail"
+    assert bottom.min() == 255, "bottom tiles (value=255) should be white in assembled thumbnail"
+
+
+def test_tiled_global_normalization_no_seams(proc):
+    """Tiles with different uniform intensities must be normalized globally, not per-tile.
+
+    Left tile = 50, right tile = 150.  With global normalization:
+      lower = 0 (min(50, 0)), upper = 150
+      left  → (50-0)/150*255 ≈ 85  (grey)
+      right → (150-0)/150*255 = 255 (white)
+
+    With per-tile normalization (the bug), both tiles independently normalize to 255,
+    making them indistinguishable despite having different actual intensities.
+    """
+    rows = []
+    for x_off, val in [(0, 50), (40, 150)]:
+        data = np.full((40, 40), val, dtype=np.float32)
+        rows.append(_run_chunk_with_origin(proc, data, [0, x_off], "YX"))
+    result = _aggregate(proc, rows)
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+
+    # 40×80 landscape image → y_pad > 0, full width
+    y_pad, x_pad, h_used, w_used = _content_region(40, 80)
+    mid_y = y_pad + h_used // 2
+    left_val  = int(arr[mid_y, x_pad + w_used // 4,     0])
+    right_val = int(arr[mid_y, x_pad + 3 * w_used // 4, 0])
+
+    assert right_val == 255, f"right tile (value=150) should be white; got {right_val}"
+    assert left_val < 150,   f"left tile (value=50) should be grey ~85 not white; got {left_val}"
+
+
 def test_numpy_array_input(proc):
     """Processor must work when record.data is a plain numpy array (e.g. LMDB loader path)."""
     data = np.random.randint(0, 256, (20, 20, 3), dtype=np.uint8)
