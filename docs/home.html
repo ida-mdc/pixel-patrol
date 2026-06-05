@@ -88,9 +88,16 @@
           Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
         </p>
 
-        <a href="./viewer/" class="btn btn-primary btn-lg mb-3">
-          <i class="bi bi-folder2-open me-2"></i>Open Report File
-        </a>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <button class="btn btn-primary btn-lg" onclick="document.getElementById('home-file-input').click()">
+            <i class="bi bi-folder2-open me-2"></i>Open Report File
+          </button>
+          <input type="file" id="home-file-input" accept=".parquet,.arrow,.ipc" style="display:none"
+                 onchange="ppStoreAndOpen(this.files[0])">
+          <a href="./viewer/?data=../example.parquet" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-play-circle me-2"></i>View Example Report
+          </a>
+        </div>
         <p class="text-muted small mb-1">
           Or pass a URL:
           <code style="font-size:0.8em">viewer/?data=https://…/report.parquet</code>
@@ -154,5 +161,17 @@
   </div>
 </footer>
 
+<script>
+function ppStoreAndOpen(file) {
+  var req = indexedDB.open('pp_file_transfer', 1);
+  req.onupgradeneeded = function(e) { e.target.result.createObjectStore('files'); };
+  req.onsuccess = function(e) {
+    var db = e.target.result;
+    var tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').put(file, 'pending');
+    tx.oncomplete = function() { db.close(); window.location.href = './viewer/?open=stored'; };
+  };
+}
+</script>
 </body>
 </html>

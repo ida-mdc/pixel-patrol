@@ -141,9 +141,8 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
 
-    # Promote the custom landing page from docs/ to the site root.
-    # mkdocs builds into out_dir/docs/; home.html and assets are copied there
-    # verbatim. Move them up so the root serves the Bootstrap landing page.
+    # Promote the custom landing page and example parquet from docs/ to the site root.
+    # mkdocs builds into out_dir/docs/; these files are copied there verbatim.
     home_html = out_dir / "docs" / "home.html"
     if home_html.is_file():
         shutil.copy2(home_html, out_dir / "index.html")
@@ -153,6 +152,9 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
         if dst_assets.exists():
             shutil.rmtree(dst_assets)
         shutil.copytree(docs_assets, dst_assets)
+    example_parquet = out_dir / "docs" / "example.parquet"
+    if example_parquet.is_file():
+        shutil.copy2(example_parquet, out_dir / "example.parquet")
 
     # Viewer lives at /viewer/ so the site root is free for the landing page.
     viewer_dir = out_dir / "viewer"
@@ -176,6 +178,14 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
         encoding="utf-8",
     )
     _inject_extension_urls(viewer_dir / "index.html", urls)
+
+    # Tell the viewer that the logo should navigate back to the site landing page.
+    viewer_index = viewer_dir / "index.html"
+    html = viewer_index.read_text(encoding="utf-8")
+    homepage_script = "<script>\nwindow.__PP_HOMEPAGE = '../';\n</script>\n"
+    html = html.replace("</head>", homepage_script + "</head>", 1)
+    viewer_index.write_text(html, encoding="utf-8")
+
     return out_dir
 
 
