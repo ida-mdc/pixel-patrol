@@ -40,35 +40,13 @@ def _reduce_to_spatial(arr, dim_order: str, keep_dims: set) -> tuple[da.Array, s
     return arr, current
 
 
-def _normalize(arr: da.Array) -> tuple[da.Array, float, float]:
-    """
-    Normalize to uint8 [0, 255].
-    Lower bound = min(arr_min, 0) to keep zero as a fixed reference.
-    Upper bound = arr_max.
-    Returns (normalized_uint8, norm_min, norm_max).
-
-    Uses ``nanmin`` / ``nanmax`` so NaN voxels do not poison the intensity range.
-    If every value is NaN (or min/max are otherwise non-finite), returns a solid
-    black image and ``(0.0, 0.0)`` for the norm metadata (no meaningful stretch).
-    """
-    mn, mx = da.compute(da.nanmin(arr), da.nanmax(arr), scheduler='synchronous')
-    mn, mx = float(mn), float(mx)
-    if not np.isfinite(mn) or not np.isfinite(mx):
-        return da.full_like(arr, np.uint8(0), dtype=np.uint8), 0.0, 0.0
-    lower = min(mn, 0.0)
-    upper = mx
-    if upper <= lower:
-        fill = np.uint8(0 if upper <= 0 else 255)
-        return da.full_like(arr, fill, dtype=np.uint8), lower, upper
-    normalized = (arr.astype(np.float64) - lower) / (upper - lower) * 255.0
-    return da.clip(normalized, 0, 255).astype(np.uint8), lower, upper
-
-
 def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     """Assemble per-chunk patches into one SPRITE_SIZE × SPRITE_SIZE RGBA thumbnail.
 
     Full image extent is derived from the patches' own position + size metadata,
-    so no external full_shape is needed.
+    so no external full_shape is needed.  Normalization is applied globally across
+    all spatial positions so tiles with different local intensity ranges don't
+    produce visible seams at chunk boundaries.
     """
     valid = [r for r in rows if "__thumbnail_patch__" in r]
     if not valid:
@@ -87,10 +65,27 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     for r in valid:
         by_pos[(r["dim_y"], r["dim_x"])].append(r)
 
+    # One representative patch per spatial position (middle of any Z/C/T stack)
+    selected = [group[len(group) // 2] for group in by_pos.values()]
+
+    # Global min/max across all spatial positions for seamless normalization
+    flat_vals = [r["__thumbnail_patch__"].ravel() for r in selected if r["__thumbnail_patch__"].size > 0]
+    if flat_vals:
+        all_vals = np.concatenate(flat_vals)
+        mn = float(np.nanmin(all_vals))
+        mx = float(np.nanmax(all_vals))
+    else:
+        mn, mx = 0.0, 0.0
+
+    if np.isfinite(mn) and np.isfinite(mx):
+        norm_min = min(mn, 0.0)
+        norm_max = mx
+    else:
+        norm_min, norm_max = 0.0, 0.0
+
     canvas = np.zeros((SPRITE_SIZE, SPRITE_SIZE, 4), dtype=np.uint8)
-    for group in by_pos.values():
-        r = group[len(group) // 2]
-        patch = r["__thumbnail_patch__"]
+    for r in selected:
+        raw = r["__thumbnail_patch__"]
         y_off, x_off = r["dim_y"], r["dim_x"]
         y_ext, x_ext = r["Y_size"], r["X_size"]
 
@@ -99,8 +94,16 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
         cx  = x_pad + round(x_off * scale)
         cx2 = min(x_pad + w_used, max(cx + 1, x_pad + round((x_off + x_ext) * scale)))
         ah, aw = cy2 - cy, cx2 - cx
-        if ah <= 0 or aw <= 0 or patch.size == 0:
+        if ah <= 0 or aw <= 0 or raw.size == 0:
             continue
+
+        if norm_max <= norm_min:
+            patch = np.full(raw.shape, np.uint8(0 if norm_max <= 0 else 255), dtype=np.uint8)
+        else:
+            patch = np.clip(
+                (raw.astype(np.float64) - norm_min) / (norm_max - norm_min) * 255.0,
+                0, 255,
+            ).astype(np.uint8)
 
         h, w = patch.shape[:2]
         r_idx = np.round(np.linspace(0, h - 1, ah)).astype(np.int64)
@@ -116,14 +119,14 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
             canvas[cy:cy2, cx:cx2, :n_c] = small[:, :, :n_c]
         canvas[cy:cy2, cx:cx2, 3] = 255
 
-    center = min(valid, key=lambda r: (
+    center = min(selected, key=lambda r: (
         (r["dim_y"] - y_full / 2) ** 2 +
         (r["dim_x"] - x_full / 2) ** 2
     ))
     return {
         "thumbnail":          canvas.tobytes(),
-        "thumbnail_norm_min": center["__norm_min__"],
-        "thumbnail_norm_max": center["__norm_max__"],
+        "thumbnail_norm_min": norm_min,
+        "thumbnail_norm_max": norm_max,
         "thumbnail_dtype":    center["__dtype__"],
     }
 
@@ -188,10 +191,9 @@ class ThumbnailProcessor:
                 arr = arr.squeeze(axis=c_ax)
                 reduced_order = reduced_order.replace(color_dim, "", 1)
 
-        normalized, norm_min, norm_max = _normalize(arr)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="invalid value encountered in cast")
-            patch = normalized.compute(scheduler='synchronous')
+            patch = arr.compute(scheduler='synchronous')
 
         dims = list(reduced_order)
         if patch.ndim == 2:
@@ -211,7 +213,5 @@ class ThumbnailProcessor:
 
         return {
             "__thumbnail_patch__": patch,
-            "__norm_min__":        norm_min,
-            "__norm_max__":        norm_max,
             "__dtype__":           str(chunk.dtype),
         }
