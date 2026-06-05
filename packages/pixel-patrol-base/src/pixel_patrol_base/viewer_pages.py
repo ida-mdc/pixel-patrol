@@ -141,18 +141,23 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
 
-    # Promote the custom landing page and example parquet from docs/ to the site root.
-    # mkdocs builds into out_dir/docs/; these files are copied there verbatim.
-    home_html = out_dir / "docs" / "home.html"
-    if home_html.is_file():
-        shutil.copy2(home_html, out_dir / "index.html")
-    docs_assets = out_dir / "docs" / "assets"
+    # Promote hand-crafted site files from docs/ output to the site root.
+    # mkdocs builds into out_dir/docs/ and copies non-markdown files verbatim.
+    docs_out = out_dir / "docs"
+
+    # Promote all root-level HTML files (home.html -> index.html, others keep their name)
+    for html_file in docs_out.glob("*.html"):
+        dst_name = "index.html" if html_file.name == "home.html" else html_file.name
+        shutil.copy2(html_file, out_dir / dst_name)
+
+    # Promote assets/ and example.parquet
+    docs_assets = docs_out / "assets"
     if docs_assets.is_dir():
         dst_assets = out_dir / "assets"
         if dst_assets.exists():
             shutil.rmtree(dst_assets)
         shutil.copytree(docs_assets, dst_assets)
-    example_parquet = out_dir / "docs" / "example.parquet"
+    example_parquet = docs_out / "example.parquet"
     if example_parquet.is_file():
         shutil.copy2(example_parquet, out_dir / "example.parquet")
 
