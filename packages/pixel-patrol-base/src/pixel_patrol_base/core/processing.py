@@ -801,18 +801,19 @@ class _RecordAssembler:
         self._results:  Dict[Tuple[int, Optional[str]], List[MemoryChunkResult]] = {}
         self._expected: Dict[Tuple[int, Optional[str]], int] = {}
 
-    def add(self, result: MemoryChunkResult, n_memory_chunks: int) -> bool:
+    def add(self, result: MemoryChunkResult, n_memory_chunks: int) -> Tuple[bool, int]:
         """Register one completed MemoryChunkResult.
 
-        Returns True when all n_memory_chunks spatial chunks for
-        (result.file_index, result.child_id) have arrived.
+        Returns (is_complete, n_received) where is_complete is True when all
+        n_memory_chunks spatial chunks for (result.file_index, result.child_id) have arrived.
         """
         key = (result.file_index, result.child_id)
         if key not in self._results:
             self._results[key] = []
             self._expected[key] = n_memory_chunks
         self._results[key].append(result)
-        return len(self._results[key]) == self._expected[key]
+        n_received = len(self._results[key])
+        return n_received == self._expected[key], n_received
 
     def pop(self, record_key: Tuple[int, Optional[str]]) -> List[MemoryChunkResult]:
         """Remove and return all accumulated MemoryChunkResults for a record."""
@@ -989,12 +990,17 @@ def _coordinate_pipeline(
         desc="Processing",
         disable=on_progress is not None,
         dynamic_ncols=True,
-        bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]",
+        bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]{postfix}",
     )
+
+    _chunk_info: list = [None]  # mutable slot: Optional[str] for closure mutation
 
     def _update_pbar_postfix() -> None:
         vm = psutil.virtual_memory()
-        pbar.set_postfix({"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}, refresh=False)
+        postfix: Dict[str, str] = {"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}
+        if _chunk_info[0]:
+            postfix["chunks"] = _chunk_info[0]
+        pbar.set_postfix(postfix, refresh=False)
 
     def _handle_record(
         chunk_results: List[MemoryChunkResult],
@@ -1052,9 +1058,15 @@ def _coordinate_pipeline(
         before = completed_records
         if isinstance(task, MemoryChunkTask):
             result = results[0]
-            if assembler.add(result, task.n_memory_chunks):
+            is_complete, n_received = assembler.add(result, task.n_memory_chunks)
+            if is_complete:
+                _chunk_info[0] = None
                 key = (result.file_index, result.child_id)
                 _handle_record(assembler.pop(key), result.file_index, result.child_id)
+            elif task.n_memory_chunks > 1:
+                _chunk_info[0] = f"{n_received}/{task.n_memory_chunks} ({Path(task.file_path).name})"
+                _update_pbar_postfix()
+                pbar.refresh()
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
