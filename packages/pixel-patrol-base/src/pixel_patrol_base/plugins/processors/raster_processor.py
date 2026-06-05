@@ -219,13 +219,3 @@ class HistogramProcessor(RasterProcessor):
         RasterMetricSpec(name=MetricNames.HISTOGRAM_COUNTS,    data_type=np.ndarray, aggregate_rows=lambda spec, rows: _aggregate_histograms(rows)),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
-
-    def get_aggregation(self, name: str):
-        spec = next((s for s in self.METRICS if s.name == name), None)
-        if spec is None:
-            return None
-        def _agg(rows, g_dims):
-            if any(d in ("dim_y", "dim_x") for d in g_dims):
-                return None  # histograms don't aggregate into per-tile groupings
-            return spec.aggregate_rows(spec, rows)
-        return _agg
