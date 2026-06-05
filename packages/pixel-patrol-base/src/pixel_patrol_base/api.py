@@ -71,10 +71,10 @@ def process_files(
                                     and sub-image batching for container files.
         max_images_per_task:        Max files per batch task or sub-images per container task
                                     (default: 200).
-        slice_size:                 Leaf block size per dimension for leaf processors,
-                                    e.g. {"Z": 1, "Y": 256}. Controls the granularity of
-                                    per-dimension statistics in the output. By default X and Y
-                                    are full extent and all other dims step by 1. None = default.
+        slice_size:                 Per-dimension granularity of statistics in the output report.
+                                    {"Z": 1} produces one set of statistics per Z slice;
+                                    {"Z": 5} groups every 5 slices. By default X and Y are
+                                    full extent and all other dims step by 1. None = default.
         rows_per_part:              Rows buffered before flushing to a temporary file (default: 10000).
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
                                     Smaller values speed up thumbnail sampling in the viewer.

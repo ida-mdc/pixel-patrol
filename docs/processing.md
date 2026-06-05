@@ -47,6 +47,9 @@ Some loaders support **container files** - single files that hold multiple image
 | `tifffile` | TIFF only, lightweight | `pixel-patrol-loader-bio` |
 | *(none)* | Basic file info only (name, size, extension) | `pixel-patrol-base` |
 
+!!! note
+    `pixel-patrol-loader-bio` is included in the `pixel-patrol` bundle. If you installed with `pip install pixel-patrol` or `uv pip install pixel-patrol`, all loaders are already available.
+
 Additional loaders are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol), and you can build your own - see [Extensions](extensions.md).
 
 ### File extensions
@@ -97,6 +100,18 @@ Processors fall into two categories that determine what data they receive:
 - **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`, `raster-compression`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
 
 - **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the `mb_per_task` budget, the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
+
+### `--slice-size`
+
+Controls the per-dimension granularity of statistics in the output report. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices into one. This is independent of memory budget or file size - it affects what the report shows, not how the data is loaded.
+
+By default X and Y are full-extent (one complete 2D plane) and all other dimensions (Z, T, C, S) step by 1. Override to produce coarser statistics:
+
+```bash
+pixel-patrol process my-data/ -o report.parquet --slice-size Z=5 --slice-size Y=512
+```
+
+Use `-1` to keep a dimension at full extent.
 
 ---
 
@@ -207,17 +222,6 @@ Maximum number of files (or sub-images) per task (default: 200).
 pixel-patrol process my-data/ -o report.parquet --mb-per-task 256 --max-images-per-task 50
 ```
 
-### `--slice-size`
-
-Controls the **leaf block shape** - the spatial unit that leaf processors (see [How processors see the image](#how-processors-see-the-image)) analyse at a time. This is independent of whether a file is too large for memory; it determines the granularity of per-dimension statistics in the output.
-
-By default X and Y are full-extent (one complete 2D plane per leaf block) and all other dimensions (Z, T, C, S) step by 1. Override to analyse larger or smaller slices:
-
-```bash
-pixel-patrol process my-data/ -o report.parquet --slice-size Z=5 --slice-size Y=512
-```
-
-Use `-1` to keep a dimension at full extent.
 
 ---
 
