@@ -30,7 +30,7 @@ pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 | `-l, --loader TEXT` | *(none)* | Loader plugin, e.g. `bioio`, `zarr`, `tifffile`. Without a loader only basic file info is collected. |
 | `-e, --file-extensions EXT` | *(all supported)* | File extension to include, e.g. `tif`. Repeatable. |
 | `--flavor TEXT` | | Label shown next to the title in the viewer. |
-| `--description TEXT` | | Free-form description embedded in the report. |
+| `--description TEXT` | | Free-form description shown below the title in the viewer and embedded in the report metadata. |
 | `--processors-include NAME` | | Run only these processors by ID. Repeatable. Takes precedence over `--processors-exclude`. See [Available processors](processing.md#available-processors). |
 | `--processors-exclude NAME` | | Skip these processors by ID. Repeatable. See [Available processors](processing.md#available-processors). |
 | `--max-workers N` | auto | Number of parallel Dask workers. Auto-detected from available CPUs and RAM. Use `1` to disable parallelism. |

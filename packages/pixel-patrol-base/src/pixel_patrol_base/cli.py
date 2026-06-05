@@ -17,20 +17,21 @@ from pixel_patrol_base.processing_dashboard import create_processing_app
 
 
 @click.group()
+@click.version_option(package_name="pixel-patrol-base")
 def cli():
     """
     A command-line tool for processing image reports with Pixel Patrol.
 
     Two-step workflow:
-      1. pixel-patrol process  — scan images, write a .parquet report file
-      2. pixel-patrol view     — open the report in the interactive viewer
+      1. pixel-patrol process  - scan images, write a .parquet report file
+      2. pixel-patrol view     - open the report in the interactive viewer
     """
     pass
 
 @cli.command()
 @click.argument('base_directory', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, path_type=Path))
 @click.option('--output', '-o', type=click.Path(exists=False, file_okay=True,  dir_okay=False, writable=True, path_type=Path),
-              help='Required: Path for the output parquet file (e.g., my_project.parquet).',
+              help='Path for the output parquet file (e.g., my_project.parquet).',
               required=True)
 @click.option('--name', type=str, required=False,
               help='Optional: Name of the project. If not provided, derived from BASE_DIRECTORY.')
@@ -49,7 +50,7 @@ def cli():
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Label shown next to the Pixel Patrol title in the viewer.')
 @click.option('--description', type=str, default="",
-              help='Free-form description embedded in the report metadata.')
+              help='Free-form description shown below the title in the viewer and embedded in the report metadata.')
 @click.option('--processors-include', multiple=True, type=str,
               help='Run only these processors by ID (e.g. raster-basic, thumbnail). Repeatable. '
                    'If specified, --processors-exclude is ignored.')
