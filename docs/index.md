@@ -16,6 +16,9 @@ Or with pip:
 pip install pixel-patrol
 ```
 
+!!! warning
+    Installing without a virtual environment is not recommended - it can conflict with other packages. If in doubt, use the uv method above.
+
 Requires Python 3.11+. See [Installation](installation.md) for more options.
 
 ---

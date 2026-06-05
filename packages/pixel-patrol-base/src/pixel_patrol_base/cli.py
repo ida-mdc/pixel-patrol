@@ -73,10 +73,10 @@ def cli():
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,
-              help='Leaf block size per dimension for leaf processors, e.g. --slice-size Z=1 --slice-size Y=256. '
-                   'Controls the granularity of per-dimension statistics in the output. '
-                   'By default X and Y are full extent (one 2D plane per block) and all other '
-                   'dims (Z, T, C, S) step by 1. Use -1 for full extent. Repeatable.')
+              help='Per-dimension granularity of statistics in the output report. '
+                   'Z=1 produces one set of statistics per Z slice; Z=5 groups every 5 slices. '
+                   'By default X and Y are full extent and all other dims (Z, T, C, S) step by 1. '
+                   'Use -1 for full extent. Repeatable, e.g. --slice-size Z=1 --slice-size C=1.')
 @click.option('--rows-per-part', type=int, default=None, show_default=True,
               help='Number of rows buffered in memory before being flushed to a temporary file on disk (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,

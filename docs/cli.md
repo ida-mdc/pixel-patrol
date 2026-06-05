@@ -37,7 +37,7 @@ pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 | `--scheduler URL` | | Connect to an existing Dask scheduler instead of spawning a local one, e.g. `tcp://host:8786`. |
 | `--mb-per-task N` | 512 | Work budget per Dask task in MB. Controls batch sizes for small files, spatial splitting for large files, and sub-image batching for container files. See [Task sizing](processing.md#task-sizing). |
 | `--max-images-per-task N` | 200 | Max files per batch task or sub-images per container task. |
-| `--slice-size DIM=SIZE` | | Leaf block size per dimension for leaf processors. By default X and Y are full extent (one complete 2D plane per block) and all other dims (Z, T, C, S) step by 1. This determines the granularity of [per-dimension observations](processing.md#row-structure) in the output. Use `-1` for full extent. Repeatable, e.g. `--slice-size Z=5 --slice-size Y=512`. |
+| `--slice-size DIM=SIZE` | | Per-dimension granularity of statistics in the output report. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices. By default X and Y are full extent and all other dims (Z, T, C, S) step by 1. See [per-dimension observations](processing.md#row-structure). Use `-1` for full extent. Repeatable, e.g. `--slice-size Z=1 --slice-size C=1`. |
 | `--rows-per-part N` | 10000 | Flush intermediate results to disk every N rows. |
 | `--parquet-row-group-size N` | 2048 | Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer. |
 | `--log-file` | off | Write a debug log file alongside the output parquet. |
@@ -99,22 +99,6 @@ pixel-patrol view report.parquet --widgets-exclude histogram --no-browser --port
 
 ---
 
-## `pixel-patrol launch`
-
-Opens the web-based processing dashboard for configuring and monitoring processing interactively.
-
-```bash
-pixel-patrol launch [--port N]
-```
-
-**Options**
-
-| Option | Default | Description |
-|---|---|---|
-| `--port N` | 8051 | Port for the dashboard server. |
-
----
-
 ## `pixel-patrol build-viewer-html`
 
 Packages the viewer as a self-contained static file for sharing or hosting without a running server.
@@ -140,3 +124,19 @@ pixel-patrol build-viewer-html -o gh-pages/
 
 !!! warning
     The static viewer runs entirely in the browser and may not be able to load very large parquet files (e.g. 5 GB+). For large reports use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
+
+---
+
+## `pixel-patrol launch`
+
+Opens the web-based processing dashboard for configuring and monitoring processing interactively.
+
+```bash
+pixel-patrol launch [--port N]
+```
+
+**Options**
+
+| Option | Default | Description |
+|---|---|---|
+| `--port N` | 8051 | Port for the dashboard server. |
