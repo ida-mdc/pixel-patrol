@@ -190,3 +190,23 @@ def test_spatial_chunks_leaf_rows_pooled():
     result = _rollup([chunk1, chunk2], processors=[])
     assert _rows_at(result, 0)[0]["num_pixels"] == 300
     assert len(_rows_at(result, 1)) == 2
+
+
+# ── X/Y full-extent-by-default: memory-chunk offsets are not user tiling ─────
+
+def test_xy_varying_from_memory_chunking_not_active_without_slice_size():
+    # Simulate two memory chunks at different X positions (memory management split,
+    # not user-requested tiling). Without leaf_block_shape, X/Y should be ignored.
+    chunk1 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,    "dim_y": 0, "num_pixels": 100}])
+    chunk2 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 2048, "dim_y": 0, "num_pixels": 100}])
+    result = _rollup([chunk1, chunk2], processors=[])
+    assert {r["obs_level"] for r in result} == {0}
+    assert _rows_at(result, 0)[0]["num_pixels"] == 200
+
+
+def test_xy_active_when_explicitly_in_leaf_block_shape():
+    # User explicitly requested X/Y tiling — variation should create active dims.
+    chunk1 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,    "dim_y": 0, "num_pixels": 100}])
+    chunk2 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 2048, "dim_y": 0, "num_pixels": 100}])
+    result = _rollup([chunk1, chunk2], processors=[], leaf_block_shape={"X": 2048, "Y": -1})
+    assert 1 in {r["obs_level"] for r in result}

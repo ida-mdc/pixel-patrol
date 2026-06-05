@@ -625,8 +625,9 @@ def _execute_container_task(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _rollup(
-    chunk_results: List[MemoryChunkResult],
-    processors:    List[Any],
+    chunk_results:    List[MemoryChunkResult],
+    processors:       List[Any],
+    leaf_block_shape: Optional[Dict[str, int]] = None,
 ) -> List[dict]:
     """Aggregate a complete set of MemoryChunkResults for one record into obs rows.
 
@@ -658,9 +659,15 @@ def _rollup(
     all_dim_keys = sorted({
         col for row in all_leaf_rows for col in row if col.startswith("dim_")
     })
+    # A dim is full-extent-by-default (X, Y) and was not explicitly requested
+    # in leaf_block_shape — it may still vary across memory-chunk boundaries
+    # (which are a memory-management detail, not user-specified tiling), so
+    # exclude it from active_dims in that case.
+    user_tiled = set(leaf_block_shape or {})
     active_dims = [
         d for d in all_dim_keys
         if len({row.get(d) for row in all_leaf_rows}) > 1
+        and (d[4:].upper() not in _FULL_EXTENT_BY_DEFAULT or d[4:].upper() in user_tiled)
     ]
     n = len(active_dims)
     active_dim_set = set(active_dims)
@@ -1011,7 +1018,7 @@ def _coordinate_pipeline(
         for cr in chunk_results:
             for k, v in cr.timing.items():
                 all_timing[k] = all_timing.get(k, 0.0) + v
-        obs_rows = _rollup(chunk_results, processors)
+        obs_rows = _rollup(chunk_results, processors, config.slice_size)
         if obs_rows:
             writer.add(_join_file_metadata(obs_rows, files_meta[file_index], child_id))
         completed_records += 1
