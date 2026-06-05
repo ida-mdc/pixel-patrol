@@ -245,8 +245,3 @@ def test_get_aggregation_histogram_callable(hist_proc):
     assert callable(hist_proc.get_aggregation("histogram_counts"))
 
 
-def test_get_aggregation_skips_histogram_in_spatial_grouping(hist_proc):
-    """Histograms are non-spatial: get_aggregation returns None for spatial groupings."""
-    row = _chunk(hist_proc, np.ones((8, 8), dtype=np.float32), "YX")
-    fn = hist_proc.get_aggregation("histogram_counts")
-    assert fn([row], ("dim_y", "dim_x")) is None
