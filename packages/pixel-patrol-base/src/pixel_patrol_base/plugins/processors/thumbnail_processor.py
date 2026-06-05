@@ -162,6 +162,17 @@ class ThumbnailProcessor:
         color_dim = _get_color_dim(record.capabilities)
         dim_str = "".join(dim_order_out)
 
+        y_ax = dim_str.index("Y")
+        x_ax = dim_str.index("X")
+        h, w = chunk.shape[y_ax], chunk.shape[x_ax]
+        if h > _PATCH_MAX or w > _PATCH_MAX:
+            scale = min(_PATCH_MAX / h, _PATCH_MAX / w)
+            new_h = max(1, int(h * scale))
+            new_w = max(1, int(w * scale))
+            r_idx = np.round(np.linspace(0, h - 1, new_h)).astype(np.int64)
+            c_idx = np.round(np.linspace(0, w - 1, new_w)).astype(np.int64)
+            chunk = np.take(np.take(chunk, r_idx, axis=y_ax), c_idx, axis=x_ax)
+
         arr = da.from_array(chunk.astype(np.float32), chunks=chunk.shape)
         if np.issubdtype(chunk.dtype, np.floating):
             arr = da.where(da.isnull(arr), 0.0, arr)
