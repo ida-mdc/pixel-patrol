@@ -10,7 +10,7 @@ def test_defaults():
     assert config.processors_included == set()
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
-    assert config.max_workers == 5
+    assert config.max_workers is None
     assert config.mb_per_task == 512.0
     assert config.slice_size is None
     assert config.rows_per_part == DEFAULT_ROWS_PER_PART
