@@ -273,6 +273,15 @@ def _compute_memory_chunk_specs(
         origin = tuple(0 if s is None else s for s, _ in combo)
         specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order, image_shape=shape))
 
+    chunk_mb = math.prod(chunk_sizes.values()) * dtype_bytes / (1024 * 1024)
+    logger.info(
+        "Large file: '%s' (%.0f MB) → %d memory chunks of %s (%.0f MB each)",
+        file_path.name,
+        total_bytes / (1024 * 1024),
+        n_chunks,
+        "×".join(f"{d}={chunk_sizes[d]}" for d in dim_order),
+        chunk_mb,
+    )
     return specs
 
 
