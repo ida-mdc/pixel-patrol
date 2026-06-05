@@ -207,7 +207,7 @@ async function renderViolins(container, ctx, filterMetric, label) {
     container.appendChild(hr);
     const h = document.createElement('h6');
     h.style.cssText = 'margin-top:20px;margin-bottom:12px';
-    h.textContent = 'Metrics with No Variance';
+    h.textContent = 'Metrics with No Variance across all files that report it';
     container.appendChild(h);
     const table = document.createElement('table');
     table.className = 'stat-table';

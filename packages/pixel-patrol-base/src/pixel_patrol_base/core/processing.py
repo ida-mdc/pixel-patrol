@@ -31,9 +31,11 @@ from __future__ import annotations
 import itertools
 import math
 import logging
+import os
 import shutil
 import signal
 import time
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,6 +44,7 @@ from typing import (
     NamedTuple, Optional, Tuple, Union, Set
 )
 
+import dask
 import numpy as np
 import polars as pl
 import psutil
@@ -66,7 +69,6 @@ logger = logging.getLogger(__name__)
 
 def _silence_numcodecs_warning():
     """Same showwarning patch as core/__init__.py, applied to each Dask worker process."""
-    import warnings
     _sw = warnings.showwarning
     warnings.showwarning = lambda m, c, f, l, *a, **kw: None if c is DeprecationWarning and "numcodecs" in str(f) else _sw(m, c, f, l, *a, **kw)
 
@@ -78,6 +80,27 @@ _IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
 # Columns exempt from integer dtype shrinkage in _post_process.
 # size_bytes is a cumulative sum across many files and can exceed int32 range.
 _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
+
+# X/Y are the spatial plane dims — never split by default (full extent = -1).
+_FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
+
+# Log a progress line every N completed records.
+_LOG_EVERY = 200
+
+# Per-worker RAM multiplier: ~5× covers decompression + processor peak overhead,
+# ÷0.60 keeps actual usage below Dask's 80% pause threshold.
+_WORKER_MEMORY_MULTIPLIER = 8
+
+# OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
+# so they take effect before worker subprocesses initialize their thread pools.
+# (LocalCluster env= arrives post-spawn and is too late for BLAS initialization.)
+_WORKER_THREAD_ENV = {
+    "OMP_NUM_THREADS":      "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS":      "1",
+    "NUMEXPR_MAX_THREADS":  "1",
+    "NUMEXPR_NUM_THREADS":  "1",
+}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -150,7 +173,6 @@ def _resolve_leaf_block_shape(
     dim via user_spec (e.g. leaf_block_shape={'X': 256, 'Z': 1}).
     -1 means full extent; positive N means split into blocks of N.
     """
-    _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
     return {
         dim: (
             user_spec[dim]
@@ -187,51 +209,52 @@ def _compute_memory_chunk_specs(
 ) -> Optional[List[MemoryChunkSpec]]:
     """Return one MemoryChunkSpec per memory chunk for a file described by info.
 
-    Returns None when uncompressed size ≤ budget, all dims are pinned to -1,
-    or the resulting n_chunks would be ≤ 1.
+    Splits dims in two tiers — explicit-block-size dims first, then spatial defaults
+    (X/Y) — so spatial dims are only touched as a last resort. Within each tier the
+    required reduction is distributed geometrically across all dims in that tier,
+    largest first, so no single dim absorbs all the splitting.
+    Returns None when the file already fits within the budget.
     """
     dim_order    = info.dim_order
     shape        = info.shape
     dtype_bytes  = np.dtype(info.dtype).itemsize
     budget_bytes = int(mb_per_task * 1024 * 1024)
 
-    total_bytes = int(np.prod(shape)) * dtype_bytes
+    total_bytes = math.prod(shape) * dtype_bytes
     if total_bytes <= budget_bytes:
         return None
 
+    dim_sizes        = dict(zip(dim_order, shape))
     leaf_block_sizes = _resolve_leaf_block_shape(dim_order, leaf_block_shape)
-    dim_idx          = {d: i for i, d in enumerate(dim_order)}
 
-    splittable = [d for d in dim_order if leaf_block_sizes[d] != -1]
-    if not splittable:
-        logger.warning(
-            "_compute_memory_chunk_specs: %s (%.1f MB) exceeds budget but all dims are "
-            "pinned (-1); file will be processed as a single batch item.",
-            file_path, total_bytes / (1024 * 1024),
-        )
-        return None
 
-    divisible_dims = sorted(
-        [d for d in splittable if shape[dim_idx[d]] % leaf_block_sizes[d] == 0],
-        key=lambda d: shape[dim_idx[d]],
-        reverse=True,
-    )
+    # Dims the user explicitly pinned to -1 are never split, not even as a fallback.
+    user_pinned   = {d for d in dim_order
+                     if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1}
+    constrained   = sorted([d for d in dim_order if leaf_block_sizes[d] != -1],
+                            key=lambda d: -dim_sizes[d])
+    unconstrained = sorted([d for d in dim_order
+                            if leaf_block_sizes[d] == -1 and d not in user_pinned],
+                            key=lambda d: -dim_sizes[d])
 
-    chunk_dim_sizes: Dict[str, int] = {d: shape[dim_idx[d]] for d in dim_order}
+    chunk_sizes: Dict[str, int] = dict(dim_sizes)
 
-    for dim in divisible_dims:
-        leaf_block_dim_size = leaf_block_sizes[dim]
-        full_dim_size       = shape[dim_idx[dim]]
-        other_dims_elements = int(np.prod([chunk_dim_sizes[d] for d in dim_order if d != dim]))
-        min_chunk_bytes     = other_dims_elements * leaf_block_dim_size * dtype_bytes
-        if min_chunk_bytes >= budget_bytes:
-            chunk_dim_sizes[dim] = leaf_block_dim_size
-        else:
-            n_blocks = budget_bytes // min_chunk_bytes
-            chunk_dim_sizes[dim] = min(full_dim_size, n_blocks * leaf_block_dim_size)
-            break
+    for tier in (constrained, unconstrained):
+        for i, dim in enumerate(tier):
+            current_bytes = math.prod(chunk_sizes.values()) * dtype_bytes
+            if current_bytes <= budget_bytes:
+                break
+            full_size   = dim_sizes[dim]
+            other_bytes = current_bytes // full_size   # exact: full_size divides current_bytes
+            block       = max(1, leaf_block_sizes[dim])  # -1 → no alignment constraint
+            n_target    = math.ceil((current_bytes / budget_bytes) ** (1.0 / (len(tier) - i)))
+            if block * other_bytes >= budget_bytes:
+                chunk_sizes[dim] = block                 # minimum; may still exceed budget
+            else:
+                n_blocks         = max(1, full_size // (block * n_target))
+                chunk_sizes[dim] = min(full_size, n_blocks * block)
 
-    per_dim_ranges = [_split_into_ranges(shape[dim_idx[d]], chunk_dim_sizes[d]) for d in dim_order]
+    per_dim_ranges = [_split_into_ranges(dim_sizes[d], chunk_sizes[d]) for d in dim_order]
     n_chunks = math.prod(len(r) for r in per_dim_ranges)
 
     if n_chunks <= 1:
@@ -250,6 +273,15 @@ def _compute_memory_chunk_specs(
         origin = tuple(0 if s is None else s for s, _ in combo)
         specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order, image_shape=shape))
 
+    chunk_mb = math.prod(chunk_sizes.values()) * dtype_bytes / (1024 * 1024)
+    logger.info(
+        "Large file: '%s' (%.0f MB) → %d memory chunks of %s (%.0f MB each)",
+        file_path.name,
+        total_bytes / (1024 * 1024),
+        n_chunks,
+        "×".join(f"{d}={chunk_sizes[d]}" for d in dim_order),
+        chunk_mb,
+    )
     return specs
 
 
@@ -593,8 +625,9 @@ def _execute_container_task(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _rollup(
-    chunk_results: List[MemoryChunkResult],
-    processors:    List[Any],
+    chunk_results:    List[MemoryChunkResult],
+    processors:       List[Any],
+    leaf_block_shape: Optional[Dict[str, int]] = None,
 ) -> List[dict]:
     """Aggregate a complete set of MemoryChunkResults for one record into obs rows.
 
@@ -626,9 +659,15 @@ def _rollup(
     all_dim_keys = sorted({
         col for row in all_leaf_rows for col in row if col.startswith("dim_")
     })
+    # A dim is full-extent-by-default (X, Y) and was not explicitly requested
+    # in leaf_block_shape — it may still vary across memory-chunk boundaries
+    # (which are a memory-management detail, not user-specified tiling), so
+    # exclude it from active_dims in that case.
+    user_tiled = set(leaf_block_shape or {})
     active_dims = [
         d for d in all_dim_keys
         if len({row.get(d) for row in all_leaf_rows}) > 1
+        and (d[4:].upper() not in _FULL_EXTENT_BY_DEFAULT or d[4:].upper() in user_tiled)
     ]
     n = len(active_dims)
     active_dim_set = set(active_dims)
@@ -769,18 +808,19 @@ class _RecordAssembler:
         self._results:  Dict[Tuple[int, Optional[str]], List[MemoryChunkResult]] = {}
         self._expected: Dict[Tuple[int, Optional[str]], int] = {}
 
-    def add(self, result: MemoryChunkResult, n_memory_chunks: int) -> bool:
+    def add(self, result: MemoryChunkResult, n_memory_chunks: int) -> Tuple[bool, int]:
         """Register one completed MemoryChunkResult.
 
-        Returns True when all n_memory_chunks spatial chunks for
-        (result.file_index, result.child_id) have arrived.
+        Returns (is_complete, n_received) where is_complete is True when all
+        n_memory_chunks spatial chunks for (result.file_index, result.child_id) have arrived.
         """
         key = (result.file_index, result.child_id)
         if key not in self._results:
             self._results[key] = []
             self._expected[key] = n_memory_chunks
         self._results[key].append(result)
-        return len(self._results[key]) == self._expected[key]
+        n_received = len(self._results[key])
+        return n_received == self._expected[key], n_received
 
     def pop(self, record_key: Tuple[int, Optional[str]]) -> List[MemoryChunkResult]:
         """Remove and return all accumulated MemoryChunkResults for a record."""
@@ -884,7 +924,6 @@ def _coordinate_pipeline(
     config:       ProcessingConfig,
     parts_dir:    Optional[Path],
     on_progress:  Optional[Callable[[int, int], None]],
-    n_workers:    int = 1,
     is_distributed: bool = False,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Drive the full submit → gather → rollup → join → accumulate cycle.
@@ -893,7 +932,9 @@ def _coordinate_pipeline(
     stay busy while _plan_tasks is still generating tasks from the file stream.
     Returns (result_df, stats_dict) where stats_dict carries timing and throughput data.
     """
-    max_pending = 2 * sum(client.nthreads().values())
+    _nthreads       = client.nthreads()
+    n_workers_live  = len(_nthreads)
+    max_pending     = 2 * sum(_nthreads.values())
     writer      = _ResultsWriter(config.rows_per_part, parts_dir, config.parquet_row_group_size)
     assembler   = _RecordAssembler()
     future_to_task: Dict[Any, Task] = {}
@@ -903,7 +944,6 @@ def _coordinate_pipeline(
     all_timing:        Dict[str, float] = {}
     error_records     = 0
     t_pipeline_start  = time.monotonic()
-    _LOG_EVERY        = 200
 
     # Count memory-pressure pause events from Dask's distributed logger.
     class _PauseCounter(logging.Handler):
@@ -923,15 +963,15 @@ def _coordinate_pipeline(
     # Note: client.scatter(list) scatters each element individually, so we wrap
     # processors in a single-element list and unpack with [0] to scatter the
     # whole list as one object.
-    worker_info = client.scheduler_info().get("workers", {})
     logger.info(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
-        len(worker_info), max_pending, config.rows_per_part,
+        n_workers_live, max_pending, config.rows_per_part,
     )
-    _worker_log = logger.info if is_distributed else logger.debug
-    for addr, w in worker_info.items():
-        _worker_log("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
-                    addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
+    if is_distributed:
+        worker_info = client.scheduler_info().get("workers", {})
+        for addr, w in worker_info.items():
+            logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
+                        addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
 
     loader_ref     = client.scatter(loader,        broadcast=True)
     processors_ref = client.scatter([processors],  broadcast=True)[0]
@@ -957,12 +997,17 @@ def _coordinate_pipeline(
         desc="Processing",
         disable=on_progress is not None,
         dynamic_ncols=True,
-        bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]",
+        bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]{postfix}",
     )
+
+    _chunk_info: list = [None]  # mutable slot: Optional[str] for closure mutation
 
     def _update_pbar_postfix() -> None:
         vm = psutil.virtual_memory()
-        pbar.set_postfix({"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}, refresh=False)
+        postfix: Dict[str, str] = {"RAM": f"{vm.used / 1024**3:.1f}/{vm.total / 1024**3:.1f} GB"}
+        if _chunk_info[0]:
+            postfix["chunks"] = _chunk_info[0]
+        pbar.set_postfix(postfix, refresh=False)
 
     def _handle_record(
         chunk_results: List[MemoryChunkResult],
@@ -973,7 +1018,7 @@ def _coordinate_pipeline(
         for cr in chunk_results:
             for k, v in cr.timing.items():
                 all_timing[k] = all_timing.get(k, 0.0) + v
-        obs_rows = _rollup(chunk_results, processors)
+        obs_rows = _rollup(chunk_results, processors, config.slice_size)
         if obs_rows:
             writer.add(_join_file_metadata(obs_rows, files_meta[file_index], child_id))
         completed_records += 1
@@ -1020,9 +1065,15 @@ def _coordinate_pipeline(
         before = completed_records
         if isinstance(task, MemoryChunkTask):
             result = results[0]
-            if assembler.add(result, task.n_memory_chunks):
+            is_complete, n_received = assembler.add(result, task.n_memory_chunks)
+            if is_complete:
+                _chunk_info[0] = None
                 key = (result.file_index, result.child_id)
                 _handle_record(assembler.pop(key), result.file_index, result.child_id)
+            elif task.n_memory_chunks > 1:
+                _chunk_info[0] = f"{n_received}/{task.n_memory_chunks} ({Path(task.file_path).name})"
+                _update_pbar_postfix()
+                pbar.refresh()
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
@@ -1047,11 +1098,11 @@ def _coordinate_pipeline(
     logging.getLogger("distributed.worker.memory").removeHandler(_pause_handler)
 
     try:
-        worker_info = client.scheduler_info().get("workers", {})
-        n_workers_actual = len(worker_info)
-        worker_nodes = sorted({addr.split("//")[-1].split(":")[0] for addr in worker_info})
+        _final_nthreads = client.nthreads()
+        n_workers_actual = len(_final_nthreads)
+        worker_nodes = sorted({addr.split("//")[-1].split(":")[0] for addr in _final_nthreads})
     except Exception:
-        n_workers_actual = n_workers
+        n_workers_actual = n_workers_live
         worker_nodes = []
 
     try:
@@ -1264,23 +1315,27 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         logger.debug("_get_or_create_client: reusing existing client %s", client.scheduler_info()["address"])
         yield client, True
     except ValueError:
-        logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", config.max_workers)
+        n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
+        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
+        n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
+        n_workers = min(n_workers_cpu, n_workers_ram)
+        if n_workers < n_workers_cpu:
+            logger.info(
+                "n_workers capped to %d by available RAM (%.1f GB); requested %d. "
+                "Reduce --mb-per-task for more workers.",
+                n_workers, psutil.virtual_memory().available / 2**30, n_workers_cpu,
+            )
+        logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
         # own handler immediately after the cluster is started.
         _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        cluster = LocalCluster(
-            n_workers=config.max_workers,
-            threads_per_worker=1,
-            processes=True,
-            env={
-                "OMP_NUM_THREADS":      "1",
-                "OPENBLAS_NUM_THREADS": "1",
-                "MKL_NUM_THREADS":      "1",
-                "NUMEXPR_MAX_THREADS":  "1",
-                "NUMEXPR_NUM_THREADS":  "1",
-            },
-        )
+        with dask.config.set({"distributed.nanny.pre-spawn-environ": _WORKER_THREAD_ENV}):
+            cluster = LocalCluster(
+                n_workers=n_workers,
+                threads_per_worker=1,
+                processes=True,
+            )
         signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         client.run(_silence_numcodecs_warning)
@@ -1373,7 +1428,6 @@ def build_records_df(
         return _collect_file_metadata_only(bases, cfg, on_progress)
 
     with _get_or_create_client(cfg) as (client, is_distributed):
-        n_workers = sum(client.nthreads().values())
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
@@ -1391,7 +1445,6 @@ def build_records_df(
             config=cfg,
             parts_dir=parts_dir,
             on_progress=on_progress,
-            n_workers=n_workers,
             is_distributed=is_distributed,
         )
 

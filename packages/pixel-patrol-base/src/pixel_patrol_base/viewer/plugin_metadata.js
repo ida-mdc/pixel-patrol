@@ -1,7 +1,6 @@
 // Columns considered metadata (shared with schema.js META_COLS constant).
 const META_COLS = [
-  'dim_order', 'dtype', 'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size',
-  'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
+  'dim_order', 'dtype', 'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ];
 
 const DIST_COLS = ['dtype', 'dim_order'];
@@ -110,7 +109,7 @@ export default {
       if (invariants.length) {
         const h = document.createElement('h6');
         h.style.cssText = 'margin-top:16px;margin-bottom:10px';
-        h.textContent = 'Properties shared between all files';
+        h.textContent = 'Properties shared by all files that report it';
         container.appendChild(h);
         const table = document.createElement('table');
         table.className = 'stat-table';
