@@ -33,6 +33,7 @@ import math
 import logging
 import shutil
 import signal
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1268,7 +1269,10 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
         # own handler immediately after the cluster is started.
-        _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        # signal.signal() only works in the main thread (e.g. not from Dash callbacks).
+        _in_main = threading.current_thread() is threading.main_thread()
+        if _in_main:
+            _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         cluster = LocalCluster(
             n_workers=config.max_workers,
             threads_per_worker=1,
@@ -1281,7 +1285,8 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
                 "NUMEXPR_NUM_THREADS":  "1",
             },
         )
-        signal.signal(signal.SIGINT, _old_sigint)
+        if _in_main:
+            signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         client.run(_silence_numcodecs_warning)
         try:
