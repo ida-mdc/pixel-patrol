@@ -10,8 +10,10 @@ set -e
 OUT=/tmp/pp-dev
 
 uv run --with mkdocs-material mkdocs build --site-dir "$OUT/docs" --quiet
-cp docs/home.html "$OUT/index.html"
-cp -r docs/assets "$OUT/assets"
+uv run python3 -c "
+from pixel_patrol_base.viewer_pages import build_github_pages_site
+build_github_pages_site('$OUT')
+"
 
 echo ""
 echo "  Landing page: http://localhost:8000/"
