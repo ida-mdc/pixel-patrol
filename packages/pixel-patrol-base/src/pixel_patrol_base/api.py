@@ -79,7 +79,7 @@ def process_files(
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
                                     Smaller values speed up thumbnail sampling in the viewer.
         flavor:                     Label shown next to the title in the viewer.
-        description:                Free-form description embedded in the report metadata.
+        description:                Free-form description shown below the title in the viewer and embedded in the report metadata.
         log_file:                   Write a DEBUG-level log file alongside the output parquet.
                                     INFO and WARNING still appear in the terminal as usual.
 
