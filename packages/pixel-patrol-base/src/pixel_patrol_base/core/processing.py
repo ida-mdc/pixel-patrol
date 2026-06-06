@@ -639,9 +639,8 @@ def _rollup(
     Power-set over non-degenerate (varying) dims.
 
     Every returned row is augmented with image_meta so it is
-    available at all obs_levels.  image_meta values take priority over
-    leaf-block-stamped *_size (which reflect the leaf block size, not the full
-    image), so callers always see the full-image extents.
+    available at all obs_levels.  Each row's *_size reflects the spatial extent
+    that row covers, not the full-image extent.
     """
     all_leaf_rows = [row for cr in chunk_results for row in cr.leaf_rows]
 
@@ -670,7 +669,9 @@ def _rollup(
         and (d[4:].upper() not in _FULL_EXTENT_BY_DEFAULT or d[4:].upper() in user_tiled)
     ]
     n = len(active_dims)
-    active_dim_set = set(active_dims)
+
+    image_meta: Dict[str, Any] = chunk_results[0].image_meta if chunk_results else {}
+    dim_to_size_key = {d: f"{d[4:].upper()}_size" for d in all_dim_keys}  # "dim_z" → "Z_size"
 
     obs_rows: List[dict] = []
 
@@ -681,6 +682,16 @@ def _rollup(
         obs["obs_level"] = len(g_dim_dict)
         for col in leaf_metric_cols:
             obs[col] = col_to_proc[col].get_aggregation(col)(group_rows, g_dim_dict)
+        # *_size: fixed dims share one per-slice size across all rows in the group;
+        # non-fixed dims span the full image extent (from image_meta).
+        ref = group_rows[0] if group_rows else {}
+        for d, sk in dim_to_size_key.items():
+            if d in g_dim_dict:
+                if not all(row.get(sk) == ref.get(sk) for row in group_rows):
+                    raise ValueError(f"inconsistent {sk} within group {g_dim_dict}")
+                obs[sk] = ref.get(sk)
+            else:
+                obs[sk] = image_meta.get(sk)
         return obs
 
     global_obs = _make_aggregate_row(all_leaf_rows, {})
@@ -701,7 +712,7 @@ def _rollup(
     if all_leaf_rows or mem_cols_added:
         obs_rows.append(global_obs)
 
-    for r in range(1, n):
+    for r in range(1, n + 1):
         for g_dim_combo in itertools.combinations(active_dims, r):
             groups: Dict[tuple, List[dict]] = {}
             for row in all_leaf_rows:
@@ -710,27 +721,11 @@ def _rollup(
             for key_vals, group_rows in groups.items():
                 obs_rows.append(_make_aggregate_row(group_rows, dict(zip(g_dim_combo, key_vals))))
 
-    if n > 0:
-        for row in all_leaf_rows:
-            # Strip degenerate (non-varying) dim coordinates from leaf rows.
-            # Dims not in active_dims have a single constant value (e.g. dim_x=0
-            # when X/Y are full-extent leaves).  Leaving them as 0 instead of
-            # null breaks the viewer's obs_level-based per-dim queries, which
-            # use `dim_x IS NULL` to identify pre-aggregated rows, and creates
-            # spurious single-slice entries in the dim-filter dropdowns.
-            filtered = {
-                k: v for k, v in row.items()
-                if not k.startswith("dim_") or k in active_dim_set
-            }
-            obs_rows.append({**filtered, "obs_level": n})
-
     # Merge image-level metadata into every obs row.
-    # {**row, **image_meta} lets image_meta override leaf-stamped *_size values
-    # (leaf blocks stamp S_size=1 per block; image_meta carries the full count).
+    # Row values take priority so per-row *_size fields (set correctly above) are preserved.
     # image_meta never contains dim_* coords, num_pixels, or obs_level, so
     # all PP-computed per-row fields survive unchanged.
-    image_meta: Dict[str, Any] = chunk_results[0].image_meta if chunk_results else {}
-    return [{**row, **image_meta} for row in obs_rows]
+    return [{**image_meta, **row} for row in obs_rows]
 
 
 def _join_file_metadata(
