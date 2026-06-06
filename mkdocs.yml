@@ -25,6 +25,7 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
+    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
@@ -39,14 +40,19 @@ extra_css:
   - stylesheets/extra.css
 
 nav:
-  - Quickstart: index.md
-  - Installation: installation.md
-  - Processing: processing.md
-  - Report Viewer: viewer.md
-  - CLI Reference: cli.md
-  - Python API: api.md
-  - Extensions: extensions.md
-  - Contributing: contributing.md
+  - Documentation:
+    - Quickstart: index.md
+    - Installation: installation.md
+    - Processing: processing.md
+    - Report Viewer: viewer.md
+    - CLI Reference: cli.md
+    - Python API: api.md
+    - Extensions: extensions.md
+    - Contributing: contributing.md
+  - Tutorials:
+    - tutorials/index.md
+    - Installation: tutorials/installation.md
+    - Processing: tutorials/processing.md
 
 markdown_extensions:
   - admonition

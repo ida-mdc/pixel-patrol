@@ -46,3 +46,318 @@
 .md-search__input::placeholder {
   color: #9ca3af;
 }
+
+/* ============================================================
+   Tutorial Wizard
+   ============================================================ */
+
+.pp-wizard {
+  --wiz-primary:           #2563eb;
+  --wiz-surface:           #ffffff;
+  --wiz-bg:                #f8f9fa;
+  --wiz-border:            #dee2e6;
+  --wiz-muted:             #6c757d;
+  --wiz-code-bg:           #0f1117;
+  --wiz-code-text:         #e2e8f0;
+  --wiz-opt-bg:            #ffffff;
+  --wiz-opt-hover:         #eff6ff;
+  --wiz-opt-sel-bg:        #dbeafe;
+  --wiz-opt-sel-border:    #2563eb;
+  --wiz-input-bg:          #ffffff;
+  --wiz-input-border:      #ced4da;
+  --wiz-callout-bg:        #fffbeb;
+  --wiz-callout-border:    #fde68a;
+  --wiz-callout-text:      #92400e;
+  margin: 1.5rem 0;
+}
+
+[data-md-color-scheme="slate"] .pp-wizard {
+  --wiz-surface:           #1e1e2e;
+  --wiz-bg:                #181825;
+  --wiz-border:            #313244;
+  --wiz-muted:             #a6adc8;
+  --wiz-code-bg:           #11111b;
+  --wiz-code-text:         #cdd6f4;
+  --wiz-opt-bg:            #181825;
+  --wiz-opt-hover:         #1e1e2e;
+  --wiz-opt-sel-bg:        #1a1a3e;
+  --wiz-input-bg:          #11111b;
+  --wiz-input-border:      #45475a;
+  --wiz-callout-bg:        #1c1a0a;
+  --wiz-callout-border:    #78350f;
+  --wiz-callout-text:      #fbbf24;
+}
+
+/* Command preview block */
+.wiz-preview {
+  background: var(--wiz-code-bg);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+
+.wiz-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.wiz-preview-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--wiz-primary);
+}
+
+.wiz-copy-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 5px;
+  color: #94a3b8;
+  font-size: 0.77rem;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.wiz-copy-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+
+.wiz-code-pre {
+  margin: 0;
+  padding: 16px 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.84rem;
+  line-height: 1.7;
+  color: var(--wiz-code-text);
+  background: transparent;
+  border: none;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Step cards */
+@keyframes wiz-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.wiz-step {
+  margin-bottom: 1rem;
+  padding: 1.2rem 1.4rem;
+  background: var(--wiz-surface);
+  border: 1px solid var(--wiz-border);
+  border-radius: 10px;
+}
+
+.wiz-step.wiz-hidden { display: none; }
+
+.wiz-step.wiz-visible {
+  display: block;
+  animation: wiz-fadein 0.25s ease both;
+}
+
+.wiz-step-q {
+  font-size: 0.98rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.wiz-step-hint {
+  font-size: 0.83rem;
+  color: var(--wiz-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.wiz-optional {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--wiz-muted);
+}
+
+/* Text inputs */
+.wiz-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.87rem;
+  background: var(--wiz-input-bg);
+  border: 1.5px solid var(--wiz-input-border);
+  border-radius: 6px;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+.wiz-input:focus {
+  outline: none;
+  border-color: var(--wiz-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+/* Radio option rows */
+.wiz-options         { display: flex; flex-direction: column; gap: 8px; }
+.wiz-options-row     { flex-direction: row; flex-wrap: wrap; }
+
+.wiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--wiz-border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--wiz-opt-bg);
+  transition: border-color 0.12s, background 0.12s;
+  user-select: none;
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+.wiz-option:hover             { border-color: var(--wiz-primary); background: var(--wiz-opt-hover); }
+.wiz-option.wiz-selected      { border-color: var(--wiz-opt-sel-border); background: var(--wiz-opt-sel-bg); }
+.wiz-option input[type="radio"] { margin-top: 3px; accent-color: var(--wiz-primary); flex-shrink: 0; }
+
+.wiz-opt-title { font-size: 0.9rem; font-weight: 500; line-height: 1.35; }
+.wiz-opt-sub   { font-size: 0.8rem; color: var(--wiz-muted); margin-top: 2px; }
+
+.wiz-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--wiz-bg);
+  border: 1px solid var(--wiz-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--wiz-primary);
+  vertical-align: middle;
+}
+
+/* Input + skip row */
+.wiz-input-row { display: flex; gap: 8px; align-items: stretch; }
+.wiz-input-row .wiz-input { flex: 1; }
+
+.wiz-skip-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1.5px solid var(--wiz-border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--wiz-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s;
+  font-family: inherit;
+}
+.wiz-skip-btn:hover { border-color: var(--wiz-primary); color: var(--wiz-primary); }
+
+/* SLURM params grid */
+.wiz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 10px;
+  margin-top: 0.75rem;
+}
+.wiz-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wiz-muted);
+  margin-bottom: 4px;
+}
+.wiz-field .wiz-input { }
+
+/* Info / callout */
+.wiz-callout {
+  background: var(--wiz-callout-bg);
+  border: 1px solid var(--wiz-callout-border);
+  border-radius: 7px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--wiz-callout-text);
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+.wiz-callout code {
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(0,0,0,0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* Advanced options toggle button */
+.wiz-adv-btn {
+  background: transparent;
+  border: 1.5px solid var(--wiz-border);
+  border-radius: 7px;
+  padding: 9px 16px;
+  font-size: 0.87rem;
+  font-weight: 500;
+  color: var(--wiz-muted);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+.wiz-adv-btn:hover { border-color: var(--wiz-primary); color: var(--wiz-primary); }
+
+/* Advanced options container */
+.wiz-adv-section {
+  margin-top: 0.75rem;
+  border: 1.5px dashed var(--wiz-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.4rem;
+  background: var(--wiz-bg);
+}
+.wiz-adv-section.wiz-hidden { display: none; }
+.wiz-adv-section.wiz-visible { display: block; animation: wiz-fadein 0.25s ease both; }
+
+.wiz-adv-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wiz-primary);
+  margin-bottom: 0.25rem;
+}
+.wiz-adv-intro {
+  font-size: 0.83rem;
+  color: var(--wiz-muted);
+  margin-bottom: 1.1rem;
+}
+
+/* Individual advanced field */
+.wiz-adv-field {
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--wiz-border);
+}
+.wiz-adv-field:first-of-type { border-top: none; padding-top: 0; }
+
+.wiz-adv-field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.wiz-adv-field-hint {
+  font-size: 0.82rem;
+  color: var(--wiz-muted);
+  margin-bottom: 0.6rem;
+  line-height: 1.5;
+}
+
+.wiz-done-msg {
+  margin-top: 1rem;
+  padding: 0.9rem 1.2rem;
+  background: var(--wiz-opt-sel-bg);
+  border: 1.5px solid var(--wiz-opt-sel-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--wiz-primary);
+  font-weight: 500;
+  display: none;
+}
+.wiz-done-msg.wiz-visible { display: block; animation: wiz-fadein 0.25s ease both; }
