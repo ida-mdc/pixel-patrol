@@ -205,11 +205,22 @@ def test_xy_varying_from_memory_chunking_not_active_without_slice_size():
 
 
 def test_xy_active_when_explicitly_in_leaf_block_shape():
-    # User explicitly requested X/Y tiling — variation should create active dims.
-    chunk1 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,    "dim_y": 0, "num_pixels": 100}])
-    chunk2 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 2048, "dim_y": 0, "num_pixels": 100}])
-    result = _rollup([chunk1, chunk2], processors=[], leaf_block_shape={"X": 2048, "Y": -1})
-    assert 1 in {r["obs_level"] for r in result}
+    # User explicitly requested X tiling — dim_x is active, dim_y (spatial, not tiled) is not.
+    # Each X tile may have multiple Y fragments (memory splits); those must be collapsed.
+    chunks = [
+        _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,   "dim_y": 0,   "num_pixels": 100}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_x": 512, "dim_y": 0,   "num_pixels": 200}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,   "dim_y": 512, "num_pixels": 300}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_x": 512, "dim_y": 512, "num_pixels": 400}]),
+    ]
+    result = _rollup(chunks, processors=[], leaf_block_shape={"X": 512})
+    assert len(_rows_at(result, 0)) == 1
+    assert _rows_at(result, 0)[0]["num_pixels"] == 1000  # 100+200+300+400
+    # Only dim_x is active: 2 unique X values → 2 obs_level=1 rows.
+    assert len(_rows_at(result, 1)) == 2
+    by_x = {r["dim_x"]: r["num_pixels"] for r in _rows_at(result, 1)}
+    assert by_x[0]   == 400   # 100 (y=0) + 300 (y=512)
+    assert by_x[512] == 600   # 200 (y=0) + 400 (y=512)
 
 
 # ── spatial Y/X split with active non-spatial dims (the core bug) ─────────────
@@ -263,6 +274,76 @@ def test_spatial_xy_split_active_z_c_produces_one_row_per_zc_combo():
     by_zc = {(r["dim_z"], r["dim_c"]): r["num_pixels"] for r in level2}
     for (z, c), expected in pixels.items():
         assert by_zc[(z, c)] == expected
+
+
+def test_global_row_has_all_active_dims_none():
+    # obs_level=0 must have every active dim set to None regardless of how many active dims there are.
+    leaf_rows = [
+        {"dim_z": z, "dim_c": c, "num_pixels": 10}
+        for z in range(2) for c in range(2)
+    ]
+    result = _rollup([_result(leaf_rows=leaf_rows)], processors=[])
+    global_row = _rows_at(result, 0)[0]
+    assert global_row.get("dim_z") is None
+    assert global_row.get("dim_c") is None
+
+
+# ── three active dims: full power-set coverage ────────────────────────────────
+
+def test_three_active_dims_obs_levels_and_counts():
+    # Z=2, C=2, T=2 → 8 leaf blocks.
+    # Power-set over 3 dims:
+    #   obs_level=1: C(3,1)=3 combos × 2 groups each = 6 rows
+    #   obs_level=2: C(3,2)=3 combos × 4 groups each = 12 rows
+    #   obs_level=3: 2×2×2 = 8 rows
+    leaf_rows = [
+        {"dim_z": z, "dim_c": c, "dim_t": t, "num_pixels": 1}
+        for z in range(2) for c in range(2) for t in range(2)
+    ]
+    result = _rollup([_result(leaf_rows=leaf_rows)], processors=[])
+    assert {r["obs_level"] for r in result} == {0, 1, 2, 3}
+    assert len(_rows_at(result, 0)) == 1
+    assert len(_rows_at(result, 1)) == 6
+    assert len(_rows_at(result, 2)) == 12
+    assert len(_rows_at(result, 3)) == 8
+
+
+def test_three_active_dims_per_z_aggregation():
+    # Z=2, C=2, T=2. Each Z slice has 4 leaf blocks (2C×2T).
+    # Per-Z rows at obs_level=1 must aggregate over all (C, T) combos.
+    leaf_rows = [
+        {"dim_z": z, "dim_c": c, "dim_t": t, "num_pixels": (z + 1) * 10}
+        for z in range(2) for c in range(2) for t in range(2)
+    ]
+    result = _rollup([_result(leaf_rows=leaf_rows)], processors=[])
+    per_z = [
+        r for r in _rows_at(result, 1)
+        if r.get("dim_z") is not None and r.get("dim_c") is None and r.get("dim_t") is None
+    ]
+    assert len(per_z) == 2
+    by_z = {r["dim_z"]: r["num_pixels"] for r in per_z}
+    assert by_z[0] == 4 * 10   # 4 blocks × 10 each
+    assert by_z[1] == 4 * 20   # 4 blocks × 20 each
+
+
+def test_three_active_dims_per_zc_aggregation():
+    # At obs_level=2, per-(Z,C) rows aggregate over T only.
+    leaf_rows = [
+        {"dim_z": z, "dim_c": c, "dim_t": t, "num_pixels": (z + 1) * (c + 1) * 10}
+        for z in range(2) for c in range(2) for t in range(2)
+    ]
+    result = _rollup([_result(leaf_rows=leaf_rows)], processors=[])
+    per_zc = [
+        r for r in _rows_at(result, 2)
+        if r.get("dim_z") is not None and r.get("dim_c") is not None and r.get("dim_t") is None
+    ]
+    assert len(per_zc) == 4   # (Z,C) ∈ {(0,0),(0,1),(1,0),(1,1)}
+    by_zc = {(r["dim_z"], r["dim_c"]): r["num_pixels"] for r in per_zc}
+    # Each (Z,C) combo has 2 T values; num_pixels = (z+1)*(c+1)*10 per block.
+    assert by_zc[(0, 0)] == 2 * 1 * 1 * 10   # 20
+    assert by_zc[(0, 1)] == 2 * 1 * 2 * 10   # 40
+    assert by_zc[(1, 0)] == 2 * 2 * 1 * 10   # 40
+    assert by_zc[(1, 1)] == 2 * 2 * 2 * 10   # 80
 
 
 def test_spatial_split_leaf_metric_aggregated_not_first_row():
