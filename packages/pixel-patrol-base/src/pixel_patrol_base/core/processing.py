@@ -711,18 +711,18 @@ def _rollup(
                 obs_rows.append(_make_aggregate_row(group_rows, dict(zip(g_dim_combo, key_vals))))
 
     if n > 0:
+        # Group leaf rows by their full active-dim combination and aggregate.
+        # This is the same pattern as the loop above but using all n active dims.
+        # Raw leaf rows must NOT be emitted directly: when X/Y are excluded from
+        # active_dims (memory-management splits, not user-requested tiling), multiple
+        # leaf blocks can share the same active-dim key. Emitting them raw produces
+        # duplicate obs_level=n rows with only partial-extent statistics.
+        groups: Dict[tuple, List[dict]] = {}
         for row in all_leaf_rows:
-            # Strip degenerate (non-varying) dim coordinates from leaf rows.
-            # Dims not in active_dims have a single constant value (e.g. dim_x=0
-            # when X/Y are full-extent leaves).  Leaving them as 0 instead of
-            # null breaks the viewer's obs_level-based per-dim queries, which
-            # use `dim_x IS NULL` to identify pre-aggregated rows, and creates
-            # spurious single-slice entries in the dim-filter dropdowns.
-            filtered = {
-                k: v for k, v in row.items()
-                if not k.startswith("dim_") or k in active_dim_set
-            }
-            obs_rows.append({**filtered, "obs_level": n})
+            key = tuple(row.get(d) for d in active_dims)
+            groups.setdefault(key, []).append(row)
+        for key_vals, group_rows in groups.items():
+            obs_rows.append(_make_aggregate_row(group_rows, dict(zip(active_dims, key_vals))))
 
     # Merge image-level metadata into every obs row.
     # {**row, **image_meta} lets image_meta override leaf-stamped *_size values
