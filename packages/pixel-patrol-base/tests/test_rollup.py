@@ -210,3 +210,74 @@ def test_xy_active_when_explicitly_in_leaf_block_shape():
     chunk2 = _result(leaf_rows=[{"dim_z": 0, "dim_x": 2048, "dim_y": 0, "num_pixels": 100}])
     result = _rollup([chunk1, chunk2], processors=[], leaf_block_shape={"X": 2048, "Y": -1})
     assert 1 in {r["obs_level"] for r in result}
+
+
+# ── spatial Y/X split with active non-spatial dims (the core bug) ─────────────
+
+def test_spatial_y_split_active_z_produces_one_row_per_z():
+    # Z=2, Y split into 2 halves for memory management → 4 leaf blocks.
+    # Y is excluded from active_dims (not user-tiled).
+    # obs_level=1 must have exactly 2 rows (one per Z), not 4 raw leaf blocks.
+    chunks = [
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 0,    "num_pixels": 100}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 1024, "num_pixels": 150}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 0,    "num_pixels": 200}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 1024, "num_pixels": 250}]),
+    ]
+    result = _rollup(chunks, processors=[])
+    assert {r["obs_level"] for r in result} == {0, 1}
+    assert len(_rows_at(result, 1)) == 2
+
+
+def test_spatial_y_split_active_z_aggregates_num_pixels():
+    # Same scenario: num_pixels for each Z row must sum both Y halves.
+    chunks = [
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 0,    "num_pixels": 100}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 1024, "num_pixels": 150}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 0,    "num_pixels": 200}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 1024, "num_pixels": 250}]),
+    ]
+    result = _rollup(chunks, processors=[])
+    by_z = {r["dim_z"]: r["num_pixels"] for r in _rows_at(result, 1)}
+    assert by_z[0] == 250   # 100 + 150
+    assert by_z[1] == 450   # 200 + 250
+
+
+def test_spatial_xy_split_active_z_c_produces_one_row_per_zc_combo():
+    # Z=2, C=2, Y and X each split in half → 2*2*2*2 = 16 leaf blocks.
+    # Only Z and C are active; each (Z, C) pair must produce exactly one obs_level=2 row.
+    chunks = []
+    pixels = {}
+    for z in range(2):
+        for c in range(2):
+            for y in (0, 512):
+                for x in (0, 512):
+                    px = (z + 1) * (c + 1) * 10
+                    chunks.append(_result(leaf_rows=[{
+                        "dim_z": z, "dim_c": c, "dim_y": y, "dim_x": x, "num_pixels": px,
+                    }]))
+                    pixels[(z, c)] = pixels.get((z, c), 0) + px
+    result = _rollup(chunks, processors=[])
+    level2 = _rows_at(result, 2)
+    assert len(level2) == 4   # one per (Z, C) combo, not 16
+    by_zc = {(r["dim_z"], r["dim_c"]): r["num_pixels"] for r in level2}
+    for (z, c), expected in pixels.items():
+        assert by_zc[(z, c)] == expected
+
+
+def test_spatial_split_leaf_metric_aggregated_not_first_row():
+    # Z=2 with Y split into 2 halves per Z slice → 4 leaf blocks.
+    # get_aggregation must be called with both Y-fragment rows for each Z,
+    # not just the first fragment emitted raw. The key observable: 2 rows
+    # at obs_level=1 (one per Z), each carrying a val produced by aggregation.
+    proc = _leaf_proc("p", val=0.0)
+    chunks = [
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 0,    "num_pixels": 1, "val": 10.0}]),
+        _result(leaf_rows=[{"dim_z": 0, "dim_y": 1024, "num_pixels": 1, "val": 20.0}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 0,    "num_pixels": 1, "val": 30.0}]),
+        _result(leaf_rows=[{"dim_z": 1, "dim_y": 1024, "num_pixels": 1, "val": 40.0}]),
+    ]
+    result = _rollup(chunks, processors=[proc])
+    level1 = _rows_at(result, 1)
+    assert len(level1) == 2
+    assert {r["dim_z"] for r in level1} == {0, 1}
