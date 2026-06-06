@@ -178,14 +178,15 @@ def test_unsplittable_large_file_falls_to_batch():
     assert isinstance(tasks[0], BatchTask)
 
 
-def test_non_divisible_large_file_falls_to_batch_with_warning():
+def test_non_divisible_dim_splits_at_block_boundaries():
+    # Y=100 is not divisible by leaf=32, but the algorithm still splits at multiples of 32;
+    # the last chunk (96:100) is simply smaller. No warning expected.
     loader = MockLoader({"/weird.npy": MockEntry((100, 512), np.float32, ("Y", "X"))})
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 32})
-    with capture_warnings() as warnings:
-        tasks, _ = _run([("/weird.npy", 100 * 512 * 4)], loader, config)
-    assert len(tasks) == 1
-    assert isinstance(tasks[0], BatchTask)
-    assert any("could not be split" in w for w in warnings)
+    tasks, _ = _run([("/weird.npy", 100 * 512 * 4)], loader, config)
+    assert all(isinstance(t, MemoryChunkTask) for t in tasks)
+    starts = sorted(t.spec.slices[0].start for t in tasks)
+    assert starts == [0, 32, 64, 96]
 
 
 def test_chunk_tasks_followed_by_more_batching():

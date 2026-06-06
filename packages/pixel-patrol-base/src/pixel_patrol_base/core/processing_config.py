@@ -23,7 +23,7 @@ class ProcessingConfig:
     selected_file_extensions: Union[Set[str], str] = "all"
 
     # ── Dask cluster ─────────────────────────────────────────────────────────
-    max_workers: Optional[int] = 5  # TODO: None auto-detection gives unexpected thread/process split; fix in next version
+    max_workers: Optional[int] = None  # None → os.cpu_count() workers, 1 thread each
 
     # ── Task planning ────────────────────────────────────────────────────────
     mb_per_task:          float                   = 512.0

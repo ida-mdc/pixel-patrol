@@ -3,6 +3,7 @@
 from typing import Dict, Optional, Tuple
 
 import numpy as np
+from scipy.ndimage import uniform_filter
 
 from pixel_patrol_base.plugins.processors.raster_processor import MetricContext
 
@@ -44,18 +45,14 @@ def fold_to_chunks(
 
 
 def _nbr_stats(arr: np.ndarray):
-    if not np.issubdtype(arr.dtype, np.floating):
-        arr = arr.astype(np.float32)
-    nbr_sum    = np.zeros(arr[..., :-2, :-2].shape, dtype=np.float64)
-    nbr_sq_sum = np.zeros_like(nbr_sum)
-    h, w = arr.shape[-2], arr.shape[-1]
-    for di in range(3):
-        for dj in range(3):
-            patch = arr[..., di:h - 2 + di, dj:w - 2 + dj]
-            nbr_sum    += patch
-            nbr_sq_sum += patch * patch
-    local_mean = nbr_sum / 9.0
-    local_std  = np.sqrt(np.maximum(nbr_sq_sum / 9.0 - local_mean ** 2, 0.0))
+    arr_f = arr.astype(np.float32, copy=False) if np.issubdtype(arr.dtype, np.floating) \
+            else arr.astype(np.float32)
+    # Filter only the spatial (H, W) dims; leading dims get size=1 (no-op).
+    # Slice off the 1-pixel reflect-padded border so output shape is (..., H-2, W-2).
+    size = (1,) * (arr_f.ndim - 2) + (3, 3)
+    local_mean = uniform_filter(arr_f,      size=size, mode='reflect')[..., 1:-1, 1:-1]
+    mean_sq    = uniform_filter(arr_f ** 2, size=size, mode='reflect')[..., 1:-1, 1:-1]
+    local_std  = np.sqrt(np.maximum(mean_sq - local_mean ** 2, 0.0))
     return local_mean, local_std
 
 
