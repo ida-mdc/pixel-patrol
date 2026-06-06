@@ -134,14 +134,14 @@ A simple 2D image produces a single row at obs_level 0. Container files produce 
 | `imported_path` | `obs_level` | `dim_z` | `dim_c` | `Z_size` | `C_size` | `mean_intensity` |
 |---|---|---|---|---|---|---|
 | `/data/img01.tif` | `0` | `null` | `null` | `2` | `2` | `285.1` |
-| `/data/img01.tif` | `1` | `0` | `null` | `2` | `2` | `271.3` |
-| `/data/img01.tif` | `1` | `1` | `null` | `2` | `2` | `289.4` |
-| `/data/img01.tif` | `1` | `null` | `0` | `2` | `2` | `280.2` |
-| `/data/img01.tif` | `1` | `null` | `1` | `2` | `2` | `290.0` |
-| `/data/img01.tif` | `2` | `0` | `0` | `2` | `2` | `265.1` |
-| `/data/img01.tif` | `2` | `0` | `1` | `2` | `2` | `277.5` |
-| `/data/img01.tif` | `2` | `1` | `0` | `2` | `2` | `288.2` |
-| `/data/img01.tif` | `2` | `1` | `1` | `2` | `2` | `291.4` |
+| `/data/img01.tif` | `1` | `0` | `null` | `1` | `2` | `271.3` |
+| `/data/img01.tif` | `1` | `1` | `null` | `1` | `2` | `289.4` |
+| `/data/img01.tif` | `1` | `null` | `0` | `2` | `1` | `280.2` |
+| `/data/img01.tif` | `1` | `null` | `1` | `2` | `1` | `290.0` |
+| `/data/img01.tif` | `2` | `0` | `0` | `1` | `1` | `265.1` |
+| `/data/img01.tif` | `2` | `0` | `1` | `1` | `1` | `277.5` |
+| `/data/img01.tif` | `2` | `1` | `0` | `1` | `1` | `288.2` |
+| `/data/img01.tif` | `2` | `1` | `1` | `1` | `1` | `291.4` |
 
 ### Columns
 
@@ -159,6 +159,8 @@ Key columns that are always present:
 | `child_id` | Sub-image identifier for container files |
 
 **Image metadata columns** (when a loader is used) are extracted by the loader and include dimension sizes (`X_size`, `Y_size`, `Z_size`, `T_size`, `C_size`), `dtype`, pixel size, `dim_order`, and any embedded acquisition metadata. Some of these are shown in the viewer header.
+
+**`*_size` columns at higher obs levels:** For `obs_level=0`, all `*_size` values reflect the full image (e.g. `Z_size=2`). For per-dimension rows, the `*_size` shows its slice size instead.
 
 **Processor columns** are listed in the [Processors](#processors) section above.
 
@@ -196,6 +198,19 @@ project = api.create_project("my-project", base_dir="my-data/", loader="bioio")
 with Client("tcp://hostname:8786"):
     api.process_files(project)
 ```
+
+### SLURM clusters (`pixel-patrol-slurm`)
+
+The `pixel-patrol-slurm` package provides a single command that launches a Dask `SLURMCluster`, waits for workers to come online, and then runs `pixel-patrol process` — no manual cluster setup needed.
+
+```bash
+pixel-patrol-slurm \
+  --jobs 8 --cores 4 --memory 16GB \
+  --partition gpu --walltime 02:00:00 \
+  -- my-data/ -o report.parquet --loader bioio
+```
+
+Everything before `--` controls the SLURM cluster (number of jobs, cores per job, memory, partition, walltime). Everything after `--` is forwarded verbatim to `pixel-patrol process`; the `--scheduler` argument is injected automatically.
 
 ---
 
