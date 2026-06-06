@@ -34,6 +34,7 @@ import logging
 import os
 import shutil
 import signal
+import threading
 import time
 import warnings
 from contextlib import contextmanager
@@ -1324,14 +1325,18 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
         # print tracebacks when the user presses Ctrl+C.  The parent restores its
         # own handler immediately after the cluster is started.
-        _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        # signal.signal() only works in the main thread (e.g. not from Dash callbacks).
+        _in_main = threading.current_thread() is threading.main_thread()
+        if _in_main:
+            _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         with dask.config.set({"distributed.nanny.pre-spawn-environ": _WORKER_THREAD_ENV}):
             cluster = LocalCluster(
                 n_workers=n_workers,
                 threads_per_worker=1,
                 processes=True,
             )
-        signal.signal(signal.SIGINT, _old_sigint)
+        if _in_main:
+            signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
         client.run(_silence_numcodecs_warning)
         try:

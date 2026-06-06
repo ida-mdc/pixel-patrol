@@ -1,4 +1,4 @@
-name: Deploy Viewer to GitHub Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
     paths:
       - 'viewer/**'
       - 'packages/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
       - '.github/workflows/deploy-viewer.yml'
   workflow_dispatch:
 
@@ -25,6 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Build the JS viewer first — the vite build syncs viewer/dist/ into
+      #    packages/pixel-patrol-base/src/pixel_patrol_base/viewer_dist/ so the
+      #    Python package install in the next step picks up the fresh build.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -37,20 +42,29 @@ jobs:
           npm ci
           npm run build
 
-      - uses: actions/setup-python@v5
+      # 2. Install Python packages after the viewer is built so that the
+      #    editable install of pixel-patrol-base exposes the fresh viewer_dist/.
+      - uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
-      - name: Install runtime packages for extension discovery
+      - name: Install Python packages
         run: |
-          python -m pip install --upgrade pip
-          pip install \
+          uv pip install --system \
             -e packages/pixel-patrol-base \
-            -e packages/pixel-patrol-loader-bio \
-            -e packages/pixel-patrol-image
+            mkdocs-material
 
-      - name: Assemble static site from bundled viewer + discovered extensions
-        run: python -c "from pixel_patrol_base.viewer_pages import build_github_pages_site; build_github_pages_site('gh-pages-site')"
+      # 3. Build the MkDocs documentation.
+      - name: Build docs
+        run: mkdocs build --site-dir gh-pages-site/docs
+
+      # 4. Assemble the full site: promote landing page + assets, copy viewer
+      #    to /viewer/, and inject installed extension URLs.
+      - name: Assemble site
+        run: python -c "
+from pixel_patrol_base.viewer_pages import build_github_pages_site
+build_github_pages_site('gh-pages-site')
+"
 
       - uses: actions/upload-pages-artifact@v3
         with:
