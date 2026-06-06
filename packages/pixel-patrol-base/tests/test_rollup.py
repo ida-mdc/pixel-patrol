@@ -362,3 +362,32 @@ def test_spatial_split_leaf_metric_aggregated_not_first_row():
     level1 = _rows_at(result, 1)
     assert len(level1) == 2
     assert {r["dim_z"] for r in level1} == {0, 1}
+
+
+# ── *_size correctness per obs_level ─────────────────────────────────────────
+
+def test_size_fields_correct_per_obs_level():
+    # Z=2, Y split into 2 halves (memory management). image_meta carries full sizes.
+    # obs_level=0 (global): all dims at full-image size.
+    # obs_level=1 (per-Z): Z_size=1 (one slice), Y_size and X_size at full-image size.
+    image_meta = {"Z_size": 2, "Y_size": 1024, "X_size": 2048}
+    def _result_with_meta(leaf_rows):
+        return MemoryChunkResult(
+            file_index=0, child_id=None, chunk_rows={}, leaf_rows=leaf_rows,
+            image_meta=image_meta,
+        )
+    chunks = [
+        _result_with_meta([{"dim_z": 0, "dim_y": 0,    "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 0, "dim_y": 512,  "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 1, "dim_y": 0,    "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 1, "dim_y": 512,  "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
+    ]
+    result = _rollup(chunks, processors=[])
+    global_row = _rows_at(result, 0)[0]
+    assert global_row["Z_size"] == 2    # full image
+    assert global_row["Y_size"] == 1024
+    assert global_row["X_size"] == 2048
+    for row in _rows_at(result, 1):
+        assert row["Z_size"] == 1       # one slice
+        assert row["Y_size"] == 1024    # full extent (both Y halves aggregated)
+        assert row["X_size"] == 2048
