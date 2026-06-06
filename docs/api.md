@@ -18,7 +18,7 @@ Creates a new project.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `name` | `str` | Project name, embedded in the report. Optional - defaults to the base directory name if empty. |
+| `name` | `str` | Project name, embedded in the report. Required - cannot be empty or whitespace-only. |
 | `base_dir` | `str \| Path` | Root directory containing your dataset. |
 | `loader` | `str \| None` | Loader plugin ID, e.g. `"bioio"`. `None` = basic file info only. |
 | `output_path` | `str \| Path \| None` | Where to save the `.parquet` file. Defaults to `<base_dir>/<name>.parquet`. |
