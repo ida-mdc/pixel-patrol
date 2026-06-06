@@ -61,10 +61,11 @@ jobs:
       # 4. Assemble the full site: promote landing page + assets, copy viewer
       #    to /viewer/, and inject installed extension URLs.
       - name: Assemble site
-        run: python -c "
-from pixel_patrol_base.viewer_pages import build_github_pages_site
-build_github_pages_site('gh-pages-site')
-"
+        run: |
+          python -c "
+          from pixel_patrol_base.viewer_pages import build_github_pages_site
+          build_github_pages_site('gh-pages-site')
+          "
 
       - uses: actions/upload-pages-artifact@v3
         with:
