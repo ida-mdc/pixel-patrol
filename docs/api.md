@@ -59,7 +59,7 @@ api.process_files(project, **kwargs) -> Project
 
 Processes all files in the project paths and writes the `.parquet` report. Most parameters correspond directly to the [CLI options](cli.md#pixel-patrol-process). API-specific notes:
 
-- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [slice-size](processing.md#slice-size).
+- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [slice-size](processing.md#-slice-size).
 - `processors_included` / `processors_excluded` - sets of processor IDs, e.g. `{"raster-basic", "thumbnail"}`. See [Available processors](processing.md#available-processors).
 - `selected_file_extensions` - set of extensions, e.g. `{"tif", "nd2"}`, or `"all"`.
 - `progress_callback` - `Callable[[int, int], None]` called with `(done, total)` after each completed record. `total` is `-1` until the full count is known.
