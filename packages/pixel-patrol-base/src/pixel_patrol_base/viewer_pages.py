@@ -141,12 +141,34 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
 
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    shutil.copytree(dist_dir, out_dir)
+    # Promote hand-crafted site files from docs/ output to the site root.
+    # mkdocs builds into out_dir/docs/ and copies non-markdown files verbatim.
+    docs_out = out_dir / "docs"
+
+    # Promote all root-level HTML files (home.html -> index.html, others keep their name)
+    for html_file in docs_out.glob("*.html"):
+        dst_name = "index.html" if html_file.name == "home.html" else html_file.name
+        shutil.copy2(html_file, out_dir / dst_name)
+
+    # Promote assets/ and example.parquet
+    docs_assets = docs_out / "assets"
+    if docs_assets.is_dir():
+        dst_assets = out_dir / "assets"
+        if dst_assets.exists():
+            shutil.rmtree(dst_assets)
+        shutil.copytree(docs_assets, dst_assets)
+    example_parquet = docs_out / "example.parquet"
+    if example_parquet.is_file():
+        shutil.copy2(example_parquet, out_dir / "example.parquet")
+
+    # Viewer lives at /viewer/ so the site root is free for the landing page.
+    viewer_dir = out_dir / "viewer"
+    if viewer_dir.exists():
+        shutil.rmtree(viewer_dir)
+    shutil.copytree(dist_dir, viewer_dir)
 
     extension_dirs = _discover_installed_extensions()
-    ext_root = out_dir / "extensions"
+    ext_root = viewer_dir / "extensions"
     ext_root.mkdir(parents=True, exist_ok=True)
 
     urls: list[str] = []
@@ -156,11 +178,19 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
         shutil.copytree(ext_dir, dst_dir)
         urls.append(f"./extensions/{dst_name}/extension.json")
 
-    (out_dir / "pp_extension_urls.json").write_text(
+    (viewer_dir / "pp_extension_urls.json").write_text(
         json.dumps(urls, indent=2) + "\n",
         encoding="utf-8",
     )
-    _inject_extension_urls(out_dir / "index.html", urls)
+    _inject_extension_urls(viewer_dir / "index.html", urls)
+
+    # Tell the viewer that the logo should navigate back to the site landing page.
+    viewer_index = viewer_dir / "index.html"
+    html = viewer_index.read_text(encoding="utf-8")
+    homepage_script = "<script>\nwindow.__PP_HOMEPAGE = '../';\n</script>\n"
+    html = html.replace("</head>", homepage_script + "</head>", 1)
+    viewer_index.write_text(html, encoding="utf-8")
+
     return out_dir
 
 

@@ -53,28 +53,33 @@ def process_files(
         log_file: bool = False,
 ) -> Project:
     """
-    Process files in the project.
+    Process files in the project and write the .parquet report.
 
     Args:
         project:                    The project to process.
         progress_callback:          Optional callback(done: int, total: int) called per
-                                    completed record.
-        processors_included:        Only run these processors (e.g. {"basic-stats"}).
+                                    completed record. total is -1 until the full count is known.
+        processors_included:        Run only these processor IDs, e.g. {"raster-basic", "thumbnail"}.
                                     If set, processors_excluded is ignored.
-        processors_excluded:        Exclude these processors (e.g. {"histogram"}).
-        selected_file_extensions:   Extensions to process, e.g. {"tif", "png"}, or "all".
+        processors_excluded:        Skip these processor IDs, e.g. {"raster-quality"}.
+        selected_file_extensions:   Extensions to process, e.g. {"tif", "nd2"}, or "all".
                                     Defaults to "all".
-        max_workers:                Dask worker count. None = auto-detect CPU count.
-        mb_per_task:                MB budget per task (controls batch size). None = default (512).
-                                    Increase for many small images; decrease for very large images.
-        max_images_per_task:         Max images per task (batch and container files). None = default (200). Lower values
-                                    give more frequent progress updates on large flat datasets.
-        slice_size:                 Per-dim block size for spatial chunking of large single files,
-                                    e.g. {"Z": 1, "Y": 256}. None = auto.
-        rows_per_part:              Flush intermediate results to disk every N rows.
-        parquet_row_group_size:     Number of records per parquet row group. None = default (2048).
-        flavor:                     Config flavour label embedded in the parquet metadata.
-        description:                Free-form description string embedded in the parquet metadata.
+        max_workers:                Dask worker count. None = auto-detect from CPUs and RAM.
+                                    Use 1 to disable parallelism.
+        mb_per_task:                Work budget per Dask task in MB (default: 512). Controls
+                                    batch sizes for small files, spatial splitting for large files,
+                                    and sub-image batching for container files.
+        max_images_per_task:        Max files per batch task or sub-images per container task
+                                    (default: 200).
+        slice_size:                 Per-dimension granularity of statistics in the output report.
+                                    {"Z": 1} produces one set of statistics per Z slice;
+                                    {"Z": 5} groups every 5 slices. By default X and Y are
+                                    full extent and all other dims step by 1. None = default.
+        rows_per_part:              Rows buffered before flushing to a temporary file (default: 10000).
+        parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
+                                    Smaller values speed up thumbnail sampling in the viewer.
+        flavor:                     Label shown next to the title in the viewer.
+        description:                Free-form description shown below the title in the viewer and embedded in the report metadata.
         log_file:                   Write a DEBUG-level log file alongside the output parquet.
                                     INFO and WARNING still appear in the terminal as usual.
 

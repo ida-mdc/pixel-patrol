@@ -130,8 +130,31 @@ async function boot() {
   hideLoading();
 
   // Check for ?data=<url> query parameter.
-  const dataUrl = new URLSearchParams(window.location.search).get('data');
-  if (dataUrl) {
+  const params  = new URLSearchParams(window.location.search);
+  const dataUrl = params.get('data');
+  const openStored = params.get('open') === 'stored';
+
+  if (openStored) {
+    // File was stored in IndexedDB by the landing page before navigating here.
+    window.history.replaceState({}, '', window.location.pathname);
+    const file = await new Promise(resolve => {
+      const req = indexedDB.open('pp_file_transfer', 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore('files');
+      req.onsuccess = e => {
+        const db = e.target.result;
+        const tx = db.transaction('files', 'readwrite');
+        const get = tx.objectStore('files').get('pending');
+        get.onsuccess = () => { tx.objectStore('files').delete('pending'); db.close(); resolve(get.result); };
+        get.onerror   = () => { db.close(); resolve(null); };
+      };
+      req.onerror = () => resolve(null);
+    });
+    if (file) {
+      await openFiles([file]);
+    } else {
+      showWelcome();
+    }
+  } else if (dataUrl) {
     await openUrl(dataUrl);
   } else {
     showWelcome();
@@ -143,7 +166,11 @@ async function boot() {
 function attachWasmFileUi() {
   document.getElementById('topbar-brand').addEventListener('click', () => {
     if (state.sidebarLocked) return;
-    showWelcome();
+    if (window.__PP_HOMEPAGE) {
+      window.location.href = window.__PP_HOMEPAGE;
+    } else {
+      showWelcome();
+    }
   });
 
   document.getElementById('file-input-welcome').addEventListener('change', e => {

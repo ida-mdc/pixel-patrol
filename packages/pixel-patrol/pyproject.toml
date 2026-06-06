@@ -4,12 +4,20 @@ version = "0.6.0"
 description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
 license = { file = "LICENSE" }
+authors = [
+    { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
+]
 requires-python = ">=3.11"
+
 dependencies = [
     "pixel-patrol-base==0.6.0",
     "pixel-patrol-image==0.6.0",
     "pixel-patrol-loader-bio==0.6.0",
 ]
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
 requires = ["setuptools>=61"]

@@ -4,7 +4,11 @@ version = "0.6.0"
 description = "PixelPatrol add-on package for loading images with bioio and zarr"
 readme = "README.md"
 license = { file = "LICENSE" }
+authors = [
+    { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
+]
 requires-python = ">=3.11"
+
 dependencies = [
     "bioio==3.0.0",
     "bioio-tifffile==1.3.0",
@@ -16,6 +20,10 @@ dependencies = [
     "zarr==3.1.1",
     "tifffile==2025.9.9",
 ]
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
 requires = ["hatchling"]

@@ -139,6 +139,24 @@
 
         </div>
       </div>
+
+      <div id="sidebar-feedback" style="border-top:1px solid #dee2e6;margin-top:16px">
+        <button id="sb-feedback-toggle"
+          class="d-flex align-items-center gap-2 w-100 border-0 bg-transparent py-3 px-1"
+          style="cursor:pointer" aria-expanded="false"
+        >
+          <span class="small" style="flex:1;text-align:left;color:#495057">Please send us feedback about PixelPatrol</span>
+          <i class="bi bi-chevron-down text-muted" style="font-size:0.75rem;transition:transform .2s" id="sb-feedback-chevron"></i>
+        </button>
+        <div id="sb-feedback-form" style="display:none;padding:0 4px 16px">
+          <form action="https://formspree.io/f/xdavagve" method="POST">
+            <input type="text" name="name" class="form-control form-control-sm mb-2" placeholder="Your name (optional)" />
+            <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Your email (optional)" />
+            <textarea name="message" class="form-control form-control-sm mb-2" rows="3" placeholder="Your feedback" required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Send Feedback</button>
+          </form>
+        </div>
+      </div>
     </div><!-- /sidebar -->
 
     <!-- Main content -->
@@ -152,6 +170,33 @@
   </div>
 </div><!-- /main-app -->
 
+<!-- ── Feedback Section ── -->
+<div style="background:#f8f9fa;border-top:1px solid #dee2e6">
+  <div style="max-width:600px;margin:0 auto;padding:0 24px">
+    <button id="feedback-toggle"
+      class="d-flex align-items-center justify-content-center gap-2 w-100 border-0 bg-transparent py-4"
+      style="cursor:pointer"
+      aria-expanded="false"
+    >
+      <h3 style="font-size:1.1rem;font-weight:600;margin:0;color:#212529">Please send us feedback about PixelPatrol</h3>
+      <i class="bi bi-chevron-down text-muted" style="font-size:0.85rem;transition:transform .2s" id="feedback-chevron"></i>
+    </button>
+    <div id="feedback-form" style="display:none;padding-bottom:32px">
+      <form action="https://formspree.io/f/xdavagve" method="POST">
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input type="text" name="name" class="form-control" placeholder="Your name (optional)" style="flex:1" />
+          <input type="email" name="email" class="form-control" placeholder="Your email (optional)" style="flex:1" />
+        </div>
+        <div style="margin-bottom:16px">
+          <textarea name="message" class="form-control" rows="4" placeholder="Your feedback" required></textarea>
+        </div>
+        <div style="text-align:center">
+          <button type="submit" class="btn btn-primary">Send Feedback</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 <!-- ── Footer ── -->
 <footer class="pp-footer">
   <div class="pp-footer-inner">
@@ -175,5 +220,17 @@
 </footer>
 
 <script type="module" src="/src/main.js"></script>
+<script>
+  function initFeedbackToggle(toggleId, formId, chevronId) {
+    document.getElementById(toggleId).addEventListener('click', () => {
+      const form = document.getElementById(formId);
+      const open = form.style.display === 'none';
+      form.style.display = open ? '' : 'none';
+      document.getElementById(chevronId).style.transform = open ? 'rotate(180deg)' : '';
+    });
+  }
+  initFeedbackToggle('sb-feedback-toggle', 'sb-feedback-form', 'sb-feedback-chevron');
+  initFeedbackToggle('feedback-toggle', 'feedback-form', 'feedback-chevron');
+</script>
 </body>
 </html>
