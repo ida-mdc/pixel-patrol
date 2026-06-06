@@ -44,9 +44,11 @@ jobs:
 
       # 2. Install Python packages after the viewer is built so that the
       #    editable install of pixel-patrol-base exposes the fresh viewer_dist/.
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v4
 
       - name: Install Python packages
         run: |
