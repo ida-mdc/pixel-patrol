@@ -5,8 +5,8 @@
 We recommend [uv](https://docs.astral.sh/uv/) for fast, clean installs:
 
 ```bash
-uv venv --python 3.12 pixel-patrol-env
-source pixel-patrol-env/bin/activate   # Windows: pixel-patrol-env\Scripts\Activate.ps1
+uv venv --python 3.12 .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 

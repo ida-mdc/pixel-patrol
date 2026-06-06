@@ -19,8 +19,8 @@ Image datasets are rarely as clean or consistent as they appear. Pixel Patrol sc
 Requires Python 3.11+. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv venv --python 3.12 pixel-patrol-env
-source pixel-patrol-env/bin/activate   # Windows: pixel-patrol-env\Scripts\Activate.ps1
+uv venv --python 3.12 .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 
