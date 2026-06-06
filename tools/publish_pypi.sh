@@ -21,6 +21,7 @@ PACKAGES=(
     "pixel-patrol-image"
     "pixel-patrol-loader-bio"
     "pixel-patrol-aqqua"
+    "pixel-patrol-slurm"
 )
 
 CURRENT_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)

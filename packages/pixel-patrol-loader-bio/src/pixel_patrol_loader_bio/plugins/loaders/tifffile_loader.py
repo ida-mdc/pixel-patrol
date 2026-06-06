@@ -135,7 +135,13 @@ def _dask_from_series(series: tifffile.TiffPageSeries) -> da.Array:
     try:
         store = series.aszarr()
         za = zarr.open(store, mode="r")
-        return da.from_zarr(za)
+        if isinstance(za, zarr.Group):
+            # OME-TIFFs expose a multiscale group; '0' is the full-resolution array.
+            za = za['0']
+        # da.from_zarr re-opens za.store via zarr.open(), which returns the Group root
+        # for multiscale stores rather than the level-0 array, causing a failure.
+        # da.from_array avoids this by using the zarr array's __getitem__ directly.
+        return da.from_array(za, chunks=za.chunks)
     except Exception as e:
         logger.warning(
             "tifffile aszarr/Zarr failed (%s); falling back to in-memory array + Dask auto chunks.",
