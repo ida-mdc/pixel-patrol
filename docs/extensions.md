@@ -2,7 +2,7 @@
 
 Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
-The `examples/minimal-extension/` directory in the repository is a complete, working template. It implements:
+The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template. It implements:
 
 - A custom **loader** (reads Markdown diary files)
 - A custom **processor** (mood sentiment score)
@@ -20,13 +20,31 @@ Register them in your `pyproject.toml`:
 
 ```toml
 [project.entry-points."pixel_patrol.loader_plugins"]
-my-loader = "my_package.loader:MyLoader"
+my_extension_loaders = "my_package.plugin_registry:register_loader_plugins"
 
 [project.entry-points."pixel_patrol.processor_plugins"]
-my-processor = "my_package.processor:MyProcessor"
+my_extension_processors = "my_package.plugin_registry:register_processor_plugins"
 
 [project.entry-points."pixel_patrol.viewer_extensions"]
-my-extension = "my_package:viewer_extension_dir"
+my_extension_viewer = "my_package.plugin_registry:get_viewer_extension_dir"
+```
+
+Each register function returns a list of classes (for loaders/processors) or a `Path` (for the viewer extension directory):
+
+```python
+# my_package/plugin_registry.py
+from my_package.loader import MyLoader
+from my_package.processor import MyProcessor
+from pathlib import Path
+
+def register_loader_plugins():
+    return [MyLoader]
+
+def register_processor_plugins():
+    return [MyProcessor]
+
+def get_viewer_extension_dir():
+    return Path(__file__).parent / "viewer"
 ```
 
 ---
@@ -35,7 +53,7 @@ my-extension = "my_package:viewer_extension_dir"
 
 A loader reads image files and returns array data and metadata. Implement the `PixelPatrolLoader` contract from `pixel_patrol_base.core.contracts`.
 
-See `examples/minimal-extension/` for a full working example.
+See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example.
 
 ---
 
@@ -60,4 +78,4 @@ The entry point in `pyproject.toml` points to the directory containing `extensio
 ---
 
 !!! tip
-    See `examples/minimal-extension/README.md` in the repository for step-by-step instructions and the full plugin API.
+    See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) in the repository for step-by-step instructions and the full plugin API.
