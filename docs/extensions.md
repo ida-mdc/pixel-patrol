@@ -2,11 +2,11 @@
 
 Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
-The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template. It implements:
+The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template — the playful "Pixel Sky Watch", which reads `.parquet` tables as if they were tiny snapshots of the night sky. It implements:
 
-- A custom **loader** (reads Markdown diary files)
-- A custom **processor** (mood sentiment score)
-- Two JavaScript **viewer plugins** (word frequency chart, mood trend chart)
+- A custom **loader** (reads `.parquet` tables as pixel grids, with fake image metadata like time of day and cloud cover)
+- A custom **processor** (counts the "stars" in each patch)
+- Two JavaScript **viewer plugins** (one for the fake image metadata, one for the star-count metric derived from the pixel data)
 
 Use it as a starting point: update the `pyproject.toml` metadata and replace the example identifiers with your own.
 

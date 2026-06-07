@@ -99,8 +99,12 @@ A plugin is an ES module that exports a single object:
 
 ```js
 export default {
-  id:    'my-widget',   // unique across all loaded plugins
-  label: 'My Widget',   // shown in the sidebar widget list
+  id:    'my-widget',          // unique across all loaded plugins
+  label: 'My Widget',          // shown in the sidebar widget list
+  group: 'My Extension Name',  // optional — sidebar section to list the widget under;
+                               // reuses a canonical section (Summary, File Stats, Metadata,
+                               // Dataset Stats, Visualization) if it matches one by name,
+                               // otherwise creates its own; defaults to "Other Widgets"
 
   requires(schema) {
     // return false to hide the widget when expected columns are absent

@@ -1,0 +1,7 @@
+{
+  "name": "Pixel Sky Watch Extension",
+  "plugins": [
+    "./plugin_sky_patches_logged.js",
+    "./plugin_stars_by_time.js"
+  ]
+}
