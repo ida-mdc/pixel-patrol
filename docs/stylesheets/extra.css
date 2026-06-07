@@ -132,11 +132,14 @@
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 0.84rem;
   line-height: 1.7;
-  color: var(--wiz-code-text);
   background: transparent;
   border: none;
   white-space: pre;
   overflow-x: auto;
+}
+
+.md-typeset .wiz-code-pre {
+  color: var(--wiz-code-text);
 }
 
 /* Step cards */
