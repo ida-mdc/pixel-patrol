@@ -169,6 +169,32 @@ export function createFlexGrid(container, plotsPerRow, gap = '15px') {
   return { wrap, flexBasisPct };
 }
 
+const WARNING_ICONS = { red: '🚩', yellow: '⚠️' };
+
+/**
+ * Insert a warning banner as the first child of `container` — used to flag
+ * the most obvious data-quality issues right where the relevant widget
+ * renders them (e.g. mixed dtypes at the top of the Metadata widget).
+ *
+ * Mirrors the red/yellow flag styling used in the report-walkthrough docs,
+ * so the language and color-coding feel familiar to anyone who's read it.
+ *
+ * @param {HTMLElement} container  Widget body (already in the DOM).
+ * @param {object} opts
+ * @param {'red'|'yellow'} [opts.level='yellow']  Severity — red for things
+ *   worth investigating, yellow for things that are merely worth a look.
+ * @param {string} opts.html  Pre-built HTML for the message body. Callers are
+ *   responsible for escaping any dynamic values (see `escapeHtml`).
+ * @returns {HTMLElement} The created banner element.
+ */
+export function prependWarning(container, { level = 'yellow', html }) {
+  const div = document.createElement('div');
+  div.className = `widget-warning widget-warning-${level}`;
+  div.innerHTML = `<span class="widget-warning-icon">${WARNING_ICONS[level] ?? WARNING_ICONS.yellow}</span><div>${html}</div>`;
+  container.insertBefore(div, container.firstChild);
+  return div;
+}
+
 /**
  * Append a compact DOM color legend for the current groups.
  * Supports optional grouping header using the selected group column.

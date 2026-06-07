@@ -35,7 +35,23 @@ export default {
   
       const groups = rows.map(r => String(r.__group__));
       const colors = groups.map(g => groupColor(g));
-  
+
+      if (rows.length > 1) {
+        const UNEVEN_RATIO = 1.5;
+        const biggest  = rows.reduce((a, b) => Number(a.file_count) >= Number(b.file_count) ? a : b);
+        const smallest = rows.reduce((a, b) => Number(a.file_count) <= Number(b.file_count) ? a : b);
+        if (Number(biggest.file_count) / Number(smallest.file_count) >= UNEVEN_RATIO) {
+          ctx.plot.prependWarning(container, {
+            level: 'yellow',
+            html: `Group sizes differ a fair bit: <code>${ctx.plot.escapeHtml(ctx.groupLabel(String(biggest.__group__)))}</code> ` +
+              `has ${Number(biggest.file_count).toLocaleString()} files, while ` +
+              `<code>${ctx.plot.escapeHtml(ctx.groupLabel(String(smallest.__group__)))}</code> has ` +
+              `${Number(smallest.file_count).toLocaleString()}. That's not necessarily an issue, but uneven group ` +
+              `sizes can affect statistics and significance tests - worth a quick check that it's what you expect.`,
+          });
+        }
+      }
+
       const nGroups = rows.length;
       const intro   = document.createElement('div');
       intro.style.marginBottom = '16px';

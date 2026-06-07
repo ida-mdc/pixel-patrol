@@ -65,6 +65,13 @@ export default {
       } else if (exts.length === 1) {
         invariants.push({ Property: 'File Extension', Value: exts[0] });
       } else {
+        ctx.plot.prependWarning(container, {
+          level: 'red',
+          html: `This dataset contains files with more than one extension: ` +
+            `${exts.map(e => ctx.plot.escapeHtml(e)).join(', ')}. ` +
+            `Mixed file formats can mean a mixed dataset or even images that were saved twice - worth looking into.`,
+        });
+
         renderGroupedBars(container, {
           categories: exts, groups,
           getValue: (ext, g) => { const r = extRows.find(r => String(r.ext) === ext && String(r.__group__) === g); return r ? Number(r.count) : 0; },
