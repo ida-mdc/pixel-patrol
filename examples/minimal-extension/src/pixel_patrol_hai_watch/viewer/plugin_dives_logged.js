@@ -1,9 +1,9 @@
 /**
- * Dives Logged plugin — part of the Pixel HAI Watch Extension.
+ * Dives Logged plugin - part of the Pixel HAI Watch Extension.
  *
  * A widget about the *fake image metadata* itself (not anything derived from
  * pixel data): it tallies how many dive snapshots were logged in each ocean
- * layer, split by dive site — "depth_zone" is read straight out of the
+ * layer, split by dive site - "depth_zone" is read straight out of the
  * parquet schema metadata by SharkCamLoader, exactly the way a real loader
  * would surface OME-XML/EXIF acquisition info; "site" is the
  * `imported_path_short` grouping every Pixel Patrol report already carries.

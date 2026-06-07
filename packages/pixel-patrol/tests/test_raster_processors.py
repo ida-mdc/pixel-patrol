@@ -1,4 +1,4 @@
-"""Tests for raster processors — run_chunk and get_aggregation."""
+"""Tests for raster processors - run_chunk and get_aggregation."""
 
 import numpy as np
 import pytest
@@ -171,7 +171,7 @@ def test_quality_metrics_finite(quality_proc):
 def test_laplacian_variance_sharper_image_scores_higher(quality_proc):
     rng = np.random.default_rng(42)
     sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    # Blur by repeated box-averaging — reduces second-derivative energy.
+    # Blur by repeated box-averaging - reduces second-derivative energy.
     blurred = sharp.copy()
     for _ in range(8):
         blurred[1:-1, 1:-1] = (

@@ -168,10 +168,10 @@ def build_viewer(output: Union[str, Path]) -> Path:
     Build a static viewer from the installed web viewer bundle.
 
     If OUTPUT ends in .html or .htm, writes a single self-contained HTML file
-    with all JS/CSS/extensions inlined — share it alongside your .parquet file.
+    with all JS/CSS/extensions inlined - share it alongside your .parquet file.
 
     Otherwise OUTPUT is treated as a directory and a GitHub Pages-style site
-    is written there (index.html + assets + extensions folders) — deploy to
+    is written there (index.html + assets + extensions folders) - deploy to
     any static host and open with a ?data= URL pointing to your parquet.
 
     Args:
@@ -228,7 +228,7 @@ def _setup_file_logging(project: Project) -> None:
     """Attach a DEBUG-level FileHandler to the root logger, adjacent to the output parquet.
 
     Existing handlers (e.g. the terminal StreamHandler) are kept at INFO so
-    terminal output is unchanged — only the file receives DEBUG messages.
+    terminal output is unchanged - only the file receives DEBUG messages.
     """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = project.output_path.with_name(f"{project.output_path.stem}_{ts}.log")

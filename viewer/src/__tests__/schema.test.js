@@ -100,7 +100,7 @@ describe('detectSchema', () => {
     }));
     expect(dimensionInfo).toHaveProperty('t');
     expect(dimensionInfo.t).toEqual(['0', '1']);
-    // c has only one index — should not be promoted
+    // c has only one index - should not be promoted
     expect(dimensionInfo).not.toHaveProperty('c');
   });
 

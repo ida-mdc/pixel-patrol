@@ -122,7 +122,7 @@ export default {
 };
 
 function formatFileTypes(val) {
-  if (!val) return '—';
+  if (!val) return '-';
   if (Array.isArray(val)) return val.filter(Boolean).sort().join(', ');
   if (typeof val === 'string') return val;
   try {

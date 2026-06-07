@@ -3,7 +3,7 @@ NullLoader: returns zero-filled arrays without reading disk content.
 
 Used by benchmarks to isolate pipeline overhead from I/O cost.
 The loader is configured with a shape/dtype/dim_order/n_images registry keyed
-by path string; _discover_files never runs — benchmark_pipeline.py builds a
+by path string; _discover_files never runs - benchmark_pipeline.py builds a
 fake file stream instead.
 
 For large shapes (huge_multidim scenario), load() returns a _LazyZeros proxy
@@ -48,7 +48,7 @@ class _LazyZeros:
 
 
 class NullLoader:
-    """Zero-filling loader for benchmarks — ignores file content, returns zeros.
+    """Zero-filling loader for benchmarks - ignores file content, returns zeros.
 
     entries: maps path string → (shape, dtype, dim_order tuple, n_images).
     lazy_threshold_mb: shapes whose uncompressed size exceeds this use _LazyZeros

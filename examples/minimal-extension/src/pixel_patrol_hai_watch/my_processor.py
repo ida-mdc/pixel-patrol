@@ -30,7 +30,7 @@ class GlowSpotterProcessor:
     """
 
     NAME       = "glow-spotter"
-    CHUNK_KIND = ChunkKind.MEMORY          # patches are tiny - one chunk per file
+    CHUNK_KIND = ChunkKind.LEAF
     INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
     OUTPUT     = "features"
 
@@ -46,7 +46,7 @@ class GlowSpotterProcessor:
         return {"glow_count": glow_count}
 
     def get_aggregation(self, col: str) -> Optional[callable]:
-        if col not in self.OUTPUT_SCHEMA:
+        if col != "glow_count":
             return None
-        # One chunk per file — return the value from the single chunk row.
-        return lambda rows, g_dims: rows[0][col] if rows else None
+        # Glows are independent per pixel, so chunk counts simply add up.
+        return lambda rows, g_dims: sum(r["glow_count"] for r in rows)

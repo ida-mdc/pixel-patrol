@@ -1,4 +1,4 @@
-"""Thumbnail processor — generates one spatial patch per memory chunk, assembled by get_aggregation."""
+"""Thumbnail processor - generates one spatial patch per memory chunk, assembled by get_aggregation."""
 
 import warnings
 from collections import defaultdict

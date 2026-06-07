@@ -10,7 +10,7 @@ Image datasets are rarely as clean or consistent as they appear. Pixel Patrol sc
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/overview.png" width="">
 
-*The interactive viewer — filter, group, and explore your dataset.*
+*The interactive viewer - filter, group, and explore your dataset.*
 
 ---
 
@@ -90,7 +90,7 @@ api.view(project)
 
 ![Mosaic view of images, highlighting potential discrepancies.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/mosiac.png)
 
-*Image mosaic — sort by any metric to surface outliers visually.*
+*Image mosaic - sort by any metric to surface outliers visually.*
 
 ![Statistical plots showing image dimensions and distributions.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/example_stats_plot.png)
 
@@ -100,7 +100,7 @@ api.view(project)
 
 ## Sharing a report
 
-Send the `.parquet` file and open it in the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) — no installation needed. Or build a self-contained static viewer:
+Send the `.parquet` file and open it in the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no installation needed. Or build a self-contained static viewer:
 
 ```bash
 pixel-patrol build-viewer-html -o viewer.html

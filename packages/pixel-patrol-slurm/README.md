@@ -20,7 +20,7 @@ Arguments **after** `--` are passed verbatim to `pixel-patrol process` (`--sched
 #### Examples
 
 ```bash
-# Minimal — use defaults (4 jobs, 4 cores, 16 GB, 2 h walltime)
+# Minimal - use defaults (4 jobs, 4 cores, 16 GB, 2 h walltime)
 pixel-patrol-slurm -- /data/images --output results.parquet
 
 # Custom cluster

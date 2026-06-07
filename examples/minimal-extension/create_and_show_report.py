@@ -6,7 +6,7 @@ and viewer plugins (JavaScript) to the browser-based viewer.
 
 The "Pixel HAI Watch" dataset is a handful of tiny `.parquet` tables, each
 holding a 16x16 grid of `uint8` values plus fake "image metadata" (depth_zone)
-— read by SharkCamLoader as if they were deep-sea camera snapshots.
+- read by SharkCamLoader as if they were deep-sea camera snapshots.
 
 Steps
 -----

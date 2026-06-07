@@ -80,7 +80,7 @@ def _pooled_std_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
 
 
 def _integer_sum_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
-    """Integer-preserving sum — keeps count columns as int so polars schema stays consistent."""
+    """Integer-preserving sum - keeps count columns as int so polars schema stays consistent."""
     vals = [r[spec.name] for r in rows if spec.name in r and r[spec.name] is not None]
     if not vals:
         return None

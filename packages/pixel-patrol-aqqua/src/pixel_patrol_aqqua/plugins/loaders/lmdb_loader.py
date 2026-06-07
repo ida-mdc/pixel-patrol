@@ -227,7 +227,7 @@ class LmdbLoader:
                     try:
                         array = _uncompress_blosc2(cursor.value())
                         # Convert to numpy once; reuse for both metadata extraction
-                        # and the Record payload — avoids decompressing blosc2 twice.
+                        # and the Record payload - avoids decompressing blosc2 twice.
                         np_array = np.asarray(array)
                         meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
                         uuid = meta.get("image-uuid")

@@ -121,7 +121,7 @@ def resolve_report_source(
     if isinstance(source, Path):
         return load_parquet(source)
 
-    # Live Project — use in-memory data directly
+    # Live Project - use in-memory data directly
     from pixel_patrol_base.core.project import Project
     if isinstance(source, Project):
         return source.records_df, source.metadata

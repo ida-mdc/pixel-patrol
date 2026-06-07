@@ -1,6 +1,6 @@
 """
 Provenance metadata attached to a processed project's parquet file.
-Stored in the parquet footer — zero overhead on data read/write.
+Stored in the parquet footer - zero overhead on data read/write.
 """
 
 from __future__ import annotations

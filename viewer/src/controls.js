@@ -7,16 +7,16 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
 /**
  * Wire up all sidebar controls for a loaded schema.
  * State must already have been set (from URL params or defaults) before calling.
- * This function only syncs DOM to state — it does not overwrite state.
+ * This function only syncs DOM to state - it does not overwrite state.
  *
  * @param {object}   schema
  * @param {number}   totalRows
- * @param {object[]} plugins  — all registered plugins (for widget toggles)
- * @param {Function} onExport  — called with (format, scope) where format ∈ {'csv','parquet'} and scope ∈ {'summary','full'}
+ * @param {object[]} plugins  - all registered plugins (for widget toggles)
+ * @param {Function} onExport  - called with (format, scope) where format ∈ {'csv','parquet'} and scope ∈ {'summary','full'}
  * @param {object}   [opts]
  * @param {boolean}  [opts.sidebarLocked]
- * @param {object}   [opts.frozenSidebar]  — payload from buildFrozenSidebarPayload
- * @param {Function} [opts.onExportBakedHtml] — baked static HTML snapshot
+ * @param {object}   [opts.frozenSidebar]  - payload from buildFrozenSidebarPayload
+ * @param {Function} [opts.onExportBakedHtml] - baked static HTML snapshot
  */
 export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
   // ── Palette ──────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ function buildWidgetToggles(plugins, schema) {
     `;
   }).join('');
 
-  // No onchange handler — changes are applied only when the Apply button is clicked.
+  // No onchange handler - changes are applied only when the Apply button is clicked.
 }
 
 /** Read current checkbox values into state.hiddenWidgets. */

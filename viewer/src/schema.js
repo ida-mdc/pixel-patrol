@@ -1,4 +1,4 @@
-// Ported from report/src/components/schema.js — no Observable dependencies.
+// Ported from report/src/components/schema.js - no Observable dependencies.
 import { FILE_ROW_NUMBER } from './constants.js';
 
 // Columns that contain binary data. Must correspond to actual Arrow binary types!!
@@ -119,11 +119,11 @@ export function detectSchema(columns) {
  * Prefers well-known columns in priority order, falls back to the first available.
  *
  * If only `common_base` is present (no `imported_path_short`), the data was not
- * grouped during processing — default to no grouping (null).
+ * grouped during processing - default to no grouping (null).
  */
 export function pickDefaultGroupCol(allCols, groupCols) {
   if (allCols.includes('imported_path_short')) return 'imported_path_short';
-  // No sub-paths were specified during processing — don't impose a default grouping.
+  // No sub-paths were specified during processing - don't impose a default grouping.
   if (!allCols.includes('imported_path_short') && allCols.includes('common_base')) return null;
   if (groupCols.includes('folder_top'))        return 'folder_top';
   if (groupCols.includes('report_group'))      return 'report_group';

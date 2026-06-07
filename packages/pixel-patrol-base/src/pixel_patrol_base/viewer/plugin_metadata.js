@@ -54,7 +54,7 @@ export default {
 
         const cats   = [...new Set(rows.map(r => String(r.__cat__)))].sort();
 
-        // Single unique value — no plot needed; show in shared properties table instead.
+        // Single unique value - no plot needed; show in shared properties table instead.
         if (cats.length === 1) {
           invariants.push({ Property: niceName(col), Value: cats[0] });
           continue;

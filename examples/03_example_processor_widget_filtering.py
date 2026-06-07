@@ -18,10 +18,10 @@ def main():
 
     # --- View: exclude specific widgets ---
     # Other options:
-    #   group_col="imported_path_short"                            — group by column
+    #   group_col="imported_path_short"                            - group by column
     #   filter_by={"file_extension": {"op": "in", "value": "tif, png"}}
-    #   dimensions={"T": "0", "Z": "1"}                           — filter by dimensions
-    #   palette="viridis"                                          — color palette
+    #   dimensions={"T": "0", "Z": "1"}                           - filter by dimensions
+    #   palette="viridis"                                          - color palette
     api.view(
         project,
         palette="viridis",

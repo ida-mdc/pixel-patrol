@@ -1,5 +1,5 @@
 """
-Standalone slicing strategy benchmark — no pixel-patrol imports.
+Standalone slicing strategy benchmark - no pixel-patrol imports.
 
 Compares approaches to applying a 2D metric across all planes of a 5D
 (T, C, Z, H, W) array.  The metric (std over XY) requires a real spatial
@@ -9,11 +9,11 @@ Strategies
 ----------
 loop              explicit np.ndindex loop over all (t, c, z) combinations
 np.vectorize      np.vectorize with gufunc signature "(h,w)->()"
-np.frompyfunc     np.frompyfunc — creates a real numpy ufunc (not just a wrapper)
+np.frompyfunc     np.frompyfunc - creates a real numpy ufunc (not just a wrapper)
 np.apply_over_axes np.apply_over_axes reducing the last two axes
 da.apply_gufunc   da.apply_gufunc with vectorize=True
 da.map_blocks     da.map_blocks with numpy reduction inside each block
-numpy_direct      np.std(arr, axis=(-2,-1)) — no per-plane Python at all
+numpy_direct      np.std(arr, axis=(-2,-1)) - no per-plane Python at all
 
 Run: python benchmark_slicing_strategies.py
 """
@@ -169,7 +169,7 @@ def plot(results: Dict[str, Dict[str, tuple[float, float]]]) -> None:
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     fig, (ax_planes, ax_size) = plt.subplots(1, 2, figsize=(16, 5))
-    fig.suptitle("Slicing strategy comparison — std over XY, 5D array (T, C, Z, H, W)")
+    fig.suptitle("Slicing strategy comparison - std over XY, 5D array (T, C, Z, H, W)")
 
     def _plot_group(ax, config_names, x_labels, xlabel):
         x = np.arange(len(config_names))
