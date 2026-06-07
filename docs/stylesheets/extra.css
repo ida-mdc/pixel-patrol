@@ -126,6 +126,29 @@
 }
 .wiz-copy-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
 
+/* Output-mode toggle (CLI / Python script) */
+.wiz-mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  padding: 3px;
+}
+.wiz-mode-btn {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 0.77rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.wiz-mode-btn:hover { color: #e2e8f0; }
+.wiz-mode-btn.wiz-mode-active { background: var(--wiz-primary); color: #ffffff; }
+
 .wiz-code-pre {
   margin: 0;
   padding: 16px 20px;
@@ -284,6 +307,8 @@
   margin-bottom: 0.75rem;
   line-height: 1.5;
 }
+.wiz-callout.wiz-hidden { display: none; }
+
 .wiz-callout code {
   font-family: 'JetBrains Mono', monospace;
   background: rgba(0,0,0,0.08);
