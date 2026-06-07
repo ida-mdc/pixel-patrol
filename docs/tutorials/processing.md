@@ -37,6 +37,11 @@ Answer the questions below and we'll walk you through each decision together, bu
       This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
       Pixel Patrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
+      No images of your own yet? The repo ships a small example dataset at
+      <code>examples/datasets/WHOI_processed_color/</code> (40 plankton images, four tampered
+      variants of the same originals, ~1.3 MB total) - point <code>BASE_DIRECTORY</code> there and
+      follow along. It's the very dataset behind the <a href="report.md">example report</a>
+      used in the next tutorial.
     </div>
     <input class="wiz-input" type="text" id="pwi-base_dir"
            placeholder="/path/to/images/"
