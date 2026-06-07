@@ -23,11 +23,21 @@ Answer the questions below and we'll walk you through each decision together, bu
   <!-- Live command preview -->
   <div class="wiz-preview">
     <div class="wiz-preview-header">
-      <span class="wiz-preview-label">Your command</span>
+      <span class="wiz-preview-label" id="proc-preview-label">Your command</span>
+      <div class="wiz-mode-toggle">
+        <button class="wiz-mode-btn wiz-mode-active" id="proc-mode-cli" onclick="procWiz.setMode('cli')">CLI</button>
+        <button class="wiz-mode-btn" id="proc-mode-api" onclick="procWiz.setMode('api')">Python script</button>
+      </div>
       <button class="wiz-copy-btn" id="proc-copy-btn" onclick="procWiz.copy()">Copy</button>
     </div>
     <pre class="wiz-code-pre" id="proc-cmd">pixel-patrol process &lt;path/to/images/&gt; \
   -o report.parquet</pre>
+    <div class="wiz-callout wiz-hidden" id="proc-api-slurm-warning" style="margin:0 20px 16px">
+      ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI launcher
+      around <code>dask_jobqueue.SLURMCluster</code>. Switch to the <strong>CLI</strong> tab above for a ready-to-run
+      SLURM command, or see <a href="../processing.md#connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</a>
+      to wire up a <code>SLURMCluster</code> by hand from a script.
+    </div>
   </div>
 
   <!-- Q1: Base directory -->
@@ -291,8 +301,7 @@ Answer the questions below and we'll walk you through each decision together, bu
 
   <!-- Done message -->
   <div class="wiz-done-msg" id="proc-done">
-    ✓ Your command is ready above. Once it finishes, open the report with:
-    <code style="margin-left:6px">pixel-patrol view report.parquet</code>
+    <span id="proc-done-text">✓ Your command is ready above. Once it finishes, open the report with <code>pixel-patrol view report.parquet</code>.</span>
   </div>
 
   <!-- Advanced toggle -->
@@ -468,6 +477,7 @@ const procWiz = {
     max_images_per_task: '',
     rows_per_part:       '',
     log_file:            false,
+    output_mode:         'cli',
   },
 
   show(id) {
@@ -575,6 +585,15 @@ const procWiz = {
     this.reveal();
   },
 
+  setMode(mode) {
+    this.state.output_mode = mode;
+    document.getElementById('proc-mode-cli').classList.toggle('wiz-mode-active', mode === 'cli');
+    document.getElementById('proc-mode-api').classList.toggle('wiz-mode-active', mode === 'api');
+    const label = document.getElementById('proc-preview-label');
+    if (label) label.textContent = (mode === 'api') ? 'Your script' : 'Your command';
+    this.rebuild();
+  },
+
   toggleAdvanced() {
     this.state.adv_open = !this.state.adv_open;
     const btn = document.getElementById('adv-toggle-btn');
@@ -595,6 +614,23 @@ const procWiz = {
     const isSlurm = s.cluster === 'yes' && s.slurm === 'yes';
     const hasDask = s.cluster === 'yes' && s.slurm === 'no';
 
+    const text = (s.output_mode === 'api')
+      ? this.buildApiScript(s, base, out, isSlurm, hasDask)
+      : this.buildCliCommand(s, base, out, isSlurm, hasDask);
+    document.getElementById('proc-cmd').textContent = text;
+
+    const warn = document.getElementById('proc-api-slurm-warning');
+    if (warn) warn.classList.toggle('wiz-hidden', !(s.output_mode === 'api' && isSlurm));
+
+    const doneText = document.getElementById('proc-done-text');
+    if (doneText) {
+      doneText.innerHTML = (s.output_mode === 'api')
+        ? '✓ Your script is ready above - save it (e.g. <code>run_processing.py</code>) and run it with <code>python run_processing.py</code>. It already opens the viewer at the end via <code>api.view(project)</code>.'
+        : '✓ Your command is ready above. Once it finishes, open the report with <code>pixel-patrol view report.parquet</code>.';
+    }
+  },
+
+  buildCliCommand(s, base, out, isSlurm, hasDask) {
     // Build pixel-patrol process args (shared between local and SLURM)
     const pp = [];
     pp.push('-o ' + out);
@@ -644,7 +680,92 @@ const procWiz = {
       pp.forEach(a => lines.push('  ' + a));
     }
 
-    document.getElementById('proc-cmd').textContent = lines.join(' \\\n');
+    return lines.join(' \\\n');
+  },
+
+  buildApiScript(s, base, out, isSlurm, hasDask) {
+    const pyBase = (base === '<path/to/images/>') ? '/path/to/images/' : base;
+    const projName = (s.name && s.name.trim())
+      ? s.name.trim()
+      : (pyBase.replace(/\/+$/, '').split('/').filter(Boolean).pop() || 'My Project');
+
+    const lines = [];
+    lines.push('from pixel_patrol_base import api');
+    if (hasDask) lines.push('from dask.distributed import Client');
+    lines.push('');
+    lines.push('project = api.create_project(');
+    lines.push('    "' + projName + '",');
+    lines.push('    base_dir="' + pyBase + '",');
+    if (s.loader) lines.push('    loader="' + s.loader + '",');
+    lines.push('    output_path="' + out + '",');
+    lines.push(')');
+
+    if (s.conditions && s.conditions.length) {
+      const condList = s.conditions.map(c => '"' + c + '"').join(', ');
+      lines.push('api.add_paths(project, [' + condList + '])');
+    }
+
+    // Build api.process_files kwargs
+    const kwargs = [];
+    if (s.file_exts && s.file_exts.trim()) {
+      const exts = s.file_exts.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (exts) kwargs.push('selected_file_extensions={' + exts + '}');
+    }
+    if (s.processors_include && s.processors_include.trim()) {
+      const incl = s.processors_include.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (incl) kwargs.push('processors_included={' + incl + '}');
+    }
+    if (s.processors_exclude && s.processors_exclude.trim()) {
+      const excl = s.processors_exclude.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (excl) kwargs.push('processors_excluded={' + excl + '}');
+    }
+    if (s.slice_size && s.slice_size.trim()) {
+      const pairs = s.slice_size.split(',').map(e => e.trim()).filter(Boolean)
+        .map(pair => {
+          const [dim, val] = pair.split('=').map(p => p.trim());
+          return '"' + dim + '": ' + val;
+        }).join(', ');
+      if (pairs) kwargs.push('slice_size={' + pairs + '}');
+    }
+    if (!isSlurm && s.max_workers) kwargs.push('max_workers=' + s.max_workers);
+    if (s.mb_per_task)         kwargs.push('mb_per_task=' + s.mb_per_task);
+    if (s.max_images_per_task) kwargs.push('max_images_per_task=' + s.max_images_per_task);
+    if (s.rows_per_part)       kwargs.push('rows_per_part=' + s.rows_per_part);
+    if (s.description && s.description.trim())
+      kwargs.push('description="' + s.description.trim() + '"');
+    if (s.log_file) kwargs.push('log_file=True');
+
+    lines.push('');
+
+    if (isSlurm) {
+      lines.push('# No Python-API equivalent for SLURM clusters - see the note below.');
+    } else {
+      const callLines = [];
+      if (kwargs.length) {
+        callLines.push('api.process_files(');
+        callLines.push('    project,');
+        kwargs.forEach(k => callLines.push('    ' + k + ','));
+        callLines.push(')');
+      } else {
+        callLines.push('api.process_files(project)');
+      }
+
+      if (hasDask) {
+        const url = (s.scheduler_url && s.scheduler_url.trim()) || 'tcp://hostname:8786';
+        lines.push('with Client("' + url + '"):');
+        callLines.forEach(l => lines.push('    ' + l));
+      } else {
+        callLines.forEach(l => lines.push(l));
+      }
+
+      lines.push('');
+      lines.push('api.view(project)');
+    }
+
+    return lines.join('\n');
   },
 
   copy() {
