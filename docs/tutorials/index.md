@@ -34,7 +34,7 @@ Answer a few questions about your setup and we'll build the exact commands for y
 <a href="extension/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
   <div style="font-size:1.4rem;margin-bottom:.5rem">🧩</div>
   <div style="font-weight:600;margin-bottom:.3rem">Create an Extension</div>
-  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Build a custom loader, processor, or viewer plugin - walked through with the Pixel Sky Watch example.</div>
+  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Build a custom loader, processor, or viewer plugin - walked through with the Pixel HAI Watch example.</div>
 </a>
 
 </div>

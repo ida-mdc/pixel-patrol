@@ -2,13 +2,13 @@
 
 Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
-The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - the playful "Pixel Sky Watch", which reads `.parquet` tables as if they were tiny snapshots of the night sky. It implements:
+The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - "Pixel HAI Watch", which reads `.parquet` tables as if they were tiny snapshots from a deep-sea shark camera. It implements:
 
-- A custom **loader** (reads `.parquet` tables as pixel grids, with fake image metadata like time of day and cloud cover)
-- A custom **processor** (counts the "stars" in each patch)
-- Two JavaScript **viewer plugins** (one for the fake image metadata, one for the star-count metric derived from the pixel data)
+- A custom **loader** (reads `.parquet` tables as pixel grids, with fake image metadata - which ocean depth zone the snapshot was taken in)
+- A custom **processor** (counts the bioluminescent "glows" in each patch)
+- Two JavaScript **viewer widgets** (one for the loader's metadata, one for the processor's metric)
 
-Use it as a starting point: update the `pyproject.toml` metadata and replace the example identifiers with your own.
+A loader, a processor, and a viewer widget are independent pieces - ship just the one you need and skip the rest. Use the example as a starting point: copy it, update the `pyproject.toml` metadata, and replace the example identifiers with your own.
 
 Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes - your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
 
@@ -31,13 +31,13 @@ my_extension_processors = "my_package.plugin_registry:register_processor_plugins
 my_extension_viewer = "my_package.plugin_registry:get_viewer_extension_dir"
 ```
 
-Each register function returns a list of classes (for loaders/processors) or a `Path` (for the viewer extension directory):
+You only need to declare the groups your extension actually uses. Each register function returns a list of classes (for loaders/processors) or a `Path` (for the viewer extension directory):
 
 ```python
 # my_package/plugin_registry.py
-from my_package.loader import MyLoader
-from my_package.processor import MyProcessor
 from pathlib import Path
+from my_package.my_loader import MyLoader
+from my_package.my_processor import MyProcessor
 
 def register_loader_plugins():
     return [MyLoader]
@@ -53,21 +53,23 @@ def get_viewer_extension_dir():
 
 ## Loader
 
-A loader reads image files and returns array data and metadata. Implement the `PixelPatrolLoader` contract from `pixel_patrol_base.core.contracts`.
+If Pixel Patrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
 
-See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example.
+See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example, including the complete protocol table.
 
 ---
 
 ## Processor
 
-A processor receives image data from the loader and computes derived metrics - statistics, quality scores, etc. - added as columns to the report.
+If you want to compute a metric on images - any images, regardless of who loaded them - write a processor extension. A processor receives loaded records and returns derived values that get merged into the report as new columns, by implementing the `PixelPatrolProcessor` protocol: `NAME`, `CHUNK_KIND`, `INPUT`, `OUTPUT`, `OUTPUT_SCHEMA`, `run_chunk`, and `get_aggregation` - every member is required.
+
+See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example, including the complete protocol table.
 
 ---
 
 ## Viewer plugin
 
-Viewer plugins are JavaScript modules declared in an `extension.json` manifest. They receive the DuckDB-backed dataset and render custom widgets in the viewer sidebar.
+If you want to visualize report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest:
 
 ```json
 {
@@ -75,9 +77,9 @@ Viewer plugins are JavaScript modules declared in an `extension.json` manifest. 
 }
 ```
 
-The entry point in `pyproject.toml` points to the directory containing `extension.json`.
+The `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing `extension.json`.
 
 ---
 
 !!! tip
-    See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) in the repository for step-by-step instructions and the full plugin API.
+    See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) in the repository for step-by-step instructions, the full protocol tables, and the complete viewer plugin / `ctx` API.

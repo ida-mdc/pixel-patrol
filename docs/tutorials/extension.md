@@ -1,5 +1,7 @@
 # Create an Extension
 
+<img src="../../assets/shark.png" alt="A softly glowing cartoon shark" width="220" align="right">
+
 Pixel Patrol is built to be extended - without forking it. An **extension** is a regular, installable Python package that can add any combination of:
 
 - a custom **loader** - read a file format Pixel Patrol doesn't support out of the box
@@ -8,7 +10,7 @@ Pixel Patrol is built to be extended - without forking it. An **extension** is a
 
 All three are optional, and one package can mix and match freely. The contracts for each (`PixelPatrolLoader`, `PixelPatrolProcessor`, the plugin object shape) are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes - your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
 
-This page walks through all three pieces using **[Pixel Sky Watch](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension)** - a complete, working, slightly playful example bundled with Pixel Patrol. Its twist: there are no real images. `.parquet` *tables* are read as if they were tiny photos of a patch of sky - each table's numeric columns become a pixel grid, and a couple of key/value pairs tucked into the file's metadata stand in for the kind of instrument metadata real loaders extract (channel names, pixel sizes, acquisition stamps, ...). Every snippet below is taken directly from it - open `examples/minimal-extension/` alongside this page and follow along.
+This page walks through all three pieces using **[Pixel HAI Watch](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension)** - a complete, working, slightly playful example bundled with Pixel Patrol. Its twist: there are no real images. `.parquet` *tables* are read as if they were tiny snapshots from a deep-sea shark camera - each table's numeric columns become a pixel grid, and a key/value pair tucked into the file's metadata stands in for the kind of instrument metadata real loaders extract (channel names, pixel sizes, acquisition stamps, ...). Every snippet below is taken directly from it - open `examples/minimal-extension/` alongside this page and follow along.
 
 ---
 
@@ -56,16 +58,16 @@ This page walks through all three pieces using **[Pixel Sky Watch](https://githu
 </div>
 <div class="wc-body">
 
-<p>Any extension is a regular, installable Python package. Here's Pixel Sky Watch's layout - the role of each file is the blueprint for your own:</p>
+<p>Any extension is a regular, installable Python package. Here's Pixel HAI Watch's layout - the role of each file is the blueprint for your own:</p>
 
-<pre class="wiz-code-pre">pixel_sky_watch/
-├── my_loader.py             custom loader      - reads .parquet "sky patches"
-├── my_processor.py          custom processor   - counts the stars in each patch
+<pre class="wiz-code-pre">pixel_patrol_hai_watch/
+├── my_loader.py             custom loader      - reads .parquet "dive patches"
+├── my_processor.py          custom processor   - counts the glows in each patch
 ├── plugin_registry.py       registers loader, processor, and viewer extension
 └── viewer/
     ├── extension.json                manifest listing the viewer plugins
-    ├── plugin_sky_patches_logged.js  metadata widget    - patches logged, by time &amp; cloud cover
-    └── plugin_stars_by_time.js       image-data widget  - stars spotted, by time of day</pre>
+    ├── plugin_dives_logged.js        metadata widget    - dives logged, by depth zone &amp; site
+    └── plugin_glow_by_depth.js       image-data widget  - glow sightings, by depth zone</pre>
 
 <p>Pixel Patrol finds all of this through Python <strong>entry points</strong>: three optional groups in <code>pyproject.toml</code>, each pointing at a function in your <code>plugin_registry</code> module.</p>
 
@@ -115,37 +117,38 @@ def get_viewer_extension_dir():
 <div class="wc-body">
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> your images live in a format the built-in loaders (<code>bioio</code>, <code>tifffile</code>, <code>zarr</code>, ...) can't read - a proprietary instrument format, a database export, or - like here - something delightfully unconventional.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> Pixel Patrol can't read your file format - or doesn't read it (and its metadata) the way you want. Maybe your images live in a proprietary instrument format, a database export, or - like here - something delightfully unconventional.</div></div>
 </div>
 
 <p>A loader turns a file into a <code>Record</code> - pixel data plus metadata - that the rest of the pipeline can work with. Implement the <code>PixelPatrolLoader</code> protocol:</p>
 
 <table>
-<thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
+<thead><tr><th>Member</th><th>Type</th><th>Required?</th><th>Purpose</th></tr></thead>
 <tbody>
-<tr><td><code>NAME</code></td><td><code>str</code></td><td>unique identifier passed to <code>create_project(..., loader=...)</code></td></tr>
-<tr><td><code>SUPPORTED_EXTENSIONS</code></td><td><code>set[str]</code></td><td>file extensions this loader can read (lower-case, no dot)</td></tr>
-<tr><td><code>FOLDER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>"extensions" that mark a <em>folder</em> as one loadable unit (e.g. OME-Zarr stores); usually empty</td></tr>
-<tr><td><code>CONTAINER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>extensions that may contain more than one image (multi-series OME-TIFF, LMDB, ...); usually empty</td></tr>
-<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>extra metadata columns this loader adds, with their types</td></tr>
-<tr><td><code>is_folder_supported(path)</code></td><td><code>(Path) -> bool</code></td><td>whether a <em>folder</em> should be treated as one image</td></tr>
-<tr><td><code>read_header(path)</code></td><td><code>(Path) -> FileInfo</code></td><td>cheap shape/dtype/dim-order probe, <strong>no pixel data loaded</strong></td></tr>
-<tr><td><code>load(path)</code></td><td><code>(Path) -> Record</code></td><td>loads one image and returns a <code>Record</code></td></tr>
-<tr><td><code>load_range(path, start, stop)</code></td><td><code>(Path, int, int) -> Iterator[(str, Record)]</code></td><td>yields sub-images for container formats; raise <code>NotImplementedError</code> otherwise</td></tr>
+<tr><td><code>NAME</code></td><td><code>str</code></td><td>yes</td><td>unique identifier passed to <code>create_project(..., loader=...)</code></td></tr>
+<tr><td><code>SUPPORTED_EXTENSIONS</code></td><td><code>set[str]</code></td><td>yes</td><td>file extensions this loader can read (lower-case, no dot)</td></tr>
+<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>yes</td><td>extra metadata columns this loader adds to the report, with their types</td></tr>
+<tr><td><code>read_header(path)</code></td><td><code>(Path) -> FileInfo</code></td><td>yes</td><td>cheap shape/dtype/dim-order probe, <strong>no pixel data loaded</strong></td></tr>
+<tr><td><code>load(path)</code></td><td><code>(Path) -> Record</code></td><td>yes</td><td>loads one image and returns a <code>Record</code></td></tr>
+<tr><td><code>load_range(path, start, stop)</code></td><td><code>(Path, int, int) -> Iterator[(str, Record)]</code></td><td>yes</td><td>yields sub-images for container formats; raise <code>NotImplementedError</code> otherwise</td></tr>
+<tr><td><code>FOLDER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>no</td><td>"extensions" that mark a <em>folder</em> as one loadable unit (e.g. OME-Zarr stores); defaults to empty</td></tr>
+<tr><td><code>CONTAINER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>no</td><td>extensions that may contain more than one image (multi-series OME-TIFF, LMDB, ...); defaults to empty</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_PATTERNS</code></td><td><code>list[tuple[str, type]]</code></td><td>no</td><td>regex/type pairs for dynamically-named metadata columns (e.g. <code>pixel_size_X</code>); defaults to empty</td></tr>
+<tr><td><code>is_folder_supported(path)</code></td><td><code>(Path) -> bool</code></td><td>no</td><td>whether a <em>folder</em> (not a file) should be treated as one image; only relevant if <code>FOLDER_EXTENSIONS</code> is non-empty</td></tr>
 </tbody>
 </table>
 
-<p><code>SkyPatchLoader</code> (<code>NAME = "sky-patch"</code>) reads each table with <code>pyarrow.parquet</code>, stacks its columns into a 2-D array, decodes two fields out of the schema metadata, and wraps it all with <code>record_from(...)</code>:</p>
+<p><code>SharkCamLoader</code> (<code>NAME = "shark-cam"</code>) reads each table with <code>pyarrow.parquet</code>, stacks its columns into a 2-D array, decodes one field out of the schema metadata, and wraps it all with <code>record_from(...)</code>:</p>
 
 ```python
-class SkyPatchLoader:
-    NAME = "sky-patch"
+class SharkCamLoader:
+    NAME = "shark-cam"
 
     SUPPORTED_EXTENSIONS = {"parquet"}
     FOLDER_EXTENSIONS    = set()
     CONTAINER_EXTENSIONS = set()
 
-    OUTPUT_SCHEMA          = {"time_of_day": str, "cloud_cover": str}
+    OUTPUT_SCHEMA          = {"depth_zone": str}
     OUTPUT_SCHEMA_PATTERNS = []
 
     def is_folder_supported(self, path):
@@ -165,23 +168,22 @@ class SkyPatchLoader:
         raw_meta = table.schema.metadata or {}
         log_entry = {k.decode(): v.decode() for k, v in raw_meta.items()}
         meta = {
-            "time_of_day": log_entry.get("time_of_day", "unknown"),
-            "cloud_cover": log_entry.get("cloud_cover", "unknown"),
-            "dim_order":   "YX",
+            "depth_zone": log_entry.get("depth_zone", "unknown"),
+            "dim_order":  "YX",
         }
         return record_from(pixels, meta, kind="intensity")
 
     def load_range(self, file_path, start, stop):
-        raise NotImplementedError("sky-patch is not a container format")
+        raise NotImplementedError("shark-cam is not a container format")
 ```
 
 <details class="wc-how">
-<summary>🔬 How a parquet table becomes a "sky patch"</summary>
-<div>Each file holds a small grid of <code>uint8</code> columns - read column-by-column and stacked side by side, the table <em>is</em> the pixel grid (rows → Y, columns → X). The two playful fields, <code>time_of_day</code> (dawn/day/dusk/night) and <code>cloud_cover</code> (clear/cloudy), are decoded straight out of <code>table.schema.metadata</code> - exactly the slot real formats (OME-XML in TIFFs, EXIF in JPEGs, ...) use to carry instrument and acquisition info.</div>
+<summary>🔬 How a parquet table becomes a "dive patch"</summary>
+<div>Each file holds a small grid of <code>uint8</code> columns - read column-by-column and stacked side by side, the table <em>is</em> the pixel grid (rows → Y, columns → X). The playful field, <code>depth_zone</code> (sunlit/twilight/midnight/abyss - which layer of the ocean the snapshot was taken in), is decoded straight out of <code>table.schema.metadata</code> - exactly the slot real formats (OME-XML in TIFFs, EXIF in JPEGs, ...) use to carry instrument and acquisition info.</div>
 </details>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Declaring <code>kind="intensity"</code> and <code>dim_order="YX"</code> is what makes the <em>built-in</em> processors (basic metrics, histogram, thumbnail) pick the patches up automatically, right alongside your custom one. To a Pixel Patrol pipeline, a "sky patch" parquet table behaves just like any other 2-D image - that's the whole point of the exercise.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Declaring <code>kind="intensity"</code> and <code>dim_order="YX"</code> is what makes the <em>built-in</em> processors (basic metrics, histogram, thumbnail) pick the patches up automatically, right alongside your custom one. To a Pixel Patrol pipeline, a "dive patch" parquet table behaves just like any other 2-D image - that's the whole point of the exercise.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>read_header</code> is called for every file during the initial scan and must stay cheap - it's your chance to report shape, dtype, and dimension order without paying the cost of loading pixel data.</div></div>
 </div>
 
@@ -199,16 +201,16 @@ class SkyPatchLoader:
 <div class="wc-body">
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to derive your own numbers from the loaded pixel data - quality scores, object counts, anything beyond what the built-in processors already compute.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to compute a metric on images - any images, regardless of who loaded them. Quality scores, object counts, anything beyond what the built-in processors already cover.</div></div>
 </div>
 
-<p>A processor receives loaded records and returns derived values that get merged into the report as new columns. Implement the <code>PixelPatrolProcessor</code> protocol:</p>
+<p>A processor receives loaded records and returns derived values that get merged into the report as new columns. Implement the <code>PixelPatrolProcessor</code> protocol - every member below is required:</p>
 
 <table>
 <thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
 <tbody>
 <tr><td><code>NAME</code></td><td><code>str</code></td><td>unique identifier (shown in pipeline logs)</td></tr>
-<tr><td><code>CHUNK_KIND</code></td><td><code>ChunkKind</code></td><td><code>LEAF</code> (user-configured tiles/slices), <code>MEMORY</code> (whole record, memory-safe chunking), or <code>FULL_RECORD</code></td></tr>
+<tr><td><code>CHUNK_KIND</code></td><td><code>ChunkKind</code></td><td><code>LEAF</code> (user-configured tiles/slices) or <code>MEMORY</code> (whole record, memory-safe chunking)</td></tr>
 <tr><td><code>INPUT</code></td><td><code>RecordSpec</code></td><td>which records this processor runs on (<code>kinds</code>, <code>axes</code>, <code>capabilities</code>, ...)</td></tr>
 <tr><td><code>OUTPUT</code></td><td><code>"features" | "record"</code></td><td>whether <code>run_chunk</code> returns columns to merge, or a brand-new <code>Record</code></td></tr>
 <tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>the columns this processor adds, with their types</td></tr>
@@ -217,16 +219,16 @@ class SkyPatchLoader:
 </tbody>
 </table>
 
-<p><code>StarSpotterProcessor</code> (<code>NAME = "star-spotter"</code>) runs on every <code>intensity</code> record with <code>X</code>/<code>Y</code> axes, processes each tiny patch whole, and adds one column - <code>star_count</code>:</p>
+<p><code>GlowSpotterProcessor</code> (<code>NAME = "glow-spotter"</code>) runs on every <code>intensity</code> record with <code>X</code>/<code>Y</code> axes, uses <code>CHUNK_KIND.LEAF</code>, and adds one column - <code>glow_count</code>:</p>
 
 ```python
-class StarSpotterProcessor:
-    NAME       = "star-spotter"
-    CHUNK_KIND = ChunkKind.MEMORY          # patches are tiny - one chunk per file
+class GlowSpotterProcessor:
+    NAME       = "glow-spotter"
+    CHUNK_KIND = ChunkKind.LEAF
     INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
     OUTPUT     = "features"
 
-    OUTPUT_SCHEMA          = {"star_count": int}
+    OUTPUT_SCHEMA          = {"glow_count": int}
     OUTPUT_SCHEMA_PATTERNS = []
 
     def run_chunk(self, record):
@@ -234,23 +236,23 @@ class StarSpotterProcessor:
         arr = arr.astype(np.float32)
 
         threshold = np.median(arr) + 60.0
-        star_count = int(np.sum(arr > threshold))
-        return {"star_count": star_count}
+        glow_count = int(np.sum(arr > threshold))
+        return {"glow_count": glow_count}
 
     def get_aggregation(self, col):
-        if col not in self.OUTPUT_SCHEMA:
+        if col != "glow_count":
             return None
-        # One chunk per file - return the value from the single chunk row.
-        return lambda rows, g_dims: rows[0][col] if rows else None
+        # Glows are independent per pixel, so chunk counts simply add up.
+        return lambda rows, g_dims: sum(r["glow_count"] for r in rows)
 ```
 
 <details class="wc-how">
-<summary>🔬 How "stars" get counted</summary>
-<div>A pixel counts as a star when it stands out clearly brighter than the patch's overall brightness - more than 60 above the median. Night patches are sprinkled with many such pixels by construction, daytime patches with almost none, so <code>star_count</code> tracks <code>time_of_day</code> exactly the way you'd expect from just looking up at the sky. Because each patch is processed in a single chunk, <code>get_aggregation</code> simply returns that lone chunk's value - see <code>RasterProcessor</code> in <code>pixel_patrol_base</code> for processors that genuinely need to combine many chunks.</div>
+<summary>🔬 How "glows" get counted</summary>
+<div>A pixel counts as part of a glow when it stands out clearly from the patch's overall brightness - brighter than its median by more than 60. Sunlit patches have almost none; the deeper and darker it gets, the more glows light up - exactly the way real bioluminescence concentrates in the dark, by construction. <code>get_aggregation</code> sums each chunk's <code>glow_count</code> into the per-image total - a pattern that works whenever the thing you're counting is independent per pixel, so splitting an image into pieces and adding the pieces' counts back up reconstructs the whole.</div>
 </details>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>CHUNK_KIND</code> shapes how your data arrives: <code>LEAF</code> for user-configured tiles/slices, <code>MEMORY</code> for whole-record chunks that are safe to load entirely, <code>FULL_RECORD</code> to always receive everything at once. Pick the smallest unit your computation genuinely needs - it's what keeps large datasets processable.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>CHUNK_KIND</code> shapes how your data arrives, and which unit your computation needs to handle. <code>LEAF</code> - the more common pick for metric processors - tiles large images into memory-safe pieces and runs your computation on each one; <code>MEMORY</code> hands you the whole record at once, which is only safe when you know it comfortably fits in memory.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>OUTPUT = "features"</code> merges your columns into the existing report - the right choice for almost any custom metric. <code>"record"</code> is for processors that produce a brand-new derived image instead (a mask, a projection, ...).</div></div>
 </div>
 
@@ -268,7 +270,7 @@ class StarSpotterProcessor:
 <div class="wc-body">
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to visualize something - your new metric, your loader's metadata, or any mix of report columns - with a chart the built-in widgets don't cover.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to visualise report data in the browser - your own extension's columns, anyone else's, or any mix - with a chart the built-in widgets don't cover.</div></div>
 </div>
 
 <p>A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the report's data through an in-browser DuckDB instance (the table is always called <code>pp_data</code>). It exports one default object:</p>
@@ -301,48 +303,53 @@ export default {
 <tbody>
 <tr><td><code>ctx.queryRows(sql)</code></td><td><code>async → object[]</code></td><td>query returning plain JS objects</td></tr>
 <tr><td><code>ctx.query(sql)</code></td><td><code>async → Arrow Table</code></td><td>raw Arrow result (for binary/blob columns)</td></tr>
+<tr><td><code>ctx.querySample(cols, n)</code></td><td><code>async → object[]</code></td><td>sampled scalar shorthand</td></tr>
 <tr><td><code>ctx.schema</code></td><td><code>object</code></td><td><code>{ metricCols, groupCols, dimensionInfo, allCols, blobCols }</code></td></tr>
 <tr><td><code>ctx.state</code></td><td><code>object</code></td><td><code>{ palette, groupCol, filter, dimensions }</code></td></tr>
 <tr><td><code>ctx.colorMap</code></td><td><code>object</code></td><td><code>{ groupValue: hexColor }</code> - matches the colors used everywhere else in the report</td></tr>
 <tr><td><code>ctx.where</code></td><td><code>string</code></td><td>SQL <code>WHERE</code> clause for the active filter (or <code>''</code>) - merge with <code>AND</code> if your query needs its own</td></tr>
 <tr><td><code>ctx.groups</code></td><td><code>string[]</code></td><td>distinct values of the active group column</td></tr>
+<tr><td><code>ctx.filteredCount</code> / <code>ctx.totalRows</code></td><td><code>number</code></td><td>row counts</td></tr>
 </tbody>
 </table>
 
-<p>Pixel Sky Watch ships <strong>two</strong> plugins on purpose - one per kind of data a loader can surface. <code>plugin_stars_by_time.js</code> plots <code>star_count</code> (computed by the processor, from real pixel data) against <code>time_of_day</code> (read straight from the loader's fake metadata), as a jittered scatter colored by group:</p>
+<p>Pixel HAI Watch ships <strong>two</strong> plugins on purpose - one per kind of data a loader can surface. <code>plugin_glow_by_depth.js</code> plots <code>glow_count</code> (computed by the processor, from real pixel data) against <code>depth_zone</code> (read straight from the loader's metadata), as a jittered scatter colored by site:</p>
 
 ```js
+const DEPTH_ORDER = ['sunlit', 'twilight', 'midnight', 'abyss'];
+
 export default {
-  id:    'stars-by-time-of-day',
-  label: 'Stars Spotted by Time of Day',
-  group: 'Pixel Sky Watch',
+  id:    'glow-by-depth',
+  label: 'Glow Sightings by Depth',
+  group: 'Pixel HAI Watch',
 
   requires(schema) {
-    return ['time_of_day', 'star_count'].every(c => schema.allCols.includes(c));
+    return ['depth_zone', 'glow_count'].every(c => schema.allCols.includes(c));
   },
 
   async render(container, ctx) {
     const rows = await ctx.queryRows(`
-      SELECT "time_of_day" AS time_of_day, "imported_path_short" AS folder, "star_count" AS stars
+      SELECT "depth_zone" AS depth_zone, "imported_path_short" AS site, "glow_count" AS glows
       FROM pp_data
-      WHERE "time_of_day" IS NOT NULL AND "star_count" IS NOT NULL
+      WHERE "depth_zone" IS NOT NULL AND "glow_count" IS NOT NULL
         ${ctx.where ? 'AND ' + ctx.where.replace(/^WHERE\s+/i, '') : ''}
     `);
 
-    const times   = TIME_ORDER.filter(t => rows.some(r => r.time_of_day === t));
+    const zones   = DEPTH_ORDER.filter(z => rows.some(r => r.depth_zone === z));
+    const sites   = [...new Set(rows.map(r => r.site))].sort();
     const xJitter = () => (Math.random() - 0.5) * 0.5;   // keeps overlapping points visible
 
     // A scatter (rather than a box/violin) because each category holds only a
     // handful of points - exactly where distributional summaries would mislead.
-    Plotly.newPlot(container, folders.map(folder => {
-      const sub = rows.filter(r => r.folder === folder);
+    Plotly.newPlot(container, sites.map(site => {
+      const sub = rows.filter(r => r.site === site);
       return {
-        type: 'scatter', mode: 'markers', name: folder,
-        x: sub.map(r => times.indexOf(r.time_of_day) + xJitter()),
-        y: sub.map(r => Number(r.stars)),
-        marker: { size: 12, color: ctx.colorMap[folder] ?? '#888' },
+        type: 'scatter', mode: 'markers', name: site,
+        x: sub.map(r => zones.indexOf(r.depth_zone) + xJitter()),
+        y: sub.map(r => Number(r.glows)),
+        marker: { size: 12, color: ctx.colorMap[site] ?? '#888' },
       };
-    }), { title: { text: 'How many stars show up at each time of day?' } });
+    }), { title: { text: 'How much bioluminescent glow shows up at each depth?' } });
   },
 };
 ```
@@ -351,13 +358,13 @@ export default {
 
 ```json
 {
-  "name": "Pixel Sky Watch Extension",
-  "plugins": ["./plugin_sky_patches_logged.js", "./plugin_stars_by_time.js"]
+  "name": "Pixel HAI Watch Extension",
+  "plugins": ["./plugin_dives_logged.js", "./plugin_glow_by_depth.js"]
 }
 ```
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Both plugins declare <code>group: 'Pixel Sky Watch'</code>, so they get their own named section in the sidebar instead of being lumped under "Other Widgets" - a small touch that makes an extension feel like a first-class part of the report.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Both plugins declare <code>group: 'Pixel HAI Watch'</code>, so they get their own named section in the sidebar instead of being lumped under "Other Widgets" - a small touch that makes an extension feel like a first-class part of the report.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>See the <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/viewer/README.md" target="_blank">viewer README</a> for the full plugin-writing guide, the complete <code>ctx</code> reference, and the extension-manifest format.</div></div>
 </div>
 
@@ -375,7 +382,13 @@ export default {
 </div>
 <div class="wc-body">
 
-<p>Try it locally - this generates the tiny dataset (if missing), processes it with the custom loader and processor, and opens the viewer with both plugins loaded:</p>
+<p>Pixel Patrol discovers loaders, processors, and viewer extensions through Python entry points - which only works if your package is installed in the <em>same environment</em> as <code>pixel_patrol_base</code>. So first, make sure you're in that environment, then install this package into it:</p>
+
+```sh
+uv pip install -e .
+```
+
+<p>Then try it locally - this (re)generates the tiny dataset (if missing), processes it with the custom loader and processor, and opens the viewer with both widgets loaded:</p>
 
 ```bash
 uv run python create_and_show_report.py
@@ -386,7 +399,7 @@ uv run python create_and_show_report.py
 <div class="wc-shots two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">📦 Pip package</div>
-    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-sky-watch</code> - and any report opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
+    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any report opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
   </div>
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">🌐 GitHub Pages</div>
@@ -395,7 +408,7 @@ uv run python create_and_show_report.py
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🌱</span><div><strong>Ready to grow your own?</strong> Copy <code>examples/minimal-extension/</code>, update the <code>pyproject.toml</code> metadata, and replace the example identifiers with your own - one piece at a time. The protocols will tell you exactly what's still missing as you go, and nothing stops you from running an unfinished extension while you build it out.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🌱</span><div><strong>Ready to grow your own?</strong> Copy <code>examples/minimal-extension/</code>, decide which piece(s) you actually need (see the questions at the top of this page), update the <code>pyproject.toml</code> metadata, and replace the example identifiers with your own - one piece at a time. The protocols will tell you exactly what's still missing as you go, and nothing stops you from running an unfinished extension while you build it out.</div></div>
 </div>
 
 </div>
