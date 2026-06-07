@@ -2,7 +2,7 @@ import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
-import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, prependWarning, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
 import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
@@ -103,6 +103,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       escapeHtml,
       bargap,
       flexGrid:    createFlexGrid,
+      prependWarning,
       renderDomGroupLegend: (container, opts = {}) => appendGroupLegend(
         container,
         opts.groups ?? groups,
