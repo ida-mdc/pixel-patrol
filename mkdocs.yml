@@ -53,6 +53,8 @@ nav:
     - tutorials/index.md
     - Installation: tutorials/installation.md
     - Processing: tutorials/processing.md
+    - Exploring the Report: tutorials/report.md
+    - Sharing a Report: tutorials/sharing.md
 
 markdown_extensions:
   - admonition
