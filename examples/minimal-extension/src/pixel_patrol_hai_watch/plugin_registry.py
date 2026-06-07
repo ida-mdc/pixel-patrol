@@ -1,15 +1,15 @@
 from pathlib import Path
 
-from pixel_sky_watch.my_loader import SkyPatchLoader
-from pixel_sky_watch.my_processor import StarSpotterProcessor
+from pixel_patrol_hai_watch.my_loader import SharkCamLoader
+from pixel_patrol_hai_watch.my_processor import GlowSpotterProcessor
 
 
 def register_loader_plugins():
-    return [SkyPatchLoader]
+    return [SharkCamLoader]
 
 
 def register_processor_plugins():
-    return [StarSpotterProcessor]
+    return [GlowSpotterProcessor]
 
 
 def get_viewer_extension_dir():
