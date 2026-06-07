@@ -10,6 +10,8 @@ The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 Use it as a starting point: update the `pyproject.toml` metadata and replace the example identifiers with your own.
 
+Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes — your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
+
 ---
 
 ## How extensions are discovered

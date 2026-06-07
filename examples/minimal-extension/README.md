@@ -64,7 +64,9 @@ year folders in a typical Pixel Patrol dataset: they become the `path` /
 (name: `sky-patch`).
 
 A loader is any class that satisfies the `PixelPatrolLoader` protocol from
-`pixel_patrol_base.core.contracts`. It needs:
+`pixel_patrol_base.core.contracts` — a [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol),
+not a base class, so `SkyPatchLoader` needs no import or inheritance from
+`pixel_patrol_base`; matching the shape below is enough. It needs:
 
 | Member | Type | Purpose |
 |---|---|---|
