@@ -18,7 +18,7 @@ Creates a new project.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `name` | `str` | Project name, embedded in the report. Optional - defaults to the base directory name if empty. |
+| `name` | `str` | Project name, embedded in the report. Required - cannot be empty or whitespace-only. |
 | `base_dir` | `str \| Path` | Root directory containing your dataset. |
 | `loader` | `str \| None` | Loader plugin ID, e.g. `"bioio"`. `None` = basic file info only. |
 | `output_path` | `str \| Path \| None` | Where to save the `.parquet` file. Defaults to `<base_dir>/<name>.parquet`. |
@@ -59,7 +59,7 @@ api.process_files(project, **kwargs) -> Project
 
 Processes all files in the project paths and writes the `.parquet` report. Most parameters correspond directly to the [CLI options](cli.md#pixel-patrol-process). API-specific notes:
 
-- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [slice-size](processing.md#slice-size).
+- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [slice-size](processing.md#-slice-size).
 - `processors_included` / `processors_excluded` - sets of processor IDs, e.g. `{"raster-basic", "thumbnail"}`. See [Available processors](processing.md#available-processors).
 - `selected_file_extensions` - set of extensions, e.g. `{"tif", "nd2"}`, or `"all"`.
 - `progress_callback` - `Callable[[int, int], None]` called with `(done, total)` after each completed record. `total` is `-1` until the full count is known.
