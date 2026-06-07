@@ -1,15 +1,15 @@
 from pathlib import Path
 
-from markdown_diary_tracker_static.my_loader import MarkdownDiaryLoader
-from markdown_diary_tracker_static.my_processor import MarkdownMoodProcessor
+from pixel_sky_watch.my_loader import SkyPatchLoader
+from pixel_sky_watch.my_processor import StarSpotterProcessor
 
 
 def register_loader_plugins():
-    return [MarkdownDiaryLoader]
+    return [SkyPatchLoader]
 
 
 def register_processor_plugins():
-    return [MarkdownMoodProcessor]
+    return [StarSpotterProcessor]
 
 
 def get_viewer_extension_dir():

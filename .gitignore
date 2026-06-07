@@ -4,6 +4,7 @@
 *.egg-info/
 uv.lock
 examples/out
+examples/minimal-extension/out
 examples/datasets/plankton_processed
 build
 .ipynb_checkpoints
