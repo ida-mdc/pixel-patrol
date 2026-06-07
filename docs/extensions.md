@@ -2,7 +2,7 @@
 
 Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
-The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template — the playful "Pixel Sky Watch", which reads `.parquet` tables as if they were tiny snapshots of the night sky. It implements:
+The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - the playful "Pixel Sky Watch", which reads `.parquet` tables as if they were tiny snapshots of the night sky. It implements:
 
 - A custom **loader** (reads `.parquet` tables as pixel grids, with fake image metadata like time of day and cloud cover)
 - A custom **processor** (counts the "stars" in each patch)
@@ -10,7 +10,7 @@ The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 Use it as a starting point: update the `pyproject.toml` metadata and replace the example identifiers with your own.
 
-Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes — your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
+Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes - your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
 
 ---
 

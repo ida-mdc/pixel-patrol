@@ -201,7 +201,7 @@ with Client("tcp://hostname:8786"):
 
 ### SLURM clusters (`pixel-patrol-slurm`)
 
-The `pixel-patrol-slurm` package provides a single command that launches a Dask `SLURMCluster`, waits for workers to come online, and then runs `pixel-patrol process` — no manual cluster setup needed.
+The `pixel-patrol-slurm` package provides a single command that launches a Dask `SLURMCluster`, waits for workers to come online, and then runs `pixel-patrol process` - no manual cluster setup needed.
 
 ```bash
 pixel-patrol-slurm \
