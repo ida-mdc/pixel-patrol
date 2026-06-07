@@ -18,7 +18,7 @@ window.Plotly = Plotly;
 // ---------------------------------------------------------------------------
 
 /**
- * Standard layout defaults — spread into your layout override object.
+ * Standard layout defaults - spread into your layout override object.
  *   { ...LAYOUT, title: 'My Chart', height: 400 }
  */
 export const LAYOUT = {
@@ -28,7 +28,7 @@ export const LAYOUT = {
 };
 
 /**
- * Standard legend positioning — mirrors Dash _STANDARD_LEGEND_KWARGS.
+ * Standard legend positioning - mirrors Dash _STANDARD_LEGEND_KWARGS.
  * Use as:  { ...LAYOUT, showlegend: true, legend: LEGEND }
  */
 export const LEGEND = {
@@ -107,7 +107,7 @@ export function escapeHtml(s) {
 }
 
 /**
- * Bargap for bar charts — mirrors Dash _apply_standard_styling.
+ * Bargap for bar charts - mirrors Dash _apply_standard_styling.
  *   1 category → 0.7,  2 → 0.4,  3+ → 0.1
  */
 export function bargap(nCategories) {
@@ -139,7 +139,7 @@ export function appendPlots(container, plotDefs, wrapStyle = 'display:flex;flex-
     return div;
   });
 
-  // Then render — every div is already in the live DOM at correct size.
+  // Then render - every div is already in the live DOM at correct size.
   plotDefs.forEach(({ traces, layout }, i) => {
     Plotly.newPlot(divs[i], traces, { ...LAYOUT, ...layout }, CHART_CONFIG);
   });
@@ -151,8 +151,8 @@ export function appendPlots(container, plotDefs, wrapStyle = 'display:flex;flex-
  * Create a flex-wrap grid container and append it to `container`.
  *
  * Returns { wrap, flexBasisPct } where:
- *   wrap          — the grid div (already in the DOM; append your plot items here)
- *   flexBasisPct  — the CSS flex-basis percentage for each item
+ *   wrap          - the grid div (already in the DOM; append your plot items here)
+ *   flexBasisPct  - the CSS flex-basis percentage for each item
  *
  * Usage:
  *   const { wrap, flexBasisPct } = createFlexGrid(container, plotsPerRow);
@@ -172,7 +172,7 @@ export function createFlexGrid(container, plotsPerRow, gap = '15px') {
 const WARNING_ICONS = { red: '🚩', yellow: '⚠️' };
 
 /**
- * Insert a warning banner as the first child of `container` — used to flag
+ * Insert a warning banner as the first child of `container` - used to flag
  * the most obvious data-quality issues right where the relevant widget
  * renders them (e.g. mixed dtypes at the top of the Metadata widget).
  *
@@ -181,7 +181,7 @@ const WARNING_ICONS = { red: '🚩', yellow: '⚠️' };
  *
  * @param {HTMLElement} container  Widget body (already in the DOM).
  * @param {object} opts
- * @param {'red'|'yellow'} [opts.level='yellow']  Severity — red for things
+ * @param {'red'|'yellow'} [opts.level='yellow']  Severity - red for things
  *   worth investigating, yellow for things that are merely worth a look.
  * @param {string} opts.html  Pre-built HTML for the message body. Callers are
  *   responsible for escaping any dynamic values (see `escapeHtml`).

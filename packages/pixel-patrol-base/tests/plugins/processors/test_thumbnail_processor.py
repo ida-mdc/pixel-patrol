@@ -40,7 +40,7 @@ def _run(proc, data: np.ndarray, dim_order: str) -> dict:
 
 
 def _run_chunk_with_origin(proc, data: np.ndarray, origin: list, dim_order: str) -> dict:
-    """Run a single chunk with explicit origin — simulates pipeline coordinate stamping."""
+    """Run a single chunk with explicit origin - simulates pipeline coordinate stamping."""
     record = record_from(data, {"dim_order": dim_order.upper()})
     dims = list(dim_order.upper())
     row = proc.run_chunk(record)
@@ -379,7 +379,7 @@ def test_multi_z_chunks_assembled_via_aggregation(proc):
     assert "thumbnail" in result
     assert len(result["thumbnail"]) == SPRITE_SIZE * SPRITE_SIZE * 4
     arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
-    assert arr[:, :, 3].min() == 255  # full canvas covered — all patches placed
+    assert arr[:, :, 3].min() == 255  # full canvas covered - all patches placed
 
 
 def test_multi_xy_chunks_cover_full_canvas(proc):

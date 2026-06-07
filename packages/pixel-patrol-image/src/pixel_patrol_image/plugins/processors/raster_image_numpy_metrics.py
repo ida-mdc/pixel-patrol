@@ -110,7 +110,7 @@ def mscn_variance(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
 
 def texture_heterogeneity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
                           cache: Optional[Dict] = None) -> np.ndarray:
-    """Coefficient of variation of local 3×3 stds — how unevenly distributed texture is."""
+    """Coefficient of variation of local 3×3 stds - how unevenly distributed texture is."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
@@ -161,7 +161,7 @@ def calc_ringing(arr: np.ndarray) -> np.ndarray:
 
 
 def laplacian_variance(arr: np.ndarray) -> np.ndarray:
-    """Variance of the discrete Laplacian — proxy for sharpness (higher = sharper)."""
+    """Variance of the discrete Laplacian - proxy for sharpness (higher = sharper)."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)

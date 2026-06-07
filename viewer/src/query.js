@@ -27,6 +27,6 @@ export function makeServerConn() {
     }
     return tableFromIPC(await res.arrayBuffer());
   }
-  // DuckDB WASM exposes both .query() and .execute() — alias them.
+  // DuckDB WASM exposes both .query() and .execute() - alias them.
   return { query, execute: query };
 }

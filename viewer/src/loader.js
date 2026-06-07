@@ -205,7 +205,7 @@ async function _readParquetMeta(conn, path) {
 
 async function filterGroupColsByCardinality(conn, cols) {
   if (!cols.length) return [];
-  // Sample 10 000 rows — enough to reliably detect 2–12 unique values without
+  // Sample 10 000 rows - enough to reliably detect 2–12 unique values without
   // fetching every column chunk from a remote file.
   const exprs = cols.map(c => `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`).join(', ');
   try {

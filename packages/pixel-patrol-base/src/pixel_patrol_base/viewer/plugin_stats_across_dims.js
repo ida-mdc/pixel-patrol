@@ -24,7 +24,7 @@ const QUALITY_INFO = [
 
 // X and Y are spatial tile coordinates. When querying non-spatial dims we
 // exclude tile rows (which carry dim_x/dim_y alongside dim_c etc.) so that
-// only the clean per-slice aggregated rows are scanned — the main speedup.
+// only the clean per-slice aggregated rows are scanned - the main speedup.
 const SPATIAL_LETTERS = new Set(['x', 'y']);
 
 async function renderAcrossDims(container, ctx, filterMetric) {
@@ -41,7 +41,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   // Non-spatial slice queries use obs_level = 1 (single leading dim coordinate).
   // Spatial strip queries must NOT filter obs_level: datasets often mix dim_orders
   // (YX vs CYX vs TCYX in one parquet) while dimensionInfo unions every letter that
-  // appears anywhere — obs_level would be wrong per row class. Tile rows always have
+  // appears anywhere - obs_level would be wrong per row class. Tile rows always have
   // both dim_x and dim_y; strip aggregates have exactly one spatial coord set.
   const dimLetters = Object.keys(ctx.schema.dimensionInfo ?? {})
     .filter(letter => activeDims[letter] === undefined)
@@ -167,7 +167,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     return;
   }
 
-  // Group color legend — shared across all plots in this widget
+  // Group color legend - shared across all plots in this widget
   if (ctx.groups.length > 1) {
     const legendDiv = document.createElement('div');
     legendDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:0.85rem;align-items:center';

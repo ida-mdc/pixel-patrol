@@ -25,7 +25,7 @@ function _fixedColors(palette, n) {
 }
 
 // ── ColorBrewer qualitative palettes ─────────────────────────────────────────
-// Only qualitative sets — no sequential or diverging palettes, which include
+// Only qualitative sets - no sequential or diverging palettes, which include
 // near-white tones that are invisible on a white background.
 const QUALITATIVE_BREWER = new Set([
   'Accent', 'Dark2', 'Paired', 'Set1', 'Set2', 'Set3',
@@ -64,7 +64,7 @@ function _rainbowColors(n) {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Available palette names — tab10 first (matplotlib/D3 default), then tab20,
+ * Available palette names - tab10 first (matplotlib/D3 default), then tab20,
  * then ColorBrewer qualitative palettes, then rainbow for backward compatibility.
  */
 export function getPaletteNames() {

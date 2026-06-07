@@ -1,11 +1,11 @@
 /**
- * Glow by Depth plugin — part of the Pixel HAI Watch Extension.
+ * Glow by Depth plugin - part of the Pixel HAI Watch Extension.
  *
  * Plots the glow_count computed by GlowSpotterProcessor (from the actual
  * pixel data) against the depth_zone fake-metadata field read straight from
  * the parquet "dive patch" files, split and colored by group (dive site)
  * just like the built-in widgets. A jittered scatter is used (rather than a
- * box/violin) because each category only holds a handful of points — exactly
+ * box/violin) because each category only holds a handful of points - exactly
  * the kind of small sample where distributional summaries would mislead.
  *
  * Load via the extension manifest (recommended):
