@@ -55,6 +55,7 @@ nav:
     - Processing: tutorials/processing.md
     - Exploring the Report: tutorials/report.md
     - Sharing a Report: tutorials/sharing.md
+    - Create an Extension: tutorials/extension.md
 
 markdown_extensions:
   - admonition
