@@ -1,14 +1,18 @@
-"""Generates the tiny "Pixel Sky Watch" dataset used by this example.
+"""Generates the tiny "Pixel HAI Watch" dataset used by this example.
 
-Each "sky patch" is a 16x16 grayscale snapshot of the sky stored as a
-`.parquet` table - one `uint8` column per pixel column (X), one row per pixel
-row (Y). A patch's overall brightness depends on the time of day it was
-"logged" (bright at midday, dark at night), with a few bright "stars"
-sprinkled on top - mostly at night, rarely during the day - so
-SkyPatchLoader / StarSpotterProcessor have something intuitive to read and
-count. Fake "image metadata" describing the patch (time_of_day, cloud_cover)
-is stashed in the parquet schema metadata, the same slot real formats use for
-instrument metadata.
+Each "dive patch" is a 16x16 grayscale snapshot from a deep-sea camera,
+stored as a `.parquet` table - one `uint8` column per pixel column (X), one
+row per pixel row (Y). A patch's overall brightness depends on the ocean
+layer it was logged in (`depth_zone`): bright near the surface where sunlight
+reaches, almost black in the deep, with a soft top-to-bottom gradient as that
+sunlight fades on its way down. A few bright "glows" are sprinkled on top -
+rarely near the surface, generously in the deep - standing in for
+bioluminescence, the light some sharks make themselves down where the sun
+never reaches. SharkCamLoader / GlowSpotterProcessor have something intuitive
+to read and count: of course there's more glow the deeper - and darker - it
+gets. Fake "image metadata" (`depth_zone`) is stashed in the parquet schema
+metadata - the same slot real formats use for instrument metadata - and
+read out by SharkCamLoader.
 
 Run once to (re)create `data/`:
 
@@ -25,47 +29,68 @@ HERE = Path(__file__).resolve().parent
 SPRITE_SIZE = 16
 SEED = 42
 
-# time_of_day -> (base brightness, min/max number of stars sprinkled on top).
-# It's brightest at midday and darkest at night - and that's exactly when you
-# actually see stars, by construction.
-TIME_PROFILES = {
-    "dawn":  {"brightness": 110, "stars": (0, 2)},
-    "day":   {"brightness": 205, "stars": (0, 0)},
-    "dusk":  {"brightness": 95,  "stars": (0, 2)},
-    "night": {"brightness": 25,  "stars": (8, 14)},
+# A short, charming blurb - passed as `process_files(..., description=...)`
+# in create_and_show_report.py, where the viewer displays it below the
+# project title (and stores it in the report's own metadata).
+DESCRIPTION = (
+    "Some deep-sea sharks make their own light: in 2021 researchers confirmed "
+    "the kitefin shark as the largest known glowing vertebrate, producing a "
+    "soft blue-green bioluminescence in ocean layers sunlight never reaches. "
+    "https://www.frontiersin.org/journals/marine-science/articles/10.3389/fmars.2021.633582/full"
+)
+
+# depth_zone -> (base brightness, min/max number of glows sprinkled on top).
+# It's brightest near the surface, where the sun still reaches, and darkest
+# in the deep - and that's exactly where bioluminescence shows up, by
+# construction: the deeper and darker the water, the more glows light up.
+DEPTH_PROFILES = {
+    "sunlit":   {"brightness": 205, "glows": (0, 0)},
+    "twilight": {"brightness": 120, "glows": (0, 2)},
+    "midnight": {"brightness": 55,  "glows": (3, 6)},
+    "abyss":    {"brightness": 20,  "glows": (6, 10)},
 }
 
-# (folder, file stem, time_of_day, cloud_cover)
+# (folder, file stem, depth_zone)
 PATCHES = [
-    ("rooftop_log",  "patch_dawn",  "dawn",  "clear"),
-    ("rooftop_log",  "patch_day",   "day",   "clear"),
-    ("rooftop_log",  "patch_dusk",  "dusk",  "cloudy"),
-    ("rooftop_log",  "patch_night", "night", "clear"),
-    ("campsite_log", "patch_dawn",  "dawn",  "cloudy"),
-    ("campsite_log", "patch_day",   "day",   "cloudy"),
-    ("campsite_log", "patch_dusk",  "dusk",  "clear"),
-    ("campsite_log", "patch_night", "night", "clear"),
+    ("azores_log",   "patch_sunlit",   "sunlit"),
+    ("azores_log",   "patch_twilight", "twilight"),
+    ("azores_log",   "patch_midnight", "midnight"),
+    ("azores_log",   "patch_abyss",    "abyss"),
+    ("kermadec_log", "patch_sunlit",   "sunlit"),
+    ("kermadec_log", "patch_twilight", "twilight"),
+    ("kermadec_log", "patch_midnight", "midnight"),
+    ("kermadec_log", "patch_abyss",    "abyss"),
 ]
 
 
-def make_patch(rng: np.random.Generator, brightness: int, star_range: tuple[int, int]) -> np.ndarray:
-    """Paint a patch of sky: a soft vertical gradient, some noise, and a sprinkle of stars."""
-    gradient = np.linspace(-15, 15, SPRITE_SIZE).reshape(-1, 1)
-    sky = brightness + gradient + rng.integers(-10, 11, size=(SPRITE_SIZE, SPRITE_SIZE))
-    sky = np.clip(sky, 0, 255).astype(np.uint8)
-
-    lo, hi = star_range
-    n_stars = int(rng.integers(lo, hi + 1))
-    for _ in range(n_stars):
-        y, x = rng.integers(0, SPRITE_SIZE, size=2)
-        sky[y, x] = rng.integers(225, 256)
-
-    return sky
+def stamp_glow(water: np.ndarray, rng: np.random.Generator, peak: float) -> None:
+    """Add one soft, round glow - a bright core fading out over a couple of
+    pixels, the way bioluminescent light blooms and scatters underwater
+    (rather than appearing as a sharp point, like a star against open sky)."""
+    size = water.shape[0]
+    cy, cx = rng.integers(0, size, size=2)
+    yy, xx = np.ogrid[:size, :size]
+    falloff = np.exp(-((yy - cy) ** 2 + (xx - cx) ** 2) / 2.0)
+    water += peak * falloff
 
 
-def write_patch(path: Path, patch: np.ndarray, time_of_day: str, cloud_cover: str) -> None:
+def make_patch(rng: np.random.Generator, brightness: int, glow_range: tuple[int, int]) -> np.ndarray:
+    """Paint a patch of ocean: a soft top-to-bottom gradient (sunlight fading
+    with depth), some noise, and a sprinkle of bioluminescent glows."""
+    gradient = np.linspace(15, -15, SPRITE_SIZE).reshape(-1, 1)
+    water = brightness + gradient + rng.integers(-10, 11, size=(SPRITE_SIZE, SPRITE_SIZE))
+    water = water.astype(np.float32)
+
+    lo, hi = glow_range
+    for _ in range(int(rng.integers(lo, hi + 1))):
+        stamp_glow(water, rng, peak=float(rng.integers(140, 200)))
+
+    return np.clip(water, 0, 255).astype(np.uint8)
+
+
+def write_patch(path: Path, patch: np.ndarray, depth_zone: str) -> None:
     columns = {f"px_{x:02d}": pa.array(patch[:, x], type=pa.uint8()) for x in range(patch.shape[1])}
-    table = pa.table(columns).replace_schema_metadata({"time_of_day": time_of_day, "cloud_cover": cloud_cover})
+    table = pa.table(columns).replace_schema_metadata({"depth_zone": depth_zone})
     pq.write_table(table, path)
 
 
@@ -73,15 +98,15 @@ def main() -> None:
     rng = np.random.default_rng(SEED)
     data_dir = HERE / "data"
 
-    for folder, stem, time_of_day, cloud_cover in PATCHES:
+    for folder, stem, depth_zone in PATCHES:
         out_dir = data_dir / folder
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        profile = TIME_PROFILES[time_of_day]
-        patch = make_patch(rng, profile["brightness"], profile["stars"])
+        profile = DEPTH_PROFILES[depth_zone]
+        patch = make_patch(rng, profile["brightness"], profile["glows"])
         out_path = out_dir / f"{stem}.parquet"
-        write_patch(out_path, patch, time_of_day, cloud_cover)
-        print(f"wrote {out_path.relative_to(HERE)}  [{time_of_day} · {cloud_cover}]")
+        write_patch(out_path, patch, depth_zone)
+        print(f"wrote {out_path.relative_to(HERE)}  [{depth_zone}]")
 
 
 if __name__ == "__main__":

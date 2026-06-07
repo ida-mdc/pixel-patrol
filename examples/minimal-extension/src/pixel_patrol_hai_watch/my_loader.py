@@ -8,26 +8,25 @@ from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.record import Record, record_from
 
 
-class SkyPatchLoader:
-    """Reads a tiny ``.parquet`` table as if it were a photo of a patch of sky.
+class SharkCamLoader:
+    """Reads a tiny ``.parquet`` table as if it were a deep-sea camera snapshot.
 
     Each file holds a small grid of ``uint8`` columns - read column-by-column
     and stacked side by side, the table *is* the pixel grid (rows -> Y,
     columns -> X). Real microscopy formats carry instrument metadata
     (channel names, pixel sizes, acquisition stamps, ...) in a header the
-    loader extracts; here the same role is played by two plain key/value
-    pairs stashed in the parquet schema's metadata - "time_of_day" (when the
-    patch was logged: dawn, day, dusk or night) and "cloud_cover" (clear or
-    cloudy).
+    loader extracts; here the same role is played by a single key/value pair
+    stashed in the parquet schema's metadata - "depth_zone", which layer of
+    the ocean the snapshot was taken in (sunlit, twilight, midnight or abyss).
     """
 
-    NAME = "sky-patch"
+    NAME = "shark-cam"
 
     SUPPORTED_EXTENSIONS: Set[str] = {"parquet"}
     FOLDER_EXTENSIONS:    Set[str] = set()
     CONTAINER_EXTENSIONS: Set[str] = set()
 
-    OUTPUT_SCHEMA:          Dict[str, Any] = {"time_of_day": str, "cloud_cover": str}
+    OUTPUT_SCHEMA:          Dict[str, Any] = {"depth_zone": str}
     OUTPUT_SCHEMA_PATTERNS: List[tuple]    = []
 
     def is_folder_supported(self, path: Path) -> bool:
@@ -48,13 +47,12 @@ class SkyPatchLoader:
         log_entry = {k.decode(): v.decode() for k, v in raw_meta.items()}
 
         meta = {
-            "time_of_day": log_entry.get("time_of_day", "unknown"),
-            "cloud_cover": log_entry.get("cloud_cover", "unknown"),
-            "dim_order":   "YX",
+            "depth_zone": log_entry.get("depth_zone", "unknown"),
+            "dim_order":  "YX",
         }
         # kind="intensity" lets the standard pipeline treat the patch like any
         # other image: thumbnails, histograms and basic metrics all apply.
         return record_from(pixels, meta, kind="intensity")
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
-        raise NotImplementedError("sky-patch is not a container format")
+        raise NotImplementedError("shark-cam is not a container format")

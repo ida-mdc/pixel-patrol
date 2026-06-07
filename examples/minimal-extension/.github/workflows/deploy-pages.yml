@@ -20,6 +20,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: src/pixel_sky_watch/viewer/
+          path: src/pixel_patrol_hai_watch/viewer/
       - id: deployment
         uses: actions/deploy-pages@v4
