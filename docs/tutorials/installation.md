@@ -40,7 +40,7 @@ Answer the questions below and we'll show you the exact commands for your setup.
   <div class="wiz-step wiz-hidden" id="iws-uv">
     <div class="wiz-step-q">Do you have <code>uv</code> installed?</div>
     <div class="wiz-step-hint">
-      <code>uv</code> is a fast Python package manager — we recommend it, but pip works too.
+      <code>uv</code> is a fast Python package manager - we recommend it, but pip works too.
       Not sure? Run <code>uv --version</code> in your terminal.
     </div>
     <div class="wiz-options wiz-options-row">

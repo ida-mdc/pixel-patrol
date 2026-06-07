@@ -1,6 +1,6 @@
 # Processing
 
-`pixel-patrol process` is the first step in the Pixel Patrol workflow. It scans your images and produces a `.parquet` report file containing everything Pixel Patrol knows about your dataset — file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
+`pixel-patrol process` is the first step in the Pixel Patrol workflow. It scans your images and produces a `.parquet` report file containing everything Pixel Patrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
 
 Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just *what* to run, but *why* each flag is there.
 
@@ -34,7 +34,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-visible" id="pws-base_dir">
     <div class="wiz-step-q">📁 Where are your images?</div>
     <div class="wiz-step-hint">
-      This is the root folder of your dataset — the <code>BASE_DIRECTORY</code> argument in the command.
+      This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
       Pixel Patrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
     </div>
@@ -79,7 +79,7 @@ Answer the questions below and we'll walk you through each decision together, bu
                onchange="procWiz.pick('loader','tifffile')">
         <div>
           <div class="wiz-opt-title">
-            TIFF only — lightweight loader
+            TIFF only - lightweight loader
             <code class="wiz-badge">--loader tifffile</code>
           </div>
           <div class="wiz-opt-sub">Faster when your dataset is exclusively TIFF files</div>
@@ -89,7 +89,7 @@ Answer the questions below and we'll walk you through each decision together, bu
         <input type="radio" name="proc-loader" value=""
                onchange="procWiz.pick('loader','')">
         <div>
-          <div class="wiz-opt-title">Just basic file info — no image reading</div>
+          <div class="wiz-opt-title">Just basic file info - no image reading</div>
           <div class="wiz-opt-sub">Collects file names, sizes, and extensions only. No loader required.</div>
         </div>
       </label>
@@ -101,7 +101,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-q">🗃️ Restrict to specific file extensions? <span class="wiz-optional">(optional)</span></div>
     <div class="wiz-step-hint">
       By default the loader processes all file formats it supports. If your folder contains mixed file types
-      and you only want to process some of them, list the extensions here — each becomes a <code>-e</code> flag.
+      and you only want to process some of them, list the extensions here - each becomes a <code>-e</code> flag.
       Leave blank to process everything the loader supports.
       Example: <code>tif, nd2, czi</code>
     </div>
@@ -114,22 +114,22 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-conditions">
     <div class="wiz-step-q">🗂️ Do you have multiple experimental conditions or groups?</div>
     <div class="wiz-step-hint">
-      Use this if your images are organized into subfolders — one per condition, batch, or timepoint.
+      Use this if your images are organized into subfolders - one per condition, batch, or timepoint.
       Specifying subfolders does two things: it <strong>limits processing to only those folders</strong> (others are ignored),
       and it sets each one as a <strong>labeled group</strong> in the report, shown in different colors for easy comparison.
-      This grouping is the default — you can always regroup interactively in the viewer later.
+      This grouping is the default - you can always regroup interactively in the viewer later.
       If you skip this, all images under the base folder are processed as one group.
     </div>
     <div class="wiz-options wiz-options-row">
       <label class="wiz-option">
         <input type="radio" name="proc-cond" value="no"
                onchange="procWiz.setConditions('no')">
-        <div><div class="wiz-opt-title">No — process everything as one group</div></div>
+        <div><div class="wiz-opt-title">No - process everything as one group</div></div>
       </label>
       <label class="wiz-option">
         <input type="radio" name="proc-cond" value="yes"
                onchange="procWiz.setConditions('yes')">
-        <div><div class="wiz-opt-title">Yes — I have subfolders to compare</div></div>
+        <div><div class="wiz-opt-title">Yes - I have subfolders to compare</div></div>
       </label>
     </div>
   </div>
@@ -138,7 +138,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-cond_names">
     <div class="wiz-step-q">Which subfolders should be compared?</div>
     <div class="wiz-step-hint">
-      Comma-separated paths relative to your base directory — each becomes a <code>-p</code> flag and a labeled group.
+      Comma-separated paths relative to your base directory - each becomes a <code>-p</code> flag and a labeled group.
       Can be immediate subfolders or deeper (e.g. <code>batch_1/control</code>). Only include the ones you want to compare.
       Example: <code>control, treated_a, treated_b</code>
     </div>
@@ -151,7 +151,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-output">
     <div class="wiz-step-q">💾 Where should the output report be saved?</div>
     <div class="wiz-step-hint">
-      A path (relative or absolute) for the output <code>.parquet</code> file — set by <code>-o</code>.
+      A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
       who can open it in the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/" target="_blank">online viewer</a> without installing anything.
     </div>
@@ -189,7 +189,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-q">🖥️ Are you running on an HPC cluster?</div>
     <div class="wiz-step-hint">
       Pixel Patrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
-      On a local machine it auto-detects a sensible number of workers based on your CPUs and RAM — no configuration needed.
+      On a local machine it auto-detects a sensible number of workers based on your CPUs and RAM - no configuration needed.
       On a cluster you can harness many more resources, which makes a real difference for large datasets
       with thousands of images or very large volumes.
     </div>
@@ -197,12 +197,12 @@ Answer the questions below and we'll walk you through each decision together, bu
       <label class="wiz-option">
         <input type="radio" name="proc-cluster" value="no"
                onchange="procWiz.setCluster('no')">
-        <div><div class="wiz-opt-title">No — running locally</div></div>
+        <div><div class="wiz-opt-title">No - running locally</div></div>
       </label>
       <label class="wiz-option">
         <input type="radio" name="proc-cluster" value="yes"
                onchange="procWiz.setCluster('yes')">
-        <div><div class="wiz-opt-title">Yes — using a cluster</div></div>
+        <div><div class="wiz-opt-title">Yes - using a cluster</div></div>
       </label>
     </div>
   </div>
@@ -213,7 +213,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-hint">
       SLURM is the most widely used job scheduler on HPC clusters.
       If your cluster uses it, <code>pixel-patrol-slurm</code> handles everything: it submits worker jobs,
-      waits for them to come online, runs the processing, and cleans up — all in one command.
+      waits for them to come online, runs the processing, and cleans up - all in one command.
       If you're using a different setup (e.g. you already have a running Dask cluster), choose the second option
       and provide the scheduler address instead.
     </div>
@@ -221,13 +221,13 @@ Answer the questions below and we'll walk you through each decision together, bu
       <label class="wiz-option">
         <input type="radio" name="proc-slurm" value="yes"
                onchange="procWiz.setSlurm('yes')">
-        <div><div class="wiz-opt-title">Yes — SLURM</div></div>
+        <div><div class="wiz-opt-title">Yes - SLURM</div></div>
       </label>
       <label class="wiz-option">
         <input type="radio" name="proc-slurm" value="no"
                onchange="procWiz.setSlurm('no')">
         <div>
-          <div class="wiz-opt-title">No — I have a Dask scheduler URL</div>
+          <div class="wiz-opt-title">No - I have a Dask scheduler URL</div>
           <div class="wiz-opt-sub">e.g. from a manually started Dask cluster</div>
         </div>
       </label>
@@ -311,7 +311,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       </div>
       <div class="wiz-adv-field-hint">
         Controls the per-dimension granularity of statistics in the report.
-        By default, non-spatial dimensions (Z, T, C, S) each step by 1 — one row of stats per slice.
+        By default, non-spatial dimensions (Z, T, C, S) each step by 1 - one row of stats per slice.
         Set a higher step (e.g. <code>Z=5</code>) for coarser, smaller output, or <code>-1</code> to collapse a
         dimension entirely. Only relevant if you have multidimensional data and care about per-slice statistics.
         Comma-separated for multiple dims. Example: <code>Z=5, C=1</code>
@@ -330,7 +330,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       <div class="wiz-adv-field-hint">
         By default all installed processors run: <code>raster-basic</code>, <code>raster-histogram</code>,
         <code>thumbnail</code>, <code>raster-quality</code>, <code>raster-compression</code>.
-        List specific ones here to run only those — takes precedence over exclude.
+        List specific ones here to run only those - takes precedence over exclude.
         Useful for speeding up processing when you only need a subset of metrics.
       </div>
       <input class="wiz-input" type="text" id="pwi-processors_include"
@@ -666,4 +666,4 @@ document.addEventListener('DOMContentLoaded', function() {
     ```bash
     pixel-patrol view report.parquet
     ```
-    Or drag the `.parquet` file into the [online viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) — no install needed on the recipient's side.
+    Or drag the `.parquet` file into the [online viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no install needed on the recipient's side.

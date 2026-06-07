@@ -8,7 +8,7 @@ A few things to know before you start:
 
 - **Some charts collapse into a table.** If all your images share the same value for a property (e.g. they're all the same size, or all the same dtype), Pixel Patrol shows a summary table instead of a chart.
 - **Widget availability depends on what was processed.** Widgets that need data not collected simply don't appear. The colored pill on each card tells you what's required.
-- **Everything reacts to the sidebar.** Grouping, filters, and dimension selectors update all widgets instantly — we'll cover the sidebar [at the end](#working-with-the-sidebar).
+- **Everything reacts to the sidebar.** Grouping, filters, and dimension selectors update all widgets instantly - we'll cover the sidebar [at the end](#working-with-the-sidebar).
 
 **Reading the cards:**
 
@@ -27,7 +27,7 @@ A few things to know before you start:
 pixel-patrol view report.parquet
 ```
 
-This starts a local server with native DuckDB and opens the viewer in your browser — recommended for any non-trivial dataset. You can also go to [ida-mdc.github.io/pixel-patrol/viewer/](https://ida-mdc.github.io/pixel-patrol/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
+This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [ida-mdc.github.io/pixel-patrol/viewer/](https://ida-mdc.github.io/pixel-patrol/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
 
 **Useful launch flags:**
 
@@ -44,7 +44,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 
 <div class="wc-setup" id="wc-setup-panel">
   <div class="wc-setup-title">⚙ What's in your report?</div>
-  <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for widgets that don't apply to your setup will dim out as you scroll through the walkthrough — so you can see at a glance which ones are actually relevant to you.</p>
+  <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for widgets that don't apply to your setup will dim out as you scroll through the walkthrough - so you can see at a glance which ones are actually relevant to you.</p>
   <div class="wc-setup-row">
     <span class="wc-setup-q">Did you run processing with an image loader (e.g. <code>pixel-patrol-loader-bio</code>)?</span>
     <span class="wc-setup-btns">
@@ -68,6 +68,8 @@ pixel-patrol view report.parquet --significance              # show stat bracket
   </div>
 </div>
 
+<p style="font-size:0.82rem;margin:0.5rem 0;opacity:0.8">Click the ✓ in the corner of each widget card to mark it as reviewed and track your progress through the walkthrough.</p>
+
 <div class="wc-progress-wrap">
   <div class="wc-progress-label" id="wc-prog-label">0 / 11 widgets reviewed</div>
   <div class="wc-progress-bar"><div class="wc-progress-fill" id="wc-prog-fill"></div></div>
@@ -89,17 +91,17 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-shots two-col">
   <div class="wc-shot">
     <img src="../../assets/screenshots/summ1.png" alt="File Count per Group">
-    <figcaption>File count per group — balanced at 10 each.</figcaption>
+    <figcaption>File count per group - balanced at 10 each.</figcaption>
   </div>
   <div class="wc-shot">
     <img src="../../assets/screenshots/sum2.png" alt="Total Size per Group">
-    <figcaption>Total size per group — <code>condition3_comp</code> is 10× smaller. Already suspicious before looking at a single pixel.</figcaption>
+    <figcaption>Total size per group - <code>condition3_comp</code> is 10× smaller. Already suspicious before looking at a single pixel.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Uneven group sizes can skew statistics and significance tests.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition being much smaller on disk than the others (same file count, much less data) is a hint of a possible issue — images that differ in size or dtype, or compression. The next few widgets will help you tell which it is.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition being much smaller on disk than the others (same file count, much less data) is a hint of a possible issue - images that differ in size or dtype, or compression. The next few widgets will help you tell which it is.</div></div>
 </div>
 
 </div>
@@ -120,24 +122,24 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>File metadata only — no pixel data. Sizes from the filesystem; modification timestamps from each file's <code>mtime</code>.</div>
+<div>File metadata only - no pixel data. Sizes from the filesystem; modification timestamps from each file's <code>mtime</code>.</div>
 </details>
 
 <div class="wc-shots two-col">
   <div class="wc-shot">
     <img src="../../assets/screenshots/ext.png" alt="File Count by Extension">
-    <figcaption>File count by extension — <code>condition3_comp</code> is the only group with <code>.jpeg</code> files. JPEG compression probably explains the smaller file sizes.</figcaption>
+    <figcaption>File count by extension - <code>condition3_comp</code> is the only group with <code>.jpeg</code> files. JPEG compression probably explains the smaller file sizes.</figcaption>
   </div>
   <div class="wc-shot">
     <img src="../../assets/screenshots/count_ext.png" alt="File Count by Size Bin">
-    <figcaption>File size distribution — the compressed JPEG images cluster in the small-size bins on the left; originals and noisy images spread to the right.</figcaption>
+    <figcaption>File size distribution - the compressed JPEG images cluster in the small-size bins on the left; originals and noisy images spread to the right.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>One condition has a different file format than the others.</strong> In this example, only <code>condition3_comp</code> has <code>.jpeg</code> files. Mixed extensions across groups can mean a mixed dataset — images exported in two formats, or even saved twice.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Modification dates spread across weeks or months — e.g. one condition acquired in March and another in May — you may want to check for a batch effect.</div></div>
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Most properties collapsed to tables and modification dates are clustered together — in many cases, that points to consistent acquisition.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>One condition has a different file format than the others.</strong> In this example, only <code>condition3_comp</code> has <code>.jpeg</code> files. Mixed extensions across groups can mean a mixed dataset - images exported in two formats, or even saved twice.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Modification dates spread across weeks or months - e.g. one condition acquired in March and another in May - you may want to check for a batch effect.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Most properties collapsed to tables and modification dates are clustered together - in many cases, that points to consistent acquisition.</div></div>
 </div>
 
 </div>
@@ -154,12 +156,12 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>An interactive sunburst of your folder hierarchy. A toggle lets you size the segments by <strong>file count</strong> or by <strong>total size</strong> — the screenshot below shows the by-size view. Only files that were actually scanned into the report are included. <strong>Click any segment to zoom in; click the center ring to zoom out.</strong></p>
+<p>An interactive sunburst of your folder hierarchy. A toggle lets you size the segments by <strong>file count</strong> or by <strong>total size</strong> - the screenshot below shows the by-size view. Only files that were actually scanned into the report are included. <strong>Click any segment to zoom in; click the center ring to zoom out.</strong></p>
 
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/burst.png" alt="File Structure Sunburst">
-    <figcaption>The 4 conditions at the second ring, each split into species subfolders — each file appears at the outer edge. Hover any segment to see the path and count.</figcaption>
+    <figcaption>The 4 conditions at the second ring, each split into species subfolders - each file appears at the outer edge. Hover any segment to see the path and count.</figcaption>
   </div>
 </div>
 
@@ -181,11 +183,11 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>Distribution of <code>dtype</code> and <code>dim_order</code> across groups, plus a summary table of other properties — <code>ndim</code> and pixel size, where available — for the cases where every file shares the same value.</p>
+<p>Distribution of <code>dtype</code> and <code>dim_order</code> across groups, plus a summary table of other properties - <code>ndim</code> and pixel size, where available - for the cases where every file shares the same value.</p>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>If <code>dtype</code>, <code>dim_order</code>, or <code>ndim</code> vary across your files</strong>, that points to inconsistent acquisition — possibly different instruments or different acquisition parameters — and is worth verifying before you compare groups. Mixed-<code>dtype</code> example: <code>uint8</code> lives in [0, 255] while <code>uint16</code> lives in [0, 65535], so a pixel value of 100 means something completely different in each.</div></div>
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Single <code>dtype</code>, <code>dim_order</code>, and <code>ndim</code> across the whole dataset — format-level consistency confirmed.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>If <code>dtype</code>, <code>dim_order</code>, or <code>ndim</code> vary across your files</strong>, that points to inconsistent acquisition - possibly different instruments or different acquisition parameters - and is worth verifying before you compare groups. Mixed-<code>dtype</code> example: <code>uint8</code> lives in [0, 255] while <code>uint16</code> lives in [0, 65535], so a pixel value of 100 means something completely different in each.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Single <code>dtype</code>, <code>dim_order</code>, and <code>ndim</code> across the whole dataset - format-level consistency confirmed.</div></div>
 </div>
 
 </div>
@@ -202,21 +204,21 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>X/Y scatter plot (width vs. height, one point per image) plus strip plots for any non-spatial dimensions present (e.g. Z, T, C, S — names depend on your loader). Quickly reveals outliers and whether your images are consistently sized across groups.</p>
+<p>X/Y scatter plot (width vs. height, one point per image) plus strip plots for any non-spatial dimensions present (e.g. Z, T, C, S - names depend on your loader). Quickly reveals outliers and whether your images are consistently sized across groups.</p>
 
 <div class="wc-shots two-col match-height">
   <div class="wc-shot">
     <img src="../../assets/screenshots/yx.png" alt="X vs Y size scatter">
-    <figcaption>X vs Y size — plankton images vary widely (some organisms are much larger). No tight cluster here is expected for a species-diverse dataset.</figcaption>
+    <figcaption>X vs Y size - plankton images vary widely (some organisms are much larger). No tight cluster here is expected for a species-diverse dataset.</figcaption>
   </div>
   <div class="wc-shot">
     <img src="../../assets/screenshots/y_size.png" alt="Y size distribution">
-    <figcaption>Y size violin — <code>condition1_org</code> has the widest spread, including one very tall image (~580px). That outlier is worth investigating.</figcaption>
+    <figcaption>Y size violin - <code>condition1_org</code> has the widest spread, including one very tall image (~580px). That outlier is worth investigating.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Two distinct clusters in the X/Y scatter — e.g. a 1024×1024 group and a separate 512×512 group — often indicates images from different instruments, different acquisition parameters, or accidentally included thumbnails.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Two distinct clusters in the X/Y scatter - e.g. a 1024×1024 group and a separate 512×512 group - often indicates images from different instruments, different acquisition parameters, or accidentally included thumbnails.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Hover over any point to see the file path. A single size outlier is often a misplaced metadata file or a preview image saved alongside real data.</div></div>
 </div>
 
@@ -234,7 +236,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>A thumbnail grid — one patch per image, border color = group. Sort by any metric and your statistics become something you can actually look at and verify with your own eyes.</p>
+<p>A thumbnail grid - one patch per image, border color = group. Sort by any metric and your statistics become something you can actually look at and verify with your own eyes.</p>
 
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
@@ -244,7 +246,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/mos.png" alt="Image Mosaic">
-    <figcaption>Plankton thumbnails from all four conditions — border colors indicate group. Sort by <code>laplacian_variance</code> ascending and the blurred/out-of-focus images will float to the top.</figcaption>
+    <figcaption>Plankton thumbnails from all four conditions - border colors indicate group. Sort by <code>laplacian_variance</code> ascending and the blurred/out-of-focus images will float to the top.</figcaption>
   </div>
 </div>
 
@@ -274,7 +276,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <summary>🔬 How it's computed</summary>
 <div>
 <strong>mean:</strong> <code>np.nanmean</code> over all pixels, pixel-count-weighted across 2D planes.<br>
-<strong>std:</strong> pooled — <code>√(Σnᵢ(σᵢ² + (μᵢ − μ̄)²) / Σnᵢ)</code> — accounts for both within-plane and between-plane variance.<br>
+<strong>std:</strong> pooled - <code>√(Σnᵢ(σᵢ² + (μᵢ − μ̄)²) / Σnᵢ)</code> - accounts for both within-plane and between-plane variance.<br>
 <strong>min / max:</strong> <code>np.nanmin</code> / <code>np.nanmax</code> per plane, then min/max across planes.<br>
 NaN pixels are excluded from all calculations.
 </div>
@@ -283,14 +285,14 @@ NaN pixels are excluded from all calculations.
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/max_intensity.png" alt="Max Intensity violin">
-    <figcaption><code>max_intensity</code> distribution — <code>condition2_bl</code> (blurred) has a wide, low distribution. <code>condition1_org</code> clusters tightly near 255. Each dot is one image; hover to identify the file.</figcaption>
+    <figcaption><code>max_intensity</code> distribution - <code>condition2_bl</code> (blurred) has a wide, low distribution. <code>condition1_org</code> clusters tightly near 255. Each dot is one image; hover to identify the file.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong><code>max_intensity</code> sitting exactly at 255 (or 65535)</strong> is worth a closer look — it can mean those images hit the sensor's ceiling and got clipped. Check the histogram for a spike at the max value to confirm real saturation (a single bright pixel can also legitimately land at 255), then verify visually in the mosaic.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong><code>max_intensity</code> sitting exactly at 255 (or 65535)</strong> is worth a closer look - it can mean those images hit the sensor's ceiling and got clipped. Check the histogram for a spike at the max value to confirm real saturation (a single bright pixel can also legitimately land at 255), then verify visually in the mosaic.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Large spread in <code>mean_intensity</code> within a single group: variable illumination, inconsistent staining, or genuinely variable signal.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Enable <strong>Show significance</strong> in the sidebar for Mann-Whitney U brackets (Bonferroni corrected). A bracket = statistically distinguishable groups — whether that's meaningful is your call.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Enable <strong>Show significance</strong> in the sidebar for Mann-Whitney U brackets (Bonferroni corrected). A bracket = statistically distinguishable groups - whether that's meaningful is your call.</div></div>
 </div>
 
 </div>
@@ -307,24 +309,24 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>The mean pixel intensity histogram per group — a more in-depth look at whether your pixel intensity distribution looks the way you'd expect. Toggle between a normalized <strong>0–255</strong> view and the <strong>native range</strong> of your data.</p>
+<p>The mean pixel intensity histogram per group - a more in-depth look at whether your pixel intensity distribution looks the way you'd expect. Toggle between a normalized <strong>0-255</strong> view and the <strong>native range</strong> of your data.</p>
 
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Each image gets a 256-bin histogram of its pixel values, normalized to sum to 1. Per-group, histograms are averaged using pixel-count weighting — larger images contribute proportionally more.</div>
+<div>Each image gets a 256-bin histogram of its pixel values, normalized to sum to 1. Per-group, histograms are averaged using pixel-count weighting - larger images contribute proportionally more.</div>
 </details>
 
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/hist.png" alt="Intensity histograms">
-    <figcaption>The four conditions have strikingly different distributions: <code>condition2_bl</code> (blurred, orange) peaks around 190 — much brighter on average. <code>condition3_comp</code> (JPEG, cyan) is spread unusually flat. All four peak at 0 (dark background), but to very different degrees.</figcaption>
+    <figcaption>The four conditions have strikingly different distributions: <code>condition2_bl</code> (blurred, orange) peaks around 190 - much brighter on average. <code>condition3_comp</code> (JPEG, cyan) is spread unusually flat. All four peak at 0 (dark background), but to very different degrees.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Comparing histograms across groups side by side is a quick way to look at conditions in more depth than a single summary statistic can show.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Distributions shifted between groups: could be real biology, or different acquisition settings on different days.</div></div>
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Distribution looks the way you'd expect for your sample, and is consistent across groups that should be comparable. (Not every dataset should be bell-shaped, and not every condition should look alike — judge against your own expectations, not a generic template.)</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Distribution looks the way you'd expect for your sample, and is consistent across groups that should be comparable. (Not every dataset should be bell-shaped, and not every condition should look alike - judge against your own expectations, not a generic template.)</div></div>
 </div>
 
 </div>
@@ -342,10 +344,10 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>Five quality metrics computed per leaf slice, aggregated by pixel-count-weighted mean. <strong>Only compare images at the same magnification and pixel size</strong> — all these metrics are scale-dependent.</p>
+<p>Five quality metrics computed per leaf slice, aggregated by pixel-count-weighted mean. Together they surface a wide range of issues - focus problems, low contrast, sensor noise, uneven texture, and compression artifacts - not just one of these. <strong>Only compare images at the same magnification and pixel size</strong> - all these metrics are scale-dependent.</p>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">— sharpness / focus quality</small></div>
+<div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">- sharpness / focus quality</small></div>
 <p style="font-size:0.9rem;margin:0 0 0.5rem">The go-to blur detector. High = sharp; low = blurry or out-of-focus.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
@@ -358,33 +360,33 @@ NaN pixels are excluded from all calculations.
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Michelson Contrast <small style="font-weight:400;opacity:0.65">— local dynamic range</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">How much local contrast the image has — whether pixel values vary substantially within small neighborhoods.</p>
+<div class="wc-metric-name">Michelson Contrast <small style="font-weight:400;opacity:0.65">- local dynamic range</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">How much local contrast the image has - whether pixel values vary substantially within small neighborhoods.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>For every 3×3 window, compute <code>max − min</code> (local intensity range). Average all local ranges across the image. Divide by the global spatial standard deviation. Higher = more local contrast relative to overall spread.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low Michelson contrast: image is "flat" — possible underexposure, oversaturation, or genuinely low-contrast sample. Compare with the histogram to distinguish.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low Michelson contrast: image is "flat" - possible underexposure, oversaturation, or genuinely low-contrast sample. Compare with the histogram to distinguish.</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">MSCN Variance <small style="font-weight:400;opacity:0.65">— noise sensitivity (BRISQUE)</small></div>
+<div class="wc-metric-name">MSCN Variance <small style="font-weight:400;opacity:0.65">- noise sensitivity (BRISQUE)</small></div>
 <p style="font-size:0.9rem;margin:0 0 0.5rem">A no-reference quality metric sensitive to both noise and blur.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Normalize each pixel by subtracting its 3×3 local mean and dividing by local std (+ small stabilizer). In a well-structured image this normalized map approaches zero everywhere. The variance of that map measures residual complexity: noisy → high; blurry → low.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Abnormally high: pixel-level noise — possibly high sensor gain or short exposure.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low: smooth and featureless — blur, low signal, or a genuinely uniform sample.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Abnormally high: pixel-level noise - possibly high sensor gain or short exposure.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low: smooth and featureless - blur, low signal, or a genuinely uniform sample.</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Texture Heterogeneity <small style="font-weight:400;opacity:0.65">— spatial uniformity of texture</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">How unevenly texture is distributed — high means some regions are rich while others are flat.</p>
+<div class="wc-metric-name">Texture Heterogeneity <small style="font-weight:400;opacity:0.65">- spatial uniformity of texture</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">How unevenly texture is distributed - high means some regions are rich while others are flat.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Compute local std in every 3×3 window. Then compute the coefficient of variation (std / mean) of all those local stds. High = texture concentrated in patches; low = texture uniformly distributed.</div>
@@ -395,8 +397,8 @@ NaN pixels are excluded from all calculations.
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Blocking Index <small style="font-weight:400;opacity:0.65">— JPEG compression artifacts</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">Detects 8×8-pixel block boundaries — the hallmark signature of JPEG compression.</p>
+<div class="wc-metric-name">Blocking Index <small style="font-weight:400;opacity:0.65">- JPEG compression artifacts</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Detects 8×8-pixel block boundaries - the hallmark signature of JPEG compression.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Measure the average absolute pixel jump across every 8-pixel grid boundary (horizontal and vertical). JPEG encodes in 8×8 blocks, creating subtle discontinuities at those boundaries.</div>
@@ -405,19 +407,19 @@ NaN pixels are excluded from all calculations.
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/blocking.png" alt="Blocking Index violin">
-    <figcaption><code>condition3_comp</code> (JPEG) has the highest blocking index — confirming what the file extension chart already hinted at. <code>condition2_bl</code> (blurred) has the lowest, because blurring smooths the block edges.</figcaption>
+    <figcaption><code>condition3_comp</code> (JPEG) has the highest blocking index - confirming what the file extension chart already hinted at. <code>condition2_bl</code> (blurred) has the lowest, because blurring smooths the block edges.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero blocking in data that should be lossless (TIFF, ND2, CZI): the data likely went through lossy compression somewhere — an export, upload, or storage step. Lossy compression should generally be avoided for scientific data: it can't be undone, and it distorts quantitative measurements.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero blocking in data that should be lossless (TIFF, ND2, CZI): the data likely went through lossy compression somewhere - an export, upload, or storage step. Lossy compression should generally be avoided for scientific data: it can't be undone, and it distorts quantitative measurements.</div></div>
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>High blocking in one condition but not another: they were processed differently. A systematic artifact that will skew any comparison between them.</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Ringing Index <small style="font-weight:400;opacity:0.65">— edge oscillation artifacts</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency oscillations near edges — ringing from lossy compression or aggressive filtering.</p>
+<div class="wc-metric-name">Ringing Index <small style="font-weight:400;opacity:0.65">- edge oscillation artifacts</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency oscillations near edges - ringing from lossy compression or aggressive filtering.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Subtract a 3×3 box-average from each pixel (high-pass filter). Compute variance of the residual. High variance = fine oscillations on top of the main image structure.</div>
@@ -441,19 +443,19 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>How <code>mean</code>, <code>std</code>, <code>min</code>, and <code>max</code> change as you move along your non-spatial dimensions (e.g. Z, T, C, or S — the exact names depend on your loader) — averaged across all images in each group.</p>
+<p>How <code>mean</code>, <code>std</code>, <code>min</code>, and <code>max</code> change as you move along your non-spatial dimensions (e.g. Z, T, C, or S - the exact names depend on your loader) - averaged across all images in each group.</p>
 
 <div class="wc-shots compact">
   <div class="wc-shot">
     <img src="../../assets/screenshots/max_per_s_slice.png" alt="Max intensity per S slice">
-    <figcaption>Max intensity across S (channel) slices — different images peak at different channels, and the spread widens at slice 2. The shaded band is the per-group std across images.</figcaption>
+    <figcaption>Max intensity across S (channel) slices - different images peak at different channels, and the spread widens at slice 2. The shaded band is the per-group std across images.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><code>mean_intensity</code> declining over T: <strong>photobleaching</strong>. Fluorophores are bleaching over the time course — any time-series analysis must account for this.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>std_intensity</code> increasing over T: growing noise — sample movement, degradation, or instrument drift.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal — just noise. Confirm visually in the mosaic for that channel.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><code>mean_intensity</code> declining over T: <strong>photobleaching</strong>. Fluorophores are bleaching over the time course - any time-series analysis must account for this.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>std_intensity</code> increasing over T: growing noise - sample movement, degradation, or instrument drift.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal - just noise. Confirm visually in the mosaic for that channel.</div></div>
 </div>
 
 </div>
@@ -472,20 +474,20 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>How quality metrics change across your non-spatial dimensions (e.g. Z, T, C, or S — names depend on your loader). Best for detecting focus drift across a Z-like dimension or photobleaching effects on contrast over a T-like one.</p>
+<p>How quality metrics change across your non-spatial dimensions (e.g. Z, T, C, or S - names depend on your loader). Best for detecting focus drift across a Z-like dimension or photobleaching effects on contrast over a T-like one.</p>
 
 <div class="wc-shots compact">
   <div class="wc-shot">
     <img src="../../assets/screenshots/blocking_per_s_slice.png" alt="Blocking index per S slice">
-    <figcaption>Blocking index across S (channel) slices — <code>condition4_nois</code> (noisy, dark green) increases sharply at slice 2, while <code>condition2_bl</code> (blurred, orange) stays near zero across all slices.</figcaption>
+    <figcaption>Blocking index across S (channel) slices - <code>condition4_nois</code> (noisy, dark green) increases sharply at slice 2, while <code>condition2_bl</code> (blurred, orange) stays near zero across all slices.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Laplacian variance dropping across Z:</strong> focus is unstable across the stack. Find the Z range where sharpness peaks and limit your analysis to that range.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Michelson contrast dropping over T: signal-to-background shrinking — consistent with photobleaching.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Michelson contrast dropping over T: signal-to-background shrinking - consistent with photobleaching.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>MSCN variance spiking at one specific T frame: sample motion, a bubble, or a transient autofluorescence event.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Find the Z of peak Laplacian variance here, then set that Z in the sidebar dimension selector — all widgets update to show your data at its sharpest.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Find the Z of peak Laplacian variance here, then set that Z in the sidebar dimension selector - all widgets update to show your data at its sharpest.</div></div>
 </div>
 
 </div>
@@ -504,22 +506,22 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>🔍</span> Filter</div>
-<div class="wc-ctrl-body">Restrict all widgets to rows matching a column + operator + value. Filters stack with grouping — filter to a dtype, then group by path to compare conditions within it.</div>
+<div class="wc-ctrl-body">Restrict all widgets to rows matching a column + operator + value. Filters stack with grouping - filter to a dtype, then group by path to compare conditions within it.</div>
 </div>
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>📏</span> Dimension selectors</div>
-<div class="wc-ctrl-body">For multidimensional data: a slider per non-spatial dimension (e.g. Z, T, C, S — names depend on your loader) that sets which slice all widgets display. Set the Z-like dimension to its peak Laplacian variance for the sharpest cross-condition comparison.</div>
+<div class="wc-ctrl-body">For multidimensional data: a slider per non-spatial dimension (e.g. Z, T, C, S - names depend on your loader) that sets which slice all widgets display. Set the Z-like dimension to its peak Laplacian variance for the sharpest cross-condition comparison.</div>
 </div>
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>✨</span> Show significance</div>
-<div class="wc-ctrl-body">Mann-Whitney U test brackets on violin plots, Bonferroni corrected. Non-parametric — no normality assumption. A bracket = statistically distinguishable. Biological meaningfulness is your judgment.</div>
+<div class="wc-ctrl-body">Mann-Whitney U test brackets on violin plots, Bonferroni corrected. Non-parametric - no normality assumption. A bracket = statistically distinguishable. Biological meaningfulness is your judgment.</div>
 </div>
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>💾</span> Save</div>
-<div class="wc-ctrl-body"><strong>CSV:</strong> filtered file list with all metrics — extract file paths to exclude low-quality images from your pipeline.<br><strong>Parquet:</strong> a new, fully-interactive PP report of only the images that passed your filters.</div>
+<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> a new, fully-interactive PP report of only the images that passed your filters.</div>
 </div>
 
 <div class="wc-ctrl">
@@ -529,7 +531,7 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>💬</span> Feedback</div>
-<div class="wc-ctrl-body">Send feedback directly from the viewer. If something looks wrong, a metric is confusing, or you'd like a new feature — tell us here. All feedback is read.</div>
+<div class="wc-ctrl-body">Send feedback directly from the viewer. If something looks wrong, a metric is confusing, or you'd like a new feature - tell us here. All feedback is read.</div>
 </div>
 
 </div>
@@ -545,7 +547,7 @@ NaN pixels are excluded from all calculations.
 | Find saturated images | `max_intensity` | `ge` | `254` |
 | Exclude a format | `file_extension` | `not_contains` | `.tif` |
 
-**Saving filtered subsets:** after filtering to low-quality images, **Save as CSV** gives you a list of file paths to exclude from your pipeline. **Save as Parquet** creates a new fully-interactive report with only the passing images — the standard way to share a curated, clean version of your dataset report.
+**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new fully-interactive report with only the images that passed your filters - the standard way to share a curated, clean version of your dataset report.
 
 ---
 
