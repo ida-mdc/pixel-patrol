@@ -52,7 +52,7 @@
     .perf-label { font-size: 0.73rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2563eb; margin-bottom: 12px; }
     .perf-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
     .perf-sub { font-size: 0.9rem; color: #6c757d; }
-    .perf-detail { font-size: 0.8rem; color: #9ca3af; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6; line-height: 1.7; }
+    .perf-detail { font-size: 0.9rem; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6; line-height: 1.7; }
 
     /* Footer */
     .pp-footer { background: #212529; margin-top: auto; }
@@ -188,7 +188,7 @@
   <div class="container">
     <div class="mb-5">
       <div class="section-label">Key Features</div>
-      <h2 class="section-title">Built for real-world datasets.</h2>
+      <h2 class="section-title">Built for real-world datasets</h2>
     </div>
     <div class="row g-3">
       <div class="col-md-6 col-lg-4">
@@ -242,9 +242,9 @@
   <div class="container">
     <div class="mb-5">
       <div class="section-label">Performance</div>
-      <h2 class="section-title">Tested on real datasets.</h2>
+      <h2 class="section-title">Distributed processing at scale</h2>
       <p class="section-lead">
-        Benchmarks run on HPC infrastructure with 100 parallel workers across multiple nodes.
+        Benchmarks run on HPC infrastructure across multiple nodes.
       </p>
     </div>
     <div class="row g-3">
@@ -252,14 +252,12 @@
         <div class="perf-card">
           <div class="perf-label">Many small images</div>
           <div class="d-flex align-items-baseline gap-2 mb-1">
-            <span class="perf-value">1.1M</span>
-            <span class="perf-sub">files · 7.8 GB</span>
+            <span class="perf-value">1.1M files · 7.8 GB</span>
           </div>
           <div class="perf-detail">
             ~100-400 px per image<br/>
-            Wall time: <strong>1h 00m</strong> · 303 files/s<br/>
-            CPU mean 48% · RAM mean 10.2 GB<br/>
-            100 workers · 27 nodes
+            Wall time: <strong>32m 44s</strong> · 558 files/s<br/>
+            20 workers · Peak worker RAM 0.73 GB
           </div>
         </div>
       </div>
@@ -267,14 +265,12 @@
         <div class="perf-card">
           <div class="perf-label">Large 3D volumes</div>
           <div class="d-flex align-items-baseline gap-2 mb-1">
-            <span class="perf-value">3</span>
-            <span class="perf-sub">files · 1,200 GB</span>
+            <span class="perf-value">3 files · 1,200 GB</span>
           </div>
           <div class="perf-detail">
             9,000 × 8,000 × 2,000 px per image<br/>
-            Wall time: <strong>1h 45m</strong> · 18.4 tasks/min<br/>
-            CPU mean 35% · RAM mean 2.4 GB<br/>
-            100 workers · 21 nodes
+            Wall time: <strong>19m 44s</strong> · 129.6 tasks/min<br/>
+            100 workers · Peak worker RAM 1.9 GB
           </div>
         </div>
       </div>
@@ -282,14 +278,12 @@
         <div class="perf-card">
           <div class="perf-label">Large 2D multichannel</div>
           <div class="d-flex align-items-baseline gap-2 mb-1">
-            <span class="perf-value">2</span>
-            <span class="perf-sub">files · 596 GB</span>
+            <span class="perf-value">2 files · 596 GB</span>
           </div>
           <div class="perf-detail">
             50,000 × 50,000 × 40 px per image<br/>
-            Wall time: <strong>8m 47s</strong> · 61.2 tasks/min<br/>
-            CPU mean 12% · RAM mean 0.75 GB<br/>
-            100 workers · 30 nodes
+            Wall time: <strong>6m 49s</strong> · 77.8 tasks/min<br/>
+            100 workers · Peak worker RAM 0.39 GB
           </div>
         </div>
       </div>
