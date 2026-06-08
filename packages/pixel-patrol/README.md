@@ -4,7 +4,7 @@
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
-**[Documentation](https://ida-mdc.github.io/pixel-patrol/docs/) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://ida-mdc.github.io/pixel-patrol/viewer/)**
+**[Documentation](https://ida-mdc.github.io/pixel-patrol/docs/) | [Tutorials](https://ida-mdc.github.io/pixel-patrol/docs/tutorials/) | [Example Report](https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://ida-mdc.github.io/pixel-patrol/viewer/)**
 
 Image datasets are rarely as clean or consistent as they appear. Pixel Patrol scans your images and generates a shareable, interactive browser report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
 
