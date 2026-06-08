@@ -20,8 +20,8 @@ export default {
     'They are normalized to sum to **1**, and the **mean histogram per group** is shown as a bold line.',
     '',
     '**Modes**',
-    '- **Fixed 0–255 bins (shape)** — uses 256 fixed bins regardless of the actual pixel range.',
-    '- **Native pixel range** — bins are defined using the actual min/max pixel values across the selected images.',
+    '- **Fixed 0–255 bins (shape)** - uses 256 fixed bins regardless of the actual pixel range.',
+    '- **Native pixel range** - bins are defined using the actual min/max pixel values across the selected images.',
   ].join('\n'),
 
   requires(schema) {
@@ -74,7 +74,7 @@ export default {
           <div style="max-width:400px;flex:1 1 240px">
             <div style="font-weight:600;margin-bottom:6px">Overlay specific file (optional):</div>
             <select id="${FILE_SEL_ID}" class="form-select form-select-sm">
-              <option value="">— none —</option>${nameOpts}
+              <option value="">- none -</option>${nameOpts}
             </select>${limitNote}
           </div>
         `;
@@ -198,7 +198,7 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
   const totalFetched = arrowRows.length;
   const maxPossible  = samplesPerGroup * visibleGroups.length;
   if (totalFetched < maxPossible) {
-    // All groups fit within the cap — no note needed (sampling had no effect)
+    // All groups fit within the cap - no note needed (sampling had no effect)
   } else {
     const note = document.createElement('p');
     note.style.cssText = 'font-size:0.82em;color:#888;margin:4px 0 0';

@@ -46,7 +46,7 @@ describe('buildGroupLabels', () => {
   });
 
   it('path shortening uses minimum tail segments needed for uniqueness', () => {
-    // These share the final path segment — need 2 components to distinguish
+    // These share the final path segment - need 2 components to distinguish
     const groups = [
       '/data/runA/images/sample',
       '/data/runB/images/sample',
@@ -79,7 +79,7 @@ describe('buildGroupLabels', () => {
       'beta_extra_padding_to_exceed_twenty_chars',
     ];
     const result = buildGroupLabels(groups);
-    // No meaningful prefix/suffix shortening possible — identity
+    // No meaningful prefix/suffix shortening possible - identity
     expect(result[groups[0]]).toBe(groups[0]);
     expect(result[groups[1]]).toBe(groups[1]);
   });
@@ -88,7 +88,7 @@ describe('buildGroupLabels', () => {
     // All groups have the same suffix content after stripping prefix
     const groups = [
       'aaaaaaaaaa_X_bbbbbbbbbb',
-      'aaaaaaaaaa_X_bbbbbbbbbb',  // duplicate — identity required
+      'aaaaaaaaaa_X_bbbbbbbbbb',  // duplicate - identity required
     ];
     const result = buildGroupLabels(groups);
     expect(result[groups[0]]).toBe(groups[0]);

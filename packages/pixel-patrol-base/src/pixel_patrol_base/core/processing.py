@@ -1,4 +1,4 @@
-"""Pixel Patrol processing pipeline — Dask-distributed.
+"""Pixel Patrol processing pipeline - Dask-distributed.
 
 Each file yields one record (one logical image → one set of obs rows).
 Container files (LMDB, multi-series OME-TIFF) yield one record per sub-image.
@@ -60,7 +60,7 @@ from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
 
-# Dask sets distributed.* loggers to INFO at import time — suppress after importing.
+# Dask sets distributed.* loggers to INFO at import time - suppress after importing.
 for _name in ("distributed", "distributed.worker", "distributed.scheduler",
               "distributed.nanny", "asyncio", "tornado", "numexpr", "numexpr.utils"):
     logging.getLogger(_name).setLevel(logging.WARNING)
@@ -82,7 +82,7 @@ _IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
 # size_bytes is a cumulative sum across many files and can exceed int32 range.
 _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
 
-# X/Y are the spatial plane dims — never split by default (full extent = -1).
+# X/Y are the spatial plane dims - never split by default (full extent = -1).
 _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
 
 # Log a progress line every N completed records.
@@ -160,7 +160,7 @@ class MemoryChunkResult:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Plan tasks  — task construction, consumes _discover_files
+# Plan tasks  - task construction, consumes _discover_files
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _resolve_leaf_block_shape(
@@ -170,7 +170,7 @@ def _resolve_leaf_block_shape(
     """Return the effective per-dim block size for every dim in dim_order.
 
     Default: X and Y → -1 (never split); all other dims → 1.
-    These defaults reflect the conventional 2-D image plane — override any
+    These defaults reflect the conventional 2-D image plane - override any
     dim via user_spec (e.g. leaf_block_shape={'X': 256, 'Z': 1}).
     -1 means full extent; positive N means split into blocks of N.
     """
@@ -190,7 +190,7 @@ def _split_into_ranges(
 ) -> List[Tuple[Optional[int], Optional[int]]]:
     """Split [0, total) into chunks of size step; return (start, stop) pairs.
 
-    Returns [(None, None)] when step >= total — a sentinel that becomes slice(None).
+    Returns [(None, None)] when step >= total - a sentinel that becomes slice(None).
     """
     if step >= total:
         return [(None, None)]
@@ -210,8 +210,8 @@ def _compute_memory_chunk_specs(
 ) -> Optional[List[MemoryChunkSpec]]:
     """Return one MemoryChunkSpec per memory chunk for a file described by info.
 
-    Splits dims in two tiers — explicit-block-size dims first, then spatial defaults
-    (X/Y) — so spatial dims are only touched as a last resort. Within each tier the
+    Splits dims in two tiers - explicit-block-size dims first, then spatial defaults
+    (X/Y) - so spatial dims are only touched as a last resort. Within each tier the
     required reduction is distributed geometrically across all dims in that tier,
     largest first, so no single dim absorbs all the splitting.
     Returns None when the file already fits within the budget.
@@ -261,7 +261,7 @@ def _compute_memory_chunk_specs(
     if n_chunks <= 1:
         logger.warning(
             "_compute_memory_chunk_specs: %s (%.1f MB) exceeds budget but could not be split "
-            "— leaf_block_shape=%s, image_shape=%s; processed as a single batch item.",
+            "- leaf_block_shape=%s, image_shape=%s; processed as a single batch item.",
             file_path, total_bytes / (1024 * 1024),
             dict(leaf_block_sizes),
             dict(zip(dim_order, shape)),
@@ -326,7 +326,7 @@ def _plan_tasks(
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
     # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
-    # can be orders of magnitude smaller than the uncompressed array — never skip
+    # can be orders of magnitude smaller than the uncompressed array - never skip
     # read_header for them or they'll be mis-classified as small files.
     _folder_exts: frozenset    = frozenset(getattr(loader, "FOLDER_EXTENSIONS", ()))
     _small_file_threshold: int = budget_bytes // 8
@@ -380,7 +380,7 @@ def _plan_tasks(
                     if images_per_task > 20:
                         logger.warning(
                             "Container file with n_images=%d, ~%.1f MB/image; "
-                            "mb_per_task=%.0f gives ~%d images/task — tasks may take many minutes. "
+                            "mb_per_task=%.0f gives ~%d images/task - tasks may take many minutes. "
                             "Consider --mb-per-task 50 or lower.",
                             info.n_images, image_bytes / 1024 / 1024,
                             config.mb_per_task, images_per_task,
@@ -411,7 +411,7 @@ def _plan_tasks(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Execute task  — run inside Dask workers; stateless and picklable
+# Execute task  - run inside Dask workers; stateless and picklable
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _stamp_coordinates_to_row(
@@ -450,7 +450,7 @@ def _iter_leaf_blocks(
 def _build_record(record: Record, data: Any, origin: Tuple[int, ...]) -> Record:
     """Build a new Record from a source record template, raw data, and a global origin."""
     # If data is lazy (e.g. a zarr array), read it immediately in this worker process
-    # rather than letting Dask schedule it — otherwise Dask submits one sub-task per
+    # rather than letting Dask schedule it - otherwise Dask submits one sub-task per
     # internal chunk and floods the cluster with thousands of tiny jobs.
     arr = data.compute(scheduler='synchronous') if hasattr(data, "compute") else np.asarray(data)
     meta = {
@@ -588,7 +588,7 @@ def _execute_memory_chunk_task(
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
         return []
-    # Extract image_meta from the full record BEFORE slicing — record.data.shape
+    # Extract image_meta from the full record BEFORE slicing - record.data.shape
     # here is the full image shape; task.spec.image_shape is the same value.
     image_meta = _extract_image_meta(record)
     mem_record = _build_record(record, record.data[task.spec.slices], task.spec.origin)
@@ -622,7 +622,7 @@ def _execute_container_task(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Coordinator helpers  — all run in the main (coordinator) process
+# Coordinator helpers  - all run in the main (coordinator) process
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _rollup(
@@ -660,7 +660,7 @@ def _rollup(
         col for row in all_leaf_rows for col in row if col.startswith("dim_")
     })
     # A dim is full-extent-by-default (X, Y) and was not explicitly requested
-    # in leaf_block_shape — it may still vary across memory-chunk boundaries
+    # in leaf_block_shape - it may still vary across memory-chunk boundaries
     # (which are a memory-management detail, not user-specified tiling), so
     # exclude it from active_dims in that case.
     user_tiled = set(leaf_block_shape or {})
@@ -794,7 +794,7 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# _RecordAssembler  — collects partial results until a record is complete
+# _RecordAssembler  - collects partial results until a record is complete
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class _RecordAssembler:
@@ -825,7 +825,7 @@ class _RecordAssembler:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# _ResultsWriter  — buffers complete record rows and writes part files
+# _ResultsWriter  - buffers complete record rows and writes part files
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class _ResultsWriter:
@@ -893,22 +893,22 @@ class _ResultsWriter:
         """
         self.flush()
         if not self._part_paths and not self._buffer:
-            logger.warning("Finalize: no parts and no buffer — returning empty DataFrame")
+            logger.warning("Finalize: no parts and no buffer - returning empty DataFrame")
             return pl.DataFrame()
         if self._part_paths:
-            # Data is on disk — do not collect; caller streams from parts_dir.
+            # Data is on disk - do not collect; caller streams from parts_dir.
             return None
         # In-memory path (parts_dir=None, small dataset).
         t0 = time.monotonic()
         combined = pl.concat(self._buffer, how="diagonal_relaxed")
-        logger.debug("Finalize: concat done in %.1fs — %d rows, post-processing ...", time.monotonic() - t0, len(combined))
+        logger.debug("Finalize: concat done in %.1fs - %d rows, post-processing ...", time.monotonic() - t0, len(combined))
         result = _post_process(combined)
-        logger.info("Finalize: complete — %d rows total, elapsed %.1fs", len(result), time.monotonic() - self._t_start)
+        logger.info("Finalize: complete - %d rows total, elapsed %.1fs", len(result), time.monotonic() - self._t_start)
         return result
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Coordinate pipeline  — submit + gather loop; runs in the main process
+# Coordinate pipeline  - submit + gather loop; runs in the main process
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _coordinate_pipeline(
@@ -1028,7 +1028,7 @@ def _coordinate_pipeline(
     initial_futures = [_submit(t) for t in itertools.islice(task_iter, max_pending)]
     if not initial_futures:
         pbar.close()
-        logger.warning("Pipeline: no tasks were generated — nothing to process")
+        logger.warning("Pipeline: no tasks were generated - nothing to process")
         return None, {}
     logger.debug("Pipeline: %d initial futures submitted", len(initial_futures))
 
@@ -1051,10 +1051,10 @@ def _coordinate_pipeline(
             # Emit one user-visible warning per affected file path.
             if isinstance(task, BatchTask):
                 for ip in task.files:
-                    logger.warning("Skipping '%s' — worker error: %s", ip.file_path, exc)
+                    logger.warning("Skipping '%s' - worker error: %s", ip.file_path, exc)
                     error_records += 1
             else:
-                logger.warning("Skipping '%s' — worker error: %s", task.file_path, exc)
+                logger.warning("Skipping '%s' - worker error: %s", task.file_path, exc)
                 error_records += 1
             continue
 
@@ -1127,7 +1127,7 @@ def _coordinate_pipeline(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Streaming parquet writer  — used when parts were spilled to disk
+# Streaming parquet writer  - used when parts were spilled to disk
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _null_columns_from_stats(parts: List[Path]) -> Set[str]:
@@ -1403,7 +1403,7 @@ def build_records_df(
     When loader is None only filesystem metadata is collected.
 
     _discover_files, _plan_tasks, and the submit side of _coordinate_pipeline
-    run concurrently via a streaming generator pipeline — workers receive their
+    run concurrently via a streaming generator pipeline - workers receive their
     first tasks before the filesystem scan is complete.
 
     Args:

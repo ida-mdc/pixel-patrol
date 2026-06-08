@@ -115,10 +115,10 @@ async function inlineFontsInCss(css, cssUrl) {
  * @returns {Promise<string>}
  */
 export async function exportBakedHtml(state, schema, plugins) {
-  // DOMParser base is about:blank — resolve all URLs against the live page instead.
+  // DOMParser base is about:blank - resolve all URLs against the live page instead.
   const pageBase = window.location.href;
 
-  // Canvas pixel data is not in outerHTML — capture from live DOM first.
+  // Canvas pixel data is not in outerHTML - capture from live DOM first.
   const liveCanvasDataUrls = [...document.querySelectorAll('canvas')].map(c => {
     try { return c.toDataURL(); } catch { return null; }
   });

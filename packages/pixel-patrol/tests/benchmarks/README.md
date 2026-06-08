@@ -5,7 +5,7 @@ Run from this directory (`cd packages/pixel-patrol/tests/benchmarks`).
 
 ---
 
-## benchmark_pipeline.py — pipeline throughput & scaling
+## benchmark_pipeline.py - pipeline throughput & scaling
 
 Measures Dask pipeline performance using a NullLoader (no disk I/O) and NumpyLoader
 (real I/O). Covers four scenarios: tiny batches, many small files, spatially-chunked
@@ -24,7 +24,7 @@ Results saved to `results/pipeline_<timestamp>.json`.
 
 ---
 
-## benchmark_e2e.py — full pipeline + viewer
+## benchmark_e2e.py - full pipeline + viewer
 
 Measures end-to-end time: process → viewer widget load. Uses synthetic TIFF files
 and the bioio loader. Results saved to `results/e2e_results.csv`.
@@ -44,7 +44,7 @@ python generate_benchmark_report.py --csv results/e2e_results.csv --figures
 
 ---
 
-## benchmark_processors.py — per-processor timing in pipeline context
+## benchmark_processors.py - per-processor timing in pipeline context
 
 Measures individual processor wall time within a real pipeline run. Injects
 instrumented wrappers via the plugin registry to record CPU seconds per processor.
@@ -56,7 +56,7 @@ python benchmark_processors.py --mode full --branch main
 
 ---
 
-## benchmark_metrics.py — isolated processor cost
+## benchmark_metrics.py - isolated processor cost
 
 Measures the cost of each processor's `run_chunk()` call on a fixed in-memory
 plane, with warmup + multiple samples. No Dask, no I/O.

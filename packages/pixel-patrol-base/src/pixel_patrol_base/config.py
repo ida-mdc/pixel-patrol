@@ -12,7 +12,7 @@ DEFAULT_ROWS_PER_PART: int = 10_000
 # caps task size to keep workers returning results frequently
 DEFAULT_MAX_IMAGES_PER_TASK: int = 200
 
-# Legacy alias — kept so any direct import still works during the transition
+# Legacy alias - kept so any direct import still works during the transition
 DEFAULT_RECORDS_FLUSH_EVERY_N: int = DEFAULT_ROWS_PER_PART
 
 HISTOGRAM_BINS = 256

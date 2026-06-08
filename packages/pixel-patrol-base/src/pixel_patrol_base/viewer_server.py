@@ -72,7 +72,7 @@ def find_viewer_dist() -> Path:
 
     Search order:
     1. Installed package data  (``pixel_patrol_base/viewer_dist/``)
-    2. Source-tree sibling     (``<repo>/viewer/dist/``) — editable installs
+    2. Source-tree sibling     (``<repo>/viewer/dist/``) - editable installs
     """
     try:
         pkg   = importlib.resources.files("pixel_patrol_base").joinpath("viewer_dist")
@@ -161,7 +161,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     query_lock:       threading.Lock
     project_name:     Optional[str]
     description:      Optional[str]
-    extension_dirs:   list  # list[Path] — each dir contains extension.json + plugin JS files
+    extension_dirs:   list  # list[Path] - each dir contains extension.json + plugin JS files
 
     # ------------------------------------------------------------------
     def do_HEAD(self) -> None:
@@ -195,7 +195,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     # ------------------------------------------------------------------
-    # /api/query  — native DuckDB execution
+    # /api/query  - native DuckDB execution
     # ------------------------------------------------------------------
 
     def _serve_query(self) -> None:
@@ -230,7 +230,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
 
     # ------------------------------------------------------------------
-    # /api/export-parquet  — filtered parquet download with metadata
+    # /api/export-parquet  - filtered parquet download with metadata
     # ------------------------------------------------------------------
 
     def _handle_export_parquet(self, query_string: str) -> None:

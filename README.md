@@ -10,7 +10,7 @@ Image datasets are rarely as clean or consistent as they appear. Pixel Patrol sc
 
 <img src="packages/pixel-patrol/readme_assets/overview.png" width="">
 
-*The interactive viewer — filter, group, and explore your dataset.*
+*The interactive viewer - filter, group, and explore your dataset.*
 
 ---
 
@@ -19,8 +19,8 @@ Image datasets are rarely as clean or consistent as they appear. Pixel Patrol sc
 Requires Python 3.11+. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv venv --python 3.12 pixel-patrol-env
-source pixel-patrol-env/bin/activate   # Windows: pixel-patrol-env\Scripts\Activate.ps1
+uv venv --python 3.12 .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 
@@ -90,7 +90,7 @@ api.view(project)
 
 ![Mosaic view of images, highlighting potential discrepancies.](packages/pixel-patrol/readme_assets/mosiac.png)
 
-*Image mosaic — sort by any metric to surface outliers visually.*
+*Image mosaic - sort by any metric to surface outliers visually.*
 
 ![Statistical plots showing image dimensions and distributions.](packages/pixel-patrol/readme_assets/example_stats_plot.png)
 
@@ -100,7 +100,7 @@ api.view(project)
 
 ## Sharing a report
 
-Send the `.parquet` file and open it in the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) — no installation needed. Or build a self-contained static viewer:
+Send the `.parquet` file and open it in the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no installation needed. Or build a self-contained static viewer:
 
 ```bash
 pixel-patrol build-viewer-html -o viewer.html

@@ -16,11 +16,11 @@ from pixel_patrol_base.core.specs import ProcessResult, RecordSpec, ProcessorOut
 class ChunkKind(StrEnum):
     """Declares which level of chunking a processor operates on.
 
-    LEAF        — operates on leaf chunks (user-configured granularity: XY tiles,
+    LEAF        - operates on leaf chunks (user-configured granularity: XY tiles,
                   TZ slices, etc.). Most metric processors are this kind.
-    MEMORY      — operates on memory-safe chunks, ignoring user leaf config.
-                  Thumbnail is this kind — it computes on the full spatial extent.
-    FULL_RECORD — receives the full record with no chunking applied.
+    MEMORY      - operates on memory-safe chunks, ignoring user leaf config.
+                  Thumbnail is this kind - it computes on the full spatial extent.
+    FULL_RECORD - receives the full record with no chunking applied.
                   Not yet handled by the pipeline; reserved for future use.
     """
     LEAF        = "leaf"
@@ -30,7 +30,7 @@ class ChunkKind(StrEnum):
 
 @dataclass(frozen=True)
 class FileInfo:
-    """Header-level metadata returned by loader.read_header() — no pixel data loaded.
+    """Header-level metadata returned by loader.read_header() - no pixel data loaded.
 
     Used by _plan_tasks to decide task routing (batch vs. chunk vs. sub-image)
     without loading any pixel data.
@@ -56,7 +56,7 @@ class PixelPatrolLoader(Protocol):
 
         For container formats (n_images > 1), shape/dtype/dim_order describe a
         representative sub-image (typically the first). n_images is the total count.
-        Must be picklable — no open file handles in instance state after return.
+        Must be picklable - no open file handles in instance state after return.
         """
         ...
 
@@ -64,7 +64,7 @@ class PixelPatrolLoader(Protocol):
         """Load pixel data for a single-image file; return a Record.
 
         For container formats use load_range() instead.
-        Must be picklable — no open file handles in instance state after return.
+        Must be picklable - no open file handles in instance state after return.
         """
         ...
 
@@ -74,7 +74,7 @@ class PixelPatrolLoader(Protocol):
         Required only for container formats (FileInfo.n_images > 1).
         child_id is a stable string identifier for the sub-image within the container.
         Streams sub-images so each can be freed before the next is loaded.
-        Must be picklable — no open file handles in instance state after return.
+        Must be picklable - no open file handles in instance state after return.
         """
         ...
 

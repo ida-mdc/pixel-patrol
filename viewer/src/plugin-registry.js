@@ -2,7 +2,7 @@
  * Runtime plugin registry.
  *
  * Built-in plugins are bundled at build time. External plugins are loaded via
- * an extension manifest — a JSON file listing the plugin JS URLs:
+ * an extension manifest - a JSON file listing the plugin JS URLs:
  *
  *   Remote:  ?extension=https://example.com/my-extension/extension.json
  *   Local:   window.__PP_EXTENSION_URLS = ['/extension/extension.json']
@@ -14,10 +14,10 @@
  *
  * Plugin contract:
  *   {
- *     id:       string   — unique identifier
- *     label:    string   — card header title
- *     requires(schema) → bool        — return false to hide when columns absent
- *     async render(container, ctx) → void  — draw into the provided DOM element
+ *     id:       string   - unique identifier
+ *     label:    string   - card header title
+ *     requires(schema) → bool        - return false to hide when columns absent
+ *     async render(container, ctx) → void  - draw into the provided DOM element
  *   }
  *
  * ctx fields available to plugins:
@@ -55,7 +55,7 @@ export const registry = {
    */
   register(plugin) {
     if (!plugin || typeof plugin.id !== 'string' || typeof plugin.render !== 'function') {
-      console.warn('[PixelPatrol] registerPlugin: invalid plugin — needs id (string) and render (function):', plugin);
+      console.warn('[PixelPatrol] registerPlugin: invalid plugin - needs id (string) and render (function):', plugin);
       return false;
     }
     const idx = _plugins.findIndex(p => p.id === plugin.id);

@@ -178,7 +178,7 @@ def _get_available_loaders() -> List[Dict[str, Any]]:
 def create_processing_app() -> Dash:
     """Create and configure the processing dashboard app."""
 
-    # Setup warning capture — guard against duplicate handlers if called multiple times
+    # Setup warning capture - guard against duplicate handlers if called multiple times
     base_logger = logging.getLogger("pixel_patrol_base")
     if not any(isinstance(h, DashWarningHandler) for h in base_logger.handlers):
         handler = DashWarningHandler()
@@ -877,7 +877,7 @@ def _run_processing(
             message="Processing files...",
         )
 
-        # Progress callback — total is always -1 until the pipeline exhausts the file stream,
+        # Progress callback - total is always -1 until the pipeline exhausts the file stream,
         # so we show a running count rather than a percentage estimate.
         def progress_callback(current: int, total: int) -> None:
             update_processing_state(
@@ -887,7 +887,7 @@ def _run_processing(
                 processed_files=current,
             )
 
-        # Process files — saves the parquet with metadata to project.output_path
+        # Process files - saves the parquet with metadata to project.output_path
         api.process_files(
             project,
             progress_callback=progress_callback,

@@ -92,7 +92,7 @@ async function renderViolins(container, ctx, filterMetric, label) {
     if (container.lastChild) container.lastChild.style.marginBottom = '12px';
   }
 
-  // Per-group reservoir sample — mirrors Dash's per-group sample(n=2000, seed=42).
+  // Per-group reservoir sample - mirrors Dash's per-group sample(n=2000, seed=42).
   const dimFilters = Object.entries(ctx.state.dimensions ?? {})
     .map(([letter, idxRaw]) => {
       const idx = Number(idxRaw);

@@ -1,4 +1,4 @@
-"""Unit tests for BioIoLoader — fast, no pipeline."""
+"""Unit tests for BioIoLoader - fast, no pipeline."""
 
 from pathlib import Path
 

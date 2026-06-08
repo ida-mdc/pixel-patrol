@@ -1,5 +1,5 @@
 /**
- * Plugin index — re-exports the live plugin list from the runtime registry.
+ * Plugin index - re-exports the live plugin list from the runtime registry.
  *
  * The canonical plugin list and registration API lives in ../plugin-registry.js.
  * Built-in plugins are listed and ordered there.

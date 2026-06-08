@@ -4,8 +4,8 @@ import { DEFAULT_PALETTE } from './constants.js';
  * Minimal pub/sub state store.
  *
  * Events:
- *   'render'  — re-render all plugins with current state (palette changed, etc.)
- *   'query'   — full re-query + re-render (filter/groupby/dimensions changed)
+ *   'render'  - re-render all plugins with current state (palette changed, etc.)
+ *   'query'   - full re-query + re-render (filter/groupby/dimensions changed)
  */
 
 export const state = {

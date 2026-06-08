@@ -144,7 +144,7 @@ def test_exact_2d_no_slice_size():
 
 
 def test_exact_2d_aligned_single_dim():
-    # Y (leaf=32, tier 1) handles the full 4× reduction alone — 4 strips of 64 rows.
+    # Y (leaf=32, tier 1) handles the full 4× reduction alone - 4 strips of 64 rows.
     # X (leaf=-1, tier 2) is never reached because tier 1 already meets the budget.
     specs = _specs((256, 256), ("Y", "X"), 1 / 16, {"Y": 32})
     assert [s.slices for s in specs] == [

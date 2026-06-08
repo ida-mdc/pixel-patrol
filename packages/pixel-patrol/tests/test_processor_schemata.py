@@ -95,7 +95,7 @@ def test_all_processors_return_dict():
     """Every processor's run_chunk() must return a dict.
 
     This creates a small synthetic image, loads it into a Record, and runs every
-    matching processor — verifying each returns a plain dict.
+    matching processor - verifying each returns a plain dict.
     """
     from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
 

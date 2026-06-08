@@ -1,0 +1,7 @@
+{
+  "name": "Pixel HAI Watch Extension",
+  "plugins": [
+    "./plugin_dives_logged.js",
+    "./plugin_glow_by_depth.js"
+  ]
+}

@@ -1,7 +1,7 @@
 # Pixel Patrol Viewer
 
 A single-page web app that visualises Pixel Patrol `.parquet` files.  
-Built with [Vite](https://vitejs.dev/), [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview), [Plotly](https://plotly.com/javascript/), and vanilla JS — no framework.
+Built with [Vite](https://vitejs.dev/), [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview), [Plotly](https://plotly.com/javascript/), and vanilla JS - no framework.
 
 ---
 
@@ -42,7 +42,7 @@ Open the deployed viewer or `dist/index.html` and drag & drop a `.parquet` file,
 pixel-patrol view path/to/data.parquet
 ```
 
-Starts a local HTTP server and opens the viewer. SQL runs server-side via native DuckDB — significantly faster than WASM for large files.
+Starts a local HTTP server and opens the viewer. SQL runs server-side via native DuckDB - significantly faster than WASM for large files.
 
 ### URL parameters
 
@@ -76,7 +76,7 @@ Relative paths in `plugins` are resolved against the manifest URL, so the JS fil
 
 ### Loading an extension
 
-**Remotely** — pass the manifest URL as a query parameter:
+**Remotely** - pass the manifest URL as a query parameter:
 
 ```
 ?extension=https://your-host/my-extension/extension.json
@@ -84,7 +84,7 @@ Relative paths in `plugins` are resolved against the manifest URL, so the JS fil
 
 Multiple extensions can be chained: `&extension=url1&extension=url2`
 
-**Locally** — pass the extension directory to `serve_viewer`:
+**Locally** - pass the extension directory to `serve_viewer`:
 
 ```python
 from pixel_patrol_base.viewer_server import serve_viewer
@@ -99,8 +99,12 @@ A plugin is an ES module that exports a single object:
 
 ```js
 export default {
-  id:    'my-widget',   // unique across all loaded plugins
-  label: 'My Widget',   // shown in the sidebar widget list
+  id:    'my-widget',          // unique across all loaded plugins
+  label: 'My Widget',          // shown in the sidebar widget list
+  group: 'My Extension Name',  // optional - sidebar section to list the widget under;
+                               // reuses a canonical section (Summary, File Stats, Metadata,
+                               // Dataset Stats, Visualization) if it matches one by name,
+                               // otherwise creates its own; defaults to "Other Widgets"
 
   requires(schema) {
     // return false to hide the widget when expected columns are absent
@@ -121,7 +125,7 @@ export default {
 
 `Plotly` is exposed as `window.Plotly` so plugins can use it without a separate import.
 
-The DuckDB table is always named `pp_data`. Use `${ctx.where}` to respect the active filter —
+The DuckDB table is always named `pp_data`. Use `${ctx.where}` to respect the active filter -
 note that `ctx.where` is already a full `WHERE …` clause (or empty string), so if your query
 has its own `WHERE`, merge with `AND`:
 
