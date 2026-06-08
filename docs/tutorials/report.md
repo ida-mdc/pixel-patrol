@@ -1,6 +1,6 @@
 # Exploring the Report
 
-Open your report in one browser tab and keep this page in another. No report of your own yet? <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=..%2Fexample.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
+Open your report in one browser tab and keep this page in another. No report of your own yet? <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
 
 The example screenshots below are from the WHOI plankton microscopy dataset, which we deliberately tampered with to create four synthetic conditions: **original** images, **blurred** images, **JPEG-compressed** images, and **noisy** images. This makes it easy to see what each widget catches.
 

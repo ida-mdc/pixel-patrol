@@ -48,9 +48,9 @@ Answer the questions below and we'll walk you through each decision together, bu
       Pixel Patrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
       No images of your own yet? The repo ships a small example dataset at
-      <code>examples/datasets/WHOI_processed_color/</code> (40 plankton images, four tampered
+      <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/datasets/WHOI_processed_color"><code>examples/datasets/WHOI_processed_color/</code></a> (40 plankton images, four tampered
       variants of the same originals, ~1.3 MB total) - point <code>BASE_DIRECTORY</code> there and
-      follow along. It's the very dataset behind the <a href="report.md">example report</a>
+      follow along. It's the very dataset behind the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet" target="_blank">example report</a>
       used in the next tutorial.
     </div>
     <input class="wiz-input" type="text" id="pwi-base_dir"
