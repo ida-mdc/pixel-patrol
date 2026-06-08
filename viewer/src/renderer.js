@@ -2,7 +2,7 @@ import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
-import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, prependWarning, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
 import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
@@ -29,7 +29,7 @@ import { buildGroupLabels } from './group-labels.js';
  * Additional fields available on ctx:
  * @property {Record<string,string>} groupLabels  maps each original group value to a
  *   shortened display label (e.g. ".../ dataset_A" instead of a long file path).
- *   Use for Plotly trace names and axis tick labels — never for SQL.
+ *   Use for Plotly trace names and axis tick labels - never for SQL.
  * @property {(g: string) => string} groupLabel  convenience wrapper:
  *   returns ctx.groupLabels[g] ?? String(g). Falls back to the raw value
  *   if no mapping exists (e.g. for groups discovered after ctx was built).
@@ -52,7 +52,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
 
     /**
      * Run arbitrary SQL against pp_data.
-     * Returns a raw Apache Arrow Table — use when you need binary columns
+     * Returns a raw Apache Arrow Table - use when you need binary columns
      * (thumbnails, histograms) or want Arrow-native aggregation.
      */
     query(sql) {
@@ -103,6 +103,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       escapeHtml,
       bargap,
       flexGrid:    createFlexGrid,
+      prependWarning,
       renderDomGroupLegend: (container, opts = {}) => appendGroupLegend(
         container,
         opts.groups ?? groups,
@@ -146,7 +147,7 @@ function extractBinary(val) {
 
 /**
  * Discover active plugins, query group/count metadata, then render each plugin.
- * Safe to call multiple times — clears the widget container each time.
+ * Safe to call multiple times - clears the widget container each time.
  *
  * @param {object[]} plugins  registered plugin objects
  * @param {object}   conn     DuckDB async connection

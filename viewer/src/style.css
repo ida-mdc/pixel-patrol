@@ -115,6 +115,11 @@ body { background: #f8f9fa; }
 
 /* ── Shared widget styles ── */
 .no-data { color: #aaa; padding: 20px; text-align: center; font-size: 14px; }
+.widget-warning { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 6px; font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+.widget-warning-icon { flex-shrink: 0; font-size: 15px; line-height: 1.4; }
+.widget-warning-red { background: #fdecea; border: 1px solid #f5c6cb; color: #58151c; }
+.widget-warning-yellow { background: #fff8e6; border: 1px solid #ffe69c; color: #664500; }
+.widget-warning code { background: rgba(0, 0, 0, 0.06); padding: 1px 4px; border-radius: 3px; }
 .stat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .stat-table th, .stat-table td { padding: 6px 10px; border: 1px solid #dee2e6; }
 .stat-table th { background: #f8f9fa; font-weight: 600; }

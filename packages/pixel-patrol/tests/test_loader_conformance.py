@@ -40,11 +40,11 @@ def _discover_loader_classes():
     """Return list of (name, loader_class) for every registered loader plugin.
 
     Each entry-point is expected to expose a registration function that, when
-    called with no arguments, returns a list of loader classes — the same
+    called with no arguments, returns a list of loader classes - the same
     convention used by ``pixel_patrol_base.plugin_registry.discover_plugins_from_entrypoints``.
 
     Entry-points that cannot be imported or whose registration function raises
-    are skipped with a warning rather than failing the whole suite — a broken
+    are skipped with a warning rather than failing the whole suite - a broken
     plugin should not block tests for working ones.
     """
     eps = importlib.metadata.entry_points(group="pixel_patrol.loader_plugins")
@@ -55,7 +55,7 @@ def _discover_loader_classes():
             classes = register_fn()
         except Exception as exc:
             warnings.warn(
-                f"Skipping loader entry-point '{ep.name}': could not load — {exc}",
+                f"Skipping loader entry-point '{ep.name}': could not load - {exc}",
                 stacklevel=1,
             )
             continue
@@ -158,7 +158,7 @@ def test_output_schema_patterns_structure(loader_class):
 
 
 def test_read_header_signature(loader_class):
-    """read_header must accept (path) — i.e. at least one non-self parameter."""
+    """read_header must accept (path) - i.e. at least one non-self parameter."""
     sig = inspect.signature(loader_class.read_header)
     params = [p for p in sig.parameters.values()
               if p.name != "self"]

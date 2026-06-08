@@ -25,7 +25,7 @@ def cli(source: str, port: int) -> None:
     \b
       - A Parquet file (.parquet)
       - An Arrow/IPC file (.arrow or .ipc)
-      - A Pixel Patrol project export (.zip) — requires pixel-patrol-base
+      - A Pixel Patrol project export (.zip) - requires pixel-patrol-base
     """
     source_path = Path(source)
 

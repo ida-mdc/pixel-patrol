@@ -1,5 +1,5 @@
 """
-End-to-end benchmark — full pipeline: process → viewer widget load.
+End-to-end benchmark - full pipeline: process → viewer widget load.
 
 Usage:
     python benchmark_e2e.py                  # quick mode

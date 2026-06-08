@@ -42,7 +42,7 @@ def _discover_files(
     imported_path_short (only when len(bases) > 1).
 
     No file is opened or loaded. Runs concurrently with _plan_tasks via the generator
-    protocol — yields tasks to workers before the scan completes.
+    protocol - yields tasks to workers before the scan completes.
     """
     extensions: Optional[Set[str]] = (
         None if accepted_extensions == "all"

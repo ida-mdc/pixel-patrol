@@ -205,7 +205,7 @@ def test_xy_varying_from_memory_chunking_not_active_without_slice_size():
 
 
 def test_xy_active_when_explicitly_in_leaf_block_shape():
-    # User explicitly requested X tiling — dim_x is active, dim_y (spatial, not tiled) is not.
+    # User explicitly requested X tiling - dim_x is active, dim_y (spatial, not tiled) is not.
     # Each X tile may have multiple Y fragments (memory splits); those must be collapsed.
     chunks = [
         _result(leaf_rows=[{"dim_z": 0, "dim_x": 0,   "dim_y": 0,   "num_pixels": 100}]),

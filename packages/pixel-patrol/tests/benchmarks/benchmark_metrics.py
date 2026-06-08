@@ -1,5 +1,5 @@
 """
-Metric computation benchmark — cost per processor group.
+Metric computation benchmark - cost per processor group.
 
 Uses a fixed in-memory plane as a single leaf chunk; no slicing involved.
 
@@ -89,7 +89,7 @@ def plot(groups: Dict[str, tuple[float, float]]) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(8, max(4, len(groups) * 0.5)))
-    fig.suptitle(f"Metric cost — chunk {PLANE_SHAPE}")
+    fig.suptitle(f"Metric cost - chunk {PLANE_SHAPE}")
 
     ordered = sorted((k for k in groups if k != "all"), key=lambda k: groups[k][0])
     ordered = ["all"] + ordered

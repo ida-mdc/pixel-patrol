@@ -20,8 +20,9 @@ export default {
   async render(container, ctx) {
     try {
       const { q, groupCol: gcFn, andWhere } = ctx.sql;
-      const { append: appendPlot, niceName } = ctx.plot;
+      const { append: appendPlot, niceName, escapeHtml, prependWarning } = ctx.plot;
       const invariants = [];  // collects single-value DIST_COLS + META_COLS shared properties
+      const varying    = [];  // DIST_COLS with more than one distinct value across the dataset
 
       for (const col of DIST_COLS) {
         if (!ctx.schema.allCols.includes(col)) continue;
@@ -53,11 +54,13 @@ export default {
 
         const cats   = [...new Set(rows.map(r => String(r.__cat__)))].sort();
 
-        // Single unique value — no plot needed; show in shared properties table instead.
+        // Single unique value - no plot needed; show in shared properties table instead.
         if (cats.length === 1) {
           invariants.push({ Property: niceName(col), Value: cats[0] });
           continue;
         }
+
+        varying.push({ col, cats });
 
         const groups = ctx.groups;
 
@@ -83,6 +86,23 @@ export default {
         }, 'margin-bottom:24px');
       }
   
+      if (varying.length) {
+        const parts = varying.map(({ col, cats }) =>
+          `<code>${col}</code> (${cats.map(c => `<code>${escapeHtml(c)}</code>`).join(', ')})`);
+        const list  = parts.length === 1
+          ? parts[0]
+          : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+        const dtypeNote = varying.some(v => v.col === 'dtype')
+          ? ' Mixed <code>dtype</code> is worth a particularly close look: a pixel value of 100 sits near the bottom of the <code>uint16</code> range but the middle of the <code>uint8</code> range, so the same number can mean very different things.'
+          : '';
+        prependWarning(container, {
+          level: 'red',
+          html: `This report contains more than one value for ${list}. ` +
+            `That can point to inconsistent acquisition - different instruments, software, or settings - ` +
+            `and is worth checking before comparing groups.${dtypeNote}`,
+        });
+      }
+
       const available  = META_COLS.filter(c => ctx.schema.allCols.includes(c) && !DIST_COLS.includes(c));
   
       if (available.length) {

@@ -85,7 +85,7 @@ def test_set_no_loader_returns_lowercased(caplog):
 
 
 def test_set_no_loader_not_filtered(caplog):
-    """Without a loader, any extension is accepted as-is — no filtering."""
+    """Without a loader, any extension is accepted as-is - no filtering."""
     result = _resolve_extensions({"xyz", "abc"}, loader=None)
     assert result == {"xyz", "abc"}
 

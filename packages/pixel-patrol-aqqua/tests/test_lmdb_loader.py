@@ -1,4 +1,4 @@
-"""Tests for LmdbLoader — read_header, load, load_range, and metadata extraction."""
+"""Tests for LmdbLoader - read_header, load, load_range, and metadata extraction."""
 from __future__ import annotations
 
 from pathlib import Path

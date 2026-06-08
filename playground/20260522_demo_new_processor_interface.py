@@ -2,7 +2,7 @@
 """
 Demo: new chunk-based processor interface.
 
-Standalone — does not use pp's processing pipeline.
+Standalone - does not use pp's processing pipeline.
 Intended for a collaborator to understand the new interface before updating the pipeline.
 
 Two-level chunking
@@ -12,7 +12,7 @@ MEMORY_CHUNK_SPEC  coarse tiling; each chunk is one unit of distributed work
 LEAF_CHUNK_SPEC    fine tiling applied inside each worker on the materialised
                    memory chunk; leaf processors run once per leaf.
 
-ChunkSpec  {"dim_letter": size, ...}  —  -1 or omitted means full extent.
+ChunkSpec  {"dim_letter": size, ...}  -  -1 or omitted means full extent.
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ def plan_chunks(
     """
     Return (bounds, origin) pairs that cover *shape* according to *chunk_spec*.
 
-    bounds  — tuple of slice objects, used to index the array
-    origin  — starting coordinate of this chunk in the parent array's space
+    bounds  - tuple of slice objects, used to index the array
+    origin  - starting coordinate of this chunk in the parent array's space
     """
     dims = [
         (int(shape[i]), chunk_spec.get(dim, int(shape[i]))
