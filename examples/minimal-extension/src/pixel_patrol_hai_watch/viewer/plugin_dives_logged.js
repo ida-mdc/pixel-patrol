@@ -27,11 +27,11 @@ export default {
   },
 
   async render(container, ctx) {
+    const { andWhere } = ctx.sql;
     const rows = await ctx.queryRows(`
       SELECT "depth_zone" AS depth_zone, "imported_path_short" AS site, COUNT(*) AS cnt
       FROM pp_data
-      WHERE "depth_zone" IS NOT NULL
-        ${ctx.where ? 'AND ' + ctx.where.replace(/^WHERE\s+/i, '') : ''}
+      ${andWhere(ctx.where, '"depth_zone" IS NOT NULL')}
       GROUP BY 1, 2
     `);
 
