@@ -27,14 +27,14 @@ export default {
   },
 
   async render(container, ctx) {
+    const { andWhere } = ctx.sql;
     const rows = await ctx.queryRows(`
       SELECT
         "depth_zone"          AS depth_zone,
         "imported_path_short" AS site,
         "glow_count"          AS glows
       FROM pp_data
-      WHERE "depth_zone" IS NOT NULL AND "glow_count" IS NOT NULL
-        ${ctx.where ? 'AND ' + ctx.where.replace(/^WHERE\s+/i, '') : ''}
+      ${andWhere(ctx.where, '"depth_zone" IS NOT NULL AND "glow_count" IS NOT NULL')}
     `);
 
     if (!rows.length) {
