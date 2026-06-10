@@ -221,7 +221,7 @@ async function renderViolins(container, ctx, filterMetric, label) {
 
 function makeViolinPlugin(id, label, info, filterMetric) {
   return {
-    id, label, info, group: 'Dataset Stats',
+    id, label, info, group: 'Dataset Stats', scope: 'image',
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },

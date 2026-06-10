@@ -455,6 +455,7 @@ export default {
   id:    'custom-plot',
   label: 'Custom Plot',
   group: 'Explore',
+  scope: 'image',
   info:  'Build your own plot from the columns in your current data.\n\n' +
          '- **Two numerics** → scatter\n' +
          '- **Categorical × numeric** → violin or bar (mean ± sd)\n' +

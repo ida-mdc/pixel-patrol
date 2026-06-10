@@ -22,6 +22,7 @@ export default {
   id: 'image-table',
   label: 'Image Table',
   group: 'Summary',
+  scope: 'image',
   info: 'Full-image statistics — one row per image file, no per-slice or per-channel rows. ' +
         'Click a column header to sort. ' +
         'Search (Enter): substring match across all columns for small datasets, ' +
