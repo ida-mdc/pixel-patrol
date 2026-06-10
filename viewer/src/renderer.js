@@ -33,6 +33,11 @@ import { buildGroupLabels } from './group-labels.js';
  * @property {(g: string) => string} groupLabel  convenience wrapper:
  *   returns ctx.groupLabels[g] ?? String(g). Falls back to the raw value
  *   if no mapping exists (e.g. for groups discovered after ctx was built).
+ * @property {(palette: string, n: number) => string[]} color.getColors
+ *   returns n colors from the named palette - use for ad-hoc groupings
+ *   (e.g. a column other than the active group-by) not covered by colorMap.
+ * @property {() => string[]} color.getPaletteNames  lists the available
+ *   palette names accepted by color.getColors.
  */
 function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows) {
   const legend = legendWithGrouping(LEGEND, state, '');
