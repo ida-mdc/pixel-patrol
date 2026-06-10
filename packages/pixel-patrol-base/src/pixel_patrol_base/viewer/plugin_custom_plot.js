@@ -410,10 +410,8 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
       '      `);',
       '      const xs = _sortCats([...new Set(rows.map(r => String(r.x)))]);',
       '      const ys = _sortCats([...new Set(rows.map(r => String(r.y)))]);',
-      '      const z  = ys.map(yv => xs.map(xv => {',
-      '        const r = rows.find(r => String(r.x) === xv && String(r.y) === yv);',
-      '        return r ? Number(r.n) : 0;',
-      '      }));',
+      '      const counts = new Map(rows.map(r => [`${r.x}\\x00${r.y}`, Number(r.n)]));',
+      '      const z = ys.map(yv => xs.map(xv => counts.get(`${xv}\\x00${yv}`) ?? 0));',
       '      const colorscale = [[0, \'#ffffff\'], [1, ' + JSON.stringify(heatColor) + ']];',
       '      append(container,',
       '        [{ type: \'heatmap\', x: xs, y: ys, z, colorscale, reversescale: ' + JSON.stringify(!!heatInvert) + ', showscale: true }], {',
@@ -628,6 +626,10 @@ export default {
       // ── Export ─────────────────────────────────────────────────────────────
       let activeConfig = null;
 
+      // Bumped on every doPlot() call - lets a stale, still-running call
+      // detect that a newer one has superseded it and bail out quietly.
+      let renderToken = 0;
+
       function setConfig(cfg) {
         activeConfig = cfg;
         exportBtn.style.display = '';
@@ -770,14 +772,24 @@ export default {
       function statTable(headers, rowData) {
         const t = document.createElement('table');
         t.className = 'stat-table';
-        const hRow = headers.map(h => `<th>${h}</th>`).join('');
-        const body = rowData.map(cells => `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
-        t.innerHTML = `<thead><tr>${hRow}</tr></thead><tbody>${body}</tbody>`;
+        const thead = document.createElement('thead');
+        thead.appendChild(headers.reduce((tr, h) => {
+          tr.appendChild(Object.assign(document.createElement('th'), { textContent: h }));
+          return tr;
+        }, document.createElement('tr')));
+        const tbody = document.createElement('tbody');
+        for (const cells of rowData) {
+          tbody.appendChild(cells.reduce((tr, c) => {
+            tr.appendChild(Object.assign(document.createElement('td'), { textContent: c }));
+            return tr;
+          }, document.createElement('tr')));
+        }
+        t.append(thead, tbody);
         return t;
       }
 
       // ── Plot functions ──────────────────────────────────────────────────────
-      async function plotScatter(x, y, colorMode, continuous) {
+      async function plotScatter(x, y, colorMode, continuous, isStale = () => false) {
         if (continuous) {
           const fullWh = andWhere(ctx.where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL AND ${q(colorMode)} IS NOT NULL`);
           const rows = await ctx.queryRows(`
@@ -786,6 +798,7 @@ export default {
               FROM pp_data ${fullWh}
             ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
           `);
+          if (isStale()) return;
           const sampled = rows.length >= MAX_SCATTER;
           const trace = {
             type: 'scatter', mode: 'markers',
@@ -821,6 +834,7 @@ export default {
             FROM pp_data ${fullWh}
           ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
         `);
+        if (isStale()) return;
         const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
         const sampled = rows.length >= MAX_SCATTER;
         const traces  = groups.map(g => {
@@ -846,7 +860,7 @@ export default {
         });
       }
 
-      async function plotViolin(catCol, numCol, colorMode) {
+      async function plotViolin(catCol, numCol, colorMode, isStale = () => false) {
         const fullWh = andWhere(ctx.where, `${q(numCol)} IS NOT NULL`);
         const rows = await ctx.queryRows(`
           SELECT * FROM (
@@ -854,6 +868,7 @@ export default {
             FROM pp_data ${fullWh}
           ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
         `);
+        if (isStale()) return;
         const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
         const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
         const traces = groups.map(g => {
@@ -880,7 +895,7 @@ export default {
         });
       }
 
-      async function plotBar(catCol, numCol, colorMode) {
+      async function plotBar(catCol, numCol, colorMode, isStale = () => false) {
         const fullWh = andWhere(ctx.where, `${q(numCol)} IS NOT NULL`);
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
@@ -888,6 +903,7 @@ export default {
           FROM pp_data ${fullWh}
           GROUP BY 1, 2 ORDER BY 1
         `);
+        if (isStale()) return;
         const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
         const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
         const traces = groups.map(g => {
@@ -914,12 +930,13 @@ export default {
         });
       }
 
-      async function plotCountBar(x, colorMode) {
+      async function plotCountBar(x, colorMode, isStale = () => false) {
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
           FROM pp_data ${ctx.where}
           GROUP BY 1, 2 ORDER BY 1
         `);
+        if (isStale()) return;
         const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
         const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
         const traces = groups.map(g => {
@@ -945,12 +962,13 @@ export default {
         });
       }
 
-      async function plotCountTable(x, colorMode) {
+      async function plotCountTable(x, colorMode, isStale = () => false) {
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
           FROM pp_data ${ctx.where}
           GROUP BY 1, 2 ORDER BY 1
         `);
+        if (isStale()) return;
         const { labelFn, header } = buildGroupConfig(rows, colorMode);
         const headers = header ? [niceName(x), header, 'Count'] : [niceName(x), 'Count'];
         plotArea.appendChild(statTable(
@@ -961,7 +979,7 @@ export default {
         ));
       }
 
-      async function plotCatNumTable(catCol, numCol, colorMode) {
+      async function plotCatNumTable(catCol, numCol, colorMode, isStale = () => false) {
         const isDate = DATE_COLS.has(numCol);
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
@@ -969,6 +987,7 @@ export default {
           FROM pp_data ${ctx.where}
           GROUP BY 1, 2 ORDER BY 1
         `);
+        if (isStale()) return;
         const { labelFn, header } = buildGroupConfig(rows, colorMode);
         const hasNulls = rows.some(r => Number(r.n_null) > 0);
         const fmt = v => fmtStat(numCol, v);
@@ -990,12 +1009,13 @@ export default {
         ));
       }
 
-      async function plotHeatmap(x, y) {
+      async function plotHeatmap(x, y, isStale = () => false) {
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS x, ${catExpr(y)} AS y, COUNT(*) AS n
           FROM pp_data ${ctx.where}
           GROUP BY 1, 2 ORDER BY 1, 2
         `);
+        if (isStale()) return;
         const xs = sortCats([...new Set(rows.map(r => String(r.x)))]);
         const ys = sortCats([...new Set(rows.map(r => String(r.y)))]);
 
@@ -1007,10 +1027,8 @@ export default {
           return;
         }
 
-        const z = ys.map(yv => xs.map(xv => {
-          const r = rows.find(r => String(r.x) === xv && String(r.y) === yv);
-          return r ? Number(r.n) : 0;
-        }));
+        const counts = new Map(rows.map(r => [`${r.x}\x00${r.y}`, Number(r.n)]));
+        const z = ys.map(yv => xs.map(xv => counts.get(`${xv}\x00${yv}`) ?? 0));
         const colorscale = [[0, '#ffffff'], [1, heatColor.value]];
         appendPlot(plotArea, [{
           type: 'heatmap', x: xs, y: ys, z, colorscale, reversescale: heatInvert.checked, showscale: true,
@@ -1029,6 +1047,9 @@ export default {
 
       // ── Main entry ────────────────────────────────────────────────────────
       async function doPlot() {
+        const myToken = ++renderToken;
+        const isStale = () => myToken !== renderToken;
+
         const x = xBox.get(), y = yBox.get();
         plotArea.innerHTML = '';
         activeConfig = null;
@@ -1061,15 +1082,17 @@ export default {
           if (y === COUNT_Y) {
             typeSel.style.display = 'none';
             const n = await categoryCount(x);
+            if (isStale()) return;
             if (n > MAX_CAT) {
               plotArea.innerHTML = `<div class="no-data">"${niceName(x)}" has ${n} unique values — too many for count bar (max ${MAX_CAT}).</div>`;
               return;
             }
             const cm = await resolveColorMode([x]);
+            if (isStale()) return;
             plotArea.innerHTML = '';
             applyColorMode(cm);
-            if (n === 1) await plotCountTable(x, cm.mode);
-            else         await plotCountBar(x, cm.mode);
+            if (n === 1) await plotCountTable(x, cm.mode, isStale);
+            else         await plotCountBar(x, cm.mode, isStale);
             return;
           }
 
@@ -1085,6 +1108,7 @@ export default {
             typeSel.style.display = 'none';
 
             const [{ n: yUniq }] = await cardinalityCheck(y);
+            if (isStale()) return;
             if (yUniq <= 1) {
               colorGroup.style.display = 'none';
               // One row per distinct Y value (NULL Y becomes its own "(missing)"
@@ -1097,6 +1121,7 @@ export default {
                 GROUP BY ${q(y)}
                 ORDER BY (${q(y)} IS NULL), 1
               `);
+              if (isStale()) return;
               const hasNullX = rows.some(r => Number(r.n_null) > 0);
               const headers  = [niceName(y), 'n', `${niceName(x)} range`];
               if (hasNullX) headers.push(`Null ${niceName(x)}`);
@@ -1111,20 +1136,26 @@ export default {
               })));
               return;
             }
-            const cm = await resolveColorMode([x, y], { scatter: true });
+            // resolveColorMode and the null-count check both run independent
+            // queries - issue them together.
+            const [cm, note] = await Promise.all([
+              resolveColorMode([x, y], { scatter: true }),
+              nullWarningNote(x, y),
+            ]);
+            if (isStale()) return;
             plotArea.innerHTML    = '';
             applyColorMode(cm);
             // Numeric axes can't place NULLs - warn how many points are
             // excluded because X and/or Y is null.
-            showColorNote(await nullWarningNote(x, y));
-            await plotScatter(x, y, cm.mode, cm.continuous);
+            showColorNote(note);
+            await plotScatter(x, y, cm.mode, cm.continuous, isStale);
 
           } else if (!xNum && !yNum) {
             typeSel.style.display    = 'none';
             colorGroup.style.display = 'none';
             heatGroup.style.display  = 'flex';
-            const xCats = await categoryCount(x);
-            const yCats = await categoryCount(y);
+            const [xCats, yCats] = await Promise.all([categoryCount(x), categoryCount(y)]);
+            if (isStale()) return;
             if (xCats > MAX_CAT || yCats > MAX_CAT) {
               const bad  = xCats > MAX_CAT ? x : y;
               const badN = xCats > MAX_CAT ? xCats : yCats;
@@ -1132,14 +1163,21 @@ export default {
               return;
             }
             plotArea.innerHTML = '';
-            await plotHeatmap(x, y);
+            await plotHeatmap(x, y, isStale);
 
           } else {
             const catCol  = xNum ? y : x;
             const numCol  = xNum ? x : y;
             const flipped = xNum; // user put the numeric col on X; we swap internally
             const isDate  = DATE_COLS.has(numCol);
-            const n = await categoryCount(catCol);
+            // categoryCount/cardinalityCheck/resolveColorMode are independent
+            // queries - issue them together.
+            const [n, [{ n: numUniq }], cm] = await Promise.all([
+              categoryCount(catCol),
+              cardinalityCheck(numCol),
+              resolveColorMode([catCol, numCol]),
+            ]);
+            if (isStale()) return;
             if (n > MAX_CAT) {
               typeSel.style.display = 'none';
               plotArea.innerHTML    = `<div class="no-data">"${niceName(catCol)}" has ${n} unique values — too many for a categorical axis (max ${MAX_CAT}).</div>`;
@@ -1147,22 +1185,22 @@ export default {
             }
             // A single category, or a numeric axis with at most one distinct
             // (non-null) value, can't usefully be plotted - show a table instead.
-            const [{ n: numUniq }] = await cardinalityCheck(numCol);
             const showTable = n === 1 || numUniq <= 1;
             // Bar (mean ± sd) doesn't make sense for a date-valued axis - violin only.
             typeSel.style.display = (showTable || isDate) ? 'none' : '';
-            const cm = await resolveColorMode([catCol, numCol]);
             plotArea.innerHTML    = '';
             applyColorMode(cm);
             if (flipped && !showTable) {
               showColorNote(`X and Y were swapped: "${x}" is numeric so it becomes the Y axis, "${y}" is categorical on X.`);
             }
             if (showTable) {
-              await plotCatNumTable(catCol, numCol, cm.mode);
+              await plotCatNumTable(catCol, numCol, cm.mode, isStale);
             } else {
-              showColorNote(await nullWarningNote(numCol));
-              if (typeSel.value === 'bar' && !isDate) await plotBar(catCol, numCol, cm.mode);
-              else                                     await plotViolin(catCol, numCol, cm.mode);
+              const note = await nullWarningNote(numCol);
+              if (isStale()) return;
+              showColorNote(note);
+              if (typeSel.value === 'bar' && !isDate) await plotBar(catCol, numCol, cm.mode, isStale);
+              else                                     await plotViolin(catCol, numCol, cm.mode, isStale);
             }
           }
         } catch (e) {
@@ -1180,8 +1218,8 @@ export default {
         else                               lastQualPalette = paletteSel.value;
         doPlot();
       });
-      noneColor.addEventListener('input', doPlot);
-      heatColor.addEventListener('input', doPlot);
+      noneColor.addEventListener('change', doPlot);
+      heatColor.addEventListener('change', doPlot);
       heatInvert.addEventListener('change', doPlot);
       clearBtn.addEventListener('click', () => {
         xBox.set(null);
