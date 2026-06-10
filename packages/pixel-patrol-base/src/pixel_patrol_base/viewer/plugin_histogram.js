@@ -14,6 +14,7 @@ const SAMPLE_INPUT_ID           = 'hist-sample-input';
 export default {
   id: 'histogram',
   group: 'Dataset Stats',
+  scope: 'image',
   label: 'Pixel Value Histograms',
   info: [
     'Histograms are computed **per image** and grouped based on your groupings.',

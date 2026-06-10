@@ -8,6 +8,7 @@ import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
+import { scopeBadgeHtml } from './scopes.js';
 
 /**
  * Build a plugin context object.
@@ -222,7 +223,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     container.appendChild(title);
 
     for (const plugin of grouped.get(groupName)) {
-      const card = createCard(plugin.label, plugin.info);
+      const card = createCard(plugin.label, plugin.info, plugin.scope);
       container.appendChild(card);
       const body = card.querySelector('.widget-card-body');
 
@@ -238,7 +239,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   }
 }
 
-function createCard(label, info) {
+function createCard(label, info, scope) {
   const div = document.createElement('div');
   div.className = 'widget-card';
 
@@ -249,6 +250,9 @@ function createCard(label, info) {
   title.className = 'widget-card-title';
   title.textContent = label;
   header.appendChild(title);
+
+  const badge = scopeBadgeHtml(scope);
+  if (badge) header.insertAdjacentHTML('beforeend', badge);
 
   if (info) {
     const panel = document.createElement('div');

@@ -279,7 +279,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
 
 function makeAcrossDimsPlugin(id, label, info, filterMetric) {
   return {
-    id, label, info, group: 'Dataset Stats',
+    id, label, info, group: 'Dataset Stats', scope: 'slice',
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },

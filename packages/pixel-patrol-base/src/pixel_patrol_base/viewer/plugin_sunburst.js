@@ -4,6 +4,7 @@ const MIXED_COLOR = '#aaaaaa';
 export default {
   id: 'sunburst',
   group: 'Summary',
+  scope: 'file',
   info: 'Sunburst view of the **file and folder hierarchy**.\n\nClick a slice to zoom in; click the center to zoom out.',
   label: 'File Structure Sunburst',
 

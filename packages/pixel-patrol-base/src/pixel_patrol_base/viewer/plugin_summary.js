@@ -2,6 +2,7 @@ export default {
   id: 'summary',
   label: 'File Data Summary',
   group: 'Summary',
+  scope: 'file',
   info: 'Summarizes file counts, total size, and file types present in each group.',
 
   requires(schema) {
