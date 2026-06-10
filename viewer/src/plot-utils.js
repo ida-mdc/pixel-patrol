@@ -61,6 +61,20 @@ const CHART_CONFIG = {
   toImageButtonOptions: { format: 'png', scale: 3 },
 };
 
+/**
+ * Merge a plugin's layout overrides on top of LAYOUT, with `automargin: true`
+ * defaulted on both axes so Plotly expands the plot area to fit tick labels
+ * and axis titles instead of letting them overlap.
+ */
+function mergeLayout(layout) {
+  return {
+    ...LAYOUT,
+    ...layout,
+    xaxis: { automargin: true, ...layout.xaxis },
+    yaxis: { automargin: true, ...layout.yaxis },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Core plot helper
 // ---------------------------------------------------------------------------
@@ -83,7 +97,7 @@ export function appendPlot(container, traces, layout, divStyle = '') {
   const div = document.createElement('div');
   if (divStyle) div.style.cssText = divStyle;
   container.appendChild(div);              // ← must precede newPlot
-  Plotly.newPlot(div, traces, { ...LAYOUT, ...layout }, CHART_CONFIG);
+  Plotly.newPlot(div, traces, mergeLayout(layout), CHART_CONFIG);
   return div;
 }
 
@@ -141,7 +155,7 @@ export function appendPlots(container, plotDefs, wrapStyle = 'display:flex;flex-
 
   // Then render - every div is already in the live DOM at correct size.
   plotDefs.forEach(({ traces, layout }, i) => {
-    Plotly.newPlot(divs[i], traces, { ...LAYOUT, ...layout }, CHART_CONFIG);
+    Plotly.newPlot(divs[i], traces, mergeLayout(layout), CHART_CONFIG);
   });
 
   return wrap;
