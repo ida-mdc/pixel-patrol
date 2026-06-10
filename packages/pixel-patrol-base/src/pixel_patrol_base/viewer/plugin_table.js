@@ -8,8 +8,10 @@ const LARGE_TABLE = 10_000;
 // Priority columns shown first; rest sorted alphabetically
 const PRIORITY_COLS = ['path', 'child_id'];
 
+// Escape a string for use inside `ILIKE '%...%' ESCAPE '\'` - quotes for SQL,
+// and %/_ (LIKE wildcards) so a literal search term matches literally.
 function escSql(str) {
-  return String(str).replace(/'/g, "''");
+  return String(str).replace(/'/g, "''").replace(/[\\%_]/g, c => '\\' + c);
 }
 
 function orderBy(col, dir) {
@@ -42,11 +44,9 @@ export default {
       return;
     }
 
-    const baseWhere = () => andWhere(ctx.where, 'obs_level = 0');
-
     // Fetch total once — used for browse pagination and to pick search strategy
     const [[{ n: totalCount }]] = await Promise.all([
-      ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${baseWhere()}`),
+      ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`),
     ]);
     const total0 = Number(totalCount ?? 0);
 
@@ -82,9 +82,9 @@ export default {
         const colExprs    = displayCols.map(c => q(c)).join(', ');
         const isSearching = Boolean(search.trim() && searchCols.length);
         const likes       = isSearching
-          ? searchCols.map(c => `CAST(${q(c)} AS VARCHAR) ILIKE '%${escSql(search)}%'`).join(' OR ')
+          ? searchCols.map(c => `CAST(${q(c)} AS VARCHAR) ILIKE '%${escSql(search)}%' ESCAPE '\\'`).join(' OR ')
           : null;
-        const wh = isSearching ? andWhere(baseWhere(), `(${likes})`) : baseWhere();
+        const wh = isSearching ? andWhere(ctx.where, `(${likes})`) : ctx.where;
 
         const [total, rows] = await Promise.all([
           isSearching
@@ -134,7 +134,7 @@ export default {
 
         if (!rows.length) {
           container.insertAdjacentHTML('beforeend',
-            `<div class="no-data">${isSearching ? 'No matching images.' : 'No data at obs_level=0.'}</div>`);
+            `<div class="no-data">${isSearching ? 'No matching images.' : 'No data.'}</div>`);
           return;
         }
 
