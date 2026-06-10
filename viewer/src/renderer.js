@@ -1,4 +1,4 @@
-import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
+import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
@@ -91,8 +91,10 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
 
     /** Color helpers pre-bound to the current colorMap. */
     color: {
-      group:    (g) => _groupColor(colorMap, g),
+      group:         (g) => _groupColor(colorMap, g),
       hexToRgba,
+      getColors,
+      getPaletteNames,
     },
 
     /** Plotly plot helpers (mirror of plot-utils.js). */
