@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, Iterable, Iterator, Set, Any, Dict, List, Optional, Tuple, Union
+from typing import Protocol, Iterator, Set, Any, Dict, List, Optional, Tuple
 
-import polars as pl
 from pathlib import Path
-
-from dash.development.base_component import Component
 
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import ProcessResult, RecordSpec, ProcessorOutput
@@ -89,11 +86,3 @@ class PixelPatrolProcessor(Protocol):
     def get_aggregation(self, name: str) -> Optional[Any]: ...
 
 
-class PixelPatrolWidget(Protocol):
-    NAME: str                       # human readable name
-    TAB: str                        # WidgetCategories value
-    REQUIRES: Set[str]              # columns required to render
-    REQUIRES_PATTERNS: Optional[Iterable[str]]  # optional regexes for dynamic cols
-
-    def layout(self) -> List[Component]: ...
-    def register(self, app, df_global: pl.DataFrame) -> None: ...

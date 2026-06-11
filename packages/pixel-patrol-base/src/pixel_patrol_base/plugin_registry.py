@@ -6,8 +6,8 @@ import logging
 from typing import TYPE_CHECKING, List, Type, Union
 
 if TYPE_CHECKING:
-    from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
-    PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor], Type[PixelPatrolWidget]]
+    from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor
+    PixelPluginClass = Union[Type[PixelPatrolLoader], Type[PixelPatrolProcessor]]
 
 logger = logging.getLogger(__name__)
 

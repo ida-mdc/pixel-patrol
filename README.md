@@ -1,4 +1,4 @@
-# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/prevalidation.png" width="80">  Pixel Patrol
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/prevalidation.png" width="80">  Pixel Patrol
 
 ### Image Dataset Quality Control and Exploration
 
