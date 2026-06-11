@@ -280,6 +280,8 @@ export default {
   id:    'my-widget',          // unique across all loaded plugins
   label: 'My Widget',          // shown in the sidebar widget list
   group: 'My Extension Name',  // optional - gives the widget its own sidebar section
+  scope: 'image',              // optional - 'file' | 'image' | 'slice', shown as a badge
+                               // describing what one datapoint in this widget represents
 
   requires(schema) {
     // return false to hide the widget when its columns are absent
@@ -307,6 +309,8 @@ export default {
 <tr><td><code>ctx.schema</code></td><td><code>object</code></td><td><code>{ metricCols, groupCols, dimensionInfo, allCols, blobCols }</code></td></tr>
 <tr><td><code>ctx.state</code></td><td><code>object</code></td><td><code>{ palette, groupCol, filter, dimensions }</code></td></tr>
 <tr><td><code>ctx.colorMap</code></td><td><code>object</code></td><td><code>{ groupValue: hexColor }</code> - matches the colors used everywhere else in the report</td></tr>
+<tr><td><code>ctx.color.getColors(palette, n)</code></td><td><code>(string, number) -&gt; string[]</code></td><td><code>n</code> colors from the named palette - for ad-hoc groupings (e.g. a column other than the active group-by) not covered by <code>colorMap</code></td></tr>
+<tr><td><code>ctx.color.getPaletteNames()</code></td><td><code>() -&gt; string[]</code></td><td>palette names accepted by <code>ctx.color.getColors</code></td></tr>
 <tr><td><code>ctx.where</code></td><td><code>string</code></td><td>SQL <code>WHERE</code> clause for the active filter (or <code>''</code>) - merge with <code>AND</code> if your query needs its own</td></tr>
 <tr><td><code>ctx.groups</code></td><td><code>string[]</code></td><td>distinct values of the active group column</td></tr>
 <tr><td><code>ctx.filteredCount</code> / <code>ctx.totalRows</code></td><td><code>number</code></td><td>row counts</td></tr>
@@ -322,6 +326,7 @@ export default {
   id:    'glow-by-depth',
   label: 'Glow Sightings by Depth',
   group: 'Pixel HAI Watch',
+  scope: 'image',
 
   requires(schema) {
     return ['depth_zone', 'glow_count'].every(c => schema.allCols.includes(c));

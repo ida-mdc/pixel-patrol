@@ -21,6 +21,7 @@ export default {
   id:    'glow-by-depth',
   label: 'Glow Sightings by Depth',
   group: 'Pixel HAI Watch',
+  scope: 'image',
 
   requires(schema) {
     return ['depth_zone', 'glow_count'].every(c => schema.allCols.includes(c));
