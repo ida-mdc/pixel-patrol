@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Union, Tuple, Optional, Literal
-import io
+from typing import Tuple, Optional, Literal
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -108,33 +107,6 @@ def load_parquet(src: Path) -> Tuple[pl.DataFrame, ProjectMetadata]:
         metadata.project_name, metadata.flavor, metadata.description, src,
     )
     return records_df, metadata
-
-
-### TODO: DELETE ONCE dashboard is removed.
-def resolve_report_source(
-    source: Union["Project", Path],  # type: ignore[name-defined]
-) -> Tuple[pl.DataFrame, ProjectMetadata]:
-    """
-    Resolve report data from either a live Project or a parquet file path.
-    Returns (records_df, metadata).
-    """
-    if isinstance(source, Path):
-        return load_parquet(source)
-
-    # Live Project - use in-memory data directly
-    from pixel_patrol_base.core.project import Project
-    if isinstance(source, Project):
-        return source.records_df, source.metadata
-
-    raise TypeError(f"Expected Project or Path, got {type(source)}")
-
-
-### TODO: DELETE ONCE dashboard is removed.
-def to_parquet_bytes(df: pl.DataFrame, metadata: ProjectMetadata) -> bytes:
-    buf = io.BytesIO()
-    table = df.to_arrow()
-    _write_with_metadata(table, buf, metadata.to_parquet_meta())
-    return buf.getvalue()
 
 
 def reattach_parquet_metadata(target: Path, source: Path) -> None:
