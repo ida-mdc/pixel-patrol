@@ -105,6 +105,10 @@ export default {
                                // reuses a canonical section (Summary, File Stats, Metadata,
                                // Dataset Stats, Visualization) if it matches one by name,
                                // otherwise creates its own; defaults to "Other Widgets"
+  scope: 'image',              // optional - 'file' | 'image' | 'slice', shown as a small
+                               // badge on the widget card describing what one datapoint is:
+                               // a file, an image (one per image even within a multi-image
+                               // file), or a slice (e.g. one Z-plane/channel/timepoint)
 
   requires(schema) {
     // return false to hide the widget when expected columns are absent
@@ -144,6 +148,8 @@ WHERE my_col IS NOT NULL
 | `ctx.schema` | object | `{ metricCols, groupCols, dimensionInfo, allCols, blobCols }` |
 | `ctx.state` | object | `{ palette, groupCol, filter, dimensions }` |
 | `ctx.colorMap` | object | `{ groupValue: hexColor }` |
+| `ctx.color.getColors(palette, n)` | `(string, number) → string[]` | `n` colors from the named palette - for ad-hoc groupings not covered by `colorMap` |
+| `ctx.color.getPaletteNames()` | `() → string[]` | Names accepted by `ctx.color.getColors` |
 | `ctx.where` | string | SQL `WHERE` clause for the current filter (or `''`) |
 | `ctx.groups` | string[] | Distinct values of the active group column |
 | `ctx.filteredCount` | number | Rows matching the current filter |

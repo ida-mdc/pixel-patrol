@@ -19,6 +19,8 @@ A few things to know before you start:
   <span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice
 </div>
 
+Each widget also carries a small **scope badge** in its header, telling you what one datapoint represents: 📄 **per file**, 🖼️ **per image** (one image's worth of data, even if its file holds several), or 🧩 **per slice** (a single channel/Z-plane/timepoint within an image). Hover the badge for details.
+
 ---
 
 ## Opening your report
@@ -71,7 +73,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <p style="font-size:0.82rem;margin:0.5rem 0;opacity:0.8">Click the ✓ in the corner of each widget card to mark it as reviewed and track your progress through the walkthrough.</p>
 
 <div class="wc-progress-wrap">
-  <div class="wc-progress-label" id="wc-prog-label">0 / 11 widgets reviewed</div>
+  <div class="wc-progress-label" id="wc-prog-label">0 / 13 widgets reviewed</div>
   <div class="wc-progress-bar"><div class="wc-progress-fill" id="wc-prog-fill"></div></div>
 </div>
 
@@ -102,6 +104,27 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Uneven group sizes can skew statistics and significance tests.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition being much smaller on disk than the others (same file count, much less data) is a hint of a possible issue - images that differ in size or dtype, or compression. The next few widgets will help you tell which it is.</div></div>
+</div>
+
+</div>
+</div>
+
+---
+
+<div class="wc" data-wc-req="" id="wc-image-table">
+<div class="wc-head">
+<span class="wc-icon">📋</span>
+<span class="wc-name">Image Table</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="image-table" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>A sortable, searchable table with one row per image, showing every column except thumbnails and other binary/array data. Click a column header to sort; press Enter in the search box to search by substring - across all columns for datasets under 10,000 images, or just <code>path</code>/<code>child_id</code> for larger ones.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>The fastest way to find a specific file or check raw values before trusting a chart - sort by a metric to see the exact numbers behind the most extreme points in the violin plots.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use <strong>Save as CSV</strong> in the sidebar if you want the full table (filtered or not) outside the browser.</div></div>
 </div>
 
 </div>
@@ -456,6 +479,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><code>mean_intensity</code> declining over T: <strong>photobleaching</strong>. Fluorophores are bleaching over the time course - any time-series analysis must account for this.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>std_intensity</code> increasing over T: growing noise - sample movement, degradation, or instrument drift.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal - just noise. Confirm visually in the mosaic for that channel.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Each plot also has a dashed line - the percentage of images that still have a slice at that position, per group. A line dropping below 100% means images in that group don't all have the same number of slices.</div></div>
 </div>
 
 </div>
@@ -488,6 +512,37 @@ NaN pixels are excluded from all calculations.
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Michelson contrast dropping over T: signal-to-background shrinking - consistent with photobleaching.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>MSCN variance spiking at one specific T frame: sample motion, a bubble, or a transient autofluorescence event.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Find the Z of peak Laplacian variance here, then set that Z in the sidebar dimension selector - all widgets update to show your data at its sharpest.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>As with Basic Statistics Across Dimensions, the dashed line shows the per-group percentage of images that still have a slice at that position - check it before reading too much into a quality metric at the far end of a dimension.</div></div>
+</div>
+
+</div>
+</div>
+
+---
+
+<div class="wc" data-wc-req="" id="wc-custom-plot">
+<div class="wc-head">
+<span class="wc-icon">🧪</span>
+<span class="wc-name">Custom Plot</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="custom-plot" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Build your own plot from any columns in the report - pick an X column, a Y column (or <code>(count)</code>), and Pixel Patrol picks a sensible chart type:</p>
+
+<ul style="font-size:0.9rem;line-height:1.6">
+<li><strong>Two numerics</strong> → scatter</li>
+<li><strong>Categorical × numeric</strong> → violin or bar (mean ± sd)</li>
+<li><strong>Any column × <code>(count)</code></strong> → count bar</li>
+<li><strong>Two categoricals</strong> → count heatmap</li>
+</ul>
+
+<p><strong>Color by</strong> defaults to the app-wide group column, but you can color/split by any other column instead - or, for scatter plots, by a numeric column on a continuous colormap. Click <strong>＋ Add plot</strong> for as many independent plots as you need.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use this for anything not covered by the built-in widgets - e.g. plotting a loader-specific metadata column against a quality metric, or checking whether two metrics correlate.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>↓ Export plugin</strong> downloads the current plot as a standalone viewer plugin <code>.js</code> file - drop it into an extension's <code>viewer/</code> folder and list it in <code>extension.json</code> to make it a permanent part of your reports. See <a href="../extension/">Create an Extension</a>.</div></div>
 </div>
 
 </div>
@@ -577,7 +632,7 @@ function wcApply() {
 }
 
 /* ── Progress tracker ─────────────────────────────────────── */
-const WC_TOTAL = 11;
+const WC_TOTAL = 13;
 const WC_KEY   = 'pp-report-progress';
 
 function wcCheck(btn) {
