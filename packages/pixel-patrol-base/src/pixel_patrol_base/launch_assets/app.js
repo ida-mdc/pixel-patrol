@@ -11,6 +11,16 @@ const fileExtHelp = document.getElementById("file-extensions-help");
 const processorsIncludeSelect = document.getElementById("processors-include");
 const processorsExcludeSelect = document.getElementById("processors-exclude");
 
+const versionInfoEl = document.getElementById("version-info");
+const openExistingBtn = document.getElementById("open-existing-btn");
+const openExistingOverlay = document.getElementById("open-existing-overlay");
+const browserPathInput = document.getElementById("browser-path");
+const browserUpBtn = document.getElementById("browser-up-btn");
+const browserListEl = document.getElementById("browser-list");
+const existingReportError = document.getElementById("existing-report-error");
+const existingReportCancelBtn = document.getElementById("existing-report-cancel");
+const existingReportOpenBtn = document.getElementById("existing-report-open");
+
 const statusEl = document.getElementById("progress-status");
 const progressContainer = document.getElementById("progress-bar-container");
 const progressBar = document.getElementById("progress-bar");
@@ -310,11 +320,169 @@ async function openViewer(outputParquet) {
 }
 
 // ---------------------------------------------------------------------
+// Open existing report
+// ---------------------------------------------------------------------
+
+const LAST_BROWSE_DIR_KEY = "pixelPatrolLastBrowseDir";
+let selectedReportPath = null;
+let currentParentDir = null;
+
+function showOpenExistingDialog() {
+  existingReportError.innerHTML = "";
+  selectedReportPath = null;
+  existingReportOpenBtn.disabled = true;
+  openExistingOverlay.hidden = false;
+  const startDir = localStorage.getItem(LAST_BROWSE_DIR_KEY) || "";
+  loadBrowser(startDir);
+}
+
+function hideOpenExistingDialog() {
+  openExistingOverlay.hidden = true;
+}
+
+async function loadBrowser(path) {
+  existingReportError.innerHTML = "";
+  try {
+    const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : "/api/browse";
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
+      return;
+    }
+    renderBrowser(data);
+    localStorage.setItem(LAST_BROWSE_DIR_KEY, data.path);
+  } catch (err) {
+    existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+  }
+}
+
+function renderBrowser(data) {
+  browserPathInput.value = data.path;
+  browserUpBtn.disabled = !data.parent;
+  currentParentDir = data.parent;
+
+  selectedReportPath = null;
+  existingReportOpenBtn.disabled = true;
+
+  browserListEl.innerHTML = "";
+  if (!data.entries.length) {
+    browserListEl.innerHTML = `<div class="browser-empty">No subfolders or .parquet files here</div>`;
+    return;
+  }
+
+  for (const entry of data.entries) {
+    const row = document.createElement("div");
+    row.className = "browser-entry";
+    const icon = entry.is_dir ? "📁" : "📄";
+    row.innerHTML = `<span class="browser-entry-icon">${icon}</span><span>${escapeHtml(entry.name)}</span>`;
+    const fullPath = data.path.replace(/\/$/, "") + "/" + entry.name;
+    if (entry.is_dir) {
+      row.addEventListener("click", () => loadBrowser(fullPath));
+    } else {
+      row.addEventListener("click", () => {
+        for (const el of browserListEl.querySelectorAll(".browser-entry.selected")) {
+          el.classList.remove("selected");
+        }
+        row.classList.add("selected");
+        selectedReportPath = fullPath;
+        existingReportOpenBtn.disabled = false;
+      });
+    }
+    browserListEl.appendChild(row);
+  }
+}
+
+async function openExistingReport() {
+  if (!selectedReportPath) return;
+  existingReportOpenBtn.disabled = true;
+  existingReportOpenBtn.textContent = "Opening...";
+  try {
+    const res = await fetch("/api/open-viewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ output_parquet: selectedReportPath }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.open(data.url, "_blank");
+      hideOpenExistingDialog();
+    } else {
+      existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to open report")}</span></div>`;
+    }
+  } catch (err) {
+    existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+  } finally {
+    existingReportOpenBtn.disabled = false;
+    existingReportOpenBtn.textContent = "Open";
+  }
+}
+
+openExistingBtn.addEventListener("click", showOpenExistingDialog);
+existingReportCancelBtn.addEventListener("click", hideOpenExistingDialog);
+existingReportOpenBtn.addEventListener("click", openExistingReport);
+browserUpBtn.addEventListener("click", () => {
+  if (currentParentDir) loadBrowser(currentParentDir);
+});
+browserPathInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") loadBrowser(browserPathInput.value.trim());
+});
+
+// ---------------------------------------------------------------------
+// Version check
+// ---------------------------------------------------------------------
+
+async function checkVersion() {
+  try {
+    const res = await fetch("/api/version");
+    const data = await res.json();
+    if (!data.update_available) return;
+
+    if (data.managed) {
+      versionInfoEl.innerHTML = `
+        <span>Update available: pixel-patrol v${escapeHtml(data.latest)}</span>
+        <button type="button" id="install-update-btn" class="btn btn-secondary btn-sm">Install Update</button>
+      `;
+      document.getElementById("install-update-btn").addEventListener("click", installUpdate);
+    } else {
+      versionInfoEl.innerHTML = `
+        <a href="${data.pypi_url}" target="_blank">Update available: pixel-patrol v${escapeHtml(data.latest)} (PyPI)</a>
+      `;
+    }
+    versionInfoEl.hidden = false;
+  } catch (err) {
+    // Offline or PyPI unreachable - silently skip the version check.
+  }
+}
+
+async function installUpdate() {
+  const btn = document.getElementById("install-update-btn");
+  btn.disabled = true;
+  btn.textContent = "Installing...";
+  try {
+    const res = await fetch("/api/update", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      versionInfoEl.innerHTML = `<span>Update installed — close this tab and reopen Pixel Patrol to use the new version.</span>`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Install Update";
+      errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Update failed")}</span></div>`;
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Install Update";
+    errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+  }
+}
+
+// ---------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------
 
 (async function init() {
   await Promise.all([loadLoaders(), loadProcessors()]);
+  checkVersion();
   const res = await fetch("/api/status");
   const state = await res.json();
   renderState(state);

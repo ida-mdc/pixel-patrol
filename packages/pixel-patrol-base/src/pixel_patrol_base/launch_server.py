@@ -13,15 +13,24 @@ API, no Dash/Flask dependency required.
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import logging
+import platform
+import shutil
 import socket
+import subprocess
+import sys
 import threading
+import urllib.request
 import webbrowser
+from urllib.parse import parse_qs, urlsplit
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from packaging.version import InvalidVersion, Version
 
 from pixel_patrol_base import api
 from pixel_patrol_base.viewer_server import build_viewer_url_params, serve_viewer
@@ -29,6 +38,12 @@ from pixel_patrol_base.viewer_server import build_viewer_url_params, serve_viewe
 logger = logging.getLogger(__name__)
 
 ASSETS_DIR = (Path(__file__).parent / "launch_assets").resolve()
+
+# ~/.pixel-patrol is created by the Pixel Patrol launcher (deploy/launcher);
+# its presence as our venv root is how we detect a launcher-managed install.
+_LAUNCHER_HOME = Path.home() / ".pixel-patrol"
+_LAUNCHER_VENV = _LAUNCHER_HOME / "venv"
+_PYPI_URL = "https://pypi.org/pypi/pixel-patrol/json"
 
 _MIME = {
     ".html": "text/html; charset=utf-8",
@@ -138,6 +153,111 @@ def _get_available_processors() -> list:
     from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
     return [{"id": p.NAME, "name": p.NAME} for p in discover_processor_plugins()]
+
+
+# ---------------------------------------------------------------------------
+# Version check / self-update (launcher-managed installs only)
+# ---------------------------------------------------------------------------
+
+def _is_managed_install() -> bool:
+    """True if this process is running from the launcher-managed venv."""
+    try:
+        return Path(sys.prefix).resolve() == _LAUNCHER_VENV.resolve()
+    except OSError:
+        return False
+
+
+def _latest_pixel_patrol_version() -> Optional[str]:
+    try:
+        with urllib.request.urlopen(_PYPI_URL, timeout=3) as resp:
+            data = json.loads(resp.read())
+        return data["info"]["version"]
+    except Exception:
+        logger.debug("Could not check latest pixel-patrol version on PyPI", exc_info=True)
+        return None
+
+
+def _installed_version() -> Optional[str]:
+    """Version of pixel-patrol, falling back to pixel-patrol-base if the
+    full bundle isn't installed (e.g. dev/test environments)."""
+    for name in ("pixel-patrol", "pixel-patrol-base"):
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return None
+
+
+def _get_version_info() -> Dict[str, Any]:
+    current = _installed_version()
+    latest = _latest_pixel_patrol_version()
+
+    update_available = False
+    if latest and current:
+        try:
+            update_available = Version(latest) > Version(current)
+        except InvalidVersion:
+            update_available = latest != current
+
+    return {
+        "current": current,
+        "latest": latest,
+        "update_available": update_available,
+        "managed": _is_managed_install(),
+        "pypi_url": "https://pypi.org/project/pixel-patrol/",
+    }
+
+
+def _find_uv() -> Optional[Path]:
+    hit = shutil.which("uv")
+    if hit:
+        return Path(hit)
+    suffix = ".exe" if platform.system() == "Windows" else ""
+    bundled = _LAUNCHER_HOME / "uv-bin" / f"uv{suffix}"
+    return bundled if bundled.exists() else None
+
+
+def _update_pixel_patrol() -> Dict[str, Any]:
+    """Upgrade pixel-patrol (and configured loaders) in the managed venv."""
+    uv = _find_uv()
+    if uv is None:
+        return {"error": "Could not find the uv package manager."}
+
+    loader_pkgs: list = []
+    try:
+        config = json.loads((_LAUNCHER_HOME / "config.json").read_text())
+        loader_pkgs = config.get("loader_pkgs", [])
+    except Exception:
+        pass
+
+    pkgs = ["pixel-patrol", *loader_pkgs]
+    try:
+        subprocess.run(
+            [str(uv), "pip", "install", "--python", sys.executable, "--upgrade", *pkgs],
+            check=True, capture_output=True, text=True, timeout=300,
+        )
+    except subprocess.CalledProcessError as exc:
+        return {"error": exc.stderr or str(exc)}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+    return {"status": "ok"}
+
+
+def _list_directory(path: Path) -> Dict[str, Any]:
+    """List subdirectories and .parquet files in path, for the report file picker."""
+    entries = []
+    for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        if child.is_dir():
+            entries.append({"name": child.name, "is_dir": True})
+        elif child.suffix.lower() == ".parquet":
+            entries.append({"name": child.name, "is_dir": False})
+    parent = path.parent
+    return {
+        "path": str(path),
+        "parent": str(parent) if parent != path else None,
+        "entries": entries,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +496,10 @@ class _LaunchHandler(BaseHTTPRequestHandler):
             state = get_state()
             state["warnings"] = get_warnings()
             self._send_json(state)
+        elif path == "/api/version":
+            self._send_json(_get_version_info())
+        elif path == "/api/browse":
+            self._handle_browse()
         else:
             self._serve_static(path)
 
@@ -396,8 +520,38 @@ class _LaunchHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/open-viewer":
             payload = self._read_json() or {}
             self._handle_open_viewer(payload)
+        elif self.path == "/api/update":
+            if not _is_managed_install():
+                self._send_json(
+                    {"error": "Update is only available for installations managed by the Pixel Patrol launcher."},
+                    status=400,
+                )
+            else:
+                result = _update_pixel_patrol()
+                self._send_json(result, status=200 if "error" not in result else 500)
         else:
             self.send_error(404)
+
+    # ------------------------------------------------------------------
+    def _handle_browse(self) -> None:
+        query = parse_qs(urlsplit(self.path).query)
+        raw_path = query.get("path", [str(Path.home())])[0]
+
+        target = Path(raw_path).expanduser()
+        try:
+            target = target.resolve()
+        except OSError:
+            self._send_json({"error": f"Invalid path: {raw_path}"}, status=400)
+            return
+
+        if not target.exists() or not target.is_dir():
+            self._send_json({"error": f"Not a directory: {target}"}, status=404)
+            return
+
+        try:
+            self._send_json(_list_directory(target))
+        except PermissionError:
+            self._send_json({"error": f"Permission denied: {target}"}, status=403)
 
     # ------------------------------------------------------------------
     def _handle_open_viewer(self, payload: Dict[str, Any]) -> None:

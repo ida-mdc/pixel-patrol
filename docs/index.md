@@ -82,7 +82,7 @@ If you prefer a visual interface, `pixel-patrol launch` opens a web UI:
 pixel-patrol launch
 ```
 
-This opens a browser tab where you can set your project, process your data, and finally view the report.
+This opens a browser tab where you can set your project, process your data, and finally view the report. An "Open Existing Report" button lets you jump straight to the viewer for a `.parquet` file from a previous run, without reprocessing.
 
 ---
 
