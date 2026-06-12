@@ -79,3 +79,8 @@ If you'd rather skip the command line entirely, download the **Pixel Patrol Laun
 [🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
 [🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
+
+!!! note "First time running it?"
+    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
+    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
+    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).
