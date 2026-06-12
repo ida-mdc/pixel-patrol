@@ -188,7 +188,4 @@ const instWiz = {
 
 If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single double-clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
 
-[Download the launcher :material-download:](https://github.com/ida-mdc/pixel-patrol/releases/latest){ .md-button }
-
-!!! note "This is optional, not the default"
-    The CLI install above gives you the full toolkit - scripting, optional packages, and the `pixel-patrol` command everywhere. The launcher is a quick way to get the viewer running with zero setup. You can switch to the CLI install later; nothing about the launcher locks you in.
+[Download the launcher](https://github.com/ida-mdc/pixel-patrol/releases/latest){ .md-button }
