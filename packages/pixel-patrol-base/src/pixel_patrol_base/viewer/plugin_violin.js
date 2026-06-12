@@ -204,6 +204,12 @@ async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
   const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
   const showSig = ctx.state.showSignificance && groups.length >= 2;
 
+  // Pairwise Mann-Whitney rank sums, computed in SQL (one query per group pair,
+  // covering all metrics at once via UNION ALL + window functions).
+  const rankData = (showSig && toPlot.length)
+    ? await fetchRankSums(ctx, q, andWhere, gc, combinedWhere, sourceTable, toPlot.map(t => t.metric), groups)
+    : null;
+
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
 
@@ -215,29 +221,26 @@ async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
       const label = niceName(metric);
       const title = `Distribution of ${label}<br><sup>${granularityDesc}; n=${total.toLocaleString()}</sup>`;
 
-      let traces, groupData = null;
-      if (total <= MAX_VIOLIN_POINTS) {
-        ({ traces, groupData } = await fetchRawViolinTraces(ctx, q, andWhere, gc, combinedWhere, sourceTable, metric, groups));
-      } else {
-        traces = groups.map(g => {
-          const r = statsByGroup.get(g);
-          return {
-            type: 'box', name: ctx.groupLabel(g),
-            x: [ctx.groupLabel(g)],
-            q1: [Number(r[`${metric}__q1`])],
-            median: [Number(r[`${metric}__median`])],
-            q3: [Number(r[`${metric}__q3`])],
-            lowerfence: [Number(r[`${metric}__min`])],
-            upperfence: [Number(r[`${metric}__max`])],
-            mean: [Number(r[`${metric}__mean`])],
-            boxmean: true, boxpoints: false, opacity: 0.9,
-            marker: { color: ctx.color.group(g), line: { width: 1, color: 'black' } },
-            hovertemplate: '<b>Group:</b> %{x}' +
-              '<br><b>Median:</b> %{median:.2f}<br><b>Q1:</b> %{q1:.2f}<br><b>Q3:</b> %{q3:.2f}' +
-              '<br><b>Min:</b> %{lowerfence:.2f}<br><b>Max:</b> %{upperfence:.2f}<extra></extra>',
-          };
-        });
-      }
+      const traces = total <= MAX_VIOLIN_POINTS
+        ? await fetchRawViolinTraces(ctx, q, andWhere, gc, combinedWhere, sourceTable, metric, groups)
+        : groups.map(g => {
+            const r = statsByGroup.get(g);
+            return {
+              type: 'box', name: ctx.groupLabel(g),
+              x: [ctx.groupLabel(g)],
+              q1: [Number(r[`${metric}__q1`])],
+              median: [Number(r[`${metric}__median`])],
+              q3: [Number(r[`${metric}__q3`])],
+              lowerfence: [Number(r[`${metric}__min`])],
+              upperfence: [Number(r[`${metric}__max`])],
+              mean: [Number(r[`${metric}__mean`])],
+              boxmean: true, boxpoints: false, opacity: 0.9,
+              marker: { color: ctx.color.group(g), line: { width: 1, color: 'black' } },
+              hovertemplate: '<b>Group:</b> %{x}' +
+                '<br><b>Median:</b> %{median:.2f}<br><b>Q1:</b> %{q1:.2f}<br><b>Q3:</b> %{q3:.2f}' +
+                '<br><b>Min:</b> %{lowerfence:.2f}<br><b>Max:</b> %{upperfence:.2f}<extra></extra>',
+            };
+          });
 
       const outerDiv = appendPlot(wrap, traces, {
         title: { text: title },
@@ -247,8 +250,8 @@ async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
         showlegend: false,
       }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
 
-      if (showSig && groupData) {
-        const pairs = computeSignificancePairs(groups, groupData);
+      if (showSig && rankData) {
+        const pairs = computeSignificancePairsFromRanks(groups, rankData[metric] ?? {});
         addSignificanceBrackets(outerDiv, pairs, groups);
       }
     }
@@ -273,28 +276,62 @@ async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
 
 // Raw per-row values for `metric`, one Plotly violin trace per group - used
 // instead of the SQL-aggregate box summary when total rows <= MAX_VIOLIN_POINTS.
-// Also returns groupData (per-group raw value arrays) for the significance test.
 async function fetchRawViolinTraces(ctx, q, andWhere, gc, combinedWhere, sourceTable, metric, groups) {
   const rows = await ctx.queryRows(`
     SELECT ${gc} AS __group__, ${q(metric)} AS val
     FROM ${sourceTable} ${andWhere(combinedWhere, `${q(metric)} IS NOT NULL`)}
   `);
-  const groupData = {};
-  const traces = [];
-  for (const g of groups) {
+  return groups.map(g => {
     const vals = rows.filter(r => String(r.__group__) === g).map(r => Number(r.val));
-    groupData[g] = vals;
-    if (!vals.length) continue;
-    traces.push({
+    return {
       type: 'violin', name: ctx.groupLabel(g),
       x: vals.map(() => ctx.groupLabel(g)), y: vals,
       box: { visible: true }, meanline: { visible: true }, points: 'outliers',
       spanmode: 'hard', opacity: 0.9,
       marker: { color: ctx.color.group(g) },
       hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
-    });
+    };
+  }).filter(t => t.y.length);
+}
+
+// Pairwise Mann-Whitney rank sums, computed in SQL: rankData[metric][`${g1}|${g2}`]
+// = { [group]: { n, rankSum } }, one query per group pair covering all metrics.
+async function fetchRankSums(ctx, q, andWhere, gc, combinedWhere, sourceTable, metrics, groups) {
+  const esc = v => `'${String(v).replace(/'/g, "''")}'`;
+  const rankData = {};
+  for (const m of metrics) rankData[m] = {};
+
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = i + 1; j < groups.length; j++) {
+      const g1 = groups[i], g2 = groups[j];
+      const pairWhere = andWhere(combinedWhere, `CAST(${gc} AS VARCHAR) IN (${esc(g1)}, ${esc(g2)})`);
+      const unions = metrics.map(m =>
+        `SELECT CAST(${gc} AS VARCHAR) AS grp, '${m.replace(/'/g, "''")}' AS metric, ${q(m)}::DOUBLE AS v
+         FROM ${sourceTable} ${pairWhere} AND ${q(m)} IS NOT NULL`
+      ).join('\nUNION ALL\n');
+
+      const rows = await ctx.queryRows(`
+        WITH unioned AS (${unions}),
+        ranked AS (
+          SELECT metric, grp, v, ROW_NUMBER() OVER (PARTITION BY metric ORDER BY v) AS rn
+          FROM unioned
+        ), avg_ranked AS (
+          SELECT metric, grp, AVG(rn) OVER (PARTITION BY metric, v) AS rnk
+          FROM ranked
+        )
+        SELECT metric, grp, COUNT(*) AS n, SUM(rnk) AS rank_sum
+        FROM avg_ranked GROUP BY metric, grp
+      `);
+
+      const key = `${g1}|${g2}`;
+      for (const r of rows) {
+        const m = String(r.metric);
+        rankData[m][key] = rankData[m][key] || {};
+        rankData[m][key][String(r.grp)] = { n: Number(r.n), rankSum: Number(r.rank_sum) };
+      }
+    }
   }
-  return { traces, groupData };
+  return rankData;
 }
 
 function makeViolinPlugin(id, label, info, filterMetric) {
@@ -380,33 +417,25 @@ function erf(x) {
 }
 const normalCDF = z => 0.5 * (1 + erf(z / Math.SQRT2));
 
-function mannWhitneyP(a, b) {
-  const n1 = a.length, n2 = b.length;
+function mannWhitneyPFromRankSum(n1, n2, rankSum1) {
   if (n1 < 3 || n2 < 3) return 1.0;
-  const combined = [...a.map(v => ({ v, g: 0 })), ...b.map(v => ({ v, g: 1 }))].sort((x, y) => x.v - y.v);
-  const ranks = new Array(combined.length);
-  let i = 0;
-  while (i < combined.length) {
-    let j = i;
-    while (j < combined.length && combined[j].v === combined[i].v) j++;
-    const avgRank = (i + j + 1) / 2;
-    for (let k = i; k < j; k++) ranks[k] = avgRank;
-    i = j;
-  }
-  let R1 = 0;
-  for (let k = 0; k < combined.length; k++) if (combined[k].g === 0) R1 += ranks[k];
-  const U1  = R1 - n1 * (n1 + 1) / 2;
+  const U1  = rankSum1 - n1 * (n1 + 1) / 2;
   const mu  = n1 * n2 / 2;
   const sig = Math.sqrt(n1 * n2 * (n1 + n2 + 1) / 12);
   if (sig === 0) return 1.0;
   return 2 * (1 - normalCDF(Math.abs(U1 - mu) / sig));
 }
 
-function computeSignificancePairs(groups, groupData) {
+function computeSignificancePairsFromRanks(groups, metricRankData) {
   const pairs = [];
-  for (let i = 0; i < groups.length; i++)
-    for (let j = i + 1; j < groups.length; j++)
-      pairs.push({ g1: groups[i], g2: groups[j], p: mannWhitneyP(groupData[groups[i]], groupData[groups[j]]) });
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = i + 1; j < groups.length; j++) {
+      const g1 = groups[i], g2 = groups[j];
+      const d = metricRankData[`${g1}|${g2}`];
+      const p = (d && d[g1] && d[g2]) ? mannWhitneyPFromRankSum(d[g1].n, d[g2].n, d[g1].rankSum) : 1.0;
+      pairs.push({ g1, g2, p });
+    }
+  }
   const n = pairs.length;
   return pairs
     .map(p => ({ ...p, symbol: sigSymbol(Math.min(p.p * n, 1.0)) }))
