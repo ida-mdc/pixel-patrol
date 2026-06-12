@@ -101,7 +101,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/summary.png" alt="File Data Summary">
-    <figcaption>KPI tiles for the dataset, plus a per-group table - all four groups have the same file count, but <code>condition3_comp</code> is 10× smaller on disk. Already suspicious before looking at a single pixel.</figcaption>
+    <figcaption>Summary tiles for the dataset, plus a per-group table - all four groups have the same file count, but <code>condition3_comp</code> is 10× smaller on disk. Already suspicious before looking at a single pixel.</figcaption>
   </div>
 </div>
 
