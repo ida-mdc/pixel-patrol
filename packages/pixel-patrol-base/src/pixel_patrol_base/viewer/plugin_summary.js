@@ -19,7 +19,7 @@ export default {
       const hasNImages = ctx.schema.allCols.includes('n_images');
       const nImagesSql = hasNImages ? ', SUM("n_images") AS n_images_sum' : '';
 
-      const [rows, pathRow, leafRow, basePathRow] = await Promise.all([
+      const [rows, pathRow, basePathRow] = await Promise.all([
         ctx.queryRows(`
           SELECT ${gcExpr} AS __group__,
                  COUNT(*)                         AS file_count,
@@ -32,16 +32,6 @@ export default {
         `),
         hasPath
           ? ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${ctx.where}`)
-          : Promise.resolve([{ n: null }]),
-        hasPath
-          ? ctx.queryRows(`
-              WITH leaves AS (
-                SELECT obs_level, MAX(obs_level) OVER (PARTITION BY "path") AS max_level
-                FROM pp_all
-                WHERE "path" IN (SELECT DISTINCT "path" FROM pp_data ${ctx.where})
-              )
-              SELECT COUNT(*) AS n FROM leaves WHERE obs_level = max_level
-            `)
           : Promise.resolve([{ n: null }]),
         hasPath
           ? ctx.queryRows(`
@@ -80,7 +70,6 @@ export default {
       for (const r of rows) for (const ext of (r.file_types ?? [])) if (ext) allExtensions.add(ext);
 
       const totalFiles     = pathRow[0]?.n != null ? Number(pathRow[0].n) : null;
-      const leafCount      = leafRow[0]?.n != null ? Number(leafRow[0].n) : null;
       const totalImagesSum = hasNImages
         ? rows.reduce((sum, r) => sum + Number(r.n_images_sum ?? 0), 0)
         : null;
@@ -98,14 +87,8 @@ export default {
       if (totalImagesSum != null && totalImagesSum > 0) {
         kpis.push({ label: 'Images', value: totalImagesSum.toLocaleString() });
       }
-      if (leafCount != null && leafCount > totalRecords) {
-        kpis.push({ label: 'Image Slices', value: leafCount.toLocaleString() });
-      }
       kpis.push({ label: 'Total Size', value: formatBytes(totalBytes) });
       kpis.push({ label: 'File Extensions', value: formatFileTypes(allExtensions) });
-      if (nGroups > 1) {
-        kpis.push({ label: 'Groups', value: String(nGroups) });
-      }
 
       const kpiRow = document.createElement('div');
       kpiRow.className = 'kpi-row';
