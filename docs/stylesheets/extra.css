@@ -438,7 +438,8 @@
 .wc-head {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
   padding: 0.85rem 1.2rem;
   background: var(--wc-head);
   border-bottom: 1.5px solid var(--wc-border);
@@ -463,6 +464,20 @@
 [data-md-color-scheme="slate"] .wc-pill-loader { background: #78350f; color: #fde68a; }
 [data-md-color-scheme="slate"] .wc-pill-image  { background: #4c1d95; color: #c4b5fd; }
 [data-md-color-scheme="slate"] .wc-pill-dim    { background: #1e3a5f; color: #93c5fd; }
+
+.wc-scope {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  cursor: help;
+}
+[data-md-color-scheme="slate"] .wc-scope { background: #1e293b; color: #cbd5e1; border-color: #334155; }
 
 .wc-body {
   padding: 1.1rem 1.2rem;

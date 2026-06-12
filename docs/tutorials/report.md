@@ -19,7 +19,14 @@ A few things to know before you start:
   <span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice
 </div>
 
-Each widget also carries a small **scope badge** in its header, telling you what one datapoint represents: 📄 **per file**, 🖼️ **per image** (one image's worth of data, even if its file holds several), or 🧩 **per slice** (a single channel/Z-plane/timepoint within an image). Hover the badge for details.
+Each widget also carries a small **scope badge** telling you what one datapoint represents - hover it for details:
+
+<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.75rem 0 1.5rem;font-size:0.82rem;align-items:center">
+  <span class="wc-scope">📄 per file</span> &nbsp;one datapoint = one file &nbsp;&nbsp;
+  <span class="wc-scope">🖼️ per image</span> &nbsp;one datapoint = one image, even if its file holds several &nbsp;&nbsp;
+  <span class="wc-scope">🧩 per slice</span> &nbsp;one datapoint = one channel / Z-plane / timepoint within an image &nbsp;&nbsp;
+  <span class="wc-scope">🖼️/🧩</span> &nbsp;switchable with the <strong>Slice by</strong> toggle
+</div>
 
 ---
 
@@ -83,12 +90,13 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">📋</span>
 <span class="wc-name">File Data Summary</span>
+<span class="wc-scope" title="One datapoint = one file">📄 per file</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="summary" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
 <div class="wc-body">
 
-<p>Your first sanity check: KPI tiles for the whole dataset (files, images, total size, file extensions), plus - when grouped - a per-group breakdown table of file count and size.</p>
+<p>Your first sanity check: a summary for the whole dataset (files, images, total size, file extensions) - when grouped, a per-group breakdown table of file count and size.</p>
 
 <div class="wc-shots">
   <div class="wc-shot">
@@ -111,6 +119,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">📋</span>
 <span class="wc-name">Image Table</span>
+<span class="wc-scope" title="One row = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="image-table" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -132,6 +141,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">📁</span>
 <span class="wc-name">File Statistics</span>
+<span class="wc-scope" title="One datapoint = one file">📄 per file</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="file-stats" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -170,6 +180,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">🌀</span>
 <span class="wc-name">File System Structure</span>
+<span class="wc-scope" title="One segment = one file">📄 per file</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="sunburst" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -197,6 +208,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">🧬</span>
 <span class="wc-name">Metadata</span>
+<span class="wc-scope" title="One datapoint = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="metadata" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -218,6 +230,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">📐</span>
 <span class="wc-name">Dimension Size Distribution</span>
+<span class="wc-scope" title="One point = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="dim-size" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -250,6 +263,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">🖼️</span>
 <span class="wc-name">Image Mosaic</span>
+<span class="wc-scope" title="One thumbnail = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="mosaic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -284,6 +298,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 <div class="wc-head">
 <span class="wc-icon">📈</span>
 <span class="wc-name">Pixel Value Statistics</span>
+<span class="wc-scope" title="Switch with the Slice by toggle">🖼️/🧩 per image / slice</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="violin-basic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -323,6 +338,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-head">
 <span class="wc-icon">📊</span>
 <span class="wc-name">Pixel Value Histograms</span>
+<span class="wc-scope" title="One histogram = one image, then averaged per group">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="histogram" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -357,6 +373,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-head">
 <span class="wc-icon">🎯</span>
 <span class="wc-name">Image Quality Metrics</span>
+<span class="wc-scope" title="Switch with the Slice by toggle">🖼️/🧩 per image / slice</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <span class="wc-pill wc-pill-image" style="margin-left:4px">needs pixel-patrol-image</span>
 <button class="wc-check" data-wc="violin-quality" onclick="wcCheck(this)" title="Mark as reviewed"></button>
@@ -457,6 +474,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-head">
 <span class="wc-icon">📉</span>
 <span class="wc-name">Basic Statistics Across Dimensions</span>
+<span class="wc-scope" title="One point = one dimension slice, averaged across images">🧩 per slice</span>
 <span class="wc-pill wc-pill-dim">multidim only</span>
 <button class="wc-check" data-wc="stats-basic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -487,6 +505,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-head">
 <span class="wc-icon">🎨</span>
 <span class="wc-name">Quality Metrics Across Dimensions</span>
+<span class="wc-scope" title="One point = one dimension slice, averaged across images">🧩 per slice</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <span class="wc-pill wc-pill-image" style="margin-left:4px">needs pixel-patrol-image</span>
 <span class="wc-pill wc-pill-dim" style="margin-left:4px">multidim only</span>
@@ -520,6 +539,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-head">
 <span class="wc-icon">🧪</span>
 <span class="wc-name">Custom Plot</span>
+<span class="wc-scope" title="Depends on the columns and Slice by toggle you pick">📄/🖼️/🧩 varies</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="custom-plot" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
