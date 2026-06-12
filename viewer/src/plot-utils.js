@@ -210,6 +210,47 @@ export function prependWarning(container, { level = 'yellow', html }) {
 }
 
 /**
+ * Warn if one or more named values aren't reported by every row - e.g. a
+ * metric or dimension size that's only present for part of the dataset.
+ * Shows nothing if everything is fully present, since that's the common
+ * case and not worth calling out.
+ *
+ * @param {HTMLElement} container
+ * @param {{label: string, present: number}[]} items
+ * @param {number} total
+ * @param {object} [opts]
+ * @param {'files'|'images'|'slices'} [opts.unit='files']  what one row represents,
+ *   matching the widget's scope badge (per file/image/slice).
+ * @param {'red'|'yellow'} [opts.level='red']
+ * @returns {HTMLElement|undefined} The created banner, if any.
+ */
+export function dataAvailabilityWarning(container, items, total, { unit = 'files', level = 'red' } = {}) {
+  const incomplete = items.filter(({ present }) => present < total);
+  if (!incomplete.length) return;
+
+  const pct = n => (total > 0 ? ((n / total) * 100).toFixed(2) : '0.00');
+
+  if (incomplete.length === 1) {
+    const { label, present } = incomplete[0];
+    return prependWarning(container, {
+      level,
+      html: `Only ${present.toLocaleString()} of ${total.toLocaleString()} ${unit} (${pct(present)}%) have <code>${escapeHtml(label)}</code> information.`,
+    });
+  }
+
+  const rows = incomplete.map(({ label, present }) => `
+    <li style="display:flex;justify-content:space-between;gap:16px;max-width:320px">
+      <span><code>${escapeHtml(label)}</code></span>
+      <span style="font-variant-numeric:tabular-nums;white-space:nowrap">${present.toLocaleString()} of ${total.toLocaleString()} (${pct(present)}%)</span>
+    </li>`).join('');
+
+  return prependWarning(container, {
+    level,
+    html: `Not all ${unit} report every value:<ul style="margin:6px 0 0;padding-left:0;list-style:none">${rows}</ul>`,
+  });
+}
+
+/**
  * Append a compact DOM color legend for the current groups.
  * Supports optional grouping header using the selected group column.
  */

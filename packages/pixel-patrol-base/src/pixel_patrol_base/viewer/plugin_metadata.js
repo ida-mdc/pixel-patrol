@@ -21,7 +21,7 @@ export default {
   async render(container, ctx) {
     try {
       const { q, groupCol: gcFn, andWhere } = ctx.sql;
-      const { append: appendPlot, niceName, escapeHtml, prependWarning } = ctx.plot;
+      const { append: appendPlot, niceName, escapeHtml, prependWarning, dataAvailabilityWarning } = ctx.plot;
       const invariants = [];  // collects single-value DIST_COLS + META_COLS shared properties
       const varying    = [];  // DIST_COLS with more than one distinct value across the dataset
 
@@ -41,16 +41,10 @@ export default {
         const totalRows = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
         const total     = Number(totalRows[0]?.n ?? 0);
         const withData  = rows.reduce((s, r) => s + Number(r.count), 0);
-        const ratio     = total > 0 ? ((withData / total) * 100).toFixed(2) : '0.00';
-  
-        const label = niceName(col);
-        const ratioText = document.createElement('p');
-        ratioText.style.marginBottom = '12px';
-        ratioText.textContent =
-          `${withData.toLocaleString()} of ${total.toLocaleString()} files ` +
-          `(${ratio}%) have '${label}' information.`;
-        container.appendChild(ratioText);
-  
+        const label     = niceName(col);
+
+        dataAvailabilityWarning(container, [{ label, present: withData }], total, { unit: 'images' });
+
         if (!rows.length) continue;
 
         const cats   = [...new Set(rows.map(r => String(r.__cat__)))].sort();

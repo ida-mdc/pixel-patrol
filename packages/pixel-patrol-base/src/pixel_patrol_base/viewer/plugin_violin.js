@@ -1,9 +1,3 @@
-function availabilityLine(withData, total, label) {
-  const n = Number(withData), tot = Number(total);
-  const pct = tot > 0 ? ((n / tot) * 100).toFixed(2) : '0.00';
-  return `${n.toLocaleString()} of ${tot.toLocaleString()} files (${pct}%) have '${label}' information.`;
-}
-
 // Matches BasicStatsProcessor.OUTPUT_SCHEMA
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
@@ -110,9 +104,9 @@ function buildViolinWhereParts(ctx, q, splitDims, dimFilters, activeDims) {
   return whereParts;
 }
 
-async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
+async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   const { q, groupCol: gcFn, groupExpr: geFn, andWhere } = ctx.sql;
-  const { append: appendPlot, flexGrid: createFlexGrid, niceName } = ctx.plot;
+  const { append: appendPlot, flexGrid: createFlexGrid, niceName, dataAvailabilityWarning } = ctx.plot;
 
   const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions)
     .filter(filterMetric);
@@ -127,22 +121,8 @@ async function renderViolins(plotRoot, ctx, filterMetric, label, splitDims) {
     `SELECT COUNT(*) AS total, ${metricSelects} FROM pp_data ${ctx.where}`
   );
   const tot = Number(availRow.total);
-  const counts = metrics.map((m, i) => ({ metric: m, n: Number(availRow[`c${i}`]) }));
-  const allSame = counts.every(c => c.n === counts[0].n);
-  if (allSame) {
-    const p = document.createElement('p');
-    p.style.marginBottom = '12px';
-    p.textContent = availabilityLine(counts[0].n, tot, label);
-    plotRoot.appendChild(p);
-  } else {
-    for (const { metric, n } of counts) {
-      const p = document.createElement('p');
-      p.style.marginBottom = '4px';
-      p.textContent = availabilityLine(n, tot, niceName(metric));
-      plotRoot.appendChild(p);
-    }
-    if (plotRoot.lastChild) plotRoot.lastChild.style.marginBottom = '12px';
-  }
+  const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
+  dataAvailabilityWarning(plotRoot, counts, tot, { unit: splitDims.size ? 'slices' : 'images' });
 
   const dimFilters = Object.entries(ctx.state.dimensions ?? {})
     .map(([letter, idxRaw]) => {
@@ -356,7 +336,7 @@ function makeViolinPlugin(id, label, info, filterMetric) {
       const draw = async () => {
         plotRoot.innerHTML = '';
         try {
-          await renderViolins(plotRoot, ctx, filterMetric, label, splitDims);
+          await renderViolins(plotRoot, ctx, filterMetric, splitDims);
         } catch {
           plotRoot.innerHTML = '<div class="no-data">Failed to load data.</div>';
         }

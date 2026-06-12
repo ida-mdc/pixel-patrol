@@ -20,31 +20,20 @@ export default {
   async render(container, ctx) {
     try {
       const { q, sample, groupCol: gcFn, andWhere } = ctx.sql;
-      const { append: appendPlot, niceName, plotlyLegendConfig } = ctx.plot;
+      const { append: appendPlot, niceName, plotlyLegendConfig, dataAvailabilityWarning } = ctx.plot;
       const gcExpr   = gcFn();
       const sizeCols = ctx.schema.allCols.filter(c => c.endsWith('_size') && !c.startsWith('__'));
-  
+
       const totalRes  = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
       const totalRows = Number(totalRes[0]?.n ?? 0);
-  
-      const ratioLines = await Promise.all(sizeCols.map(async col => {
-        const colCond   = `${q(col)} > 1`;
-        const whereClause = ctx.where ? `${ctx.where} AND ${colCond}` : `WHERE ${colCond}`;
-        const res       = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${whereClause}`);
-        const present   = Number(res[0]?.n ?? 0);
-        const label     = niceName(col);
-        const pct       = totalRows > 0 ? ((present / totalRows) * 100).toFixed(2) : '0.00';
-        return `${label}: ${present.toLocaleString()} of ${totalRows.toLocaleString()} files (${pct}%).`;
+
+      const availability = await Promise.all(sizeCols.map(async col => {
+        const res = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} > 1`)}`);
+        return { label: niceName(col), present: Number(res[0]?.n ?? 0) };
       }));
-  
-      const ratioDiv = document.createElement('div');
-      ratioDiv.style.marginBottom = '16px';
-      ratioDiv.innerHTML = `
-        <p><strong>Data Availability by Dimension:</strong></p>
-        ${ratioLines.map(l => `<p class="mb-1 small">${l}</p>`).join('')}
-      `;
-      container.appendChild(ratioDiv);
-  
+
+      dataAvailabilityWarning(container, availability, totalRows, { unit: 'images' });
+
       const MAX_XY_BUBBLE = 50_000;
       const HEATMAP_BINS  = 70;
       const hasXY = sizeCols.includes('X_size') && sizeCols.includes('Y_size');
