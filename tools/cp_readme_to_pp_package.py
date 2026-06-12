@@ -12,8 +12,8 @@ def rewrite_readme_assets_paths(lines):
         line
         .replace("packages/pixel-patrol/readme_assets/", f"{GITHUB_RAW}/packages/pixel-patrol/readme_assets/")
         .replace(
-            "packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/",
-            f"{GITHUB_RAW}/packages/pixel-patrol-base/src/pixel_patrol_base/processing_assets/",
+            "packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/",
+            f"{GITHUB_RAW}/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/",
         )
         for line in lines
     ]

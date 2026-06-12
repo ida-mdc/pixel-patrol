@@ -1,6 +1,4 @@
-import webbrowser
 from pathlib import Path
-from threading import Timer
 
 import click
 from dask.distributed import Client
@@ -13,7 +11,7 @@ from pixel_patrol_base.api import (
     build_viewer as api_build_viewer,
 )
 
-from pixel_patrol_base.processing_dashboard import create_processing_app
+from pixel_patrol_base.launch_server import serve_launch
 
 
 @click.group()
@@ -145,24 +143,14 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
 
 @cli.command()
 @click.option('--port', type=int, default=8051, show_default=True,
-              help='Port number for the Dash processing dashboard server.')
-def launch(port: int):
+              help='Port number for the processing dashboard server.')
+@click.option('--no-browser', is_flag=True, default=False,
+              help='Do not open the browser automatically.')
+def launch(port: int, no_browser: bool):
     """
     Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
     """
-    
-    app = create_processing_app()
-    dashboard_url = f"http://127.0.0.1:{port}"
-    click.echo(f"Processing dashboard will run on {dashboard_url}/")
-    click.echo("Attempting to open dashboard in your default browser...")
-
-    def _open_browser():
-        webbrowser.open_new_tab(dashboard_url)
-
-    Timer(1, _open_browser).start()
-
-    click.echo("Starting processing dashboard...")
-    app.run(debug=False, host="127.0.0.1", port=port, use_reloader=False)
+    serve_launch(port=port, open_browser=not no_browser)
 
 
 def _filter_options(fn):

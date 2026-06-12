@@ -25,7 +25,7 @@ import warnings
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 import importlib.resources
 from urllib.parse import urlencode
 
@@ -447,6 +447,7 @@ def serve_viewer(
     widgets_excluded: Optional[set] = None,
     is_show_significance: bool = False,
     palette: Optional[str] = None,
+    ready_callback: Optional[Callable[[int, str], None]] = None,
 ) -> None:
     """
     Start a local HTTP server and (optionally) open the viewer in the browser.
@@ -469,6 +470,10 @@ def serve_viewer(
         hosted remotely.
     group_col, filter_by, dimensions, widgets_excluded, is_show_significance, palette:
         Initial viewer state, encoded into the viewer URL as query parameters.
+    ready_callback:
+        If given, called once with ``(chosen_port, viewer_url)`` after the
+        server socket is bound but before it starts serving. Useful for
+        callers that pass ``port=0`` and need to know the assigned port.
     """
     parquet_path = Path(parquet_path).resolve()
     if not parquet_path.exists():
@@ -514,7 +519,8 @@ def serve_viewer(
 
         click.echo(f"Port {chosen_port} is in use; selecting a free port.")
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        chosen_port = int(server.server_address[1])
+
+    chosen_port = int(server.server_address[1])
 
     qs = build_viewer_url_params(
         group_col=group_col,
@@ -528,6 +534,9 @@ def serve_viewer(
 
     click.echo(f"Viewer URL       : {viewer_url}")
     click.echo("Press Ctrl+C to stop.\n")
+
+    if ready_callback:
+        ready_callback(chosen_port, viewer_url)
 
     if open_browser:
         threading.Timer(0.6, webbrowser.open, args=[viewer_url]).start()

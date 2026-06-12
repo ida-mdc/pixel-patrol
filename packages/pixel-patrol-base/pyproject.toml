@@ -11,8 +11,6 @@ requires-python = ">=3.11"
 
 dependencies = [
     "click>=8.2.1",
-    "dash-ag-grid>=32.3.0",
-    "dash-bootstrap-components>=2.0.3",
     "matplotlib>=3.10.3", # TODO: Are we sure we need it in base?
     "polars>=1.31.0",
     "pyarrow>=21.0.0",
@@ -42,7 +40,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "pixel_patrol_base.report" = ["assets/*.png"]
-"pixel_patrol_base" = ["viewer_dist/**/*", "viewer/**/*"]
+"pixel_patrol_base" = ["viewer_dist/**/*", "viewer/**/*", "launch_assets/**/*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
