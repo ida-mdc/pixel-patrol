@@ -6,7 +6,8 @@ on:
       - 'launcher-v*'
     paths:
       - 'deploy/launcher/**'
-      - 'packages/pixel-patrol-base/src/pixel_patrol_base/report/assets/**'
+      - 'viewer/public/**'
+      - 'packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/**'
   pull_request:
     paths:
       - 'deploy/launcher/**'
@@ -55,7 +56,8 @@ jobs:
       - name: Build binary (Linux / macOS)
         if: runner.os != 'Windows'
         run: |
-          ASSETS="$(pwd)/packages/pixel-patrol-base/src/pixel_patrol_base/report/assets"
+          VIEWER_ASSETS="$(pwd)/viewer/public"
+          LAUNCH_ASSETS="$(pwd)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
           pyinstaller \
             --onefile \
             --name pixel-patrol-launcher \
@@ -63,8 +65,9 @@ jobs:
             --workpath deploy/launcher/build \
             --specpath deploy/launcher \
             --hidden-import flask \
-            --add-data "${ASSETS}/icon.png:." \
-            --add-data "${ASSETS}/Helmholtz-Imaging_Mark.png:." \
+            --add-data "${VIEWER_ASSETS}/icon.png:." \
+            --add-data "${VIEWER_ASSETS}/Helmholtz-Imaging_Mark.png:." \
+            --add-data "${LAUNCH_ASSETS}/prevalidation.png:." \
             --clean \
             deploy/launcher/launcher.py
 
@@ -72,7 +75,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $assets = "$($PWD.Path)/packages/pixel-patrol-base/src/pixel_patrol_base/report/assets"
+          $viewerAssets = "$($PWD.Path)/viewer/public"
+          $launchAssets = "$($PWD.Path)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
           pyinstaller `
             --onefile `
             --name pixel-patrol-launcher `
@@ -80,8 +84,9 @@ jobs:
             --workpath deploy/launcher/build `
             --specpath deploy/launcher `
             --hidden-import flask `
-            --add-data "${assets}/icon.png;." `
-            --add-data "${assets}/Helmholtz-Imaging_Mark.png;." `
+            --add-data "${viewerAssets}/icon.png;." `
+            --add-data "${viewerAssets}/Helmholtz-Imaging_Mark.png;." `
+            --add-data "${launchAssets}/prevalidation.png;." `
             --clean `
             deploy/launcher/launcher.py
 

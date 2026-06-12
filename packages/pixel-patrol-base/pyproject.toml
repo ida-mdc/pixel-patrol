@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 
 dependencies = [
     "click>=8.2.1",
+    "packaging>=21.0",
     "matplotlib>=3.10.3", # TODO: Are we sure we need it in base?
     "polars>=1.31.0",
     "pyarrow>=21.0.0",

@@ -6,19 +6,11 @@ A self-installing double-click binary for Pixel Patrol.
 
 | Run | Behaviour |
 |-----|-----------|
-| First launch | Wizard asks which **loader** to install, downloads [uv](https://github.com/astral-sh/uv), creates a managed Python environment at `~/.pixel-patrol/venv/`, installs packages, then opens the Pixel Patrol web UI in your browser. |
+| First launch | Downloads [uv](https://github.com/astral-sh/uv), creates a managed Python environment at `~/.pixel-patrol/venv/`, installs the `pixel-patrol` package with all its dependencies, then opens the Pixel Patrol web UI in your browser. |
 | Subsequent launches | Opens the Pixel Patrol web UI directly. |
 
-**Available loaders**
-
-| Loader | Package | Formats |
-|--------|---------|---------|
-| bioio | `pixel-patrol-loader-bio` | TIFF, OME-TIFF, LIF, Zarr, ImageIO, … |
-| Aqqua | `pixel-patrol-aqqua` | lmdb + blosc2 |
-| None | — | Basic file info only |
-
 The environment lives in `~/.pixel-patrol/`.
-To reset / change loader: delete that directory and launch again.
+To reset: delete that directory and launch again.
 
 ## Building the binary
 

@@ -10,6 +10,10 @@
 <body>
 <div class="page">
 
+  <div class="top-actions">
+    <button type="button" id="open-existing-btn" class="btn btn-primary">Open Existing Report</button>
+  </div>
+
   <header class="header">
     <img src="prevalidation.png" alt="Pixel Patrol" class="logo">
     <h1>Pixel Patrol Processing</h1>
@@ -237,6 +241,26 @@
       <div id="error-message"></div>
       <div id="warnings-display"></div>
       <div id="action-buttons" class="action-buttons"></div>
+    </div>
+  </div>
+
+  <div class="bottom-actions">
+    <div id="version-info" class="version-info" hidden></div>
+  </div>
+
+  <div id="open-existing-overlay" class="modal-overlay" hidden>
+    <div class="modal">
+      <h3>Open Existing Report</h3>
+      <div class="browser-path-row">
+        <button type="button" id="browser-up-btn" class="btn btn-secondary" title="Go to parent folder">&uarr;</button>
+        <input type="text" id="browser-path" class="browser-path-input">
+      </div>
+      <div id="browser-list" class="browser-list"></div>
+      <div id="existing-report-error"></div>
+      <div class="modal-actions">
+        <button type="button" id="existing-report-cancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="existing-report-open" class="btn btn-primary" disabled>Open</button>
+      </div>
     </div>
   </div>
 
