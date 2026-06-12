@@ -69,3 +69,11 @@ uv pip install pixel-patrol-image          # image quality metrics and extra vie
 | `pixel-patrol-image` | Image quality metrics (blur, contrast, noise) and extra viewer widgets |
 
 Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend Pixel Patrol by creating your own packages; see [Extensions](extensions.md).
+
+---
+
+## Prefer a one-click app?
+
+If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single double-clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
+
+[Download the launcher](https://github.com/ida-mdc/pixel-patrol/releases/latest){ .md-button }
