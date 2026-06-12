@@ -1,5 +1,8 @@
 # Processing
 
+!!! tip "Used the launcher instead?"
+    Double-click it, a browser tab opens, and you can set up your project and start processing from there - no terminal needed. The rest of this page is for the CLI workflow.
+
 `pixel-patrol process` is the first step in the Pixel Patrol workflow. It scans your images and produces a `.parquet` report file containing everything Pixel Patrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
 
 Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just *what* to run, but *why* each flag is there.
