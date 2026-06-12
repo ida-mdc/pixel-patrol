@@ -145,8 +145,12 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     # mkdocs builds into out_dir/docs/ and copies non-markdown files verbatim.
     docs_out = out_dir / "docs"
 
-    # Promote all root-level HTML files (home.html -> index.html, others keep their name)
+    # Promote root-level HTML files: home.html becomes the site index, others
+    # keep their name. docs/index.html (the mkdocs Quickstart page) is skipped
+    # here - it stays accessible at /docs/ and must not overwrite home.html.
     for html_file in docs_out.glob("*.html"):
+        if html_file.name == "index.html":
+            continue
         dst_name = "index.html" if html_file.name == "home.html" else html_file.name
         shutil.copy2(html_file, out_dir / dst_name)
 
