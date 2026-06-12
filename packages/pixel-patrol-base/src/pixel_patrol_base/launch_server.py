@@ -177,12 +177,23 @@ def _latest_pixel_patrol_version() -> Optional[str]:
         return None
 
 
+def _installed_version() -> Optional[str]:
+    """Version of pixel-patrol, falling back to pixel-patrol-base if the
+    full bundle isn't installed (e.g. dev/test environments)."""
+    for name in ("pixel-patrol", "pixel-patrol-base"):
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return None
+
+
 def _get_version_info() -> Dict[str, Any]:
-    current = importlib.metadata.version("pixel-patrol")
+    current = _installed_version()
     latest = _latest_pixel_patrol_version()
 
     update_available = False
-    if latest:
+    if latest and current:
         try:
             update_available = Version(latest) > Version(current)
         except InvalidVersion:

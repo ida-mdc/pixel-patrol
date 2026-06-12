@@ -380,7 +380,7 @@ def test_version_endpoint_unmanaged(server, monkeypatch):
 
 
 def test_version_endpoint_up_to_date(server, monkeypatch):
-    current = ls.importlib.metadata.version("pixel-patrol")
+    current = ls._installed_version()
     monkeypatch.setattr(ls, "_latest_pixel_patrol_version", lambda: current)
 
     with urllib.request.urlopen(_url(server, "/api/version")) as resp:
