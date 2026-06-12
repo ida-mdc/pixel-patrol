@@ -147,6 +147,16 @@ body { background: #f8f9fa; }
 .widget-warning-red { background: #fdecea; border: 1px solid #f5c6cb; color: #58151c; }
 .widget-warning-yellow { background: #fff8e6; border: 1px solid #ffe69c; color: #664500; }
 .widget-warning code { background: rgba(0, 0, 0, 0.06); padding: 1px 4px; border-radius: 3px; }
+.kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.kpi-tile {
+  flex: 1 1 140px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;
+  padding: 12px 16px; text-align: center;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.kpi-value { font-size: 24px; font-weight: 700; color: #212529; line-height: 1.2; word-break: break-word; }
+.kpi-label { font-size: 14px; color: #6c757d; margin-top: 4px; }
+.summary-meta-line { font-size: 13px; color: #6c757d; word-break: break-all; margin-bottom: 8px; }
+.summary-meta-line code { color: inherit; background: #f1f3f5; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
 .stat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .stat-table th, .stat-table td { padding: 6px 10px; border: 1px solid #dee2e6; }
 .stat-table th { background: #f8f9fa; font-weight: 600; }
@@ -154,6 +164,9 @@ body { background: #f8f9fa; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.bar-cell { position: relative; min-width: 70px; padding: 2px 0; }
+.bar-cell-fill { position: absolute; inset: 2px 0; opacity: 0.25; border-radius: 3px; }
+.bar-cell-value { position: relative; padding-left: 6px; }
 canvas { image-rendering: pixelated; max-width: 100%; }
 
 /* ── Topbar icon + brand ── */
