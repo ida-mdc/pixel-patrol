@@ -194,8 +194,8 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
 
     const granularityDesc = splitDims.size
-      ? `one point per (file × ${[...splitDims].map(l => l.toUpperCase()).join(' × ')})`
-      : 'one point per file';
+      ? `one point per (image × ${[...splitDims].map(l => l.toUpperCase()).join(' × ')})`
+      : 'one point per image';
 
     for (const { metric, total } of toPlot) {
       const label = niceName(metric);
