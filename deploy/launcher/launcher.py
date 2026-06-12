@@ -55,6 +55,11 @@ _IMG_ICON      = _b64_png("icon.png")
 _IMG_LOGO      = _b64_png("prevalidation.png")
 _IMG_HELMHOLTZ = _b64_png("Helmholtz-Imaging_Mark.png")
 
+# ── Version ────────────────────────────────────────────────────────────────────
+
+# Kept in sync with packages/pixel-patrol's version by tools/bump_toml_version.py.
+LAUNCHER_VERSION = "0.7.0"
+
 # ── App directories ────────────────────────────────────────────────────────────
 
 APP_DIR     = Path.home() / ".pixel-patrol"
@@ -537,7 +542,7 @@ SETUP_HTML = f"""<!DOCTYPE html>
         <div class="text">
           <span>Pixel Patrol is developed by </span>
           <a href="https://helmholtz-imaging.de" target="_blank">Helmholtz Imaging</a>
-          <span>.</span>
+          <span>. Launcher v{LAUNCHER_VERSION}</span>
         </div>
       </div>
       <div class="pp-footer-right">
