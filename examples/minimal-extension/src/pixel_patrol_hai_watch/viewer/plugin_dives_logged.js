@@ -21,6 +21,7 @@ export default {
   id:    'dives-logged',
   label: 'Dives Logged',
   group: 'Pixel HAI Watch',
+  scope: 'image',
 
   requires(schema) {
     return schema.allCols.includes('depth_zone');
