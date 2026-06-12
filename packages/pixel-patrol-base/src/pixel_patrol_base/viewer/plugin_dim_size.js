@@ -150,20 +150,6 @@ export default {
         const invariantDims = dimStats.filter(d => d.nd === 1);
         const variantDims   = dimStats.filter(d => d.nd > 1).map(d => d.col);
 
-        if (invariantDims.length) {
-          const h = document.createElement('h6');
-          h.style.cssText = 'margin-top:8px;margin-bottom:8px';
-          h.textContent = 'Dimension Sizes - same across all files that report it';
-          container.appendChild(h);
-          const table = document.createElement('table');
-          table.className = 'stat-table';
-          table.innerHTML = `
-            <thead><tr><th>Dimension</th><th>Size (pixels)</th></tr></thead>
-            <tbody>${invariantDims.map(d => `<tr><td>${niceName(d.col)}</td><td>${d.val}</td></tr>`).join('')}</tbody>
-          `;
-          container.appendChild(table);
-        }
-
         if (variantDims.length) {
           const dimRows = await ctx.queryRows(`
             SELECT ${gcExpr} AS __group__, ${variantDims.map(q).join(', ')}
@@ -198,6 +184,22 @@ export default {
               xaxis: { title: ctx.plot.groupingLabel(''), type: 'category' }, height: 280, margin: { l: 44, r: 10, t: 36, b: 40 },
             }, 'flex:0 0 280px;min-width:220px;margin-bottom:16px');
           }
+        }
+
+        if (invariantDims.length) {
+          const hr = document.createElement('hr');
+          container.appendChild(hr);
+          const h = document.createElement('h6');
+          h.style.cssText = 'margin-top:20px;margin-bottom:12px';
+          h.textContent = 'Dimension Sizes - same across all files that report it';
+          container.appendChild(h);
+          const table = document.createElement('table');
+          table.className = 'stat-table';
+          table.innerHTML = `
+            <thead><tr><th>Dimension</th><th>Size (pixels)</th></tr></thead>
+            <tbody>${invariantDims.map(d => `<tr><td>${niceName(d.col)}</td><td>${d.val}</td></tr>`).join('')}</tbody>
+          `;
+          container.appendChild(table);
         }
       }
     
