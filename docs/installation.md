@@ -74,6 +74,8 @@ Additional packages are available in the [GitHub repository](https://github.com/
 
 ## Prefer a one-click app?
 
-If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single double-clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
+If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
 
-[Download the launcher](https://github.com/ida-mdc/pixel-patrol/releases/latest){ .md-button }
+[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
+[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
+[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
