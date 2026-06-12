@@ -3,7 +3,8 @@ export default {
   label: 'File Data Summary',
   group: 'Summary',
   scope: 'file',
-  info: 'Summarizes file counts, total size, and file types present in each group.',
+  info: 'High-level overview of the dataset: total files, total size, file types present, ' +
+    'and (when grouped) a per-group breakdown.',
 
   requires(schema) {
     return schema.allCols.includes('size_bytes') &&
@@ -12,110 +13,94 @@ export default {
 
   async render(container, ctx) {
     try {
-      const { q, groupCol: gcFn } = ctx.sql;
-      const groupColor = (g) => ctx.color.group(g);
-      const { appendMany: appendPlots, bargap, niceName } = ctx.plot;
-  
-      const groupLabel = ctx.state.groupCol ?? 'group';
-      const gcExpr     = gcFn();
-  
+      const { groupCol: gcFn } = ctx.sql;
+      const { escapeHtml, niceName } = ctx.plot;
+      const gcExpr = gcFn();
+
       const rows = await ctx.queryRows(`
         SELECT ${gcExpr} AS __group__,
-               COUNT(*)                              AS file_count,
-               SUM("size_bytes") / (1024.0 * 1024)  AS total_size_mb,
-               LIST(DISTINCT "file_extension")       AS file_types
+               COUNT(*)                         AS file_count,
+               SUM("size_bytes")                AS total_bytes,
+               LIST(DISTINCT "file_extension")  AS file_types
         FROM pp_data ${ctx.where}
         GROUP BY 1
         ORDER BY 1
       `);
-  
+
       if (!rows.length) {
         container.innerHTML = '<div class="no-data">No data available after filtering.</div>';
         return;
       }
-  
-      const groups = rows.map(r => String(r.__group__));
-      const colors = groups.map(g => groupColor(g));
 
-      if (rows.length > 1) {
+      const nGroups = rows.length;
+
+      if (nGroups > 1) {
         const UNEVEN_RATIO = 1.5;
         const biggest  = rows.reduce((a, b) => Number(a.file_count) >= Number(b.file_count) ? a : b);
         const smallest = rows.reduce((a, b) => Number(a.file_count) <= Number(b.file_count) ? a : b);
         if (Number(biggest.file_count) / Number(smallest.file_count) >= UNEVEN_RATIO) {
           ctx.plot.prependWarning(container, {
             level: 'yellow',
-            html: `Group sizes differ a fair bit: <code>${ctx.plot.escapeHtml(ctx.groupLabel(String(biggest.__group__)))}</code> ` +
+            html: `Group sizes differ a fair bit: <code>${escapeHtml(ctx.groupLabel(String(biggest.__group__)))}</code> ` +
               `has ${Number(biggest.file_count).toLocaleString()} files, while ` +
-              `<code>${ctx.plot.escapeHtml(ctx.groupLabel(String(smallest.__group__)))}</code> has ` +
+              `<code>${escapeHtml(ctx.groupLabel(String(smallest.__group__)))}</code> has ` +
               `${Number(smallest.file_count).toLocaleString()}. That's not necessarily an issue, but uneven group ` +
               `sizes can affect statistics and significance tests - worth a quick check that it's what you expect.`,
           });
         }
       }
 
-      const nGroups = rows.length;
-      const intro   = document.createElement('div');
-      intro.style.marginBottom = '16px';
-  
-      const prettiedGroupLabel = groupLabel.replace(/_/g, ' ');
-      let introHtml = `<p>This summary focuses on file properties across ${nGroups} group(s) (by '${prettiedGroupLabel}').</p>`;
-      for (const row of rows) {
-        const ftStr = formatFileTypes(row.file_types);
-        introHtml += `<p>Group '<strong>${row.__group__}</strong>' contains ` +
-          `${Number(row.file_count).toLocaleString()} files ` +
-          `(${Number(row.total_size_mb).toFixed(3)} MB) with types: ${ftStr}.</p>`;
-      }
-      intro.innerHTML = introHtml;
-      container.appendChild(intro);
-  
-      if (nGroups > 1) {
-        const barLayout = {
-          height:     340,
-          showlegend: false,
-          margin:     { l: 50, r: 50, t: 50, b: 80 },
-          bargap:     bargap(groups.length),
-        };
+      const totalFiles    = rows.reduce((sum, r) => sum + Number(r.file_count), 0);
+      const totalBytes    = rows.reduce((sum, r) => sum + Number(r.total_bytes ?? 0), 0);
+      const allExtensions = new Set();
+      for (const r of rows) for (const ext of (r.file_types ?? [])) if (ext) allExtensions.add(ext);
 
-        const groupDisplayLabels = groups.map(g => ctx.groupLabel(g));
-        appendPlots(container, [
-          {
-            traces: [{ type: 'bar', x: groupDisplayLabels, y: rows.map(r => Number(r.file_count)), marker: { color: colors } }],
-            layout: { ...barLayout, title: { text: 'File Count per Group' }, xaxis: { title: prettiedGroupLabel, type: 'category' }, yaxis: { title: 'Number of files' } },
-            divStyle: 'flex:1 1 320px',
-          },
-          {
-            traces: [{ type: 'bar', x: groupDisplayLabels, y: rows.map(r => Number(r.total_size_mb)), marker: { color: colors } }],
-            layout: { ...barLayout, title: { text: 'Total Size per Group (MB)' }, xaxis: { title: prettiedGroupLabel, type: 'category' }, yaxis: { title: 'Size (MB)' } },
-            divStyle: 'flex:1 1 320px',
-          },
-        ], 'display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px');
+      const kpis = [
+        { label: 'Files', value: totalFiles.toLocaleString() },
+        { label: 'Total Size', value: formatBytes(totalBytes) },
+        { label: 'File Extensions', value: formatFileTypes(allExtensions) },
+      ];
+      if (nGroups > 1) {
+        kpis.push({ label: `Groups (by '${niceName(ctx.state.groupCol ?? 'group')}')`, value: String(nGroups) });
       }
-  
-      const table = document.createElement('table');
-      table.className = 'stat-table';
-      const prettyGroup = niceName(groupLabel);
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>${prettyGroup}</th>
-            <th>Number of Files</th>
-            <th>Size (MB)</th>
-            <th>File Extension</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map(r => `
+
+      const kpiRow = document.createElement('div');
+      kpiRow.className = 'kpi-row';
+      kpiRow.innerHTML = kpis.map(k => `
+        <div class="kpi-tile">
+          <div class="kpi-value">${escapeHtml(k.value)}</div>
+          <div class="kpi-label">${escapeHtml(k.label)}</div>
+        </div>
+      `).join('');
+      container.appendChild(kpiRow);
+
+      if (nGroups > 1) {
+        const showExtCol = allExtensions.size > 1;
+        const table = document.createElement('table');
+        table.className = 'stat-table';
+        table.innerHTML = `
+          <thead>
             <tr>
-              <td>${r.__group__}</td>
-              <td>${Number(r.file_count).toLocaleString()}</td>
-              <td>${Number(r.total_size_mb).toFixed(3)}</td>
-              <td>${formatFileTypes(r.file_types)}</td>
+              <th>${niceName(ctx.state.groupCol ?? 'group')}</th>
+              <th>Files</th>
+              <th>Size</th>
+              ${showExtCol ? '<th>File Extension</th>' : ''}
             </tr>
-          `).join('')}
-        </tbody>
-      `;
-      container.appendChild(table);
-    
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${escapeHtml(ctx.groupLabel(String(r.__group__)))}</td>
+                <td>${Number(r.file_count).toLocaleString()}</td>
+                <td>${formatBytes(Number(r.total_bytes ?? 0))}</td>
+                ${showExtCol ? `<td>${escapeHtml(formatFileTypes(r.file_types))}</td>` : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+        container.appendChild(table);
+      }
+
     } catch {
       container.innerHTML = '<div class="no-data">Failed to load data.</div>';
     }
@@ -124,12 +109,19 @@ export default {
 
 function formatFileTypes(val) {
   if (!val) return '-';
-  if (Array.isArray(val)) return val.filter(Boolean).sort().join(', ');
   if (typeof val === 'string') return val;
+  let arr;
   try {
-    const arr = [...val].filter(Boolean);
-    return arr.sort().join(', ');
+    arr = [...val].filter(Boolean);
   } catch {
     return String(val);
   }
+  return arr.length ? arr.sort().join(', ') : '-';
+}
+
+function formatBytes(v) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let val = Number(v), u = 0;
+  while (val >= 1024 && u < units.length - 1) { val /= 1024; u++; }
+  return val >= 10 ? `${Math.round(val)} ${units[u]}` : `${val.toFixed(1)} ${units[u]}`;
 }
