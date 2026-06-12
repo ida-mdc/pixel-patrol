@@ -135,6 +135,8 @@ export default {
   id:    'my-widget',          // unique across all loaded plugins
   label: 'My Widget',          // shown in the sidebar widget list
   group: 'My Extension Name',  // optional - gives the widget its own sidebar section
+  scope: 'image',              // optional - 'file' | 'image' | 'slice', shown as a badge
+                               // describing what one datapoint in this widget represents
 
   requires(schema) {
     // return false to hide the widget when its columns are absent
@@ -173,6 +175,8 @@ The DuckDB table is always named `pp_data`; `Plotly` is exposed globally as
 | `ctx.schema` | `object` | `{ metricCols, groupCols, dimensionInfo, allCols, blobCols }` |
 | `ctx.state` | `object` | `{ palette, groupCol, filter, dimensions }` |
 | `ctx.colorMap` | `object` | `{ groupValue: hexColor }` |
+| `ctx.color.getColors(palette, n)` | `(string, number) → string[]` | `n` colors from the named palette - for ad-hoc groupings not covered by `colorMap` |
+| `ctx.color.getPaletteNames()` | `() → string[]` | palette names accepted by `ctx.color.getColors` |
 | `ctx.where` | `string` | SQL `WHERE` clause for the active filter (or `''`) - merge with `AND` if your query has its own `WHERE` |
 | `ctx.groups` | `string[]` | distinct values of the active group column |
 | `ctx.filteredCount` / `ctx.totalRows` | `number` | row counts |
