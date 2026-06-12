@@ -21,13 +21,12 @@ import subprocess
 import sys
 import tarfile
 import threading
-import time
 import urllib.request
 import webbrowser
 import zipfile
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, stream_with_context
+from flask import Flask, Response, request, stream_with_context
 
 # ── Embedded assets ────────────────────────────────────────────────────────────
 # Images are read relative to this file at build time so PyInstaller can bundle
@@ -35,13 +34,14 @@ from flask import Flask, Response, jsonify, request, stream_with_context
 
 def _b64_png(rel_path: str) -> str:
     here = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    # also look relative to the source tree root
+    repo_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+    # also look relative to the source tree root, where the viewer and launch
+    # page already ship the same branding assets
     candidates = [
         os.path.join(here, rel_path),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                     "..", "..", "packages", "pixel-patrol-base", "src",
-                     "pixel_patrol_base", "report", "assets",
-                     os.path.basename(rel_path)),
+        os.path.join(repo_root, "viewer", "public", os.path.basename(rel_path)),
+        os.path.join(repo_root, "packages", "pixel-patrol-base", "src",
+                      "pixel_patrol_base", "launch_assets", os.path.basename(rel_path)),
     ]
     for p in candidates:
         try:
@@ -52,6 +52,7 @@ def _b64_png(rel_path: str) -> str:
     return ""
 
 _IMG_ICON      = _b64_png("icon.png")
+_IMG_LOGO      = _b64_png("prevalidation.png")
 _IMG_HELMHOLTZ = _b64_png("Helmholtz-Imaging_Mark.png")
 
 # ── App directories ────────────────────────────────────────────────────────────
@@ -63,10 +64,12 @@ UV_BIN_DIR  = APP_DIR / "uv-bin"
 
 # ── Package catalogue ──────────────────────────────────────────────────────────
 
-# pixel-patrol-base is always installed silently.
-BASE_PACKAGES = ["pixel-patrol-base"]
+# pixel-patrol (the full bundle: base + image quality + bioio loaders) is
+# always installed silently.
+BASE_PACKAGES = ["pixel-patrol"]
 
-# Selectable add-on packages — shown as cards in the setup wizard.
+# Selectable add-on packages — shown as cards in the setup wizard, for
+# packages not already included in the pixel-patrol bundle above.
 # Keys:
 #   id          unique string used in the HTML form
 #   label       display name
@@ -76,40 +79,10 @@ BASE_PACKAGES = ["pixel-patrol-base"]
 #   widgets     list of report widget names added by this package
 #   extensions  input file extensions supported (empty list if no loader)
 #   default     pre-checked in the UI
-PACKAGES: list[dict] = [
-    {
-        "id":         "image",
-        "label":      "Image quality analysis",
-        "package":    "pixel-patrol-image",
-        "use_case":   "Pixel-level quality metrics for raster images",
-        "processes":  "Blur, noise, brightness, contrast, saturation",
-        "widgets":    ["Quality Metrics (violin plots)",
-                       "Quality Metrics across dimensions"],
-        "extensions": [],
-        "default":    True,
-    },
-    {
-        "id":         "bio",
-        "label":      "Standard bioimaging formats",
-        "package":    "pixel-patrol-loader-bio",
-        "use_case":   "Load microscopy and standard image files via bioio and Zarr",
-        "processes":  None,
-        "widgets":    [],
-        "extensions": [".tif", ".tiff", ".ome.tif", ".ome.zarr", ".zarr",
-                       ".czi", ".nd2", ".lif", ".jpg", ".jpeg", ".png", ".bmp"],
-        "default":    True,
-    },
-    {
-        "id":         "aqqua",
-        "label":      "Aqqua",
-        "package":    "pixel-patrol-aqqua",
-        "use_case":   "Load data from the Aqqua project (lmdb / blosc2)",
-        "processes":  None,
-        "widgets":    [],
-        "extensions": [".lmdb", ".mdb"],
-        "default":    False,
-    },
-]
+# Empty for now - the pixel-patrol bundle above covers the packages relevant
+# to most users. Add entries here for optional add-ons worth surfacing to a
+# general audience (e.g. niche loaders for specific projects/communities).
+PACKAGES: list[dict] = []
 
 # ── uv helpers ─────────────────────────────────────────────────────────────────
 
@@ -202,7 +175,7 @@ def setup_environment(uv: Path, loader_pkgs: list[str], line_cb: callable | None
     cb = line_cb or (lambda _: None)
 
     cb(">>> Creating Python environment…")
-    _run_streaming([str(uv), "venv", "--python", "3.12", str(VENV_DIR)], cb)
+    _run_streaming([str(uv), "venv", "--python", "3.12", "--clear", str(VENV_DIR)], cb)
 
     pkgs = BASE_PACKAGES + loader_pkgs
     cb(f">>> Installing: {', '.join(pkgs)}")
@@ -313,22 +286,23 @@ SETUP_HTML = f"""<!DOCTYPE html>
     flex-direction: column;
   }}
 
-  /* ── Navbar (matches Dash app top bar) ── */
+  /* ── Header (matches the Pixel Patrol launch page) ── */
   .pp-navbar {{
     background: #fff;
     border-bottom: 1px solid #dee2e6;
-    padding: 0;
+    padding: 24px 0;
   }}
   .pp-navbar .container-fluid {{
     max-width: 1400px;
-    padding: 12px 24px;
+    padding: 0 24px;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 16px;
   }}
   .pp-navbar img.logo {{
-    height: 48px;
-    width: 48px;
+    height: 64px;
+    width: auto;
     object-fit: contain;
   }}
   .pp-navbar h1 {{
@@ -420,20 +394,11 @@ SETUP_HTML = f"""<!DOCTYPE html>
 
   /* ── Action bar ── */
   .pp-actions {{
-    border-top: 1px solid #dee2e6;
-    padding: 20px 24px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    background: #fff;
-  }}
-  .pp-actions .container-fluid {{
-    max-width: 1400px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0;
-    width: 100%;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 24px;
   }}
 
   /* ── Progress overlay ── */
@@ -493,7 +458,7 @@ SETUP_HTML = f"""<!DOCTYPE html>
     word-break: break-word;
   }}
 
-  /* ── Footer (matches processing dashboard) ── */
+  /* ── Footer (matches the Pixel Patrol viewer/launch pages) ── */
   .pp-footer {{
     background-color: #212529;
     margin-top: auto;
@@ -523,26 +488,24 @@ SETUP_HTML = f"""<!DOCTYPE html>
 <!-- Navbar / header -->
 <nav class="pp-navbar">
   <div class="container-fluid">
-    {"<img class='logo' src='" + _IMG_ICON + "' alt='Pixel Patrol'>" if _IMG_ICON else ""}
-    <h1>Pixel Patrol</h1>
+    {"<img class='logo' src='" + _IMG_LOGO + "' alt='Pixel Patrol'>" if _IMG_LOGO else ""}
+    <h1>Pixel Patrol Setup</h1>
   </div>
 </nav>
 
 <!-- Main -->
 <div class="pp-main">
   <div class="container-fluid">
-    <p class="text-muted mb-3" style="font-size:13px;">
-      Select the packages to install. You can change this later by
+    {f'''<p class="text-muted mb-3" style="font-size:13px;">
+      Select additional packages to install. You can change this later by
       deleting <code>~/.pixel-patrol/</code> and relaunching.
     </p>
-    {_package_cards_html()}
-  </div>
-</div>
+    {_package_cards_html()}''' if PACKAGES else '''<p class="text-muted mb-3" style="font-size:13px;">
+      Pixel Patrol is ready to install.
+    </p>'''}
 
-<!-- Action bar -->
-<div class="pp-actions">
-  <div class="container-fluid">
-    <div class="d-flex gap-2 ms-auto">
+    <!-- Action bar -->
+    <div class="pp-actions">
       <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Cancel</button>
       <button class="btn btn-primary btn-sm" id="install-btn" onclick="startInstall()">
         <i class="bi bi-download me-1"></i>Install &amp; Launch
@@ -687,6 +650,7 @@ def create_flask_app() -> Flask:
                     uv = get_uv(progress_cb=dl_cb)
                     setup_environment(uv, loader_pkgs, line_cb=cb)
                     save_config(loader_pkgs)
+                    q.put(("status", f"Installed to {APP_DIR}"))
                     q.put(("status", "Launching Pixel Patrol…"))
                     launch_pixel_patrol()
                     q.put(("done", ""))

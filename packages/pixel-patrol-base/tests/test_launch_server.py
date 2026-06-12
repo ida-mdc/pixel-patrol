@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
 import polars as pl
@@ -315,6 +316,144 @@ def test_open_viewer_file_not_found(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         _post_json(server, "/api/open-viewer", {"output_parquet": "/no/such/report.parquet"})
     assert excinfo.value.code == 404
+
+
+# ---------------------------------------------------------------------------
+# Report file browser
+# ---------------------------------------------------------------------------
+
+def test_browse_lists_dirs_and_parquet_files(server, tmp_path):
+    (tmp_path / "subdir").mkdir()
+    (tmp_path / "report.parquet").touch()
+    (tmp_path / "notes.txt").touch()
+
+    with urllib.request.urlopen(_url(server, f"/api/browse?path={tmp_path}")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["path"] == str(tmp_path)
+    assert data["parent"] == str(tmp_path.parent)
+    names = {(e["name"], e["is_dir"]) for e in data["entries"]}
+    assert ("subdir", True) in names
+    assert ("report.parquet", False) in names
+    assert all(name != "notes.txt" for name, _ in names)
+
+
+def test_browse_unknown_path_returns_404(server, tmp_path):
+    missing = tmp_path / "does-not-exist"
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(_url(server, f"/api/browse?path={missing}"))
+    assert excinfo.value.code == 404
+
+
+def test_browse_file_path_returns_404(server, tmp_path):
+    file_path = tmp_path / "report.parquet"
+    file_path.touch()
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(_url(server, f"/api/browse?path={file_path}"))
+    assert excinfo.value.code == 404
+
+
+def test_browse_no_path_defaults_to_home(server, monkeypatch, tmp_path):
+    monkeypatch.setattr(ls.Path, "home", lambda: tmp_path)
+
+    with urllib.request.urlopen(_url(server, "/api/browse")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["path"] == str(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Version check / self-update
+# ---------------------------------------------------------------------------
+
+def test_version_endpoint_unmanaged(server, monkeypatch):
+    monkeypatch.setattr(ls, "_is_managed_install", lambda: False)
+    monkeypatch.setattr(ls, "_latest_pixel_patrol_version", lambda: "999.0.0")
+
+    with urllib.request.urlopen(_url(server, "/api/version")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["managed"] is False
+    assert data["latest"] == "999.0.0"
+    assert data["update_available"] is True
+    assert data["pypi_url"] == "https://pypi.org/project/pixel-patrol/"
+
+
+def test_version_endpoint_up_to_date(server, monkeypatch):
+    current = ls.importlib.metadata.version("pixel-patrol")
+    monkeypatch.setattr(ls, "_latest_pixel_patrol_version", lambda: current)
+
+    with urllib.request.urlopen(_url(server, "/api/version")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["current"] == current
+    assert data["update_available"] is False
+
+
+def test_version_endpoint_pypi_unreachable(server, monkeypatch):
+    monkeypatch.setattr(ls, "_latest_pixel_patrol_version", lambda: None)
+
+    with urllib.request.urlopen(_url(server, "/api/version")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["latest"] is None
+    assert data["update_available"] is False
+
+
+def test_update_endpoint_rejects_unmanaged_install(server, monkeypatch):
+    monkeypatch.setattr(ls, "_is_managed_install", lambda: False)
+
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _post_json(server, "/api/update", {})
+    assert excinfo.value.code == 400
+
+
+def test_update_endpoint_runs_uv_upgrade(server, monkeypatch, tmp_path):
+    monkeypatch.setattr(ls, "_is_managed_install", lambda: True)
+    monkeypatch.setattr(ls, "_find_uv", lambda: Path("/fake/uv"))
+    monkeypatch.setattr(ls, "_LAUNCHER_HOME", tmp_path)
+    (tmp_path / "config.json").write_text(json.dumps({"loader_pkgs": ["pixel-patrol-demo"]}))
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(ls.subprocess, "run", fake_run)
+
+    with _post_json(server, "/api/update", {}) as resp:
+        data = json.loads(resp.read())
+
+    assert data == {"status": "ok"}
+    assert captured["cmd"][0] == "/fake/uv"
+    assert "--upgrade" in captured["cmd"]
+    assert "pixel-patrol" in captured["cmd"]
+    assert "pixel-patrol-demo" in captured["cmd"]
+
+
+def test_update_endpoint_no_uv_found(server, monkeypatch):
+    monkeypatch.setattr(ls, "_is_managed_install", lambda: True)
+    monkeypatch.setattr(ls, "_find_uv", lambda: None)
+
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _post_json(server, "/api/update", {})
+    assert excinfo.value.code == 500
+
+
+def test_update_endpoint_uv_failure(server, monkeypatch, tmp_path):
+    monkeypatch.setattr(ls, "_is_managed_install", lambda: True)
+    monkeypatch.setattr(ls, "_find_uv", lambda: Path("/fake/uv"))
+    monkeypatch.setattr(ls, "_LAUNCHER_HOME", tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        raise ls.subprocess.CalledProcessError(1, cmd, stderr="boom")
+
+    monkeypatch.setattr(ls.subprocess, "run", fake_run)
+
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _post_json(server, "/api/update", {})
+    assert excinfo.value.code == 500
 
 
 def test_open_viewer_builds_query_string(server, tmp_path, monkeypatch):

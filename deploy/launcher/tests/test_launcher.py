@@ -35,36 +35,8 @@ def test_package_ids_are_unique():
     assert len(ids) == len(set(ids)), f"Duplicate package ids: {ids}"
 
 
-def test_base_packages_always_contains_base():
-    assert "pixel-patrol-base" in launcher.BASE_PACKAGES
-
-
-def test_image_package_is_default():
-    img = next(p for p in launcher.PACKAGES if p["id"] == "image")
-    assert img["default"] is True
-    assert img["package"] == "pixel-patrol-image"
-
-
-def test_bio_package_extensions():
-    bio = next(p for p in launcher.PACKAGES if p["id"] == "bio")
-    for ext in (".tif", ".tiff", ".zarr", ".ome.zarr", ".czi", ".nd2"):
-        assert ext in bio["extensions"], f"{ext} missing from bio package extensions"
-
-
-def test_aqqua_package_extensions():
-    aqqua = next(p for p in launcher.PACKAGES if p["id"] == "aqqua")
-    assert ".lmdb" in aqqua["extensions"]
-    assert ".mdb" in aqqua["extensions"]
-
-
-def test_image_package_has_widgets():
-    img = next(p for p in launcher.PACKAGES if p["id"] == "image")
-    assert len(img["widgets"]) > 0
-
-
-def test_image_package_has_processes():
-    img = next(p for p in launcher.PACKAGES if p["id"] == "image")
-    assert img["processes"] is not None and len(img["processes"]) > 0
+def test_base_packages_always_contains_full_bundle():
+    assert "pixel-patrol" in launcher.BASE_PACKAGES
 
 
 # ── HTML generation ────────────────────────────────────────────────────────────
@@ -92,28 +64,6 @@ def test_package_cards_html_non_defaults_not_checked():
             assert f'value="{pkg["id"]}" checked' not in html
 
 
-def test_package_cards_html_shows_extensions():
-    html = launcher._package_cards_html()
-    assert ".tif" in html
-    assert ".zarr" in html
-    assert ".lmdb" in html
-
-
-def test_package_cards_html_shows_widgets():
-    html = launcher._package_cards_html()
-    img = next(p for p in launcher.PACKAGES if p["id"] == "image")
-    for widget in img["widgets"]:
-        assert widget in html
-
-
-def test_package_cards_html_shows_processes():
-    html = launcher._package_cards_html()
-    img = next(p for p in launcher.PACKAGES if p["id"] == "image")
-    # At least one word from the processes description should appear
-    first_word = img["processes"].split(",")[0].strip().split()[0]
-    assert first_word in html
-
-
 def test_setup_html_loads_bootstrap():
     assert "bootstrap" in launcher.SETUP_HTML.lower()
 
@@ -135,15 +85,32 @@ def test_setup_html_contains_github_link():
     assert "github.com" in launcher.SETUP_HTML
 
 
+# ── Environment setup ──────────────────────────────────────────────────────────
+
+def test_setup_environment_clears_existing_venv(tmp_path, monkeypatch):
+    """uv venv must be called with --clear so a broken/partial prior install
+    (e.g. from an interrupted setup) doesn't break re-installation."""
+    monkeypatch.setattr(launcher, "VENV_DIR", tmp_path / "venv")
+    commands: list[list[str]] = []
+
+    def fake_run_streaming(cmd, line_cb):
+        commands.append(cmd)
+
+    monkeypatch.setattr(launcher, "_run_streaming", fake_run_streaming)
+    launcher.setup_environment(Path("/fake/uv"), [])
+    venv_cmd = commands[0]
+    assert "--clear" in venv_cmd
+
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 def test_save_and_load_config(tmp_path, monkeypatch):
     monkeypatch.setattr(launcher, "APP_DIR", tmp_path)
     monkeypatch.setattr(launcher, "CONFIG_FILE", tmp_path / "config.json")
 
-    launcher.save_config(["pixel-patrol-loader-bio"])
+    launcher.save_config(["pixel-patrol-demo"])
     result = launcher.load_config()
-    assert result == {"loader_pkgs": ["pixel-patrol-loader-bio"]}
+    assert result == {"loader_pkgs": ["pixel-patrol-demo"]}
 
 
 def test_save_config_empty_list(tmp_path, monkeypatch):
@@ -245,23 +212,34 @@ def test_index_contains_install_button(flask_client):
 
 def test_install_response_is_event_stream(flask_client, tmp_path, monkeypatch):
     _patch_install_deps(monkeypatch, tmp_path)
-    resp = flask_client.get("/install?loaders=image")
+    resp = flask_client.get("/install?loaders=")
     assert resp.status_code == 200
     assert "text/event-stream" in resp.content_type
 
 
 def test_install_streams_done_event(flask_client, tmp_path, monkeypatch):
     _patch_install_deps(monkeypatch, tmp_path)
-    resp = flask_client.get("/install?loaders=image")
+    resp = flask_client.get("/install?loaders=")
     body = resp.data.decode()
     assert "event: done" in body
 
 
 def test_install_streams_status_events(flask_client, tmp_path, monkeypatch):
     _patch_install_deps(monkeypatch, tmp_path)
-    resp = flask_client.get("/install?loaders=image")
+    resp = flask_client.get("/install?loaders=")
     body = resp.data.decode()
     assert "event: status" in body
+
+
+def test_install_streams_install_dir_before_launch(flask_client, tmp_path, monkeypatch):
+    _patch_install_deps(monkeypatch, tmp_path)
+    resp = flask_client.get("/install?loaders=")
+    body = resp.data.decode()
+    install_dir_idx = body.find(f"data: Installed to {tmp_path}")
+    launch_idx = body.find("data: Launching Pixel Patrol")
+    assert install_dir_idx != -1
+    assert launch_idx != -1
+    assert install_dir_idx < launch_idx
 
 
 def test_install_no_loaders_installs_base_only(flask_client, tmp_path, monkeypatch):
@@ -278,6 +256,18 @@ def test_install_no_loaders_installs_base_only(flask_client, tmp_path, monkeypat
     assert installed == [[]]
 
 
+_FAKE_PACKAGE = {
+    "id": "demo",
+    "label": "Demo package",
+    "package": "pixel-patrol-demo",
+    "use_case": "demo",
+    "processes": [],
+    "widgets": [],
+    "extensions": [],
+    "default": False,
+}
+
+
 def test_install_deduplicates_packages(flask_client, tmp_path, monkeypatch):
     """Sending duplicate IDs must not install the same package twice."""
     installed: list[str] = []
@@ -285,18 +275,20 @@ def test_install_deduplicates_packages(flask_client, tmp_path, monkeypatch):
     def fake_setup(uv, pkgs, line_cb=None):
         installed.extend(pkgs)
 
+    monkeypatch.setattr(launcher, "PACKAGES", [_FAKE_PACKAGE])
     _patch_install_deps(monkeypatch, tmp_path, setup_fn=fake_setup)
-    # bio and a repeated bio — pixel-patrol-loader-bio must appear at most once
-    flask_client.get("/install?loaders=bio,bio")
-    assert installed.count("pixel-patrol-loader-bio") <= 1
+    # demo and a repeated demo — pixel-patrol-demo must appear at most once
+    flask_client.get("/install?loaders=demo,demo")
+    assert installed.count("pixel-patrol-demo") <= 1
 
 
 def test_install_saves_config(flask_client, tmp_path, monkeypatch):
+    monkeypatch.setattr(launcher, "PACKAGES", [_FAKE_PACKAGE])
     _patch_install_deps(monkeypatch, tmp_path)
-    flask_client.get("/install?loaders=bio")
+    flask_client.get("/install?loaders=demo")
     config = launcher.load_config()
     assert config is not None
-    assert "pixel-patrol-loader-bio" in config["loader_pkgs"]
+    assert "pixel-patrol-demo" in config["loader_pkgs"]
 
 
 def test_install_error_streams_error_msg_event(flask_client, tmp_path, monkeypatch):
@@ -310,7 +302,7 @@ def test_install_error_streams_error_msg_event(flask_client, tmp_path, monkeypat
     monkeypatch.setattr(launcher, "get_uv", boom)
     monkeypatch.setattr(launcher, "launch_pixel_patrol", lambda: None)
 
-    resp = flask_client.get("/install?loaders=bio")
+    resp = flask_client.get("/install?loaders=")
     body = resp.data.decode()
     assert "event: error_msg" in body
     assert "uv not found" in body

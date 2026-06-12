@@ -18,8 +18,8 @@ ENV_NAME="pixel-patrol"
 echo "==> Installing build dependencies into the '${ENV_NAME}' micromamba env…"
 micromamba run -n "${ENV_NAME}" pip install --quiet pyinstaller flask
 
-ASSETS_DIR="${SCRIPT_DIR}/../../packages/pixel-patrol-base/src/pixel_patrol_base/report/assets"
-ASSETS_DIR="$(realpath "${ASSETS_DIR}")"
+VIEWER_ASSETS="$(realpath "${SCRIPT_DIR}/../../viewer/public")"
+LAUNCH_ASSETS="$(realpath "${SCRIPT_DIR}/../../packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets")"
 
 echo "==> Building launcher binary…"
 micromamba run -n "${ENV_NAME}" pyinstaller \
@@ -29,8 +29,9 @@ micromamba run -n "${ENV_NAME}" pyinstaller \
     --workpath "${SCRIPT_DIR}/build" \
     --specpath "${SCRIPT_DIR}" \
     --hidden-import flask \
-    --add-data "${ASSETS_DIR}/icon.png:." \
-    --add-data "${ASSETS_DIR}/Helmholtz-Imaging_Mark.png:." \
+    --add-data "${VIEWER_ASSETS}/icon.png:." \
+    --add-data "${VIEWER_ASSETS}/Helmholtz-Imaging_Mark.png:." \
+    --add-data "${LAUNCH_ASSETS}/prevalidation.png:." \
     --icon "${SCRIPT_DIR}/icon.png" \
     --clean \
     "${SCRIPT_DIR}/launcher.py"
