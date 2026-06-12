@@ -173,17 +173,25 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     return;
   }
 
-  // Group color legend - shared across all plots in this widget
-  if (ctx.groups.length > 1) {
+  // Legend - shared across all plots in this widget: group colors (if any)
+  // plus the meaning of the dashed retention line shown on every plot.
+  {
     const legendDiv = document.createElement('div');
     legendDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:0.85rem;align-items:center';
-    for (const g of ctx.groups) {
-      const color = ctx.color.group(g);
-      const item  = document.createElement('span');
-      item.style.cssText = 'display:flex;align-items:center;gap:5px';
-      item.innerHTML = `<span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${color}"></span>${escapeHtml(String(g))}`;
-      legendDiv.appendChild(item);
+    if (ctx.groups.length > 1) {
+      for (const g of ctx.groups) {
+        const color = ctx.color.group(g);
+        const item  = document.createElement('span');
+        item.style.cssText = 'display:flex;align-items:center;gap:5px';
+        item.innerHTML = `<span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${color}"></span>${escapeHtml(String(g))}`;
+        legendDiv.appendChild(item);
+      }
     }
+    const dashItem = document.createElement('span');
+    dashItem.style.cssText = 'display:flex;align-items:center;gap:5px;color:#6c757d';
+    dashItem.innerHTML = '<span style="display:inline-block;width:16px;height:0;border-top:1px dashed #6c757d"></span>'
+      + '% of images with this slice (right axis)';
+    legendDiv.appendChild(dashItem);
     container.appendChild(legendDiv);
   }
 
