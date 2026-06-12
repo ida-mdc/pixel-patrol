@@ -39,6 +39,16 @@ def test_base_packages_always_contains_full_bundle():
     assert "pixel-patrol" in launcher.BASE_PACKAGES
 
 
+# ── Version ────────────────────────────────────────────────────────────────────
+
+def test_launcher_version_matches_pixel_patrol_version():
+    import tomllib
+
+    pyproject = Path(__file__).resolve().parents[3] / "packages" / "pixel-patrol" / "pyproject.toml"
+    pp_version = tomllib.loads(pyproject.read_text())["project"]["version"]
+    assert launcher.LAUNCHER_VERSION == pp_version
+
+
 # ── HTML generation ────────────────────────────────────────────────────────────
 
 def test_package_cards_html_has_checkbox_for_each_package():

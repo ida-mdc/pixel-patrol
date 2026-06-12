@@ -1,9 +1,11 @@
+import re
 import sys
 from pathlib import Path
 from packaging.version import Version, InvalidVersion
 import tomlkit
 
 ROOT = Path(__file__).resolve().parents[1] / "packages"
+LAUNCHER_PY = Path(__file__).resolve().parents[1] / "deploy" / "launcher" / "launcher.py"
 PACKAGES = [
     "pixel-patrol-base",
     "pixel-patrol",
@@ -68,6 +70,21 @@ def main(new_version: str):
                     deps[i] = updated
 
         write_toml(py, doc)
+
+    # keep the launcher's embedded version string in sync
+    content = LAUNCHER_PY.read_text(encoding="utf8")
+    updated = re.sub(
+        r'^LAUNCHER_VERSION = ".*"$',
+        f'LAUNCHER_VERSION = "{new_version}"',
+        content,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if updated == content:
+        print(f"WARN: LAUNCHER_VERSION not found in {LAUNCHER_PY}")
+    else:
+        LAUNCHER_PY.write_text(updated, encoding="utf8")
+        print(f"Set LAUNCHER_VERSION -> {new_version}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
