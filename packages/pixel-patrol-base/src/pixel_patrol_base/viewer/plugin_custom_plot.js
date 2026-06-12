@@ -98,6 +98,19 @@ function getColorsLocal(name, n) {
   return Array.from({ length: n }, (_, i) => `hsl(${Math.round(360 * i / n)},70%,50%)`);
 }
 
+// Mirrors viewer/src/scopes.js SCOPES.image / SCOPES.slice - reused here via the shared
+// .widget-scope-badge style so each plot's badge matches other widgets'.
+const SCOPE_BADGES = {
+  image: { icon: '🖼️', color: '#0d6efd', label: 'per image', desc: 'Each datapoint here is a whole image.' },
+  slice: { icon: '🧩', color: '#fd7e14', label: 'per slice', desc: 'Each datapoint here is a slice within an image (e.g. a channel, Z-plane, timepoint, or spatial tile).' },
+};
+function updateScopeBadge(el, splitDims) {
+  const s = splitDims.size ? SCOPE_BADGES.slice : SCOPE_BADGES.image;
+  el.style.setProperty('--scope-color', s.color);
+  el.title = s.desc;
+  el.textContent = `${s.icon} ${s.label}`;
+}
+
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
 function lbl(text) {
@@ -184,10 +197,39 @@ function makeCombobox(cols, placeholder) {
 
 // ── Plugin code generator ─────────────────────────────────────────────────────
 
-function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuous, palette, noneColor, heatColor, heatInvert }) {
+// Generates the dataSource() logic below (see dataSource()) as exportable code,
+// for the splitDims chosen in this slot's "Slice by" toggles.
+function dataSourceSnippet(splitDims) {
+  if (!splitDims.length) {
+    return "      const fromTable = 'pp_data', baseWhere = ctx.where;";
+  }
+  return [
+    '      const dimCols    = ctx.schema?.dimCols ?? [];',
+    '      const activeDims = ctx.state.dimensions ?? {};',
+    '      const splitDims  = new Set(' + JSON.stringify(splitDims) + ');',
+    '      const dimFilters = Object.entries(activeDims)',
+    '        .map(([letter, idx]) => Number.isFinite(Number(idx)) ? `${q(\'dim_\' + letter)} = ${Number(idx)}` : null)',
+    '        .filter(Boolean);',
+    '      const sliceWhereParts = [`obs_level = ${dimFilters.length + splitDims.size}`, ...dimFilters];',
+    '      for (const col of dimCols) {',
+    '        const letter = col.slice(4);',
+    '        if (letter in activeDims) continue;',
+    '        sliceWhereParts.push(splitDims.has(letter) ? `${q(col)} IS NOT NULL` : `${q(col)} IS NULL`);',
+    '      }',
+    "      const fromTable = 'pp_all', baseWhere = andWhere(ctx.where, sliceWhereParts.join(' AND '));",
+  ].join('\n');
+}
+
+function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuous, palette, noneColor, heatColor, heatInvert, splitDims }) {
   const qc   = c => '"' + String(c).replace(/"/g, '""') + '"';
   const nice = c => (c ?? '').replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
   const cid  = c => (c ?? '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+
+  // Placeholders resolved at runtime by the generated dataSource() setup
+  // (see dataSourceSnippet). fromTable is spliced into SQL template literals,
+  // so it needs ${...}; baseWhere is used as a bare identifier.
+  const fromTable = '${fromTable}';
+  const baseWhere = 'baseWhere';
 
   const yId = y && y !== COUNT_Y ? cid(y) : 'count';
   const id  = cid(x) + '-' + yId + '-' + plotType;
@@ -269,11 +311,11 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
 
   if (plotType === 'scatter' && continuous) {
     body = [
-      '      const wh = andWhere(ctx.where, `' + qc(x) + ' IS NOT NULL AND ' + qc(y) + ' IS NOT NULL AND ' + qc(colorBy) + ' IS NOT NULL`);',
+      '      const wh = andWhere(' + baseWhere + ', `' + qc(x) + ' IS NOT NULL AND ' + qc(y) + ' IS NOT NULL AND ' + qc(colorBy) + ' IS NOT NULL`);',
       '      const rows = await ctx.queryRows(`',
       '        SELECT * FROM (',
       '          SELECT ' + sel(x, 'x') + ', ' + sel(y, 'y') + ', ' + qc(colorBy) + ' AS c',
-      '          FROM pp_data ${wh}',
+      '          FROM ' + fromTable + ' ${wh}',
       '        ) USING SAMPLE 5000 ROWS (reservoir, 42)',
       '      `);',
       '      const sampled = rows.length >= 5000;',
@@ -298,11 +340,11 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     ].join('\n');
   } else if (plotType === 'scatter') {
     body = [
-      '      const wh = andWhere(ctx.where, `' + qc(x) + ' IS NOT NULL AND ' + qc(y) + ' IS NOT NULL`);',
+      '      const wh = andWhere(' + baseWhere + ', `' + qc(x) + ' IS NOT NULL AND ' + qc(y) + ' IS NOT NULL`);',
       '      const rows = await ctx.queryRows(`',
       '        SELECT * FROM (',
       '          SELECT ' + sel(x, 'x') + ', ' + sel(y, 'y') + ', ' + gExpr,
-      '          FROM pp_data ${wh}',
+      '          FROM ' + fromTable + ' ${wh}',
       '        ) USING SAMPLE 5000 ROWS (reservoir, 42)',
       '      `);',
       groupSetup,
@@ -323,11 +365,11 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     ].join('\n');
   } else if (plotType === 'violin') {
     body = [
-      '      const wh = andWhere(ctx.where, `' + qc(numCol) + ' IS NOT NULL`);',
+      '      const wh = andWhere(' + baseWhere + ', `' + qc(numCol) + ' IS NOT NULL`);',
       '      const rows = await ctx.queryRows(`',
       '        SELECT * FROM (',
       '          SELECT ' + catExprG(catCol) + ' AS cat, ' + sel(numCol, 'val') + ', ' + gExpr,
-      '          FROM pp_data ${wh}',
+      '          FROM ' + fromTable + ' ${wh}',
       '        ) USING SAMPLE 5000 ROWS (reservoir, 42)',
       '      `);',
       groupSetup,
@@ -350,11 +392,11 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     ].join('\n');
   } else if (plotType === 'bar') {
     body = [
-      '      const wh = andWhere(ctx.where, `' + qc(numCol) + ' IS NOT NULL`);',
+      '      const wh = andWhere(' + baseWhere + ', `' + qc(numCol) + ' IS NOT NULL`);',
       '      const rows = await ctx.queryRows(`',
       '        SELECT ' + catExprG(catCol) + ' AS cat, ' + gExpr + ',',
       '               AVG(' + qc(numCol) + ') AS mean_val, STDDEV(' + qc(numCol) + ') AS std_val',
-      '        FROM pp_data ${wh}',
+      '        FROM ' + fromTable + ' ${wh}',
       '        GROUP BY 1, 2 ORDER BY 1',
       '      `);',
       groupSetup,
@@ -381,7 +423,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     body = [
       '      const rows = await ctx.queryRows(`',
       '        SELECT ' + catExprG(x) + ' AS cat, ' + gExpr + ', COUNT(*) AS n',
-      '        FROM pp_data ${ctx.where}',
+      '        FROM ' + fromTable + ' ${' + baseWhere + '}',
       '        GROUP BY 1, 2 ORDER BY 1',
       '      `);',
       groupSetup,
@@ -405,7 +447,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     body = [
       '      const rows = await ctx.queryRows(`',
       '        SELECT ' + catExprG(x) + ' AS x, ' + catExprG(y) + ' AS y, COUNT(*) AS n',
-      '        FROM pp_data ${ctx.where}',
+      '        FROM ' + fromTable + ' ${' + baseWhere + '}',
       '        GROUP BY 1, 2 ORDER BY 1, 2',
       '      `);',
       '      const xs = _sortCats([...new Set(rows.map(r => String(r.x)))]);',
@@ -433,11 +475,13 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     '  id: ' + JSON.stringify(id) + ',',
     '  label: ' + JSON.stringify(TITLE) + ',',
     '  group: \'Custom\',',
+    '  scope: ' + JSON.stringify(splitDims.length ? 'slice' : 'image') + ',',
     '  requires: s => s.isLongFormat && ' + JSON.stringify(requiredCols) + '.every(c => s.allCols.includes(c)),',
     '  async render(container, ctx) {',
     '    try {',
-    '      const { andWhere } = ctx.sql;',
+    '      const { q, andWhere } = ctx.sql;',
     '      const { append } = ctx.plot;',
+    dataSourceSnippet(splitDims),
     '',
     body,
     '    } catch (e) {',
@@ -455,8 +499,13 @@ export default {
   id:    'custom-plot',
   label: 'Custom Plot',
   group: 'Explore',
-  scope: 'image',
   info:  'Build your own plot from the columns in your current data.\n\n' +
+         'Each plot has its own **Slice by** toggles (top right) and a **per image** / ' +
+         '**per slice** badge showing what one of its datapoints represents. With nothing ' +
+         'toggled, each point is one whole-image aggregate (**per image**). Switching a ' +
+         'toggle on stops that dimension from being aggregated away, so each point becomes ' +
+         'one (image × that dimension) combination instead (**per slice**) - e.g. switching ' +
+         'on "C" gives one point per C-slice per image.\n\n' +
          '- **Two numerics** → scatter\n' +
          '- **Categorical × numeric** → violin or bar (mean ± sd)\n' +
          '- **Any column × (count)** → count bar\n' +
@@ -500,6 +549,12 @@ export default {
       ...ctx.schema.metricCols,
       ...available.filter(c => EXTRA_NUMERIC.has(c) || DATE_COLS.has(c)),
     ]);
+
+    // Dims the user can toggle into "Slice by" controls per plot - excludes
+    // dims already pinned by the global cohort filter (ctx.state.dimensions).
+    const dimCols    = ctx.schema?.dimCols ?? [];
+    const activeDims = ctx.state.dimensions ?? {};
+    const splittable = dimCols.map(c => c.slice(4)).filter(letter => !(letter in activeDims));
 
     // Use viewer's palette functions if available (requires rebuilt viewer),
     // otherwise fall back to local copies.
@@ -587,6 +642,33 @@ export default {
       );
       slotEl.appendChild(controls);
 
+      // ── Slice by ─────────────────────────────────────────────────────────────
+      // Per-slot toggles controlling this plot's dataSource() (see below),
+      // independently of other slots.
+      const splitDims = new Set();
+      let sliceBadge = null;
+      if (splittable.length) {
+        const sliceRow = document.createElement('div');
+        sliceRow.className = 'violin-controls';
+        sliceRow.innerHTML = '<span class="violin-controls-label">Slice by:</span>';
+        for (const letter of splittable) {
+          const sw = document.createElement('label');
+          sw.className = 'dim-switch';
+          sw.innerHTML = `<input type="checkbox"><span class="dim-switch-track"></span><span class="dim-switch-label">${letter.toUpperCase()}</span>`;
+          sw.querySelector('input').addEventListener('change', e => {
+            if (e.target.checked) splitDims.add(letter); else splitDims.delete(letter);
+            if (sliceBadge) updateScopeBadge(sliceBadge, splitDims);
+            doPlot();
+          });
+          sliceRow.appendChild(sw);
+        }
+        sliceBadge = document.createElement('span');
+        sliceBadge.className = 'widget-scope-badge';
+        updateScopeBadge(sliceBadge, splitDims);
+        sliceRow.appendChild(sliceBadge);
+        slotEl.appendChild(sliceRow);
+      }
+
       colorBySel.set(GLOBAL_COLOR);
 
       // The palette dropdown shows different option lists depending on
@@ -613,7 +695,7 @@ export default {
       slotEl.appendChild(plotArea);
       slotsDiv.appendChild(slotEl);
 
-      const ref = { slotEl, removeBtn };
+      const ref = { slotEl, removeBtn, doPlot: () => doPlot() };
       slotRefs.push(ref);
       syncSlotUi();
 
@@ -632,7 +714,7 @@ export default {
       let renderToken = 0;
 
       function setConfig(cfg) {
-        activeConfig = cfg;
+        activeConfig = { ...cfg, splitDims: [...splitDims] };
         exportBtn.style.display = '';
       }
 
@@ -731,9 +813,30 @@ export default {
         return groups.length > 1 ? { showlegend: true, legend: plotlyLegendConfig } : { showlegend: false };
       }
 
+      // "per image" (pp_data, obs_level=0) by default, or "per slice" (pp_all at
+      // the obs_level for this slot's splitDims) once any toggles are on - see
+      // buildViolinWhereParts in plugin_violin.js for the _rollup power-set pattern.
+      function dataSource() {
+        if (!splitDims.size) return { table: 'pp_data', where: ctx.where };
+        const dimFilters = Object.entries(activeDims)
+          .map(([letter, idxRaw]) => {
+            const idx = Number(idxRaw);
+            return Number.isFinite(idx) ? `${q(`dim_${letter}`)} = ${idx}` : null;
+          })
+          .filter(Boolean);
+        const whereParts = [`obs_level = ${dimFilters.length + splitDims.size}`, ...dimFilters];
+        for (const col of dimCols) {
+          const letter = col.slice(4);
+          if (letter in activeDims) continue;
+          whereParts.push(splitDims.has(letter) ? `${q(col)} IS NOT NULL` : `${q(col)} IS NULL`);
+        }
+        return { table: 'pp_all', where: andWhere(ctx.where, whereParts.join(' AND ')) };
+      }
+
       async function cardinalityCheck(...cols) {
         const exprs = cols.map((c, i) => `COUNT(DISTINCT ${q(c)}) AS n${i}`).join(', ');
-        const [row]  = await ctx.queryRows(`SELECT ${exprs} FROM pp_data ${ctx.where}`);
+        const { table, where } = dataSource();
+        const [row]  = await ctx.queryRows(`SELECT ${exprs} FROM ${table} ${where}`);
         return cols.map((c, i) => ({ col: c, n: Number(row[`n${i}`]) }));
       }
 
@@ -744,7 +847,8 @@ export default {
       }
 
       async function categoryCount(col) {
-        const [row] = await ctx.queryRows(`SELECT COUNT(DISTINCT ${catExpr(col)}) AS n FROM pp_data ${ctx.where}`);
+        const { table, where } = dataSource();
+        const [row] = await ctx.queryRows(`SELECT COUNT(DISTINCT ${catExpr(col)}) AS n FROM ${table} ${where}`);
         return Number(row.n);
       }
 
@@ -758,7 +862,8 @@ export default {
       // axis (e.g. scatter), so callers show a warning instead.
       async function nullCounts(...cols) {
         const exprs = cols.map((c, i) => `COUNT(*) FILTER (WHERE ${q(c)} IS NULL) AS n${i}`).join(', ');
-        const [row]  = await ctx.queryRows(`SELECT ${exprs} FROM pp_data ${ctx.where}`);
+        const { table, where } = dataSource();
+        const [row]  = await ctx.queryRows(`SELECT ${exprs} FROM ${table} ${where}`);
         return cols.map((c, i) => ({ col: c, n: Number(row[`n${i}`]) }));
       }
 
@@ -791,12 +896,13 @@ export default {
 
       // ── Plot functions ──────────────────────────────────────────────────────
       async function plotScatter(x, y, colorMode, continuous, isStale = () => false) {
+        const { table, where } = dataSource();
         if (continuous) {
-          const fullWh = andWhere(ctx.where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL AND ${q(colorMode)} IS NOT NULL`);
+          const fullWh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL AND ${q(colorMode)} IS NOT NULL`);
           const rows = await ctx.queryRows(`
             SELECT * FROM (
               SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${q(colorMode)} AS c
-              FROM pp_data ${fullWh}
+              FROM ${table} ${fullWh}
             ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
           `);
           if (isStale()) return;
@@ -828,11 +934,11 @@ export default {
           return;
         }
 
-        const fullWh = andWhere(ctx.where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL`);
+        const fullWh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL`);
         const rows = await ctx.queryRows(`
           SELECT * FROM (
             SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${groupSqlExpr(colorMode)}
-            FROM pp_data ${fullWh}
+            FROM ${table} ${fullWh}
           ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
         `);
         if (isStale()) return;
@@ -862,11 +968,12 @@ export default {
       }
 
       async function plotViolin(catCol, numCol, colorMode, isStale = () => false) {
-        const fullWh = andWhere(ctx.where, `${q(numCol)} IS NOT NULL`);
+        const { table, where } = dataSource();
+        const fullWh = andWhere(where, `${q(numCol)} IS NOT NULL`);
         const rows = await ctx.queryRows(`
           SELECT * FROM (
             SELECT ${catExpr(catCol)} AS cat, ${selectExpr(q, numCol, 'val')}, ${groupSqlExpr(colorMode)}
-            FROM pp_data ${fullWh}
+            FROM ${table} ${fullWh}
           ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
         `);
         if (isStale()) return;
@@ -897,11 +1004,12 @@ export default {
       }
 
       async function plotBar(catCol, numCol, colorMode, isStale = () => false) {
-        const fullWh = andWhere(ctx.where, `${q(numCol)} IS NOT NULL`);
+        const { table, where } = dataSource();
+        const fullWh = andWhere(where, `${q(numCol)} IS NOT NULL`);
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
                  AVG(${q(numCol)}) AS mean_val, STDDEV(${q(numCol)}) AS std_val
-          FROM pp_data ${fullWh}
+          FROM ${table} ${fullWh}
           GROUP BY 1, 2 ORDER BY 1
         `);
         if (isStale()) return;
@@ -932,9 +1040,10 @@ export default {
       }
 
       async function plotCountBar(x, colorMode, isStale = () => false) {
+        const { table, where } = dataSource();
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
-          FROM pp_data ${ctx.where}
+          FROM ${table} ${where}
           GROUP BY 1, 2 ORDER BY 1
         `);
         if (isStale()) return;
@@ -964,9 +1073,10 @@ export default {
       }
 
       async function plotCountTable(x, colorMode, isStale = () => false) {
+        const { table, where } = dataSource();
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
-          FROM pp_data ${ctx.where}
+          FROM ${table} ${where}
           GROUP BY 1, 2 ORDER BY 1
         `);
         if (isStale()) return;
@@ -982,10 +1092,11 @@ export default {
 
       async function plotCatNumTable(catCol, numCol, colorMode, isStale = () => false) {
         const isDate = DATE_COLS.has(numCol);
+        const { table, where } = dataSource();
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
                  COUNT(${q(numCol)}) AS n, COUNT(*) - COUNT(${q(numCol)}) AS n_null, ${aggExprs(q, numCol)}
-          FROM pp_data ${ctx.where}
+          FROM ${table} ${where}
           GROUP BY 1, 2 ORDER BY 1
         `);
         if (isStale()) return;
@@ -1011,9 +1122,10 @@ export default {
       }
 
       async function plotHeatmap(x, y, isStale = () => false) {
+        const { table, where } = dataSource();
         const rows = await ctx.queryRows(`
           SELECT ${catExpr(x)} AS x, ${catExpr(y)} AS y, COUNT(*) AS n
-          FROM pp_data ${ctx.where}
+          FROM ${table} ${where}
           GROUP BY 1, 2 ORDER BY 1, 2
         `);
         if (isStale()) return;
@@ -1114,11 +1226,12 @@ export default {
               colorGroup.style.display = 'none';
               // One row per distinct Y value (NULL Y becomes its own "(missing)"
               // row), with the range of X and how many X values are null in it.
+              const { table, where } = dataSource();
               const rows = await ctx.queryRows(`
                 SELECT ${aggExpr(q, y, 'MIN', 'yval')},
                        COUNT(${q(x)}) AS n, COUNT(*) - COUNT(${q(x)}) AS n_null,
                        ${aggExpr(q, x, 'MIN', 'xmin')}, ${aggExpr(q, x, 'MAX', 'xmax')}
-                FROM pp_data ${ctx.where}
+                FROM ${table} ${where}
                 GROUP BY ${q(y)}
                 ORDER BY (${q(y)} IS NULL), 1
               `);
