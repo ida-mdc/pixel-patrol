@@ -15,11 +15,96 @@ body {
   padding: 24px 16px 48px;
 }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.version-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #495057;
+}
+.version-info[hidden] { display: none; }
+.version-info a { color: #0d6efd; text-decoration: none; }
+.version-info a:hover { text-decoration: underline; }
+
+.bottom-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 24px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-overlay[hidden] { display: none; }
+.modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.modal h3 { margin: 0 0 16px; font-size: 1.2rem; }
+.modal .form-group { margin-bottom: 0; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.browser-path-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.browser-path-input { flex: 1; }
+
+.browser-list {
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  height: 260px;
+  overflow-y: auto;
+  background: #fff;
+}
+.browser-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.browser-entry:hover { background: #f0f7ff; }
+.browser-entry.selected { background: #cfe2ff; }
+.browser-entry .browser-entry-icon { width: 1.2em; text-align: center; }
+.browser-empty {
+  padding: 16px;
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
+  margin-top: 8px;
   margin-bottom: 24px;
 }
 .header .logo { height: 90px; width: auto; }
@@ -47,15 +132,20 @@ body {
 .card-body { padding: 20px; }
 
 .info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px; height: 24px;
   border-radius: 50%;
   border: 1px solid #6c757d;
   background: #fff;
   color: #6c757d;
+  font-family: Georgia, "Times New Roman", serif;
   font-style: italic;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   line-height: 1;
+  padding: 0;
   cursor: pointer;
 }
 .info-btn:hover { background: #e9ecef; }

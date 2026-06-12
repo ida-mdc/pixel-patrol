@@ -1,0 +1,126 @@
+name: Build Launcher
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'deploy/launcher/**'
+  workflow_dispatch:
+
+jobs:
+  test-launcher:
+    name: Test launcher (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: deploy/launcher
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install flask pytest
+
+      - name: Run launcher tests
+        run: pytest tests/ -vv
+
+  build-launcher:
+    name: Build binary (${{ matrix.os }})
+    needs: test-launcher
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: pip install pyinstaller flask
+
+      - name: Build binary (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: |
+          VIEWER_ASSETS="$(pwd)/viewer/public"
+          LAUNCH_ASSETS="$(pwd)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
+          pyinstaller \
+            --onefile \
+            --name pixel-patrol-launcher \
+            --distpath deploy/launcher/dist \
+            --workpath deploy/launcher/build \
+            --specpath deploy/launcher \
+            --hidden-import flask \
+            --add-data "${VIEWER_ASSETS}/icon.png:." \
+            --add-data "${VIEWER_ASSETS}/Helmholtz-Imaging_Mark.png:." \
+            --add-data "${LAUNCH_ASSETS}/prevalidation.png:." \
+            --clean \
+            deploy/launcher/launcher.py
+
+      - name: Build binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $viewerAssets = "$($PWD.Path)/viewer/public"
+          $launchAssets = "$($PWD.Path)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
+          pyinstaller `
+            --onefile `
+            --name pixel-patrol-launcher `
+            --distpath deploy/launcher/dist `
+            --workpath deploy/launcher/build `
+            --specpath deploy/launcher `
+            --hidden-import flask `
+            --add-data "${viewerAssets}/icon.png;." `
+            --add-data "${viewerAssets}/Helmholtz-Imaging_Mark.png;." `
+            --add-data "${launchAssets}/prevalidation.png;." `
+            --clean `
+            deploy/launcher/launcher.py
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)   mv deploy/launcher/dist/pixel-patrol-launcher deploy/launcher/dist/pixel-patrol-launcher-linux ;;
+            macOS)   mv deploy/launcher/dist/pixel-patrol-launcher deploy/launcher/dist/pixel-patrol-launcher-macos ;;
+            Windows) mv deploy/launcher/dist/pixel-patrol-launcher.exe deploy/launcher/dist/pixel-patrol-launcher-windows.exe ;;
+          esac
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixel-patrol-launcher-${{ runner.os }}
+          path: deploy/launcher/dist/pixel-patrol-launcher-*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-launcher
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pixel-patrol-launcher-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update release with binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
