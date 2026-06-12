@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Patrol Processing</title>
+<link rel="icon" href="prevalidation.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <img src="prevalidation.png" alt="Pixel Patrol" class="logo">
+    <h1>Pixel Patrol Processing</h1>
+  </header>
+
+  <div class="card">
+    <div class="card-header">
+      <span>Processing Configuration</span>
+      <button type="button" class="info-btn" id="config-info-btn" aria-label="Help" title="What happens when you start processing">i</button>
+    </div>
+    <div class="info-panel" id="config-info-panel" hidden>
+      <p><strong>What happens when you start processing:</strong></p>
+      <p>Pixel Patrol scans for files within the selected folders:</p>
+      <ul>
+        <li>If <strong>Paths</strong> are provided, only those subfolders/paths (relative to the Base Directory) are processed.</li>
+        <li>If <strong>Paths</strong> are empty, the whole Base Directory is processed.</li>
+      </ul>
+      <p>If no Loader is selected, only basic file information is extracted (path, size, timestamps).
+      If a loader is selected, only files matching the selected <strong>File Extensions</strong> are
+      included (leave empty for all supported), and rich metadata/image data is extracted.</p>
+      <p>When processing finishes, a <strong>parquet file</strong> is saved at the Output Path. It
+      contains all processed data and project metadata needed to generate the Pixel Patrol report.</p>
+      <p>You can open it later from a terminal with <code>pixel-patrol view /path/to/output.parquet</code>,
+      or directly from this page once processing completes.</p>
+    </div>
+
+    <form id="process-form" class="card-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="base-directory">Base Directory <span class="required">*</span></label>
+          <input type="text" id="base-directory" name="base_directory" placeholder="/path/to/dataset" required>
+          <p class="form-text">Path to root folder containing your dataset</p>
+        </div>
+        <div class="form-group">
+          <label for="output-path">Output Path <span class="required">*</span></label>
+          <input type="text" id="output-path" name="output_path" placeholder="/path/to/output.parquet" required>
+          <p class="form-text">Where to save the results file (.parquet). e.g. /my/dir/project.parquet</p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="project-name">Project Name</label>
+          <input type="text" id="project-name" name="project_name" placeholder="Auto (uses base directory name)">
+        </div>
+        <div class="form-group">
+          <label for="loader">Loader</label>
+          <select id="loader" name="loader"></select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="paths">Paths (experimental conditions)</label>
+          <textarea id="paths" name="paths" rows="3" placeholder="path1, path2..."></textarea>
+          <p class="form-text">Comma-separated. Subdirectories of Base Directory (absolute or relative).</p>
+        </div>
+        <div class="form-group">
+          <label for="file-extensions">File Extensions</label>
+          <input type="text" id="file-extensions" name="file_extensions" placeholder="Leave empty for all supported extensions">
+          <p class="form-text" id="file-extensions-help">Comma-separated extensions (leave empty for all)</p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="flavor">Flavor</label>
+          <input type="text" id="flavor" name="flavor" placeholder="Optional label">
+        </div>
+        <div class="form-group">
+          <label for="description">Description</label>
+          <input type="text" id="description" name="description" placeholder='e.g., "Authors: Annona Buddha and Banana Java"'>
+        </div>
+      </div>
+
+      <details class="advanced">
+        <summary>Advanced settings</summary>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="processors-include">Run only these processors</label>
+            <select id="processors-include" name="processors_include" multiple></select>
+            <p class="form-text">Leave empty to run all applicable processors. Overrides "Skip processors" below if set.</p>
+          </div>
+          <div class="form-group">
+            <label for="processors-exclude">Skip these processors</label>
+            <select id="processors-exclude" name="processors_exclude" multiple></select>
+            <p class="form-text">Ignored if "Run only these processors" is set.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="max-workers">Max Workers</label>
+            <input type="number" id="max-workers" name="max_workers" min="1" step="1" placeholder="Auto (from CPUs / RAM)">
+            <p class="form-text" id="max-workers-help">Number of parallel Dask workers. Use 1 to disable parallelism.</p>
+          </div>
+          <div class="form-group">
+            <label for="scheduler">Dask Scheduler Address</label>
+            <input type="text" id="scheduler" name="scheduler" placeholder="e.g. tcp://host:8786">
+            <p class="form-text">Connect to an existing Dask scheduler instead of a local one (e.g. on an HPC cluster).
+            <strong>!</strong> When set, "Max Workers" above is ignored - configure worker count on the scheduler/cluster itself.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mb-per-task">Work Budget per Task (MB)</label>
+            <input type="number" id="mb-per-task" name="mb_per_task" min="0" step="any" placeholder="512">
+            <p class="form-text">Controls batch sizes for small files, spatial splitting for large files, and sub-image batching.</p>
+          </div>
+          <div class="form-group">
+            <label for="max-images-per-task">Max Images per Task</label>
+            <input type="number" id="max-images-per-task" name="max_images_per_task" min="1" step="1" placeholder="200">
+            <p class="form-text">Max files per batch task or sub-images per container task.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="rows-per-part">Rows per Part</label>
+            <input type="number" id="rows-per-part" name="rows_per_part" min="1" step="1" placeholder="10000">
+            <p class="form-text">Rows buffered in memory before flushing to a temporary file on disk.</p>
+          </div>
+          <div class="form-group">
+            <label for="parquet-row-group-size">Parquet Row Group Size</label>
+            <input type="number" id="parquet-row-group-size" name="parquet_row_group_size" min="1" step="1" placeholder="2048">
+            <p class="form-text">Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="slice-size">Slice Size</label>
+            <input type="text" id="slice-size" name="slice_size" placeholder="e.g. Z=1, C=2">
+            <p class="form-text">Per-dimension granularity of statistics. Z=1 produces one set of statistics per Z slice;
+            Z=5 groups every 5 slices. By default X and Y are full extent and other dims (Z, T, C, S) step by 1.
+            Use -1 for full extent. Comma-separated DIM=SIZE pairs.</p>
+          </div>
+          <div class="form-group form-group-checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" id="log-file" name="log_file">
+              Write debug log file alongside the output parquet
+            </label>
+            <p class="form-text">INFO and WARNING messages still appear below as usual.</p>
+          </div>
+        </div>
+
+        <h3 class="advanced-subheading">Viewer defaults</h3>
+        <p class="form-text">Pre-set how the report opens in "Open in Viewer" below. These don't affect processing.</p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="view-group-by">Group by column</label>
+            <input type="text" id="view-group-by" name="group_by" placeholder="e.g. path">
+          </div>
+          <div class="form-group">
+            <label for="view-dimensions">Dimensions</label>
+            <input type="text" id="view-dimensions" name="dimensions" placeholder="e.g. z=0, t=0">
+            <p class="form-text">Comma-separated KEY=VALUE pairs to pre-select a slice.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="view-filter-col">Filter column</label>
+            <input type="text" id="view-filter-col" name="filter_col" placeholder="e.g. file_extension">
+          </div>
+          <div class="form-group">
+            <label for="view-filter-op">Filter operation</label>
+            <select id="view-filter-op" name="filter_op">
+              <option value="">(none)</option>
+              <option value="eq">equals</option>
+              <option value="in">in</option>
+              <option value="gt">greater than</option>
+              <option value="ge">greater or equal</option>
+              <option value="lt">less than</option>
+              <option value="le">less or equal</option>
+              <option value="contains">contains</option>
+              <option value="not_contains">does not contain</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="view-filter-value">Filter value</label>
+            <input type="text" id="view-filter-value" name="filter_value" placeholder="e.g. tif,nd2">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="view-widgets-exclude">Hide widgets</label>
+            <input type="text" id="view-widgets-exclude" name="widgets_exclude" placeholder="e.g. histogram, summary">
+            <p class="form-text">Comma-separated widget IDs.</p>
+          </div>
+          <div class="form-group">
+            <label for="view-palette">Color palette</label>
+            <input type="text" id="view-palette" name="palette" placeholder="tab10">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group form-group-checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" id="view-significance" name="is_show_significance">
+              Show statistical significance brackets
+            </label>
+          </div>
+        </div>
+      </details>
+
+      <hr>
+      <button type="submit" id="start-btn" class="btn btn-primary btn-lg btn-block">Start Processing</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Processing Progress</div>
+    <div class="card-body">
+      <div id="progress-status" class="status-text status-muted">Ready to start processing</div>
+      <div id="progress-bar-container" class="progress-bar-container" hidden>
+        <div id="progress-bar" class="progress-bar"></div>
+        <span id="progress-bar-label" class="progress-bar-label"></span>
+      </div>
+      <div id="progress-details" class="progress-details"></div>
+      <div id="error-message"></div>
+      <div id="warnings-display"></div>
+      <div id="action-buttons" class="action-buttons"></div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

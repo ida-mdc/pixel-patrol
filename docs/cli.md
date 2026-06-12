@@ -132,7 +132,7 @@ pixel-patrol build-viewer-html -o gh-pages/
 Opens the web-based processing dashboard for configuring and monitoring processing interactively.
 
 ```bash
-pixel-patrol launch [--port N]
+pixel-patrol launch [--port N] [--no-browser]
 ```
 
 **Options**
@@ -140,3 +140,4 @@ pixel-patrol launch [--port N]
 | Option | Default | Description |
 |---|---|---|
 | `--port N` | 8051 | Port for the dashboard server. |
+| `--no-browser` | off | Do not open the browser automatically. |
