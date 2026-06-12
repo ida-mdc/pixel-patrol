@@ -8,10 +8,15 @@ const QUALITY_METRIC_BASES = new Set([
 
 const COL_BG = ['#ffffff', '#f4f6f9'];
 
+const RAGGED_INFO = 'The dashed line (right-hand axis) shows the **% of images that still have a ' +
+  'slice at this position**, per condition - useful for spotting datasets where images have ' +
+  'different numbers of slices.';
+
 const BASIC_INFO = [
   'Shows how image statistics (e.g., mean, std, min, max) change **across different dimension slices**.',
   '', 'Useful for identifying drift, artifacts, or unexpected variation within (e.g.) T/C/Z/S dimensions.',
   '', 'You can select slices in the dropdowns to filter the tables.',
+  '', RAGGED_INFO,
 ].join('\n');
 
 const QUALITY_INFO = [
@@ -20,6 +25,7 @@ const QUALITY_INFO = [
   '- drift in focus or noise over time (T)',
   '- channel-specific artifacts (C)',
   '- depth-dependent quality changes (Z)',
+  '', RAGGED_INFO,
 ].join('\n');
 
 // X and Y are spatial tile coordinates. When querying non-spatial dims we
@@ -167,17 +173,25 @@ async function renderAcrossDims(container, ctx, filterMetric) {
     return;
   }
 
-  // Group color legend - shared across all plots in this widget
-  if (ctx.groups.length > 1) {
+  // Legend - shared across all plots in this widget: group colors (if any)
+  // plus the meaning of the dashed retention line shown on every plot.
+  {
     const legendDiv = document.createElement('div');
     legendDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:0.85rem;align-items:center';
-    for (const g of ctx.groups) {
-      const color = ctx.color.group(g);
-      const item  = document.createElement('span');
-      item.style.cssText = 'display:flex;align-items:center;gap:5px';
-      item.innerHTML = `<span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${color}"></span>${escapeHtml(String(g))}`;
-      legendDiv.appendChild(item);
+    if (ctx.groups.length > 1) {
+      for (const g of ctx.groups) {
+        const color = ctx.color.group(g);
+        const item  = document.createElement('span');
+        item.style.cssText = 'display:flex;align-items:center;gap:5px';
+        item.innerHTML = `<span style="display:inline-block;width:12px;height:3px;border-radius:2px;background:${color}"></span>${escapeHtml(String(g))}`;
+        legendDiv.appendChild(item);
+      }
     }
+    const dashItem = document.createElement('span');
+    dashItem.style.cssText = 'display:flex;align-items:center;gap:5px;color:#6c757d';
+    dashItem.innerHTML = '<span style="display:inline-block;width:16px;height:0;border-top:1px dashed #6c757d"></span>'
+      + '% of images with this slice (right axis)';
+    legendDiv.appendChild(dashItem);
     container.appendChild(legendDiv);
   }
 
@@ -279,7 +293,7 @@ async function renderAcrossDims(container, ctx, filterMetric) {
 
 function makeAcrossDimsPlugin(id, label, info, filterMetric) {
   return {
-    id, label, info, group: 'Dataset Stats',
+    id, label, info, group: 'Dataset Stats', scope: 'slice',
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
@@ -300,6 +314,7 @@ export default [
 
 function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
   const traces = [];
+  const retentionTraces = [];
   for (const g of ctx.groups) {
     const gRows  = agg.filter(r => String(r.__group__) === g).sort((a, b) => a.x - b.x);
     if (!gRows.length) continue;
@@ -308,18 +323,46 @@ function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
     const yMean  = gRows.map(r => r.y_mean);
     const yStd   = gRows.map(r => r.y_std ?? 0);
     const ns     = gRows.map(r => r.n);
+    const nMax   = Math.max(...ns);
+    const retention = ns.map(n => (n / nMax) * 100);
     const yUpper = yMean.map((m, i) => m + yStd[i]);
     const yLower = yMean.map((m, i) => m - yStd[i]);
     const sizes  = ns.map(n => Math.max(4, Math.min(12, 3 + 3 * Math.log10(Math.max(n, 1)))));
-    const hover  = gRows.map((r, i) => `<b>${g}</b><br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br><b>n=${ns[i]}</b>`);
+    const hover  = gRows.map((r, i) => `<b>${g}</b><br>Slice: ${r.x}<br>Mean: ${yMean[i].toFixed(3)}<br>Std: ${yStd[i].toFixed(3)}<br><b>n=${ns[i]}</b> (${retention[i].toFixed(0)}% of images)`);
     const rgba   = ctx.color.hexToRgba(color, 0.2);
     traces.push(
       { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
       { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
       { type:'scatter', mode:'lines+markers', name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
     );
+    const retentionHover = gRows.map((r, i) =>
+      `<b>${ctx.groupLabel(g)}</b><br>Slice: ${r.x}<br>${ns[i]} of ${nMax} images (${retention[i].toFixed(0)}%)`);
+    retentionTraces.push({ x: xVals, y: retention, color, hover: retentionHover });
   }
+
+  // "% of images" curve - shown on every plot (even when flat at 100%) so its
+  // absence doesn't read as "no data for this slice".
+  for (const rt of retentionTraces) {
+    traces.push({
+      type: 'scatter', mode: 'lines', x: rt.x, y: rt.y, yaxis: 'y2',
+      line: { width: 1, dash: 'dash', shape: 'hv', color: rt.color },
+      opacity: 0.7, showlegend: false,
+      hovertemplate: '%{text}<extra></extra>', text: rt.hover,
+    });
+  }
+
   const allXVals = [...new Set(agg.map(r => r.x))].sort((a, b) => a - b);
   const xaxisOverride = allXVals.length <= 8 ? { tickmode: 'array', tickvals: allXVals } : {};
-  appendPlot(container, traces, { ...STATS_DIMS_LAYOUT, xaxis: { ...STATS_DIMS_LAYOUT.xaxis, ...xaxisOverride }, margin: { l:36, r:8, t:8, b:28 }, height: 140 });
+  const layout = {
+    ...STATS_DIMS_LAYOUT,
+    xaxis: { ...STATS_DIMS_LAYOUT.xaxis, ...xaxisOverride },
+    margin: { l: 36, r: 34, t: 8, b: 28 },
+    height: 140,
+    // Range extends a bit past 100 so a flat 100% line doesn't sit flush on the plot border.
+    yaxis2: {
+      overlaying: 'y', side: 'right', range: [0, 105], ticksuffix: '%',
+      showgrid: false, zeroline: false, showline: false, tickfont: { size: 9 },
+    },
+  };
+  appendPlot(container, traces, layout);
 }

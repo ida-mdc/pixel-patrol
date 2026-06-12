@@ -16,6 +16,7 @@ const DISPLAY_DENORM = 'denormalized';
 export default {
   id: 'mosaic',
   group: 'Visualization',
+  scope: 'image',
   label: 'Image Mosaic',
   info: [
     'Displays an **image mosaic**, one thumbnail per file.',

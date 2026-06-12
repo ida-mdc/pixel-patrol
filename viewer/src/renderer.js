@@ -1,13 +1,14 @@
-import { buildColorMap, groupColor as _groupColor, hexToRgba } from './colors.js';
+import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
-import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, prependWarning, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, niceName, escapeHtml, bargap, createFlexGrid, appendGroupLegend, prependWarning, dataAvailabilityWarning, groupingLabel, legendWithGrouping, LEGEND, LAYOUT } from './plot-utils.js';
 import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
+import { scopeBadgeHtml } from './scopes.js';
 
 /**
  * Build a plugin context object.
@@ -33,6 +34,11 @@ import { buildGroupLabels } from './group-labels.js';
  * @property {(g: string) => string} groupLabel  convenience wrapper:
  *   returns ctx.groupLabels[g] ?? String(g). Falls back to the raw value
  *   if no mapping exists (e.g. for groups discovered after ctx was built).
+ * @property {(palette: string, n: number) => string[]} color.getColors
+ *   returns n colors from the named palette - use for ad-hoc groupings
+ *   (e.g. a column other than the active group-by) not covered by colorMap.
+ * @property {() => string[]} color.getPaletteNames  lists the available
+ *   palette names accepted by color.getColors.
  */
 function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows) {
   const legend = legendWithGrouping(LEGEND, state, '');
@@ -91,8 +97,10 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
 
     /** Color helpers pre-bound to the current colorMap. */
     color: {
-      group:    (g) => _groupColor(colorMap, g),
+      group:         (g) => _groupColor(colorMap, g),
       hexToRgba,
+      getColors,
+      getPaletteNames,
     },
 
     /** Plotly plot helpers (mirror of plot-utils.js). */
@@ -104,6 +112,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       bargap,
       flexGrid:    createFlexGrid,
       prependWarning,
+      dataAvailabilityWarning,
       renderDomGroupLegend: (container, opts = {}) => appendGroupLegend(
         container,
         opts.groups ?? groups,
@@ -215,7 +224,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     container.appendChild(title);
 
     for (const plugin of grouped.get(groupName)) {
-      const card = createCard(plugin.label, plugin.info);
+      const card = createCard(plugin.label, plugin.info, plugin.scope);
       container.appendChild(card);
       const body = card.querySelector('.widget-card-body');
 
@@ -231,7 +240,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   }
 }
 
-function createCard(label, info) {
+function createCard(label, info, scope) {
   const div = document.createElement('div');
   div.className = 'widget-card';
 
@@ -242,6 +251,9 @@ function createCard(label, info) {
   title.className = 'widget-card-title';
   title.textContent = label;
   header.appendChild(title);
+
+  const badge = scopeBadgeHtml(scope);
+  if (badge) header.insertAdjacentHTML('beforeend', badge);
 
   if (info) {
     const panel = document.createElement('div');
