@@ -88,16 +88,12 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>Your first sanity check: how many files are in each group, their total size on disk, and which file formats are present.</p>
+<p>Your first sanity check: KPI tiles for the whole dataset (files, images, total size, file extensions), plus - when grouped - a per-group breakdown table of file count and size.</p>
 
-<div class="wc-shots two-col">
+<div class="wc-shots">
   <div class="wc-shot">
-    <img src="../../assets/screenshots/summ1.png" alt="File Count per Group">
-    <figcaption>File count per group - balanced at 10 each.</figcaption>
-  </div>
-  <div class="wc-shot">
-    <img src="../../assets/screenshots/sum2.png" alt="Total Size per Group">
-    <figcaption>Total size per group - <code>condition3_comp</code> is 10× smaller. Already suspicious before looking at a single pixel.</figcaption>
+    <img src="../../assets/screenshots/summary.png" alt="File Data Summary">
+    <figcaption>KPI tiles for the dataset, plus a per-group table - all four groups have the same file count, but <code>condition3_comp</code> is 10× smaller on disk. Already suspicious before looking at a single pixel.</figcaption>
   </div>
 </div>
 
@@ -293,7 +289,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>Violin + box plots for four per-image statistics: <code>mean_intensity</code>, <code>std_intensity</code>, <code>min_intensity</code>, <code>max_intensity</code>. Each dot is one image; each violin is one group.</p>
+<p>Violin + box plots for four per-image statistics: <code>mean_intensity</code>, <code>std_intensity</code>, <code>min_intensity</code>, <code>max_intensity</code>. Each dot is one image; each violin is one group. Use the <strong>Slice by</strong> toggles above the plots to switch to one point per (image × dimension slice) instead.</p>
 
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
@@ -538,7 +534,7 @@ NaN pixels are excluded from all calculations.
 <li><strong>Two categoricals</strong> → count heatmap</li>
 </ul>
 
-<p><strong>Color by</strong> defaults to the app-wide group column, but you can color/split by any other column instead - or, for scatter plots, by a numeric column on a continuous colormap. Click <strong>＋ Add plot</strong> for as many independent plots as you need.</p>
+<p><strong>Color by</strong> defaults to the app-wide group column, but you can color/split by any other column instead - or, for scatter plots, by a numeric column on a continuous colormap. Each plot has its own <strong>Slice by</strong> toggles and a per-image / per-slice badge, just like Pixel Value Statistics. Click <strong>＋ Add plot</strong> for as many independent plots as you need.</p>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use this for anything not covered by the built-in widgets - e.g. plotting a loader-specific metadata column against a quality metric, or checking whether two metrics correlate.</div></div>

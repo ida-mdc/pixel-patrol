@@ -69,7 +69,7 @@ The report shows the project name and description at the top (if provided when p
 
 | ID | Widget | Description |
 |---|---|---|
-| `summary` | File Data Summary | Per-group summary of file count, total size, and file types present. Quick overview of dataset composition. |
+| `summary` | File Data Summary | Dataset-wide KPIs (file/image counts, total size, file extensions, common base path) plus a per-group breakdown table when grouped. Quick overview of dataset composition. |
 | `image-table` | Image Table | Sortable, searchable table of full-image statistics - one row per image file, no per-slice or per-channel rows. |
 | `file-stats` | File Statistics | File count and total size by extension, file size distribution, and modification timeline. Properties with no variance across files are shown as a summary table instead of a chart. |
 | `sunburst` | File Structure Sunburst | Interactive sunburst chart of the file and folder hierarchy, sized by file count or total file size. Click to zoom in; click the center to zoom out. |
@@ -77,11 +77,11 @@ The report shows the project name and description at the top (if provided when p
 | `dim-size` | Dimension Size Distribution | Distributions of image dimension sizes (X, Y, Z, T, C, ...) across the dataset. X/Y scatter plot plus per-dimension strip plots. Useful for spotting size mismatches between groups. |
 | `histogram` | Pixel Value Histograms | Mean pixel intensity histogram per group, computed per image and normalised to sum to 1. Supports fixed 0-255 bins or native pixel range. Reveals bit-depth issues, clipping, or exposure differences. |
 | `mosaic` | Image Mosaic | Thumbnail grid, one image per file. Sortable by any metric (e.g. `mean_intensity`, `laplacian_variance`) to surface visual outliers. Border colors indicate group membership. |
-| `violin-basic` | Pixel Value Statistics | Violin and box plots comparing per-image pixel statistics (`mean_intensity`, `std_intensity`, `min_intensity`, `max_intensity`) across groups. Each point is one image. |
-| `violin-quality` | Image Quality Metrics | Violin and box plots comparing image quality metrics across groups. Requires `pixel-patrol-image`. Metrics: **Michelson contrast** (global contrast ratio; higher = greater dynamic range), **MSCN variance** (Mean Subtracted Contrast Normalized variance; sensitive to noise and blur), **Texture heterogeneity** (coefficient of variation of local standard deviations; captures spatial non-uniformity of texture), **Laplacian variance** (variance of discrete Laplacian; higher = sharper image; scale-dependent), **Blocking index** (strength of blocky compression artifacts), **Ringing index** (edge oscillation artifacts from compression). |
+| `violin-basic` | Pixel Value Statistics | Violin and box plots comparing pixel statistics (`mean_intensity`, `std_intensity`, `min_intensity`, `max_intensity`) across groups. By default each point is one image; use the **Slice by** toggles to switch to one point per (image × dimension slice) instead. Plots over 5,000 points show a SQL-aggregate box summary instead of a full violin. |
+| `violin-quality` | Image Quality Metrics | Violin and box plots comparing image quality metrics across groups. Requires `pixel-patrol-image`. Supports the same **Slice by** toggles and box-summary fallback as Pixel Value Statistics. Metrics: **Michelson contrast** (global contrast ratio; higher = greater dynamic range), **MSCN variance** (Mean Subtracted Contrast Normalized variance; sensitive to noise and blur), **Texture heterogeneity** (coefficient of variation of local standard deviations; captures spatial non-uniformity of texture), **Laplacian variance** (variance of discrete Laplacian; higher = sharper image; scale-dependent), **Blocking index** (strength of blocky compression artifacts), **Ringing index** (edge oscillation artifacts from compression). |
 | `stats-across-dims-basic` | Basic Statistics Across Dimensions | How pixel statistics (mean, std, min, max) change across Z, T, C, or S slices. Useful for detecting drift or unexpected variation within a dimension. A dashed line shows the percentage of images that still have a slice at each position, for spotting datasets where images don't all have the same number of slices. |
 | `stats-across-dims-quality` | Quality Metrics Across Dimensions | How image quality metrics change across dimension slices. Useful for detecting focus drift over time (T), channel-specific artifacts (C), or depth-dependent quality changes (Z). Requires `pixel-patrol-image`. A dashed line shows the percentage of images that still have a slice at each position, for spotting datasets where images don't all have the same number of slices. |
-| `custom-plot` | Custom Plot | Build your own scatter, violin, bar, count, or heatmap plot from any columns in the report, with grouping, coloring, and palette controls. Add multiple plots, and export any of them as a standalone viewer plugin file. |
+| `custom-plot` | Custom Plot | Build your own scatter, violin, bar, count, or heatmap plot from any columns in the report, with grouping, coloring, and palette controls. Each plot has its own **Slice by** toggles and per-image/per-slice badge. Add multiple plots, and export any of them as a standalone viewer plugin file. |
 
 ---
 
@@ -89,9 +89,11 @@ The report shows the project name and description at the top (if provided when p
 
 Each widget card shows a small badge indicating what one datapoint in that widget represents:
 
-- 📄 **per file** - each datapoint is a file (e.g. File Data Summary, File Structure Sunburst).
+- 📄 **per file** - each datapoint is a file (e.g. File Structure Sunburst).
 - 🖼️ **per image** - each datapoint is an image. A file containing multiple images (a stack or container) contributes one datapoint per image (e.g. Image Table, Image Mosaic, Pixel Value Statistics).
 - 🧩 **per slice** - each datapoint is a slice within an image, such as a channel, Z-plane, or timepoint (e.g. Statistics Across Dimensions).
+
+Pixel Value Statistics, Image Quality Metrics, and Custom Plot can switch between **per image** and **per slice** via their **Slice by** toggles - their badge updates accordingly. File Data Summary spans multiple resolutions (files, images, slices) and shows no badge.
 
 This helps you reason about what's actually being aggregated or plotted, especially for multi-dimensional or multi-image files.
 
