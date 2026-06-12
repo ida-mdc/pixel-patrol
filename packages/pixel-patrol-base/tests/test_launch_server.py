@@ -426,7 +426,7 @@ def test_update_endpoint_runs_uv_upgrade(server, monkeypatch, tmp_path):
         data = json.loads(resp.read())
 
     assert data == {"status": "ok"}
-    assert captured["cmd"][0] == "/fake/uv"
+    assert captured["cmd"][0] == str(Path("/fake/uv"))
     assert "--upgrade" in captured["cmd"]
     assert "pixel-patrol" in captured["cmd"]
     assert "pixel-patrol-demo" in captured["cmd"]
