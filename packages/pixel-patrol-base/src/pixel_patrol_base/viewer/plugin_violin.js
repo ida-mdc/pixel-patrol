@@ -219,7 +219,11 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
         title: { text: title },
         yaxis: { title: label },
         xaxis: { title: ctx.plot.groupingLabel ? ctx.plot.groupingLabel('') : '', type: 'category' },
-        violinmode: groups.length > 1 ? 'group' : undefined,
+        // Each trace owns its own x category (one group per category), so leave
+        // violinmode at the default 'overlay'. 'group' would reserve an empty
+        // sub-slot per trace in every category and push the violins off-centre
+        // (see violinBeginnerPlot for the same reasoning with boxmode).
+        violinmode: 'overlay',
         showlegend: false,
       }, `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`);
 
