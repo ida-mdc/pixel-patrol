@@ -1,10 +1,17 @@
 """Tests for _rollup: aggregation, obs_level assignment, active dim detection, power-set grouping."""
 from __future__ import annotations
 
+import logging
+
+import numpy as np
 import pytest
 
-from pixel_patrol_base.core.processing import MemoryChunkResult, _rollup
+from pixel_patrol_base.core.processing import MemoryChunkResult, _process_memory_chunk, _rollup
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.record import record_from
 from _processing_mocks import MockLeafProcessor, MockMemoryProcessor
+
+_PROC_LOGGER = "pixel_patrol_base.core.processing"
 
 
 def _result(file_index=0, child_id=None, chunk_rows=None, leaf_rows=None):
@@ -391,3 +398,33 @@ def test_size_fields_correct_per_obs_level():
         assert row["Z_size"] == 1       # one slice
         assert row["Y_size"] == 1024    # full extent (both Y halves aggregated)
         assert row["X_size"] == 2048
+
+
+# ── all-dims-block-size-1 guard ───────────────────────────────────────────────
+
+def _chunk_record(shape, dim_order):
+    arr = np.zeros(shape, dtype=np.uint8)
+    return record_from(arr, {"dim_order": dim_order}, kind="intensity")
+
+
+def test_guard_skips_when_loader_omits_spatial_dims(caplog):
+    record = _chunk_record((5, 10), "AB")
+    with caplog.at_level(logging.ERROR, logger=_PROC_LOGGER):
+        result = _process_memory_chunk(record, 0, None, [], ProcessingConfig(), "/f.tif", {})
+    assert result.leaf_rows == [] and result.chunk_rows == {}
+    assert any("loader" in m for m in caplog.messages)
+
+
+def test_guard_skips_when_user_sets_all_dims_to_1(caplog):
+    record = _chunk_record((3, 5, 5), "CYX")
+    config = ProcessingConfig(slice_size={"C": 1, "Y": 1, "X": 1})
+    with caplog.at_level(logging.ERROR, logger=_PROC_LOGGER):
+        result = _process_memory_chunk(record, 0, None, [], config, "/f.tif", {})
+    assert result.leaf_rows == [] and result.chunk_rows == {}
+    assert any("slice_size" in m for m in caplog.messages)
+
+
+def test_guard_does_not_fire_for_normal_spatial_image():
+    record = _chunk_record((3, 5, 5), "CYX")
+    result = _process_memory_chunk(record, 0, None, [], ProcessingConfig(), "/f.tif", {})
+    assert result is not None
