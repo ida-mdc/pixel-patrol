@@ -500,6 +500,27 @@ def _process_memory_chunk(
     dim_order  = mem_record.dim_order
     mem_origin = tuple(mem_record.meta.get(f"dim_{d.lower()}", 0) for d in dim_order)
 
+    # Guard: skip if all dims resolve to leaf block size 1.
+    _user_spec  = config.slice_size or {}
+    _leaf_block = _resolve_leaf_block_shape(dim_order, config.slice_size)
+    if dim_order and all(v == 1 for v in _leaf_block.values()):
+        if all(d in _user_spec for d in dim_order):
+            logger.error(
+                "worker: skipping '%s' — slice_size is set to 1 for all dims (dim_order=%r). "
+                "At least one spatial dim (e.g. X, Y) must have a larger block size or be unpinned.",
+                file_path, dim_order,
+            )
+        else:
+            logger.error(
+                "worker: skipping '%s' — all dims resolve to leaf block size 1 (dim_order=%r). "
+                "The loader likely did not include spatial dims (e.g. X, Y) in dim_order.",
+                file_path, dim_order,
+            )
+        return MemoryChunkResult(
+            file_index=file_index, child_id=child_id,
+            chunk_rows={}, leaf_rows=[], image_meta=image_meta,
+        )
+
     # MEMORY pass
     chunk_rows: Dict[str, dict] = {}
     timing: Dict[str, float] = {}
