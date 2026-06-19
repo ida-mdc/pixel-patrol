@@ -19,6 +19,8 @@ also be used.
 from __future__ import annotations
 
 import json
+import re
+import secrets
 import socket
 import threading
 import warnings
@@ -28,6 +30,44 @@ from pathlib import Path
 from typing import Callable, Optional
 import importlib.resources
 from urllib.parse import urlencode
+
+# ---------------------------------------------------------------------------
+# Content Security Policy
+# ---------------------------------------------------------------------------
+
+# Strict script-src (no 'unsafe-inline'): injected markup can't execute, so a
+# missed XSS sink can't run JS and remote code can't be import()ed. A per-document
+# nonce authorises the few inline bootstrap/feedback scripts. The rest reflects
+# what the viewer genuinely needs: 'wasm-unsafe-eval' + blob: workers for DuckDB
+# WASM, jsdelivr for Bootstrap CSS/icons, connect-src https: for remote ?data=
+# parquet, and formspree as the feedback-form target.
+_CSP_DIRECTIVES = (
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval' 'nonce-{nonce}'",
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data: https://cdn.jsdelivr.net",
+    "connect-src 'self' https: data: blob:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self' https://formspree.io",
+)
+
+
+def new_csp_nonce() -> str:
+    """A fresh nonce for one viewer document."""
+    return secrets.token_urlsafe(16)
+
+
+def viewer_csp(nonce: str) -> str:
+    """The viewer's Content-Security-Policy string for the given document nonce."""
+    return "; ".join(directive.format(nonce=nonce) for directive in _CSP_DIRECTIVES)
+
+
+def add_csp_nonce(html: str, nonce: str) -> str:
+    """Stamp the nonce on every <script> so the strict CSP allows the inline ones."""
+    return re.sub(r"<script(?![^>]*\bnonce=)", f'<script nonce="{nonce}"', html)
 
 # ---------------------------------------------------------------------------
 # Installed extension discovery
@@ -334,12 +374,16 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         content_type = _mime(file_path.suffix)
         data         = file_path.read_bytes()
 
+        nonce = None
         if file_path.name == "index.html":
-            data = self._inject_server_config(data)
+            nonce = new_csp_nonce()
+            data = self._inject_server_config(data, nonce)
             content_type = "text/html; charset=utf-8"
 
         self.send_response(200)
         self._common_headers(content_type, len(data))
+        if nonce is not None:
+            self.send_header("Content-Security-Policy", viewer_csp(nonce))
         self.end_headers()
         self.wfile.write(data)
 
@@ -348,10 +392,13 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         file_path = self.dist_dir / rel
         if not file_path.is_file():
             file_path = self.dist_dir / "index.html"
-        size = len(self._inject_server_config(file_path.read_bytes())) \
-               if file_path.name == "index.html" else file_path.stat().st_size
+        nonce = new_csp_nonce() if file_path.name == "index.html" else None
+        size  = len(self._inject_server_config(file_path.read_bytes(), nonce)) \
+                if nonce is not None else file_path.stat().st_size
         self.send_response(200)
         self._common_headers(_mime(file_path.suffix), size)
+        if nonce is not None:
+            self.send_header("Content-Security-Policy", viewer_csp(nonce))
         self.end_headers()
 
     def _serve_extension_file(self, url_path: str) -> None:
@@ -390,10 +437,10 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _inject_server_config(self, html: bytes) -> bytes:
-        """Inject window.__PP_* config variables before </head>."""
+    def _inject_server_config(self, html: bytes, nonce: str) -> bytes:
+        """Inject window.__PP_* config before </head> and stamp the CSP nonce."""
         extension_urls = [f"/extension/{i}/extension.json" for i in range(len(self.extension_dirs))]
-        script = (
+        config = (
             "<script>\n"
             "window.__PP_SERVER = true;\n"
             f"window.__PP_FILENAME = {json.dumps(self.parquet_path.name)};\n"
@@ -401,8 +448,9 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             f"window.__PP_DESCRIPTION = {json.dumps(self.description)};\n"
             f"window.__PP_EXTENSION_URLS = {json.dumps(extension_urls)};\n"
             "</script>\n"
-        ).encode()
-        return html.replace(b"</head>", script + b"</head>", 1)
+        )
+        text = html.decode("utf-8").replace("</head>", config + "</head>", 1)
+        return add_csp_nonce(text, nonce).encode("utf-8")
 
     # ------------------------------------------------------------------
     # Shared helpers

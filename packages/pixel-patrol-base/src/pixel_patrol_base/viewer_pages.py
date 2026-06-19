@@ -7,7 +7,13 @@ import re
 import shutil
 from pathlib import Path
 
-from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist
+from pixel_patrol_base.viewer_server import (
+    _discover_installed_extensions,
+    add_csp_nonce,
+    find_viewer_dist,
+    new_csp_nonce,
+    viewer_csp,
+)
 
 
 def _safe_name(name: str) -> str:
@@ -193,9 +199,25 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     html = viewer_index.read_text(encoding="utf-8")
     homepage_script = "<script>\nwindow.__PP_HOMEPAGE = '../';\n</script>\n"
     html = html.replace("</head>", homepage_script + "</head>", 1)
+    html = _apply_viewer_csp(html)
     viewer_index.write_text(html, encoding="utf-8")
 
     return out_dir
+
+
+def _apply_viewer_csp(html: str) -> str:
+    """Ship the viewer CSP as a <meta> tag, authorising inline scripts via one nonce.
+
+    Static hosts can't set response headers, so the policy travels in <head>. The
+    meta form ignores frame-ancestors/report-uri, but script-src - the part that
+    blocks remote and injected code - is enforced.
+    """
+    nonce = new_csp_nonce()
+    meta  = f'<meta http-equiv="Content-Security-Policy" content="{viewer_csp(nonce)}">\n'
+    html  = add_csp_nonce(html, nonce)
+    if "</head>" in html:
+        return html.replace("</head>", meta + "</head>", 1)
+    return meta + html
 
 
 def build_single_file_viewer_html(output_html: str | Path) -> Path:
