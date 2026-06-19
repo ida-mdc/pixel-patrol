@@ -1,0 +1,49 @@
+name: JS Tests
+
+# Vitest unit tests for the repo's JavaScript, all run from the viewer (the only
+# JS toolchain): the viewer's own helpers (schema, SQL, plotting, URL params,
+# group labels) plus the built-in viewer widgets. Widgets ship inside Python
+# packages; their tests live beside the widget source under packages/*/tests/
+# viewer/ and are discovered via the wildcard include globs in
+# viewer/vite.config.js (no per-package wiring here).
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'viewer/**'
+      - 'packages/*/tests/viewer/**'
+      - 'packages/*/src/*/viewer/**'
+      - '.github/workflows/viewer-tests.yml'
+  pull_request:
+    branches:
+      - '**'
+    paths:
+      - 'viewer/**'
+      - 'packages/*/tests/viewer/**'
+      - 'packages/*/src/*/viewer/**'
+      - '.github/workflows/viewer-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  vitest:
+    name: Run vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: viewer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run vitest
+        run: npm test
