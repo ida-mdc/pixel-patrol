@@ -33,7 +33,6 @@ let renderQueue = Promise.resolve();
  * is already in the registry when afterLoad() runs.
  */
 async function loadExternalPlugins() {
-  const params = new URLSearchParams(window.location.search);
   let bundledExtUrls = [];
   try {
     const res = await fetch('./pp_extension_urls.json', { cache: 'no-store' });
@@ -45,11 +44,11 @@ async function loadExternalPlugins() {
     // Optional for older deployments that do not ship this file.
   }
 
-  // ?extension=<url> or window.__PP_EXTENSION_URLS (injected by local server)
-  // Manifest format: { "plugins": ["./a.js", "./b.js"] }
-  // Relative URLs are resolved against the manifest's own URL.
+  // Trusted sources only: same-origin pp_extension_urls.json + server-injected
+  // window.__PP_EXTENSION_URLS. No URL param. Manifest: { "plugins": [...] },
+  // relative URLs resolved against the manifest URL.
   const pageExtUrls   = Array.isArray(window.__PP_EXTENSION_URLS) ? window.__PP_EXTENSION_URLS : [];
-  const extensionUrls = [...bundledExtUrls, ...pageExtUrls, ...params.getAll('extension').filter(Boolean)];
+  const extensionUrls = [...bundledExtUrls, ...pageExtUrls];
   const manifests = (
     await Promise.all(extensionUrls.map(async extUrl => {
       try {

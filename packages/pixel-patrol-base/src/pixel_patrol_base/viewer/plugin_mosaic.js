@@ -51,7 +51,7 @@ export default {
       </select>
       <label for="${SORT_COL_ID}" style="white-space:nowrap;font-weight:500;font-size:14px">Sort mosaic by:</label>
       <select id="${SORT_COL_ID}" class="form-select form-select-sm" style="max-width:260px">
-        ${sortableMetrics.map(c => `<option value="${c}"${c === defaultSort ? ' selected' : ''}>${c}</option>`).join('')}
+        ${sortableMetrics.map(c => `<option value="${ctx.plot.escapeHtml(c)}"${c === defaultSort ? ' selected' : ''}>${ctx.plot.escapeHtml(c)}</option>`).join('')}
       </select>
       <select id="${SORT_DIR_ID}" class="form-select form-select-sm" style="max-width:160px">
         <option value="asc">Ascending</option>

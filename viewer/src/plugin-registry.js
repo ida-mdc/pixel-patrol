@@ -2,9 +2,10 @@
  * Runtime plugin registry.
  *
  * Built-in plugins are bundled at build time. External plugins are loaded via
- * an extension manifest - a JSON file listing the plugin JS URLs:
+ * an extension manifest - a JSON file listing the plugin JS URLs. Manifest URLs
+ * come only from trusted sources:
  *
- *   Remote:  ?extension=https://example.com/my-extension/extension.json
+ *   Bundled: ./pp_extension_urls.json  (same-origin, shipped with the build)
  *   Local:   window.__PP_EXTENSION_URLS = ['/extension/extension.json']
  *            (injected automatically when serve_viewer(extension=...) is used)
  *

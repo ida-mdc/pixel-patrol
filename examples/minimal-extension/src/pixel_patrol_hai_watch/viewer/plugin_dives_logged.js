@@ -8,11 +8,8 @@
  * would surface OME-XML/EXIF acquisition info; "site" is the
  * `imported_path_short` grouping every Pixel Patrol report already carries.
  *
- * Load via the extension manifest (recommended):
- *   ?extension=https://your-host/extension.json
- *
- * Or standalone:
- *   ?plugin=https://your-host/plugin_dives_logged.js
+ * Loaded via the extension manifest: injected by serve_viewer(extension=...)
+ * locally, or bundled into a hosted build (pp_extension_urls.json).
  */
 
 const DEPTH_ORDER = ['sunlit', 'twilight', 'midnight', 'abyss'];

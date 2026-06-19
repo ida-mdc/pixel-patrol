@@ -8,11 +8,8 @@
  * box/violin) because each category only holds a handful of points - exactly
  * the kind of small sample where distributional summaries would mislead.
  *
- * Load via the extension manifest (recommended):
- *   ?extension=https://your-host/extension.json
- *
- * Or standalone:
- *   ?plugin=https://your-host/plugin_glow_by_depth.js
+ * Loaded via the extension manifest: injected by serve_viewer(extension=...)
+ * locally, or bundled into a hosted build (pp_extension_urls.json).
  */
 
 const DEPTH_ORDER = ['sunlit', 'twilight', 'midnight', 'abyss'];

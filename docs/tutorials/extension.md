@@ -408,7 +408,7 @@ uv run python create_and_show_report.py
   </div>
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">🌐 GitHub Pages</div>
-    <div style="font-size:0.85rem;line-height:1.6">No Python required on the recipient's side. A bundled GitHub Actions workflow deploys the <code>viewer/</code> folder; the manifest then lives at a public URL you can pass straight to the hosted viewer:<br><code>?extension=https://&lt;org&gt;.github.io/&lt;repo&gt;/extension.json</code> (repeat <code>&amp;extension=</code> to chain several).</div>
+    <div style="font-size:0.85rem;line-height:1.6">No Python required on the recipient's side. A bundled GitHub Actions workflow deploys the <code>viewer/</code> folder and <strong>bundles your extension into it</strong> (same-origin, listed in <code>pp_extension_urls.json</code>), so the hosted viewer loads it automatically - just share the page URL.</div>
   </div>
 </div>
 

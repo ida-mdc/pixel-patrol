@@ -83,7 +83,7 @@ export default {
   
       if (varying.length) {
         const parts = varying.map(({ col, cats }) =>
-          `<code>${col}</code> (${cats.map(c => `<code>${escapeHtml(c)}</code>`).join(', ')})`);
+          `<code>${escapeHtml(col)}</code> (${cats.map(c => `<code>${escapeHtml(c)}</code>`).join(', ')})`);
         const list  = parts.length === 1
           ? parts[0]
           : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];

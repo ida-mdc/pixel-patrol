@@ -28,7 +28,7 @@ export default {
 
       if (numFiles === 1) {
         const pathRow = (await ctx.queryRows(`SELECT "path"::VARCHAR AS p FROM pp_data ${pathWhere} LIMIT 1`))[0];
-        container.innerHTML = `<div class="p-2 text-break"><strong>File:</strong> ${pathRow?.p ?? ''}</div>`;
+        container.innerHTML = `<div class="p-2 text-break"><strong>File:</strong> ${ctx.plot.escapeHtml(pathRow?.p ?? '')}</div>`;
         return;
       }
 

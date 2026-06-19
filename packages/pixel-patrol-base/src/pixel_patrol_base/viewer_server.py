@@ -466,8 +466,8 @@ def serve_viewer(
         Path to a local directory containing ``extension.json`` and plugin JS
         files.  Added on top of any extensions auto-discovered from installed
         packages (``pixel_patrol.viewer_extensions`` entry-point group).
-        Mirrors the ``?extension=<url>`` URL parameter used when the viewer is
-        hosted remotely.
+        Injected via ``window.__PP_EXTENSION_URLS``; not loaded from a URL
+        query parameter.
     group_col, filter_by, dimensions, widgets_excluded, is_show_significance, palette:
         Initial viewer state, encoded into the viewer URL as query parameters.
     ready_callback:

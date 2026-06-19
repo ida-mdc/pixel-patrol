@@ -49,12 +49,11 @@ Starts a local HTTP server and opens the viewer. SQL runs server-side via native
 | Parameter | Description |
 |---|---|
 | `?data=<url>` | Load a remote parquet file on startup |
-| `?extension=<url>` | Load an extension manifest (repeatable) |
 
 Example:
 
 ```
-https://ida-mdc.github.io/pixel-patrol/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
+https://ida-mdc.github.io/pixel-patrol/?data=https://example.com/data.parquet
 ```
 
 ---
@@ -76,14 +75,6 @@ Relative paths in `plugins` are resolved against the manifest URL, so the JS fil
 
 ### Loading an extension
 
-**Remotely** - pass the manifest URL as a query parameter:
-
-```
-?extension=https://your-host/my-extension/extension.json
-```
-
-Multiple extensions can be chained: `&extension=url1&extension=url2`
-
 **Locally** - pass the extension directory to `serve_viewer`:
 
 ```python
@@ -92,6 +83,11 @@ serve_viewer('data.parquet', extension='path/to/my-extension/')
 ```
 
 The server serves the directory at `/extension/` and injects the manifest URL automatically.
+
+**Hosted (e.g. GitHub Pages)** - the deploy step bundles every installed extension
+into the viewer build (same-origin `./extensions/...`) and lists them in
+`pp_extension_urls.json`, which the viewer loads automatically. No query parameter
+and no separate hosting required.
 
 ### Writing a plugin
 
