@@ -271,6 +271,7 @@ function applySnapshotBundle(bundle) {
   state.dimensions       = {};
   state.showSignificance = !!rs.showSignificance;
   state.hiddenWidgets    = new Set(Array.isArray(rs.hiddenWidgets) ? rs.hiddenWidgets : []);
+  state.openedWidgets    = new Set(Array.isArray(rs.openedWidgets) ? rs.openedWidgets : []);
   state.sidebarLocked    = true;
 }
 
@@ -281,6 +282,7 @@ function afterLoad(options = {}) {
   state.dimensions      = {};
   state.groupCol        = schema.defaultGroupCol ?? null;
   state.hiddenWidgets   = new Set();
+  state.openedWidgets   = new Set();
   state.sidebarLocked   = false;
   state.filter          = { col: '', op: '', val: '' };
 
@@ -300,7 +302,9 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
+  if ('condensedMode' in urlParams)     state.condensedMode     = urlParams.condensedMode;
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
+  if (urlParams.openedWidgets)    state.openedWidgets    = urlParams.openedWidgets;
 
   // 3. Init controls (syncs DOM from state).
   initControls(schema, totalRows, registry.plugins, handleExport,
@@ -548,25 +552,50 @@ function showFatalError(message, err, hint = null) {
   ws.appendChild(banner);
 }
 
-// ── Sidebar toggle (mobile) ───────────────────────────────────────────────────
+// ── Sidebar toggle (mobile slide-in + desktop hide) ──────────────────────────
 
 (function initSidebarToggle() {
   const toggle   = document.getElementById('sidebar-toggle');
   const sidebar  = document.getElementById('sidebar');
   const backdrop = document.getElementById(ID_SIDEBAR_BACKDROP);
 
-  function setSidebarOpen(open) {
-    sidebar.classList.toggle('sidebar-open', open);
-    backdrop.classList.toggle('sidebar-open', open);
+  const isMobile = () => window.matchMedia('(max-width: 967px)').matches;
+
+  // The sidebar's default visibility differs by mode: shown on desktop (a
+  // floating panel), hidden on mobile (a slide-in drawer). `open` tracks the
+  // single source of truth; `apply` maps it to the right class for the mode.
+  let open      = !isMobile();
+  let wasMobile = isMobile();
+
+  function apply() {
+    if (isMobile()) {
+      // Mobile: slide-in drawer with a dimming backdrop.
+      sidebar.classList.remove('sidebar-hidden');
+      sidebar.classList.toggle('sidebar-open', open);
+      backdrop.classList.toggle('sidebar-open', open);
+    } else {
+      // Desktop: floating panel, collapsed out of the way when hidden.
+      sidebar.classList.remove('sidebar-open');
+      backdrop.classList.remove('sidebar-open');
+      sidebar.classList.toggle('sidebar-hidden', !open);
+    }
   }
 
-  toggle?.addEventListener('click',   () => setSidebarOpen(!sidebar.classList.contains('sidebar-open')));
-  backdrop?.addEventListener('click', () => setSidebarOpen(false));
+  toggle?.addEventListener('click',   () => { open = !open; apply(); });
+  backdrop?.addEventListener('click', () => { open = false; apply(); });
+
+  // Crossing the breakpoint resets to that mode's default (desktop open, mobile closed).
+  window.addEventListener('resize', () => {
+    const mobile = isMobile();
+    if (mobile !== wasMobile) { wasMobile = mobile; open = !mobile; apply(); }
+  });
 
   // Close sidebar when a filter/apply button is tapped on mobile.
   document.getElementById('apply-btn')?.addEventListener('click', () => {
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    if (isMobile()) { open = false; apply(); }
   });
+
+  apply();
 })();
 
 // ── Go ─────────────────────────────────────────────────────────────────────────

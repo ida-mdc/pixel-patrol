@@ -19,6 +19,16 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
  * @param {Function} [opts.onExportBakedHtml] - baked static HTML snapshot
  */
 export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
+  // ── Condensed mode ────────────────────────────────────────────────────
+  const condensedCb = el('condensed-mode-cb');
+  if (condensedCb) {
+    condensedCb.checked = state.condensedMode;
+    condensedCb.onchange = () => {
+      state.condensedMode = condensedCb.checked;
+      emit('render');
+    };
+  }
+
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -51,9 +61,10 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
   const sigCb = el('show-significance-cb');
   if (sigCb) sigCb.checked = state.showSignificance;
 
-  // ── Widget toggles (collapsed by default; Apply required to take effect) ─
+  // ── Widget toggles (live inside the collapsible Appearance section; Apply
+  //    required to take effect) ─
   buildWidgetToggles(plugins, schema);
-  initWidgetCollapseToggle();
+  initCollapseToggle('appearance-section-header', 'appearance-section');
 
   // ── Apply button ──────────────────────────────────────────────────────
   el('apply-btn').onclick = () => {
@@ -75,6 +86,7 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('filter-op').value     = '';
     el('filter-value').value  = '';
     if (sigCb) sigCb.checked  = false;
+    if (condensedCb) condensedCb.checked = true;
     resetDimensions(schema.dimensionInfo);
     resetState(schema.defaultGroupCol);
     // Sync DOM after reset
@@ -83,8 +95,10 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     buildWidgetToggles(plugins, schema);
   };
 
-  // ── Export dropdown ───────────────────────────────────────────────────
+  // ── Topbar popovers (export + feedback) ───────────────────────────────
   buildExportControls(schema, onExport, !!canParquet);
+  initHeaderPopover('export-menu-btn', 'export-menu-panel');
+  initHeaderPopover('feedback-menu-btn', 'feedback-menu-panel');
 
   const bakedBtn = el('export-baked-btn');
   if (bakedBtn) {
@@ -116,20 +130,17 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('reset-btn').style.display = 'none';
 
     el('widget-toggles')?.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.disabled = true; });
-    const widgetHeader = el('widget-section-header');
-    if (widgetHeader) widgetHeader.style.pointerEvents = 'none';
 
     if (bakedBtn) bakedBtn.style.display = 'none';
   }
 }
 
-/** Update the filtered row count shown in the header badge and sidebar. */
+/** Update the filtered row count shown in the header badge. */
 export function updateFilteredInfo(filteredRows, totalRows) {
   const isFiltered = filteredRows !== totalRows;
   const summary = isFiltered
     ? `${filteredRows.toLocaleString()} / ${totalRows.toLocaleString()} records`
     : `${totalRows.toLocaleString()} records`;
-  el('filtered-info').textContent  = summary;
   el('row-count-badge').textContent = summary;
 }
 
@@ -148,11 +159,11 @@ function buildDimensionControls(dimensionInfo, activeDimensions = {}) {
   }
 
   container.innerHTML = entries.map(([dim, indices]) => `
-    <div class="mb-2">
-      <label class="form-label small mb-1">${dim.toUpperCase()}</label>
+    <div style="flex:1 1 60px;min-width:60px">
+      <label class="form-label small mb-1 d-block text-center">${dim.toUpperCase()}</label>
       <select id="dim-sel-${dim}" class="form-select form-select-sm">
         <option value="">All</option>
-        ${indices.map(i => `<option value="${i}">${dim}${i}</option>`).join('')}
+        ${indices.map(i => `<option value="${i}">${i}</option>`).join('')}
       </select>
     </div>
   `).join('');
@@ -215,16 +226,55 @@ function applyWidgetToggles(plugins, schema) {
   }
 }
 
-/** Toggle the widget-toggles section open/closed. */
-function initWidgetCollapseToggle() {
-  const header  = el('widget-section-header');
-  const content = el('widget-toggles');
-  const icon    = el('widget-toggle-icon');
+/**
+ * Wire a collapsible sidebar section. `header` must be a <button> with
+ * aria-expanded; `content` is shown/hidden via the `hidden` attribute. The
+ * chevron rotation is driven from aria-expanded in CSS. Keyboard activation
+ * (Enter/Space) works for free because the header is a real button.
+ */
+function initCollapseToggle(headerId, contentId) {
+  const header  = el(headerId);
+  const content = el(contentId);
   if (!header || !content) return;
   header.addEventListener('click', () => {
-    const nowVisible = content.style.display === 'none';
-    content.style.display = nowVisible ? '' : 'none';
-    if (icon) icon.className = `bi bi-chevron-${nowVisible ? 'up' : 'down'} text-muted`;
+    const open = header.getAttribute('aria-expanded') === 'true';
+    header.setAttribute('aria-expanded', String(!open));
+    content.hidden = open;
+  });
+}
+
+// Registry of topbar popovers so opening one closes the others.
+const headerPopovers = [];
+
+/**
+ * Wire a topbar popover (Export, Feedback): toggle on the trigger button,
+ * close on outside-click or Escape, close sibling popovers when this one
+ * opens, and keep aria-expanded in sync for screen readers.
+ */
+function initHeaderPopover(btnId, panelId) {
+  const btn   = el(btnId);
+  const panel = el(panelId);
+  if (!btn || !panel) return;
+
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  headerPopovers.push(setOpen);
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = panel.hidden;
+    headerPopovers.forEach(close => close(false));
+    setOpen(willOpen);
+  });
+
+  // Clicks inside the panel must not bubble up to the document closer.
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  document.addEventListener('click', () => { if (!panel.hidden) setOpen(false); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.hidden) { setOpen(false); btn.focus(); }
   });
 }
 
