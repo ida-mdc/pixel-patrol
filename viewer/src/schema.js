@@ -30,17 +30,17 @@ export const KNOWN_GROUP_COLS = new Set([
   'common_base',
 ]);
 
-// dim_t, dim_c, dim_z … columns in the long format
+// dim_t, dim_c, dim_z … per-dimension index columns
 const DIM_COL_RE = /^dim_([a-z])$/;
 
-// Columns that are infrastructure for the long format, not metrics
-const LONG_FORMAT_COLS = new Set(['obs_level']);
+// Infrastructure columns, not metrics
+const INFRA_COLS = new Set(['obs_level']);
 
 /**
  * Detect schema from an array of {name, type} column descriptors.
  * `type` is the string from Arrow's field type (e.g. "Float64", "Utf8", "Int32").
  *
- * Long-format files have dim_t/dim_c/... nullable int columns + obs_level.
+ * Files carry per-dimension dim_t/dim_c/... nullable int columns plus obs_level.
  *
  * @returns {{
  *   metricCols: string[],
@@ -50,20 +50,18 @@ const LONG_FORMAT_COLS = new Set(['obs_level']);
  *   defaultGroupCol: string|null,
  *   allCols: string[],
  *   blobCols: string[],
- *   isLongFormat: boolean,
  *   allTable: string,
  * }}
  */
 export function detectSchema(columns) {
   const metricCols    = [];
-  const dimCols       = [];   // long-format: ['dim_t', 'dim_c', …]
+  const dimCols       = [];   // per-dimension index columns: ['dim_t', 'dim_c', …]
   const groupCols     = [];
   const blobCols      = [];
   const allCols       = [];
 
-  const isLongFormat  = columns.some(c => c.name === 'obs_level');
-  if (!isLongFormat) {
-    throw new Error('Unsupported schema: obs_level column is required (long-format only).');
+  if (!columns.some(c => c.name === 'obs_level')) {
+    throw new Error('Unsupported schema: required obs_level column is missing.');
   }
 
   for (const { name, type } of columns) {
@@ -73,14 +71,14 @@ export function detectSchema(columns) {
       continue;
     }
 
-    // Skip long-format infrastructure columns from metric/group/allCols
-    if (LONG_FORMAT_COLS.has(name)) continue;
+    // Skip infrastructure columns from metric/group/allCols
+    if (INFRA_COLS.has(name)) continue;
 
     const isNumeric = /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
     const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
-    const isDimCol  = DIM_COL_RE.test(name); // long format: dim_t, dim_c, …
+    const isDimCol  = DIM_COL_RE.test(name); // dim_t, dim_c, …
 
-    // dim_* columns in long format: track but don't add to allCols/metricCols
+    // dim_* columns: track but don't add to allCols/metricCols
     if (isDimCol) {
       dimCols.push(name);
       continue;
@@ -104,7 +102,7 @@ export function detectSchema(columns) {
   }
 
   const dimensionInfo = {};
-  // Long-format dimensionInfo is populated later in finishLoad() via a DB query.
+  // dimensionInfo is populated later in finishLoad() via a DB query.
 
   for (const mustHave of ['imported_path_short', 'common_base']) {
     if (allCols.includes(mustHave) && !groupCols.includes(mustHave)) {
@@ -115,7 +113,6 @@ export function detectSchema(columns) {
   return {
     metricCols, dimCols,
     groupCols, dimensionInfo, allCols, blobCols,
-    isLongFormat,
     allTable: 'pp_all',
   };
 }

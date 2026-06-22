@@ -229,7 +229,7 @@ function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metri
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
-      return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
+      return schema.metricCols.some(filterMetric);
     },
     ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {
@@ -298,7 +298,6 @@ export default [
 ];
 
 function resolveMetrics(schema, dimensions) {
-  if (!schema.isLongFormat) return [];
-  // Long format keeps metrics as base columns; dim filtering is row-based via dim_* + obs_level.
+  // Metrics are base columns; dim filtering is row-based via dim_* + obs_level.
   return schema.metricCols;
 }
