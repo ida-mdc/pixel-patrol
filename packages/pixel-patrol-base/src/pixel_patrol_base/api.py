@@ -166,33 +166,51 @@ def view(
     )
 
 
-def build_viewer(output: Union[str, Path]) -> Path:
+def build_viewer(
+    output: Union[str, Path],
+    offline: bool = False,
+    base_url: Optional[str] = None,
+) -> Path:
     """
     Build a static viewer from the installed web viewer bundle.
 
-    If OUTPUT ends in .html or .htm, writes a single self-contained HTML file
-    with all JS/CSS/extensions inlined - share it alongside your .parquet file.
+    If OUTPUT ends in .html or .htm, writes a single HTML file - share it
+    alongside your .parquet file. By default this is a light (~7 MB) file that
+    inlines the app bundle but loads DuckDB WASM from a CDN; it works for any
+    installed version and needs a network connection only for DuckDB.
+
+    Pass offline=True to inline all JS/CSS/WASM into a large self-contained file
+    that works with no network access. Pass base_url to instead reference the
+    app bundle from a host (e.g. the hosted viewer for a matching released
+    version) for a tiny file - the deployed bundle must be the exact same build.
 
     Otherwise OUTPUT is treated as a directory and a GitHub Pages-style site
     is written there (index.html + assets + extensions folders) - deploy to
     any static host and open with a ?data= URL pointing to your parquet.
+    (offline / base_url do not apply to the directory build.)
 
     Args:
         output: Path to a .html file or a directory.
+        offline: For single-file builds, inline all dependencies (incl. WASM).
+        base_url: For single-file builds, reference the app bundle from this
+            URL instead of inlining it. Ignored when offline=True.
 
     Returns:
         Path to the written file or directory.
 
     Examples:
         >>> from pixel_patrol_base import api
-        >>> api.build_viewer("viewer.html")        # single file
+        >>> api.build_viewer("viewer.html")                 # light single file
+        >>> api.build_viewer("viewer.html", offline=True)   # self-contained
+        >>> api.build_viewer("viewer.html",                 # tiny, hosted bundle
+        ...     base_url="https://ida-mdc.github.io/pixel-patrol/viewer/")
         # OR
-        >>> api.build_viewer("gh-pages-out/")      # site folder
+        >>> api.build_viewer("gh-pages-out/")               # site folder
     """
 
     output = Path(output)
     if output.suffix.lower() in {".html", ".htm"}:
-        out = build_single_file_viewer_html(output)
+        out = build_single_file_viewer_html(output, offline=offline, base_url=base_url)
         logger.info("Single-file viewer written to: '%s'", out)
     else:
         out = build_github_pages_site(output)

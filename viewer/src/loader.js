@@ -29,10 +29,20 @@ export async function terminateDuckDB(db, conn) {
   try { await db?.terminate(); } catch {}
 }
 
-/** Initialise DuckDB WASM using locally bundled files (avoids CDN version mismatches). */
+/**
+ * Initialise DuckDB WASM.
+ *
+ * By default the locally bundled files are used (avoids CDN version mismatches).
+ * A static "light" HTML build references the app bundle from a remote host, so
+ * the bundled relative paths would resolve against the local file:// page and
+ * break. Such builds set window.__PP_DUCKDB_WORKER_URL / __PP_DUCKDB_WASM_URL to
+ * absolute CDN URLs which take precedence when present.
+ */
 export async function initDuckDB() {
-  const absWorkerUrl = new URL(duckdbMvpWorkerUrl, location.href).href;
-  const absWasmUrl   = new URL(duckdbMvpWasmUrl,   location.href).href;
+  const absWorkerUrl = window.__PP_DUCKDB_WORKER_URL
+    || new URL(duckdbMvpWorkerUrl, location.href).href;
+  const absWasmUrl   = window.__PP_DUCKDB_WASM_URL
+    || new URL(duckdbMvpWasmUrl,   location.href).href;
 
   const workerUrl = URL.createObjectURL(
     new Blob([`importScripts("${absWorkerUrl}");`], { type: 'text/javascript' }),

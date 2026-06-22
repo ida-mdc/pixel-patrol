@@ -23,10 +23,21 @@ Open [pixelpatrol.app/viewer](https://pixelpatrol.app/viewer/) and drag and drop
 
 **From a built static viewer:**
 
-Build a self-contained viewer file and open it alongside your parquet:
+Build a viewer file and open it alongside your parquet:
 
 ```bash
 pixel-patrol build-viewer-html -o viewer.html
+```
+
+By default this writes a **light** file (~7 MB): it inlines the viewer's own
+JS/CSS but loads the large DuckDB WASM engine from a CDN (jsdelivr), so it works
+for any installed version and needs an internet connection only for DuckDB.
+
+For a fully **self-contained** file that works with no network access, pass
+`--offline` (this inlines all JS/CSS/WASM too, producing a large ~50 MB+ file):
+
+```bash
+pixel-patrol build-viewer-html -o viewer.html --offline
 ```
 
 Open `viewer.html` in any browser and load your parquet from there. To share with someone, send them both files. See the [privacy policy](privacy.md) for what's included in the parquet file before sharing it.
