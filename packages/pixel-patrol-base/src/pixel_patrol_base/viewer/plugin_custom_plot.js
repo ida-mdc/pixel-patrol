@@ -7,7 +7,6 @@ const EXTRA_NUMERIC = new Set([
   'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ]);
 
-const MAX_SCATTER  = 5_000;
 const MAX_CAT      = 30;
 const MAX_HUE      = 12;
 const COUNT_Y      = '(count)';
@@ -30,47 +29,9 @@ const DATE_COLS = new Set(['modification_date']);
 
 const dateFmt = "'%Y-%m-%d %H:%M:%S'";
 
-// Date columns are formatted to readable strings in SQL and plotted on a
-// Plotly 'date' axis instead of a raw numeric/category axis.
-function selectExpr(q, col, alias) {
-  return DATE_COLS.has(col)
-    ? `STRFTIME(${q(col)}, ${dateFmt}) AS ${alias}`
-    : `${q(col)} AS ${alias}`;
-}
-
-function axisCfg(col, title) {
-  return DATE_COLS.has(col) ? { title, type: 'date' } : { title };
-}
-
-function valueOf(col, v) {
-  return DATE_COLS.has(col) ? v : Number(v);
-}
-
 // Build an id from column names + a suffix, for exported plugin filenames.
 function idFor(...parts) {
   return parts.map(p => String(p).replace(/\W/g, '_')).join('-');
-}
-
-// Date-aware MIN/MAX/AVG/STDDEV aggregate expressions for a numeric column.
-function aggExprs(q, col) {
-  return DATE_COLS.has(col)
-    ? `STRFTIME(MIN(${q(col)}), ${dateFmt}) AS min_val, STRFTIME(MAX(${q(col)}), ${dateFmt}) AS max_val,
-       STRFTIME(AVG(${q(col)}), ${dateFmt}) AS mean_val`
-    : `AVG(${q(col)}) AS mean_val, STDDEV(${q(col)}) AS std_val,
-       MIN(${q(col)}) AS min_val,  MAX(${q(col)}) AS max_val`;
-}
-
-// Date-aware single aggregate expression, e.g. aggExpr(q, 'modification_date', 'MIN', 'xmin').
-function aggExpr(q, col, fn, alias) {
-  return DATE_COLS.has(col)
-    ? `STRFTIME(${fn}(${q(col)}), ${dateFmt}) AS ${alias}`
-    : `${fn}(${q(col)}) AS ${alias}`;
-}
-
-// Format a stat value for display: dates pass through, numbers get 4 sig figs, nulls show '—'.
-function fmtStat(col, v) {
-  if (v == null) return '—';
-  return DATE_COLS.has(col) ? v : (Number.isFinite(Number(v)) ? Number(v).toPrecision(4) : '—');
 }
 
 // Fallback palettes — used when viewer hasn't been rebuilt to expose ctx.color.getColors.
@@ -96,19 +57,6 @@ function getColorsLocal(name, n) {
   }
   // Simple HSL rainbow fallback
   return Array.from({ length: n }, (_, i) => `hsl(${Math.round(360 * i / n)},70%,50%)`);
-}
-
-// Mirrors viewer/src/scopes.js SCOPES.image / SCOPES.slice - reused here via the shared
-// .widget-scope-badge style so each plot's badge matches other widgets'.
-const SCOPE_BADGES = {
-  image: { icon: '🖼️', color: '#0d6efd', label: 'per image', desc: 'Each datapoint here is a whole image.' },
-  slice: { icon: '🧩', color: '#fd7e14', label: 'per slice', desc: 'Each datapoint here is a slice within an image (e.g. a channel, Z-plane, timepoint, or spatial tile).' },
-};
-function updateScopeBadge(el, splitDims) {
-  const s = splitDims.size ? SCOPE_BADGES.slice : SCOPE_BADGES.image;
-  el.style.setProperty('--scope-color', s.color);
-  el.title = s.desc;
-  el.textContent = `${s.icon} ${s.label}`;
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
@@ -193,6 +141,68 @@ function makeCombobox(cols, placeholder) {
     get:      ()  => selected,
     set:      col => { selected = col; input.value = col ?? ''; },
   };
+}
+
+// Build a slot's control row (X/Y pickers, plot-type, color-by, palette, color
+// swatches, significance toggle, clear/export/remove) and return the row element
+// plus refs to every control so the slot can read and wire them.
+function buildSlotControls(available, paletteNames, getColors) {
+  const xBox    = makeCombobox(available, 'X column…');
+  const yBox    = makeCombobox([COUNT_Y, ...available], 'Y column…');
+  const typeSel = mkSelect([['Violin', 'violin'], ['Bar (mean ± sd)', 'bar']]);
+
+  // Significance brackets - only meaningful for a single-series distribution
+  // (no separate color-by), so doPlot shows/hides this accordingly.
+  const sigToggle     = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  const sigToggleWrap = document.createElement('label');
+  sigToggleWrap.style.cssText = 'font-size:13px;display:none;align-items:center;gap:4px;cursor:pointer;white-space:nowrap';
+  sigToggleWrap.append(sigToggle, document.createTextNode('Significance'));
+
+  const colorBySel = makeCombobox([NO_COLOR, GLOBAL_COLOR, ...available], 'Color by…');
+  const paletteSel = mkSelect(paletteNames.map(n => [n, n]));
+  const noneColor  = Object.assign(document.createElement('input'), { type: 'color', value: getColors('tab10', 1)[0] });
+
+  // Heatmaps don't support color-by grouping - instead let the user pick a
+  // single-hue colorscale (white → color, optionally inverted).
+  const heatColor  = Object.assign(document.createElement('input'), { type: 'color', value: HEATMAP_DEFAULT_COLOR });
+  const heatInvert = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  const heatInvertLabel = document.createElement('label');
+  heatInvertLabel.style.cssText = 'font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer';
+  heatInvertLabel.append(heatInvert, document.createTextNode('Invert'));
+
+  const clearBtn  = Object.assign(document.createElement('button'), { textContent: '✕ Clear' });
+  const exportBtn = Object.assign(document.createElement('button'), { textContent: '↓ Export plugin' });
+  const removeBtn = Object.assign(document.createElement('button'), { textContent: '✕ Remove' });
+
+  typeSel.style.cssText    = 'padding:4px 8px;border:1px solid #dee2e6;border-radius:4px;font-size:13px;background:#fff;display:none';
+  paletteSel.style.cssText = 'padding:4px 8px;border:1px solid #dee2e6;border-radius:4px;font-size:13px;background:#fff;display:none';
+  noneColor.style.cssText  = 'width:32px;height:28px;padding:1px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;display:none';
+  heatColor.style.cssText  = 'width:32px;height:28px;padding:1px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer';
+  clearBtn.style.cssText   = 'padding:3px 10px;border:1px solid #dee2e6;border-radius:4px;background:#fff;cursor:pointer;font-size:12px';
+  exportBtn.style.cssText  = 'padding:3px 10px;border:1px solid #0d6efd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;color:#0d6efd;display:none';
+  removeBtn.style.cssText  = 'padding:3px 10px;border:1px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;color:#dc3545;display:none';
+
+  // Color-by group (hidden for heatmaps) vs heatmap colorscale group.
+  const colorGroup = document.createElement('div');
+  colorGroup.style.cssText = 'display:flex;align-items:center;gap:10px';
+  colorGroup.append(lbl('Color:'), colorBySel.el, paletteSel, noneColor);
+
+  const heatGroup = document.createElement('div');
+  heatGroup.style.cssText = 'display:none;align-items:center;gap:10px';
+  heatGroup.append(lbl('Color:'), heatColor, heatInvertLabel);
+
+  const controls = document.createElement('div');
+  controls.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap';
+  controls.append(
+    lbl('X:'), xBox.el,
+    lbl('Y:'), yBox.el,
+    typeSel, sigToggleWrap,
+    colorGroup, heatGroup,
+    clearBtn, exportBtn, removeBtn,
+  );
+
+  return { controls, xBox, yBox, typeSel, sigToggle, sigToggleWrap, colorBySel, paletteSel,
+           noneColor, heatColor, heatInvert, clearBtn, exportBtn, removeBtn, colorGroup, heatGroup };
 }
 
 // ── Plugin code generator ─────────────────────────────────────────────────────
@@ -498,6 +508,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
 export default {
   id:    'custom-plot',
   label: 'Custom Plot',
+  shortLabel: 'Explore',
   group: 'Explore',
   info:  'Build your own plot from the columns in your current data.\n\n' +
          'Each plot has its own **Slice by** toggles (top right) and a **per image** / ' +
@@ -540,9 +551,25 @@ export default {
     return schema.isLongFormat;
   },
 
+  async condensedSummary(ctx) {
+    try {
+      const cols = ctx.schema.allCols ?? [];
+      const has  = c => cols.includes(c);
+      let suggestion = null;
+      if (has('mean_intensity') && has('laplacian_variance')) {
+        suggestion = 'try <strong>Mean Intensity</strong> vs <strong>Laplacian Variance</strong> to see if brighter images tend to be sharper';
+      } else if (has('size_bytes') && has('modification_date')) {
+        suggestion = 'try <strong>Modification Date</strong> vs <strong>Size Bytes</strong> to see how file sizes changed over time';
+      } else if (has('dtype')) {
+        suggestion = 'try any measurement with <strong>Dtype</strong> as "Color by" to compare pixel types';
+      }
+      return `Your playground - pick any two columns and Pixel Patrol chooses a sensible plot${suggestion ? `, e.g. ${suggestion}` : ''}.`;
+    } catch { return null; }
+  },
+
   async render(container, ctx) {
     const { q, andWhere } = ctx.sql;
-    const { append: appendPlot, niceName, plotlyLegendConfig } = ctx.plot;
+    const { niceName } = ctx.plot;
 
     const available  = ctx.schema.allCols.filter(c => !EXCLUDED_SUBSTRINGS.some(s => c.includes(s))).sort();
     const numericSet = new Set([
@@ -588,58 +615,10 @@ export default {
     function createSlot() {
       const slotEl = document.createElement('div');
 
-      // ── Controls ────────────────────────────────────────────────────────────
-      const controls  = document.createElement('div');
-      controls.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap';
-
-      const xBox       = makeCombobox(available, 'X column…');
-      const yBox       = makeCombobox([COUNT_Y, ...available], 'Y column…');
-      const typeSel    = mkSelect([['Violin', 'violin'], ['Bar (mean ± sd)', 'bar']]);
-      const colorBySel = makeCombobox([NO_COLOR, GLOBAL_COLOR, ...available], 'Color by…');
-      const paletteSel = mkSelect(paletteNames.map(n => [n, n]));
-      const noneColor  = Object.assign(document.createElement('input'), { type: 'color', value: getColors('tab10', 1)[0] });
-
-      // Heatmaps don't support color-by grouping - instead let the user pick a
-      // single-hue colorscale (white → color, optionally inverted).
-      const heatColor  = Object.assign(document.createElement('input'), { type: 'color', value: HEATMAP_DEFAULT_COLOR });
-      const heatInvert = Object.assign(document.createElement('input'), { type: 'checkbox' });
-      const heatInvertLabel = document.createElement('label');
-      heatInvertLabel.style.cssText = 'font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer';
-      heatInvertLabel.append(heatInvert, document.createTextNode('Invert'));
-
-      const clearBtn  = Object.assign(document.createElement('button'), { textContent: '✕ Clear' });
-      const exportBtn = Object.assign(document.createElement('button'), { textContent: '↓ Export plugin' });
-      const removeBtn = Object.assign(document.createElement('button'), { textContent: '✕ Remove' });
-
-      typeSel.style.display    = 'none';
-      paletteSel.style.display = 'none';
-      exportBtn.style.display  = 'none';
-      removeBtn.style.display  = 'none';
-
-      typeSel.style.cssText    = 'padding:4px 8px;border:1px solid #dee2e6;border-radius:4px;font-size:13px;background:#fff;display:none';
-      paletteSel.style.cssText = 'padding:4px 8px;border:1px solid #dee2e6;border-radius:4px;font-size:13px;background:#fff;display:none';
-      noneColor.style.cssText  = 'width:32px;height:28px;padding:1px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;display:none';
-      heatColor.style.cssText  = 'width:32px;height:28px;padding:1px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer';
-      clearBtn.style.cssText   = 'padding:3px 10px;border:1px solid #dee2e6;border-radius:4px;background:#fff;cursor:pointer;font-size:12px';
-      exportBtn.style.cssText  = 'padding:3px 10px;border:1px solid #0d6efd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;color:#0d6efd;display:none';
-      removeBtn.style.cssText  = 'padding:3px 10px;border:1px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;color:#dc3545;display:none';
-
-      // Color-by group (hidden for heatmaps) vs heatmap colorscale group.
-      const colorGroup = document.createElement('div');
-      colorGroup.style.cssText = 'display:flex;align-items:center;gap:10px';
-      colorGroup.append(lbl('Color:'), colorBySel.el, paletteSel, noneColor);
-
-      const heatGroup = document.createElement('div');
-      heatGroup.style.cssText = 'display:none;align-items:center;gap:10px';
-      heatGroup.append(lbl('Color:'), heatColor, heatInvertLabel);
-
-      controls.append(
-        lbl('X:'), xBox.el,
-        lbl('Y:'), yBox.el,
-        typeSel,
-        colorGroup, heatGroup,
-        clearBtn, exportBtn, removeBtn,
-      );
+      const {
+        controls, xBox, yBox, typeSel, sigToggle, sigToggleWrap, colorBySel, paletteSel,
+        noneColor, heatColor, heatInvert, clearBtn, exportBtn, removeBtn, colorGroup, heatGroup,
+      } = buildSlotControls(available, paletteNames, getColors);
       slotEl.appendChild(controls);
 
       // ── Slice by ─────────────────────────────────────────────────────────────
@@ -647,24 +626,12 @@ export default {
       // independently of other slots.
       const splitDims = new Set();
       let sliceBadge = null;
+      const syncSliceBadge = () => ctx.plot.setScopeBadge(sliceBadge, splitDims.size ? 'slice' : 'image');
       if (splittable.length) {
-        const sliceRow = document.createElement('div');
-        sliceRow.className = 'violin-controls';
-        sliceRow.innerHTML = '<span class="violin-controls-label">Slice by:</span>';
-        for (const letter of splittable) {
-          const sw = document.createElement('label');
-          sw.className = 'dim-switch';
-          sw.innerHTML = `<input type="checkbox"><span class="dim-switch-track"></span><span class="dim-switch-label">${letter.toUpperCase()}</span>`;
-          sw.querySelector('input').addEventListener('change', e => {
-            if (e.target.checked) splitDims.add(letter); else splitDims.delete(letter);
-            if (sliceBadge) updateScopeBadge(sliceBadge, splitDims);
-            doPlot();
-          });
-          sliceRow.appendChild(sw);
-        }
+        const sliceRow = ctx.plot.sliceToggles(splittable, splitDims, () => { syncSliceBadge(); doPlot(); });
         sliceBadge = document.createElement('span');
         sliceBadge.className = 'widget-scope-badge';
-        updateScopeBadge(sliceBadge, splitDims);
+        syncSliceBadge();
         sliceRow.appendChild(sliceBadge);
         slotEl.appendChild(sliceRow);
       }
@@ -809,28 +776,20 @@ export default {
         plotArea.appendChild(div);
       }
 
-      function legend(groups) {
-        return groups.length > 1 ? { showlegend: true, legend: plotlyLegendConfig } : { showlegend: false };
-      }
-
       // "per image" (pp_data, obs_level=0) by default, or "per slice" (pp_all at
-      // the obs_level for this slot's splitDims) once any toggles are on - see
-      // buildViolinWhereParts in plugin_violin.js for the _rollup power-set pattern.
+      // the obs_level for this slot's splitDims) once any toggles are on. Unlike
+      // the Dataset Stats widgets, the base predicate here is the file-scope
+      // ctx.where, so dimSubsetWhere is called with baseWhere:'' and combined via
+      // andWhere below.
       function dataSource() {
         if (!splitDims.size) return { table: 'pp_data', where: ctx.where };
-        const dimFilters = Object.entries(activeDims)
-          .map(([letter, idxRaw]) => {
-            const idx = Number(idxRaw);
-            return Number.isFinite(idx) ? `${q(`dim_${letter}`)} = ${idx}` : null;
-          })
-          .filter(Boolean);
-        const whereParts = [`obs_level = ${dimFilters.length + splitDims.size}`, ...dimFilters];
-        for (const col of dimCols) {
-          const letter = col.slice(4);
-          if (letter in activeDims) continue;
-          whereParts.push(splitDims.has(letter) ? `${q(col)} IS NOT NULL` : `${q(col)} IS NULL`);
+        const fixed = {};
+        for (const [letter, idxRaw] of Object.entries(activeDims)) {
+          const idx = Number(idxRaw);
+          if (Number.isFinite(idx)) fixed[letter] = idx;
         }
-        return { table: 'pp_all', where: andWhere(ctx.where, whereParts.join(' AND ')) };
+        const parts = ctx.sql.dimSubsetWhere({ fixed, split: splitDims, baseWhere: '' });
+        return { table: 'pp_all', where: andWhere(ctx.where, parts.join(' AND ')) };
       }
 
       async function cardinalityCheck(...cols) {
@@ -852,12 +811,6 @@ export default {
         return Number(row.n);
       }
 
-      // Sort categories with the "(missing)" bucket placed last.
-      function sortCats(cats) {
-        const real = cats.filter(c => c !== NULL_LABEL).sort();
-        return cats.includes(NULL_LABEL) ? [...real, NULL_LABEL] : real;
-      }
-
       // Count NULLs in numeric columns - these can't be placed on a numeric
       // axis (e.g. scatter), so callers show a warning instead.
       async function nullCounts(...cols) {
@@ -875,288 +828,11 @@ export default {
         return parts.length ? `${parts.join(' and ')} can't be shown on a numeric axis — those points are excluded.` : null;
       }
 
-      function statTable(headers, rowData) {
-        const t = document.createElement('table');
-        t.className = 'stat-table';
-        const thead = document.createElement('thead');
-        thead.appendChild(headers.reduce((tr, h) => {
-          tr.appendChild(Object.assign(document.createElement('th'), { textContent: h }));
-          return tr;
-        }, document.createElement('tr')));
-        const tbody = document.createElement('tbody');
-        for (const cells of rowData) {
-          tbody.appendChild(cells.reduce((tr, c) => {
-            tr.appendChild(Object.assign(document.createElement('td'), { textContent: c }));
-            return tr;
-          }, document.createElement('tr')));
-        }
-        t.append(thead, tbody);
-        return t;
-      }
-
-      // ── Plot functions ──────────────────────────────────────────────────────
-      async function plotScatter(x, y, colorMode, continuous, isStale = () => false) {
-        const { table, where } = dataSource();
-        if (continuous) {
-          const fullWh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL AND ${q(colorMode)} IS NOT NULL`);
-          const rows = await ctx.queryRows(`
-            SELECT * FROM (
-              SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${q(colorMode)} AS c
-              FROM ${table} ${fullWh}
-            ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
-          `);
-          if (isStale()) return;
-          const sampled = rows.length >= MAX_SCATTER;
-          const trace = {
-            type: 'scatter', mode: 'markers',
-            x: rows.map(r => valueOf(x, r.x)), y: rows.map(r => valueOf(y, r.y)),
-            marker: {
-              color: rows.map(r => Number(r.c)),
-              colorscale: paletteSel.value,
-              showscale: true,
-              colorbar: { title: { text: niceName(colorMode) } },
-              size: 5, opacity: 0.7,
-            },
-          };
-          appendPlot(plotArea, [trace], {
-            title:  { text: `${niceName(x)} vs ${niceName(y)}` +
-                            (sampled ? '<br><sup>sampled to 5,000 points</sup>' : '') },
-            xaxis:  axisCfg(x, niceName(x)),
-            yaxis:  axisCfg(y, niceName(y)),
-            showlegend: false,
-          });
-          setConfig({ plotType: 'scatter', x, y, catCol: null, numCol: null,
-            colorBy: colorMode, continuous: true,
-            palette: paletteSel.value,
-            noneColor: noneColor.value,
-            id: idFor(x, y, 'scatter'),
-          });
-          return;
-        }
-
-        const fullWh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL`);
-        const rows = await ctx.queryRows(`
-          SELECT * FROM (
-            SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${groupSqlExpr(colorMode)}
-            FROM ${table} ${fullWh}
-          ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
-        `);
-        if (isStale()) return;
-        const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
-        const sampled = rows.length >= MAX_SCATTER;
-        const traces  = groups.map(g => {
-          const gr = rows.filter(r => String(r.__group__) === g);
-          return {
-            type: 'scatter', mode: 'markers', name: labelFn(g),
-            x: gr.map(r => valueOf(x, r.x)), y: gr.map(r => valueOf(y, r.y)),
-            marker: { color: colorFn(g), size: 5, opacity: 0.7 },
-          };
-        }).filter(t => t.x.length);
-        appendPlot(plotArea, traces, {
-          title:  { text: `${niceName(x)} vs ${niceName(y)}` +
-                          (sampled ? '<br><sup>sampled to 5,000 points</sup>' : '') },
-          xaxis:  axisCfg(x, niceName(x)),
-          yaxis:  axisCfg(y, niceName(y)),
-          ...legend(groups),
-        });
-        setConfig({ plotType: 'scatter', x, y, catCol: null, numCol: null,
-          colorBy: colorMode === 'global' ? null : colorMode, continuous: false,
-          palette: paletteSel.value,
-          noneColor: noneColor.value,
-          id: idFor(x, y, 'scatter'),
-        });
-      }
-
-      async function plotViolin(catCol, numCol, colorMode, isStale = () => false) {
-        const { table, where } = dataSource();
-        const fullWh = andWhere(where, `${q(numCol)} IS NOT NULL`);
-        const rows = await ctx.queryRows(`
-          SELECT * FROM (
-            SELECT ${catExpr(catCol)} AS cat, ${selectExpr(q, numCol, 'val')}, ${groupSqlExpr(colorMode)}
-            FROM ${table} ${fullWh}
-          ) USING SAMPLE ${MAX_SCATTER} ROWS (reservoir, 42)
-        `);
-        if (isStale()) return;
-        const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
-        const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
-        const traces = groups.map(g => {
-          const gr = rows.filter(r => String(r.__group__) === g);
-          return {
-            type: 'violin', name: labelFn(g),
-            x: gr.map(r => String(r.cat)), y: gr.map(r => valueOf(numCol, r.val)),
-            box: { visible: true }, meanline: { visible: true }, points: 'outliers',
-            spanmode: 'hard', marker: { color: colorFn(g) },
-          };
-        }).filter(t => t.y.length);
-        appendPlot(plotArea, traces, {
-          title:      { text: `${niceName(numCol)} by ${niceName(catCol)}` },
-          xaxis:      { title: niceName(catCol), type: 'category', categoryarray: cats },
-          yaxis:      axisCfg(numCol, niceName(numCol)),
-          violinmode: groups.length > 1 ? 'group' : undefined,
-          ...legend(groups),
-        });
-        setConfig({ plotType: 'violin', x: catCol, y: numCol, catCol, numCol,
-          colorBy: colorMode === 'global' ? null : colorMode,
-          palette: paletteSel.value,
-          noneColor: noneColor.value,
-          id: idFor(catCol, numCol, 'violin'),
-        });
-      }
-
-      async function plotBar(catCol, numCol, colorMode, isStale = () => false) {
-        const { table, where } = dataSource();
-        const fullWh = andWhere(where, `${q(numCol)} IS NOT NULL`);
-        const rows = await ctx.queryRows(`
-          SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
-                 AVG(${q(numCol)}) AS mean_val, STDDEV(${q(numCol)}) AS std_val
-          FROM ${table} ${fullWh}
-          GROUP BY 1, 2 ORDER BY 1
-        `);
-        if (isStale()) return;
-        const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
-        const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
-        const traces = groups.map(g => {
-          const gr = rows.filter(r => String(r.__group__) === g);
-          return {
-            type: 'bar', name: labelFn(g),
-            x: gr.map(r => String(r.cat)), y: gr.map(r => Number(r.mean_val)),
-            error_y: { type: 'data', visible: true, array: gr.map(r => Number(r.std_val)) },
-            marker: { color: colorFn(g) },
-          };
-        }).filter(t => t.x.length);
-        appendPlot(plotArea, traces, {
-          title:   { text: `Mean ${niceName(numCol)} by ${niceName(catCol)}` },
-          xaxis:   { title: niceName(catCol), type: 'category', categoryarray: cats },
-          yaxis:   { title: `Mean ${niceName(numCol)}` },
-          barmode: groups.length > 1 ? 'group' : undefined,
-          ...legend(groups),
-        });
-        setConfig({ plotType: 'bar', x: catCol, y: numCol, catCol, numCol,
-          colorBy: colorMode === 'global' ? null : colorMode,
-          palette: paletteSel.value,
-          noneColor: noneColor.value,
-          id: idFor(catCol, numCol, 'bar'),
-        });
-      }
-
-      async function plotCountBar(x, colorMode, isStale = () => false) {
-        const { table, where } = dataSource();
-        const rows = await ctx.queryRows(`
-          SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
-          FROM ${table} ${where}
-          GROUP BY 1, 2 ORDER BY 1
-        `);
-        if (isStale()) return;
-        const { groups, colorFn, labelFn } = buildGroupConfig(rows, colorMode);
-        const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
-        const traces = groups.map(g => {
-          const gr = rows.filter(r => String(r.__group__) === g);
-          return {
-            type: 'bar', name: labelFn(g),
-            x: gr.map(r => String(r.cat)), y: gr.map(r => Number(r.n)),
-            marker: { color: colorFn(g) },
-          };
-        }).filter(t => t.x.length);
-        appendPlot(plotArea, traces, {
-          title:   { text: `Count by ${niceName(x)}` },
-          xaxis:   { title: niceName(x), type: 'category', categoryarray: cats },
-          yaxis:   { title: 'Count' },
-          barmode: 'stack',
-          ...legend(groups),
-        });
-        setConfig({ plotType: 'countBar', x, y: COUNT_Y, catCol: null, numCol: null,
-          colorBy: colorMode === 'global' ? null : colorMode,
-          palette: paletteSel.value,
-          noneColor: noneColor.value,
-          id: idFor(x, 'count', 'countBar'),
-        });
-      }
-
-      async function plotCountTable(x, colorMode, isStale = () => false) {
-        const { table, where } = dataSource();
-        const rows = await ctx.queryRows(`
-          SELECT ${catExpr(x)} AS cat, ${groupSqlExpr(colorMode)}, COUNT(*) AS n
-          FROM ${table} ${where}
-          GROUP BY 1, 2 ORDER BY 1
-        `);
-        if (isStale()) return;
-        const { labelFn, header } = buildGroupConfig(rows, colorMode);
-        const headers = header ? [niceName(x), header, 'Count'] : [niceName(x), 'Count'];
-        plotArea.appendChild(statTable(
-          headers,
-          rows.map(r => header
-            ? [String(r.cat), labelFn(String(r.__group__)), Number(r.n).toLocaleString()]
-            : [String(r.cat), Number(r.n).toLocaleString()])
-        ));
-      }
-
-      async function plotCatNumTable(catCol, numCol, colorMode, isStale = () => false) {
-        const isDate = DATE_COLS.has(numCol);
-        const { table, where } = dataSource();
-        const rows = await ctx.queryRows(`
-          SELECT ${catExpr(catCol)} AS cat, ${groupSqlExpr(colorMode)},
-                 COUNT(${q(numCol)}) AS n, COUNT(*) - COUNT(${q(numCol)}) AS n_null, ${aggExprs(q, numCol)}
-          FROM ${table} ${where}
-          GROUP BY 1, 2 ORDER BY 1
-        `);
-        if (isStale()) return;
-        const { labelFn, header } = buildGroupConfig(rows, colorMode);
-        const hasNulls = rows.some(r => Number(r.n_null) > 0);
-        const fmt = v => fmtStat(numCol, v);
-        const cols = isDate
-          ? [niceName(catCol), 'n', `Mean ${niceName(numCol)}`, 'Min', 'Max']
-          : [niceName(catCol), 'n', `Mean ${niceName(numCol)}`, 'SD', 'Min', 'Max'];
-        if (hasNulls) cols.push(`Null ${niceName(numCol)}`);
-        const headers = header ? [cols[0], header, ...cols.slice(1)] : cols;
-        plotArea.appendChild(statTable(
-          headers,
-          rows.map(r => {
-            const vals = isDate
-              ? [Number(r.n).toLocaleString(), fmt(r.mean_val), fmt(r.min_val), fmt(r.max_val)]
-              : [Number(r.n).toLocaleString(), fmt(r.mean_val), fmt(r.std_val), fmt(r.min_val), fmt(r.max_val)];
-            if (hasNulls) vals.push(Number(r.n_null).toLocaleString());
-            const row = [String(r.cat), ...vals];
-            return header ? [row[0], labelFn(String(r.__group__)), ...row.slice(1)] : row;
-          })
-        ));
-      }
-
-      async function plotHeatmap(x, y, isStale = () => false) {
-        const { table, where } = dataSource();
-        const rows = await ctx.queryRows(`
-          SELECT ${catExpr(x)} AS x, ${catExpr(y)} AS y, COUNT(*) AS n
-          FROM ${table} ${where}
-          GROUP BY 1, 2 ORDER BY 1, 2
-        `);
-        if (isStale()) return;
-        const xs = sortCats([...new Set(rows.map(r => String(r.x)))]);
-        const ys = sortCats([...new Set(rows.map(r => String(r.y)))]);
-
-        if (xs.length <= 1 || ys.length <= 1) {
-          plotArea.appendChild(statTable(
-            [niceName(x), niceName(y), 'Count'],
-            rows.map(r => [String(r.x), String(r.y), Number(r.n).toLocaleString()])
-          ));
-          return;
-        }
-
-        const counts = new Map(rows.map(r => [`${r.x}\x00${r.y}`, Number(r.n)]));
-        const z = ys.map(yv => xs.map(xv => counts.get(`${xv}\x00${yv}`) ?? 0));
-        const colorscale = [[0, '#ffffff'], [1, heatColor.value]];
-        appendPlot(plotArea, [{
-          type: 'heatmap', x: xs, y: ys, z, colorscale, reversescale: heatInvert.checked, showscale: true,
-        }], {
-          title:      { text: `Count: ${niceName(x)} × ${niceName(y)}` },
-          xaxis:      { title: niceName(x), type: 'category' },
-          yaxis:      { title: niceName(y), type: 'category' },
-          showlegend: false,
-        });
-        setConfig({ plotType: 'heatmap', x, y, catCol: null, numCol: null,
-          colorBy: null, palette: paletteSel.value,
-          heatColor: heatColor.value, heatInvert: heatInvert.checked,
-          id: idFor(x, y, 'heatmap'),
-        });
-      }
+      // Resolved color/series config handed to the engine render functions.
+      const seriesFor = (colorMode) => ({
+        sql: groupSqlExpr(colorMode),
+        build: (rows) => buildGroupConfig(rows, colorMode),
+      });
 
       // ── Main entry ────────────────────────────────────────────────────────
       async function doPlot() {
@@ -1167,6 +843,7 @@ export default {
         plotArea.innerHTML = '';
         activeConfig = null;
         exportBtn.style.display = 'none';
+        sigToggleWrap.style.display = 'none';
 
         if (!x || !y) {
           plotArea.innerHTML = '<div class="no-data">Select X and Y columns above.</div>';
@@ -1190,131 +867,144 @@ export default {
           return mode;
         }
 
+        const engine = ctx.plot.engine;
         plotArea.innerHTML = '<div class="no-data">Loading…</div>';
         try {
-          if (y === COUNT_Y) {
-            typeSel.style.display = 'none';
-            const n = await categoryCount(x);
-            if (isStale()) return;
-            if (n > MAX_CAT) {
-              plotArea.innerHTML = `<div class="no-data">"${niceName(x)}" has ${n} unique values — too many for count bar (max ${MAX_CAT}).</div>`;
-              return;
-            }
-            const cm = await resolveColorMode([x]);
-            if (isStale()) return;
-            plotArea.innerHTML = '';
-            applyColorMode(cm);
-            if (n === 1) await plotCountTable(x, cm.mode, isStale);
-            else         await plotCountBar(x, cm.mode, isStale);
-            return;
-          }
+          // One shared decider picks the plot kind; the engine render* functions
+          // draw it (same scaling/significance as the dedicated widgets).
+          const kind = await engine.choosePlotKind({
+            xCol: x, yCol: y, numericSet,
+            catCount: categoryCount,
+            distinct: (c) => cardinalityCheck(c).then(([r]) => r.n),
+            maxCat: MAX_CAT, countY: COUNT_Y,
+          });
+          if (isStale()) return;
+          const src = dataSource();
 
-          if (x === y) {
-            plotArea.innerHTML = '<div class="no-data">X and Y must be different columns.</div>';
-            return;
-          }
-
-          const xNum = numericSet.has(x);
-          const yNum = numericSet.has(y);
-
-          if (xNum && yNum) {
-            typeSel.style.display = 'none';
-
-            const [{ n: yUniq }] = await cardinalityCheck(y);
-            if (isStale()) return;
-            if (yUniq <= 1) {
-              colorGroup.style.display = 'none';
-              // One row per distinct Y value (NULL Y becomes its own "(missing)"
-              // row), with the range of X and how many X values are null in it.
-              const { table, where } = dataSource();
-              const rows = await ctx.queryRows(`
-                SELECT ${aggExpr(q, y, 'MIN', 'yval')},
-                       COUNT(${q(x)}) AS n, COUNT(*) - COUNT(${q(x)}) AS n_null,
-                       ${aggExpr(q, x, 'MIN', 'xmin')}, ${aggExpr(q, x, 'MAX', 'xmax')}
-                FROM ${table} ${where}
-                GROUP BY ${q(y)}
-                ORDER BY (${q(y)} IS NULL), 1
-              `);
-              if (isStale()) return;
-              const hasNullX = rows.some(r => Number(r.n_null) > 0);
-              const headers  = [niceName(y), 'n', `${niceName(x)} range`];
-              if (hasNullX) headers.push(`Null ${niceName(x)}`);
-              plotArea.innerHTML = '';
-              plotArea.appendChild(statTable(headers, rows.map(r => {
-                const yLabel  = r.yval == null ? NULL_LABEL : fmtStat(y, r.yval);
-                const xMinTxt = fmtStat(x, r.xmin), xMaxTxt = fmtStat(x, r.xmax);
-                const xRange  = xMinTxt === xMaxTxt ? xMinTxt : `${xMinTxt} – ${xMaxTxt}`;
-                const row = [yLabel, Number(r.n).toLocaleString(), xRange];
-                if (hasNullX) row.push(Number(r.n_null).toLocaleString());
-                return row;
-              })));
-              return;
-            }
-            // resolveColorMode and the null-count check both run independent
-            // queries - issue them together.
-            const [cm, note] = await Promise.all([
-              resolveColorMode([x, y], { scatter: true }),
-              nullWarningNote(x, y),
-            ]);
-            if (isStale()) return;
-            plotArea.innerHTML    = '';
-            applyColorMode(cm);
-            // Numeric axes can't place NULLs - warn how many points are
-            // excluded because X and/or Y is null.
-            showColorNote(note);
-            await plotScatter(x, y, cm.mode, cm.continuous, isStale);
-
-          } else if (!xNum && !yNum) {
-            typeSel.style.display    = 'none';
-            colorGroup.style.display = 'none';
-            heatGroup.style.display  = 'flex';
-            const [xCats, yCats] = await Promise.all([categoryCount(x), categoryCount(y)]);
-            if (isStale()) return;
-            if (xCats > MAX_CAT || yCats > MAX_CAT) {
-              const bad  = xCats > MAX_CAT ? x : y;
-              const badN = xCats > MAX_CAT ? xCats : yCats;
-              plotArea.innerHTML = `<div class="no-data">"${niceName(bad)}" has ${badN} unique values — too many for heatmap (max ${MAX_CAT}).</div>`;
-              return;
-            }
-            plotArea.innerHTML = '';
-            await plotHeatmap(x, y, isStale);
-
-          } else {
-            const catCol  = xNum ? y : x;
-            const numCol  = xNum ? x : y;
-            const flipped = xNum; // user put the numeric col on X; we swap internally
-            const isDate  = DATE_COLS.has(numCol);
-            // categoryCount/cardinalityCheck/resolveColorMode are independent
-            // queries - issue them together.
-            const [n, [{ n: numUniq }], cm] = await Promise.all([
-              categoryCount(catCol),
-              cardinalityCheck(numCol),
-              resolveColorMode([catCol, numCol]),
-            ]);
-            if (isStale()) return;
-            if (n > MAX_CAT) {
+          switch (kind.kind) {
+            case 'message':
+            case 'invalid':
               typeSel.style.display = 'none';
-              plotArea.innerHTML    = `<div class="no-data">"${niceName(catCol)}" has ${n} unique values — too many for a categorical axis (max ${MAX_CAT}).</div>`;
+              plotArea.innerHTML = `<div class="no-data">${kind.message}</div>`;
+              return;
+
+            case 'countTable': {
+              typeSel.style.display = 'none';
+              const cm = await resolveColorMode([x]);
+              if (isStale()) return;
+              plotArea.innerHTML = '';
+              applyColorMode(cm);
+              await engine.renderCountTable(plotArea, ctx, { x, source: src, series: seriesFor(cm.mode), isStale });
               return;
             }
-            // A single category, or a numeric axis with at most one distinct
-            // (non-null) value, can't usefully be plotted - show a table instead.
-            const showTable = n === 1 || numUniq <= 1;
-            // Bar (mean ± sd) doesn't make sense for a date-valued axis - violin only.
-            typeSel.style.display = (showTable || isDate) ? 'none' : '';
-            plotArea.innerHTML    = '';
-            applyColorMode(cm);
-            if (flipped && !showTable) {
-              showColorNote(`X and Y were swapped: "${x}" is numeric so it becomes the Y axis, "${y}" is categorical on X.`);
+
+            case 'countBar': {
+              typeSel.style.display = 'none';
+              const cm = await resolveColorMode([x]);
+              if (isStale()) return;
+              plotArea.innerHTML = '';
+              applyColorMode(cm);
+              const drawn = await engine.renderCountBar(plotArea, ctx, { x, source: src, series: seriesFor(cm.mode), isStale });
+              if (drawn && !isStale()) setConfig({ plotType: 'countBar', x, y: COUNT_Y, catCol: null, numCol: null,
+                colorBy: cm.mode === 'global' ? null : cm.mode,
+                palette: paletteSel.value, noneColor: noneColor.value, id: idFor(x, 'count', 'countBar') });
+              return;
             }
-            if (showTable) {
-              await plotCatNumTable(catCol, numCol, cm.mode, isStale);
-            } else {
+
+            case 'numNumTable': {
+              typeSel.style.display = 'none';
+              colorGroup.style.display = 'none';
+              plotArea.innerHTML = '';
+              await engine.renderNumNumTable(plotArea, ctx, { x, y, source: src, isStale });
+              return;
+            }
+
+            case 'scatter': {
+              typeSel.style.display = 'none';
+              // resolveColorMode and the null-count check both run independent
+              // queries - issue them together.
+              const [cm, note] = await Promise.all([
+                resolveColorMode([x, y], { scatter: true }),
+                nullWarningNote(x, y),
+              ]);
+              if (isStale()) return;
+              plotArea.innerHTML = '';
+              applyColorMode(cm);
+              // Numeric axes can't place NULLs - warn how many points are excluded.
+              showColorNote(note);
+              const drawn = await engine.renderScatter(plotArea, ctx, {
+                x, y, source: src, continuous: cm.continuous, colorBy: cm.mode,
+                colorScale: paletteSel.value, series: seriesFor(cm.mode), isStale,
+              });
+              if (drawn && !isStale()) setConfig({ plotType: 'scatter', x, y, catCol: null, numCol: null,
+                colorBy: cm.continuous ? cm.mode : (cm.mode === 'global' ? null : cm.mode), continuous: cm.continuous,
+                palette: paletteSel.value, noneColor: noneColor.value, id: idFor(x, y, 'scatter') });
+              return;
+            }
+
+            case 'heatmap': {
+              typeSel.style.display = 'none';
+              colorGroup.style.display = 'none';
+              heatGroup.style.display = 'flex';
+              plotArea.innerHTML = '';
+              const drawn = await engine.renderHeatmap(plotArea, ctx, {
+                x, y, source: src, heatColor: heatColor.value, heatInvert: heatInvert.checked, isStale,
+              });
+              if (drawn && !isStale()) setConfig({ plotType: 'heatmap', x, y, catCol: null, numCol: null,
+                colorBy: null, palette: paletteSel.value,
+                heatColor: heatColor.value, heatInvert: heatInvert.checked, id: idFor(x, y, 'heatmap') });
+              return;
+            }
+
+            case 'catNumTable': {
+              typeSel.style.display = 'none';
+              const cm = await resolveColorMode([kind.catCol, kind.numCol]);
+              if (isStale()) return;
+              plotArea.innerHTML = '';
+              applyColorMode(cm);
+              await engine.renderCatNumTable(plotArea, ctx, {
+                catCol: kind.catCol, numCol: kind.numCol, source: src,
+                series: seriesFor(cm.mode), isDate: kind.isDate, isStale,
+              });
+              return;
+            }
+
+            case 'distribution': {
+              const { catCol, numCol, flipped, isDate } = kind;
+              typeSel.style.display = isDate ? 'none' : '';
+              const cm = await resolveColorMode([catCol, numCol]);
+              if (isStale()) return;
+              plotArea.innerHTML = '';
+              applyColorMode(cm);
+              if (flipped) {
+                showColorNote(`X and Y were swapped: "${x}" is numeric so it becomes the Y axis, "${y}" is categorical on X.`);
+              }
               const note = await nullWarningNote(numCol);
               if (isStale()) return;
               showColorNote(note);
-              if (typeSel.value === 'bar' && !isDate) await plotBar(catCol, numCol, cm.mode, isStale);
-              else                                     await plotViolin(catCol, numCol, cm.mode, isStale);
+
+              // Significance brackets only make sense for a single series (no
+              // separate color-by) - see plot-engine renderDistribution.
+              const singleSeries = cm.mode === 'none';
+              sigToggleWrap.style.display = singleSeries ? '' : 'none';
+
+              const force = (typeSel.value === 'bar' && !isDate) ? 'bar' : 'auto';
+              const drawn = await engine.renderDistribution(plotArea, ctx, {
+                numCol, source: src,
+                catSql: catExpr(catCol), catLabel: niceName(catCol), yLabel: niceName(numCol),
+                title: force === 'bar'
+                  ? `Mean ${niceName(numCol)} by ${niceName(catCol)}`
+                  : `${niceName(numCol)} by ${niceName(catCol)}`,
+                force, isDate,
+                showSignificance: singleSeries && sigToggle.checked,
+                series: seriesFor(cm.mode),
+                isStale,
+              });
+              if (drawn && !isStale()) setConfig({ plotType: force === 'bar' ? 'bar' : 'violin',
+                x: catCol, y: numCol, catCol, numCol, colorBy: cm.mode === 'global' ? null : cm.mode,
+                palette: paletteSel.value, noneColor: noneColor.value,
+                id: idFor(catCol, numCol, force === 'bar' ? 'bar' : 'violin') });
+              return;
             }
           }
         } catch (e) {
@@ -1326,6 +1016,7 @@ export default {
       xBox.onSelect(doPlot);
       yBox.onSelect(doPlot);
       typeSel.addEventListener('change', doPlot);
+      sigToggle.addEventListener('change', doPlot);
       colorBySel.onSelect(doPlot);
       paletteSel.addEventListener('change', () => {
         if (paletteKind === 'continuous') lastContPalette = paletteSel.value;
@@ -1342,6 +1033,7 @@ export default {
         paletteSel.style.display = 'none';
         noneColor.style.display  = 'none';
         typeSel.style.display    = 'none';
+        sigToggleWrap.style.display = 'none';
         colorGroup.style.display = 'flex';
         heatGroup.style.display  = 'none';
         exportBtn.style.display  = 'none';

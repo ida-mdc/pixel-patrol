@@ -30,3 +30,16 @@ export function scopeBadgeHtml(scope) {
   if (!s) return '';
   return `<span class="widget-scope-badge" style="--scope-color:${s.color}" title="${s.desc}">${s.icon} ${s.label}</span>`;
 }
+
+/**
+ * Update an existing `.widget-scope-badge` element in place to a given scope -
+ * used by widgets (violin, custom plot) whose scope changes at runtime as the
+ * user toggles "Slice by" dimensions, keeping their badge in sync with the rest.
+ */
+export function setScopeBadge(el, scope) {
+  const s = SCOPES[scope];
+  if (!el || !s) return;
+  el.style.setProperty('--scope-color', s.color);
+  el.title = s.desc;
+  el.textContent = `${s.icon} ${s.label}`;
+}
