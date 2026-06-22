@@ -1,5 +1,6 @@
 export default {
   id: 'dim-size',
+  inputs: ['*_size'],
   group: 'Metadata',
   scope: 'image',
   label: 'Dimension Size Distribution',

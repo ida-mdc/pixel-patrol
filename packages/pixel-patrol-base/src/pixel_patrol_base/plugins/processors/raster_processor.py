@@ -39,10 +39,11 @@ class MetricNames(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RasterMetricSpec:
-    """Declares one output column: its type and how to aggregate it across rows."""
+    """Declares one output column: its type, how to aggregate it across rows, and a human description."""
     name:           str
     data_type:      Any
     aggregate_rows: Callable[[RasterMetricSpec, List[Dict[str, Any]]], Any]
+    description:    str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -171,12 +172,14 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
 # ---------------------------------------------------------------------------
 
 class RasterProcessor:
-    NAME:       str = ""
+    NAME:        str = ""
+    DESCRIPTION: str = ""
     CHUNK_KIND  = ChunkKind.LEAF
     METRICS:    Tuple[RasterMetricSpec, ...] = ()
     INPUT       = RecordSpec(axes=set(), kinds={"intensity"})
     OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {}
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {}
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
@@ -199,23 +202,36 @@ class RasterProcessor:
 # ---------------------------------------------------------------------------
 
 class BasicMetricsProcessor(RasterProcessor):
-    NAME    = "raster-basic"
+    NAME        = "raster-basic"
+    DESCRIPTION = "Computes basic per-image intensity statistics (min, max, mean, std) and the finite-pixel count, aggregated across chunks and dimensions."
     METRICS = (
-        RasterMetricSpec(name=MetricNames.MIN_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin)),
-        RasterMetricSpec(name=MetricNames.MAX_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax)),
-        RasterMetricSpec(name=MetricNames.MEAN_INTENSITY,     data_type=np.float32, aggregate_rows=_weighted_mean_agg),
-        RasterMetricSpec(name=MetricNames.STD_INTENSITY,      data_type=np.float32, aggregate_rows=_pooled_std_agg),
-        RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg),
+        RasterMetricSpec(name=MetricNames.MIN_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin),
+                         description="Minimum pixel intensity over the covered extent (ignoring NaNs)."),
+        RasterMetricSpec(name=MetricNames.MAX_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax),
+                         description="Maximum pixel intensity over the covered extent (ignoring NaNs)."),
+        RasterMetricSpec(name=MetricNames.MEAN_INTENSITY,     data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Pixel-count-weighted mean intensity over the covered extent."),
+        RasterMetricSpec(name=MetricNames.STD_INTENSITY,      data_type=np.float32, aggregate_rows=_pooled_std_agg,
+                         description="Pooled standard deviation of intensity over the covered extent."),
+        RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
+                         description="Number of finite (non-NaN/Inf) pixels contributing to the statistics."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
 
 
 class HistogramProcessor(RasterProcessor):
-    NAME    = "raster-histogram"
+    NAME        = "raster-histogram"
+    DESCRIPTION = "Computes a per-image intensity histogram, merging per-chunk histograms onto a shared value range."
     METRICS = (
-        RasterMetricSpec(name=MetricNames.HISTOGRAM_MIN,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin)),
-        RasterMetricSpec(name=MetricNames.HISTOGRAM_MAX,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax)),
-        RasterMetricSpec(name=MetricNames.HISTOGRAM_NAN_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg),
-        RasterMetricSpec(name=MetricNames.HISTOGRAM_COUNTS,    data_type=np.ndarray, aggregate_rows=lambda spec, rows: _aggregate_histograms(rows)),
+        RasterMetricSpec(name=MetricNames.HISTOGRAM_MIN,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin),
+                         description="Lower bound of the histogram's value range."),
+        RasterMetricSpec(name=MetricNames.HISTOGRAM_MAX,       data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmax),
+                         description="Upper bound of the histogram's value range."),
+        RasterMetricSpec(name=MetricNames.HISTOGRAM_NAN_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
+                         description="Number of NaN pixels excluded from the histogram."),
+        RasterMetricSpec(name=MetricNames.HISTOGRAM_COUNTS,    data_type=np.ndarray, aggregate_rows=lambda spec, rows: _aggregate_histograms(rows),
+                         description="Per-bin pixel counts over the histogram value range (fixed number of bins)."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

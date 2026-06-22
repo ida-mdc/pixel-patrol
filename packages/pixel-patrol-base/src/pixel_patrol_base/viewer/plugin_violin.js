@@ -1,20 +1,13 @@
-// Matches BasicStatsProcessor.OUTPUT_SCHEMA
-const BASIC_METRIC_BASES = new Set([
+// The exact metric columns this widget plots (BasicStatsProcessor.OUTPUT_SCHEMA).
+const BASIC_METRICS = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
-const QUALITY_METRIC_BASES = new Set([
+// QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
+const QUALITY_METRICS = new Set([
   'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
   'blocking_index', 'ringing_index',
 ]);
-
-function matchesBases(col, bases) {
-  for (const base of bases) {
-    if (col === base || col.startsWith(base + '_')) return true;
-  }
-  return false;
-}
 
 const SIGNIFICANCE_HELP = [
   '**Statistical Comparisons**',
@@ -314,9 +307,12 @@ async function fetchRankSums(ctx, q, andWhere, gc, combinedWhere, sourceTable, m
   return rankData;
 }
 
-function makeViolinPlugin(id, label, info, filterMetric) {
+function makeViolinPlugin(id, label, info, metrics) {
+  const filterMetric = m => metrics.has(m);
   return {
     id, label, info, group: 'Dataset Stats', scope: 'image',
+    // This widget plots only its own metric family, not every metric column.
+    inputs: [...metrics],
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
@@ -369,8 +365,8 @@ function makeViolinPlugin(id, label, info, filterMetric) {
 }
 
 export default [
-  makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES)),
-  makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES)),
+  makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   BASIC_METRICS),
+  makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, QUALITY_METRICS),
 ];
 
 function resolveMetrics(schema, dimensions) {

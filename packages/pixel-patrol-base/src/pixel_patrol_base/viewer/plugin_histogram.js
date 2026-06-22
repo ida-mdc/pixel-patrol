@@ -7,6 +7,7 @@ const SAMPLE_INPUT_ID           = 'hist-sample-input';
 
 export default {
   id: 'histogram',
+  inputs: ['histogram_counts'],
   group: 'Dataset Stats',
   scope: 'image',
   label: 'Pixel Value Histograms',
