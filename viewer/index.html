@@ -53,79 +53,28 @@
     </label>
     <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
     <span id="current-filename" class="text-muted small text-truncate" style="max-width:300px"></span>
-    <span id="row-count-badge" class="badge bg-secondary ms-auto"></span>
-  </div>
-  <div id="sidebar-backdrop"></div>
+    <div class="ms-auto d-flex align-items-center gap-2">
 
-  <!-- Body: sidebar + content -->
-  <div class="d-flex" style="min-height:calc(100vh - 49px)">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="condensed-mode-cb">
+        <label class="form-check-label small fw-bold" for="condensed-mode-cb">
+          <span class="d-none d-sm-inline">Condensed mode</span>
+          <span class="d-sm-none">🗜️</span>
+        </label>
+      </div>
 
-    <!-- Sidebar -->
-    <div id="sidebar">
-      <div class="card border-0">
-        <div class="card-body p-0">
+      <span id="row-count-badge" class="badge bg-secondary"></span>
 
-          <div id="sidebar-frozen-banner" class="alert alert-secondary py-2 px-2 mb-3 d-none small">
-            <div class="fw-semibold mb-1">Offline snapshot</div>
-            <div id="sidebar-frozen-body"></div>
-          </div>
-
-          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Color Palette</label>
-          <select id="palette-selector" class="form-select form-select-sm mb-3"></select>
-
-          <hr class="my-2"/>
-          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Group By</label>
-          <select id="groupby-selector" class="form-select form-select-sm mb-3"></select>
-
-          <hr class="my-2"/>
-          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Dimension</label>
-          <div id="dimension-controls" class="mb-3">
-            <small class="text-muted">No dimensions detected.</small>
-          </div>
-
-          <hr class="my-2"/>
-          <label class="form-label fw-bold mb-1 small text-uppercase text-muted">Filter Rows</label>
-          <select id="filter-column" class="form-select form-select-sm mb-1">
-            <option value="">Column…</option>
-          </select>
-          <select id="filter-op" class="form-select form-select-sm mb-1">
-            <option value="">Operator…</option>
-            <option value="contains">contains</option>
-            <option value="not_contains">not contains</option>
-            <option value="eq">equals</option>
-            <option value="gt">&gt;</option>
-            <option value="ge">&gt;=</option>
-            <option value="lt">&lt;</option>
-            <option value="le">&lt;=</option>
-            <option value="in">in (comma-sep)</option>
-          </select>
-          <input id="filter-value" type="text" class="form-control form-control-sm mb-3" placeholder="Value…"/>
-
-          <hr class="my-2"/>
-          <div id="widget-section-header" class="d-flex align-items-center mb-1" style="cursor:pointer;user-select:none">
-            <span class="fw-bold small text-uppercase text-muted flex-grow-1">Filter Widgets</span>
-            <i id="widget-toggle-icon" class="bi bi-chevron-down text-muted" style="font-size:0.75rem"></i>
-          </div>
-          <div id="widget-toggles" class="mb-2" style="display:none">
-            <small class="text-muted">Load a file to see widgets.</small>
-          </div>
-
-          <hr class="my-2"/>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="show-significance-cb">
-            <label class="form-check-label small" for="show-significance-cb">
-              Show significance brackets
-            </label>
-          </div>
-
-          <div class="d-flex gap-2 mb-3">
-            <button id="apply-btn" class="btn btn-primary flex-grow-1 btn-sm">Apply</button>
-            <button id="reset-btn" class="btn btn-outline-secondary flex-grow-1 btn-sm">Reset</button>
-          </div>
-
-          <hr class="my-2"/>
+      <!-- Export menu (popover anchored to this button) -->
+      <div class="header-menu">
+        <button id="export-menu-btn" type="button" class="btn btn-sm btn-outline-secondary"
+                aria-haspopup="true" aria-expanded="false" aria-controls="export-menu-panel">
+          <i class="bi bi-download"></i><span class="d-none d-sm-inline ms-1">Export</span>
+        </button>
+        <div id="export-menu-panel" class="header-menu-panel" role="menu" aria-label="Export" hidden>
+          <div class="header-menu-title">Export data</div>
           <div class="d-flex gap-1">
-            <select id="export-select" class="form-select form-select-sm flex-grow-1"></select>
+            <select id="export-select" class="form-select form-select-sm flex-grow-1" aria-label="Export format"></select>
             <button id="export-btn" type="button" class="btn btn-outline-secondary btn-sm px-2" title="Export">
               <i class="bi bi-download"></i>
             </button>
@@ -135,26 +84,109 @@
           <button id="export-baked-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2">
             <i class="bi bi-file-earmark-code me-1"></i>Export static HTML snapshot…
           </button>
-          <div id="filtered-info" class="text-muted small mt-2 text-center"></div>
-
         </div>
       </div>
 
-      <div id="sidebar-feedback" style="border-top:1px solid #dee2e6;margin-top:16px">
-        <button id="sb-feedback-toggle"
-          class="d-flex align-items-center gap-2 w-100 border-0 bg-transparent py-3 px-1"
-          style="cursor:pointer" aria-expanded="false"
-        >
-          <span class="small" style="flex:1;text-align:left;color:#495057">Please send us feedback about PixelPatrol</span>
-          <i class="bi bi-chevron-down text-muted" style="font-size:0.75rem;transition:transform .2s" id="sb-feedback-chevron"></i>
+      <!-- Feedback menu (popover anchored to this button) -->
+      <div class="header-menu">
+        <button id="feedback-menu-btn" type="button" class="btn btn-sm btn-outline-secondary"
+                aria-haspopup="true" aria-expanded="false" aria-controls="feedback-menu-panel" title="Send feedback">
+          <i class="bi bi-chat-dots"></i><span class="d-none d-sm-inline ms-1">Feedback</span>
         </button>
-        <div id="sb-feedback-form" style="display:none;padding:0 4px 16px">
+        <div id="feedback-menu-panel" class="header-menu-panel" role="menu" aria-label="Send feedback" hidden>
+          <div class="header-menu-title">Send us feedback about PixelPatrol</div>
           <form action="https://formspree.io/f/xdavagve" method="POST">
             <input type="text" name="name" class="form-control form-control-sm mb-2" placeholder="Your name (optional)" />
             <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Your email (optional)" />
             <textarea name="message" class="form-control form-control-sm mb-2" rows="3" placeholder="Your feedback" required></textarea>
             <button type="submit" class="btn btn-primary btn-sm w-100">Send Feedback</button>
           </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="sidebar-backdrop"></div>
+
+  <!-- Body: sidebar + content -->
+  <div class="d-flex" style="min-height:calc(100vh - 49px)">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-scroll">
+        <div class="card border-0">
+          <div class="card-body p-0">
+
+            <div id="sidebar-frozen-banner" class="alert alert-secondary py-2 px-2 mb-3 d-none small">
+              <div class="fw-semibold mb-1">Offline snapshot</div>
+              <div id="sidebar-frozen-body"></div>
+            </div>
+
+            <!-- ── Primary data controls (always visible) ── -->
+            <div class="sidebar-field">
+              <label for="groupby-selector" class="sidebar-label">Group By</label>
+              <select id="groupby-selector" class="form-select form-select-sm"></select>
+            </div>
+
+            <div class="sidebar-field">
+              <span class="sidebar-label" id="dimensions-label">Slice by Dimension</span>
+              <div id="dimension-controls" class="d-flex flex-wrap gap-2" role="group" aria-labelledby="dimensions-label">
+                <small class="text-muted">No dimensions detected.</small>
+              </div>
+            </div>
+
+            <div class="sidebar-field">
+              <label for="filter-column" class="sidebar-label">Filter Rows</label>
+              <select id="filter-column" class="form-select form-select-sm mb-1" aria-label="Filter column">
+                <option value="">Column…</option>
+              </select>
+              <select id="filter-op" class="form-select form-select-sm mb-1" aria-label="Filter operator">
+                <option value="">Operator…</option>
+                <option value="contains">contains</option>
+                <option value="not_contains">not contains</option>
+                <option value="eq">equals</option>
+                <option value="gt">&gt;</option>
+                <option value="ge">&gt;=</option>
+                <option value="lt">&lt;</option>
+                <option value="le">&lt;=</option>
+                <option value="in">in (comma-sep)</option>
+              </select>
+              <input id="filter-value" type="text" class="form-control form-control-sm" placeholder="Value…" aria-label="Filter value"/>
+
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="show-significance-cb">
+                <label class="form-check-label small" for="show-significance-cb">
+                  Show significance brackets
+                </label>
+              </div>
+            </div>
+
+            <!-- ── Appearance (collapsible: palette + widget visibility) ── -->
+            <section class="sidebar-section">
+              <button type="button" id="appearance-section-header" class="sidebar-section-header"
+                      aria-expanded="false" aria-controls="appearance-section">
+                <span class="sidebar-section-title">Appearance</span>
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+              </button>
+              <div id="appearance-section" class="sidebar-section-body" hidden>
+                <label for="palette-selector" class="sidebar-label">Color Palette</label>
+                <select id="palette-selector" class="form-select form-select-sm mb-3"></select>
+
+                <span class="sidebar-label" id="widget-toggles-label">Show Widgets</span>
+                <div id="widget-toggles" role="group" aria-labelledby="widget-toggles-label">
+                  <small class="text-muted">Load a file to see widgets.</small>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </div><!-- /sidebar-scroll -->
+
+      <!-- Sticky action footer -->
+      <div id="sidebar-footer">
+        <div class="d-flex gap-2">
+          <button id="apply-btn" class="btn btn-primary flex-grow-1 btn-sm">Apply</button>
+          <button id="reset-btn" class="btn btn-outline-secondary flex-grow-1 btn-sm">Reset</button>
         </div>
       </div>
     </div><!-- /sidebar -->
@@ -229,7 +261,6 @@
       document.getElementById(chevronId).style.transform = open ? 'rotate(180deg)' : '';
     });
   }
-  initFeedbackToggle('sb-feedback-toggle', 'sb-feedback-form', 'sb-feedback-chevron');
   initFeedbackToggle('feedback-toggle', 'feedback-form', 'feedback-chevron');
 </script>
 </body>

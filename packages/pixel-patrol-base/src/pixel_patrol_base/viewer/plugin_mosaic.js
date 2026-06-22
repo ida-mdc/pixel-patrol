@@ -20,6 +20,7 @@ export default {
   group: 'Visualization',
   scope: 'image',
   label: 'Image Mosaic',
+  shortLabel: 'Mosaic',
   info: [
     'Displays an **image mosaic**, one thumbnail per file.',
     '',
@@ -32,6 +33,51 @@ export default {
   requires(schema) {
     const hasMetric = schema.metricCols.some(c => schema.allCols.includes(c));
     return schema.blobCols.includes('thumbnail') && hasMetric;
+  },
+
+  async condensedSummary(ctx) {
+    try {
+      const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
+      const defaultSort = sortableMetrics.includes('mean_intensity') ? 'mean_intensity' : (sortableMetrics[0] ?? null);
+      const [{ n }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
+      if (defaultSort) return `Thumbnails sorted by <strong>${ctx.plot.niceName(defaultSort)}</strong>.`;
+      const count = Math.min(Number(n ?? 0), MAX_IMGS);
+      return `A mosaic of <strong>${count.toLocaleString()}</strong> thumbnail${count === 1 ? '' : 's'}.`;
+    } catch { return null; }
+  },
+
+  async condensedPlot(container, ctx) {
+    const { q, groupExpr: geFn } = ctx.sql;
+    const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
+    const metricCol = sortableMetrics.includes('mean_intensity') ? 'mean_intensity' : (sortableMetrics[0] ?? null);
+    const N = 16;
+    const order  = metricCol ? `ORDER BY ${q(metricCol)} DESC NULLS LAST` : '';
+    const result = await ctx.query(`SELECT ${geFn()}, "thumbnail" FROM pp_data ${ctx.where} ${order} LIMIT ${N}`);
+    if (!Number(result?.numRows ?? 0)) return false;
+
+    const items = tableToItems(result, { hoverCol: null, hasSort: false, hasNorm: false });
+    if (!items.length) return false;
+
+    const perRow = Math.ceil(Math.sqrt(items.length));
+    const nRows  = Math.ceil(items.length / perRow);
+    const W = perRow * CELL, H = nRows * CELL;
+    const canvas = makeCanvas(W, H);
+    const c2d = canvas.getContext('2d');
+    canvas.style.cssText = 'image-rendering:pixelated;max-width:100%;max-height:100%;display:block';
+    c2d.clearRect(0, 0, W, H);
+    for (let i = 0; i < items.length; i++) {
+      const col = i % perRow, row = Math.floor(i / perRow);
+      const x = col * CELL, y = row * CELL, tile = CELL - GAP;
+      c2d.fillStyle = ctx.color.group(items[i].group);
+      c2d.fillRect(x, y, tile, tile);
+      c2d.clearRect(x + BORDER, y + BORDER, SPRITE, SPRITE);
+      if (items[i].thumb?.kind === 'raw') drawThumbnailRGBA(c2d, items[i].thumb.data, x + BORDER, y + BORDER);
+    }
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.appendChild(canvas);
+    return true;
   },
 
   async render(container, ctx) {
@@ -111,153 +157,130 @@ export default {
 async function renderMosaic(container, ctx, sortCol, displayMode = DISPLAY_NORM, { pickMode = PICK_TOP_ALL, sortDir = 'desc' } = {}) {
   container.innerHTML = '';
 
-  const { q, groupExpr: geFn } = ctx.sql;
-  const { escapeHtml } = ctx.plot;
-
-  const t0 = performance.now();
-  let pickIdsMs = 0, thumbnailsMs = 0;
-
   const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
-  const defaultMetric   = sortableMetrics[0] ?? null;
-  const metricCol       = (sortCol && ctx.schema.allCols.includes(sortCol)) ? sortCol : defaultMetric;
-
-  if (String(pickMode) === PICK_TOP_ALL && !metricCol) {
-    container.innerHTML = '<div class="no-data">No numeric metric column for ordering.</div>';
-    return;
-  }
-
-  const hoverCol = ctx.schema.allCols.includes('name') ? 'name'
-    : ctx.schema.allCols.includes('imported_path_short') ? 'imported_path_short'
-    : null;
-
-  const gcSel    = geFn();
-  const hoverSel = hoverCol ? `, ${q(hoverCol)} AS __label__` : '';
-  const sortSel  = metricCol ? `, ${q(metricCol)} AS __sort__` : '';
-  const normSel  =
-    ctx.schema.allCols.includes('thumbnail_norm_min') &&
-    ctx.schema.allCols.includes('thumbnail_norm_max') &&
-    ctx.schema.allCols.includes('thumbnail_dtype')
-      ? `, "thumbnail_norm_min" AS __tn_min__, "thumbnail_norm_max" AS __tn_max__, "thumbnail_dtype" AS __tn_dtype__`
-      : '';
-
-  const dir  = (String(sortDir).toLowerCase() === 'desc') ? 'DESC' : 'ASC';
+  const metricCol = (sortCol && ctx.schema.allCols.includes(sortCol)) ? sortCol : (sortableMetrics[0] ?? null);
   const mode = String(pickMode);
+
   if (mode !== PICK_TOP_ALL && mode !== PICK_SAMPLE_ALL) {
-    container.innerHTML = '<div class="no-data">Invalid mosaic mode.</div>';
-    return;
+    container.innerHTML = '<div class="no-data">Invalid mosaic mode.</div>'; return;
+  }
+  if (mode === PICK_TOP_ALL && !metricCol) {
+    container.innerHTML = '<div class="no-data">No numeric metric column for ordering.</div>'; return;
   }
 
-  const idCol = ctx.schema.rowIdColumn ?? (ctx.schema.allCols.includes('row_index') ? 'row_index' : null);
-  let items;
+  const items = await pickMosaicItems(ctx, { metricCol, mode, sortDir });
+  if (!items.length) { container.innerHTML = '<div class="no-data">No thumbnail data.</div>'; return; }
 
-  if (idCol) {
-    const tPick0 = performance.now();
-    const idRows = mode === PICK_TOP_ALL
-      ? await ctx.queryRows(`SELECT ${rowIdSql(idCol)} AS __rid__ FROM pp_data ${ctx.where} ORDER BY ${q(metricCol)} ${dir} NULLS LAST LIMIT ${MAX_IMGS}`)
-      : await ctx.queryRows(`SELECT ${rowIdSql(idCol)} AS __rid__ FROM pp_data ${ctx.where} USING SAMPLE ${MAX_IMGS} ROWS (reservoir, 42)`);
-    pickIdsMs = performance.now() - tPick0;
-
-    const rids = (idRows ?? []).map(r => Number(r.__rid__)).filter(Number.isFinite);
-    if (!rids.length) { container.innerHTML = '<div class="no-data">No thumbnail data.</div>'; return; }
-
-    const tBlob0 = performance.now();
-    const result = await ctx.query(`
-      WITH ids AS (SELECT * FROM UNNEST([${rids.join(', ')}]) WITH ORDINALITY AS t(rid, ord))
-      SELECT ids.ord AS __ord__, ${gcSel}, "thumbnail"${hoverSel}${sortSel}${normSel}
-      FROM pp_data JOIN ids ON ${rowIdSql(idCol)} = ids.rid ORDER BY ids.ord
-    `);
-    thumbnailsMs = performance.now() - tBlob0;
-
-    if (!Number(result?.numRows ?? 0)) { container.innerHTML = '<div class="no-data">No thumbnail data.</div>'; return; }
-    items = tableToItems(result, { hoverCol, hasSort: Boolean(metricCol), hasNorm: Boolean(normSel) });
-  } else {
-    const sql = mode === PICK_TOP_ALL
-      ? `SELECT ${gcSel}, "thumbnail"${hoverSel}${sortSel}${normSel} FROM pp_data ${ctx.where} ORDER BY ${q(metricCol)} ${dir} NULLS LAST LIMIT ${MAX_IMGS}`
-      : `SELECT ${gcSel}, "thumbnail"${hoverSel}${sortSel}${normSel} FROM pp_data ${ctx.where} USING SAMPLE ${MAX_IMGS} ROWS (reservoir, 42)`;
-    const tBlob0 = performance.now();
-    const result = await ctx.query(sql);
-    thumbnailsMs = performance.now() - tBlob0;
-    if (!Number(result?.numRows ?? 0)) { container.innerHTML = '<div class="no-data">No thumbnail data.</div>'; return; }
-    items = tableToItems(result, { hoverCol, hasSort: Boolean(metricCol), hasNorm: Boolean(normSel) });
-  }
-
-  const t1 = performance.now();
-  if (!items?.length) { container.innerHTML = '<div class="no-data">No thumbnail data.</div>'; return; }
-
+  // A reservoir sample comes back unordered; sort it by the metric so the grid
+  // still reads as a visual trend.
   if (mode === PICK_SAMPLE_ALL && metricCol) {
-    const dirMul = (String(sortDir).toLowerCase() === 'desc') ? -1 : 1;
+    const dirMul = String(sortDir).toLowerCase() === 'desc' ? -1 : 1;
     items.sort((a, b) => dirMul * ((a.sort ?? 0) - (b.sort ?? 0)));
   }
 
-  const t2      = performance.now();
-  const n       = items.length;
-  const perRow  = Math.ceil(Math.sqrt(n));
-  const nRows   = Math.ceil(n / perRow);
-  const W       = perRow * CELL;
-  const H       = nRows  * CELL;
-  const canvas  = makeCanvas(W, H);
-  const ctx2d   = canvas.getContext('2d');
+  const { canvas, perRow } = drawMosaicCanvas(items, ctx, displayMode);
+  container.style.position = 'relative';
+  container.appendChild(canvas);
+  attachTooltip(container, canvas, items, perRow);
+
+  const present = new Set(items.map(it => it.group));
+  const presentGroups = ctx.groups.filter(g => present.has(g));
+  if (presentGroups.length > 1) ctx.plot.renderDomGroupLegend?.(container, { groups: presentGroups });
+
+  if (items.length === MAX_IMGS && ctx.filteredCount > MAX_IMGS) {
+    const note = document.createElement('p');
+    note.className = 'text-muted small mt-1 mb-0';
+    note.textContent = `Showing ${MAX_IMGS} of ${ctx.filteredCount.toLocaleString()} images.`;
+    container.appendChild(note);
+  }
+}
+
+// Up to MAX_IMGS thumbnails (+ group / hover label / sort / norm columns), either
+// the top by metric or a random sample. When a row-id column exists, pick ids
+// first and join the blobs in a second step (much faster than scanning blobs).
+async function pickMosaicItems(ctx, { metricCol, mode, sortDir }) {
+  const { q, groupExpr: geFn } = ctx.sql;
+  const dir = String(sortDir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+  const hoverCol = ctx.schema.allCols.includes('name') ? 'name'
+    : ctx.schema.allCols.includes('imported_path_short') ? 'imported_path_short' : null;
+  const hasNorm = ctx.schema.allCols.includes('thumbnail_norm_min') &&
+                  ctx.schema.allCols.includes('thumbnail_norm_max') &&
+                  ctx.schema.allCols.includes('thumbnail_dtype');
+  const cols = `${geFn()}, "thumbnail"`
+    + (hoverCol ? `, ${q(hoverCol)} AS __label__` : '')
+    + (metricCol ? `, ${q(metricCol)} AS __sort__` : '')
+    + (hasNorm ? `, "thumbnail_norm_min" AS __tn_min__, "thumbnail_norm_max" AS __tn_max__, "thumbnail_dtype" AS __tn_dtype__` : '');
+  const limit = mode === PICK_TOP_ALL
+    ? `ORDER BY ${q(metricCol)} ${dir} NULLS LAST LIMIT ${MAX_IMGS}`
+    : `USING SAMPLE ${MAX_IMGS} ROWS (reservoir, 42)`;
+  const toItems = (result) =>
+    Number(result?.numRows ?? 0) ? tableToItems(result, { hoverCol, hasSort: Boolean(metricCol), hasNorm }) : [];
+
+  const idCol = ctx.schema.rowIdColumn ?? (ctx.schema.allCols.includes('row_index') ? 'row_index' : null);
+  if (!idCol) {
+    return toItems(await ctx.query(`SELECT ${cols} FROM pp_data ${ctx.where} ${limit}`));
+  }
+
+  const idRows = await ctx.queryRows(`SELECT ${rowIdSql(idCol)} AS __rid__ FROM pp_data ${ctx.where} ${limit}`);
+  const rids = (idRows ?? []).map(r => Number(r.__rid__)).filter(Number.isFinite);
+  if (!rids.length) return [];
+  return toItems(await ctx.query(`
+    WITH ids AS (SELECT * FROM UNNEST([${rids.join(', ')}]) WITH ORDINALITY AS t(rid, ord))
+    SELECT ids.ord AS __ord__, ${cols}
+    FROM pp_data JOIN ids ON ${rowIdSql(idCol)} = ids.rid ORDER BY ids.ord
+  `));
+}
+
+// Draw the thumbnails into a square-ish canvas grid; returns { canvas, perRow }.
+function drawMosaicCanvas(items, ctx, displayMode) {
+  const perRow = Math.ceil(Math.sqrt(items.length));
+  const nRows  = Math.ceil(items.length / perRow);
+  const W = perRow * CELL, H = nRows * CELL;
+  const canvas = makeCanvas(W, H);
+  const c2d = canvas.getContext('2d');
   canvas.style.imageRendering = 'pixelated';
   canvas.style.maxWidth = '100%';
-  ctx2d.clearRect(0, 0, W, H);
+  c2d.clearRect(0, 0, W, H);
 
-  for (let i = 0; i < items.length; i++) {
-    const col = i % perRow, row = Math.floor(i / perRow);
-    const x = col * CELL, y = row * CELL;
-    const tile = CELL - GAP;
-    const gColor = ctx.color.group(items[i].group);
-    ctx2d.fillStyle = gColor;
-    ctx2d.fillRect(x, y, tile, tile);
-    ctx2d.clearRect(x + BORDER, y + BORDER, SPRITE, SPRITE);
-    if (items[i].thumb?.kind === 'raw') {
-      const raw = (displayMode === DISPLAY_DENORM && items[i].tnMin != null && items[i].tnMax != null && items[i].tnDtype)
-        ? denormalizeThumbnailRGBA(items[i].thumb.data, items[i].tnMin, items[i].tnMax, items[i].tnDtype)
-        : items[i].thumb.data;
-      drawThumbnailRGBA(ctx2d, raw, x + BORDER, y + BORDER);
+  items.forEach((it, i) => {
+    const x = (i % perRow) * CELL, y = Math.floor(i / perRow) * CELL;
+    c2d.fillStyle = ctx.color.group(it.group);
+    c2d.fillRect(x, y, CELL - GAP, CELL - GAP);
+    c2d.clearRect(x + BORDER, y + BORDER, SPRITE, SPRITE);
+    if (it.thumb?.kind === 'raw') {
+      const raw = (displayMode === DISPLAY_DENORM && it.tnMin != null && it.tnMax != null && it.tnDtype)
+        ? denormalizeThumbnailRGBA(it.thumb.data, it.tnMin, it.tnMax, it.tnDtype)
+        : it.thumb.data;
+      drawThumbnailRGBA(c2d, raw, x + BORDER, y + BORDER);
     }
-  }
-  const t3 = performance.now();
+  });
+  return { canvas, perRow };
+}
 
-  container.style.position = 'relative';
+// Floating filename tooltip that follows the cursor over the mosaic tiles.
+function attachTooltip(container, canvas, items, perRow) {
   const tip = document.createElement('div');
   tip.style.cssText = ['position:absolute','display:none','pointer-events:none','z-index:10','background:rgba(0,0,0,0.85)','color:white','padding:6px 8px','border-radius:6px','font-size:12px','max-width:360px','white-space:nowrap','overflow:hidden','text-overflow:ellipsis'].join(';');
-  container.appendChild(canvas);
   container.appendChild(tip);
 
   const tileSize = CELL - GAP;
   canvas.onmousemove = e => {
     const rect = canvas.getBoundingClientRect();
-    const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-    const px = (e.clientX - rect.left) * sx, py = (e.clientY - rect.top) * sy;
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
     const col = Math.floor(px / CELL), row = Math.floor(py / CELL);
-    if (col < 0 || row < 0) { tip.style.display = 'none'; return; }
     const localX = px - col * CELL, localY = py - row * CELL;
-    if (localX >= tileSize || localY >= tileSize) { tip.style.display = 'none'; return; }
     const idx = row * perRow + col;
-    if (idx < 0 || idx >= items.length) { tip.style.display = 'none'; return; }
+    if (col < 0 || row < 0 || localX >= tileSize || localY >= tileSize || idx < 0 || idx >= items.length) {
+      tip.style.display = 'none'; return;
+    }
     tip.textContent = items[idx].label || items[idx].group;
     tip.style.left = `${Math.min(rect.width - 10, (e.clientX - rect.left) + 12)}px`;
     tip.style.top  = `${Math.min(rect.height - 10, (e.clientY - rect.top) + 12)}px`;
     tip.style.display = 'block';
   };
   canvas.onmouseleave = () => { tip.style.display = 'none'; };
-
-  const presentSet = new Set(items.map(it => it.group));
-  const presentGroups = ctx.groups.filter(g => presentSet.has(g));
-  if (presentGroups.length > 1) {
-    ctx.plot.renderDomGroupLegend?.(container, {
-      groups: presentGroups,
-    });
-  }
-
-  if (n === MAX_IMGS && ctx.filteredCount > MAX_IMGS) {
-    const note = document.createElement('p');
-    note.className = 'text-muted small mt-1 mb-0';
-    note.textContent = `Showing ${MAX_IMGS} of ${ctx.filteredCount.toLocaleString()} images.`;
-    container.appendChild(note);
-  }
-
-  console.log('[mosaic] timings ms', { pickIds: pickIdsMs.toFixed(1), thumbnails: thumbnailsMs.toFixed(1), query: (pickIdsMs + thumbnailsMs).toFixed(1), tableToItems: (t2 - t1).toFixed(1), draw: (t3 - t2).toFixed(1), total: (t3 - t0).toFixed(1), drawn: items.length, mode: idCol ? '2step' : '1step' });
 }
 
 function rowIdSql(name) {

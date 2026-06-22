@@ -12,6 +12,7 @@ export default {
   group: 'Dataset Stats',
   scope: 'image',
   label: 'Pixel Value Histograms',
+  shortLabel: 'Histograms',
   info: [
     'Histograms are computed **per image** and grouped based on your groupings.',
     'They are normalized to sum to **1**, and the **mean histogram per group** is shown as a bold line.',
@@ -25,100 +26,157 @@ export default {
     return schema.blobCols.includes('histogram_counts');
   },
 
+  async condensedSummary(ctx) {
+    try {
+      const [{ total, n }] = await ctx.queryRows(
+        `SELECT COUNT(*) AS total, COUNT("histogram_counts") AS n FROM pp_data ${ctx.where}`,
+      );
+      const totalN   = Number(total ?? 0);
+      const withHist = Number(n ?? 0);
+      if (withHist < totalN) {
+        return { text: `Only <strong>${withHist.toLocaleString()}</strong>/${totalN.toLocaleString()} have histograms.`, warning: true };
+      }
+      // The plot samples for larger collections, so don't imply a fixed file count -
+      // just tease what the widget shows.
+      return `Compare pixel intensity distributions across groups.`;
+    } catch { return null; }
+  },
+
+  async condensedPlot(container, ctx) {
+    const { groupExpr: geFn } = ctx.sql;
+    const { extractBinary } = ctx.data;
+    const result = await ctx.query(`
+      SELECT ${geFn()}, "histogram_counts"
+      FROM pp_data ${ctx.where}
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= 300
+    `);
+    const arrowRows = result.toArray();
+    if (!arrowRows.length) return false;
+
+    const groupData = {};
+    for (const row of arrowRows) {
+      const g = String(row.__group__);
+      const counts = extractBinary(row.histogram_counts);
+      if (!counts?.length) continue;
+      const total = histTotal(counts);
+      if (total <= 0) continue;
+      if (!groupData[g]) groupData[g] = { sums: new Float64Array(counts.length), count: 0 };
+      const gd = groupData[g];
+      for (let i = 0; i < counts.length; i++) gd.sums[i] += counts[i] / total;
+      gd.count++;
+    }
+    const groups = ctx.groups.filter(g => groupData[g]?.count);
+    if (!groups.length) return false;
+
+    const traces = groups.map(g => {
+      const { sums, count } = groupData[g];
+      const n = sums.length;
+      return {
+        type: 'scatter', mode: 'lines', fill: 'tozeroy', opacity: 0.6,
+        x: Array.from({ length: n }, (_, i) => (i / n) * 255),
+        // Mean of the per-image (area-1) histograms, so every image counts equally.
+        y: Array.from(sums, v => v / count),
+        line: { color: ctx.color.group(g), width: 1.5 }, hoverinfo: 'skip',
+      };
+    });
+    ctx.plot.appendMini(container, traces, {
+      xaxis: { title: 'intensity' }, yaxis: { showticklabels: false },
+    });
+    return true;
+  },
+
   async render(container, ctx) {
     try {
-      const { escapeHtml, dataAvailabilityWarning } = ctx.plot;
       const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
       const hasNames = ctx.schema.allCols.includes('name');
 
       const [availRow] = await ctx.queryRows(
         `SELECT COUNT(*) AS total, COUNT("histogram_counts") AS n FROM pp_data ${ctx.where}`
       );
-      dataAvailabilityWarning(container, [{ label: 'Pixel Value Histograms', present: Number(availRow.n) }], Number(availRow.total), { unit: 'images' });
+      ctx.plot.dataAvailabilityWarning(container,
+        [{ label: 'Pixel Value Histograms', present: Number(availRow.n) }], Number(availRow.total), { unit: 'images' });
 
-      const controlsDiv = document.createElement('div');
-      controlsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;margin-bottom:20px';
-  
-      controlsDiv.innerHTML += `
-        <div>
-          <div style="font-weight:600;margin-bottom:6px">Histogram plot mode:</div>
-          <label style="margin-right:16px;cursor:pointer">
-            <input type="radio" name="${MODE_ID}" value="shape" checked> Fixed 0–255 bins (Shape)
-          </label>
-          <label style="${hasRange ? 'cursor:pointer' : 'cursor:not-allowed;opacity:0.45'}">
-            <input type="radio" name="${MODE_ID}" value="native" ${hasRange ? '' : 'disabled'}> Native pixel range (Absolute)
-          </label>
-          ${!hasRange ? '<div style="font-size:0.8em;color:#888;margin-top:4px">histogram_min / histogram_max columns not present</div>' : ''}
-        </div>
-      `;
-  
-      const groupOpts = ctx.groups.map(g => `<option value="${g}">${ctx.groupLabel(g)}</option>`).join('');
-      controlsDiv.innerHTML += `
-        <div style="max-width:360px;flex:1 1 240px">
-          <div style="font-weight:600;margin-bottom:6px">Select specific groups to compare (optional):</div>
-          <select id="${GROUP_SEL_ID}" class="form-select form-select-sm" multiple style="height:80px">${groupOpts}</select>
-          <small class="text-muted">Hold Ctrl/Cmd to multi-select. Empty = all groups.</small>
-        </div>
-      `;
-  
-      if (hasNames) {
-        const nameRows = await ctx.queryRows(`SELECT DISTINCT "name" FROM pp_data ${ctx.where} ORDER BY 1 LIMIT ${MAX_FILE_OPTIONS}`);
-        const nameOpts = nameRows.map(r => `<option value="${escapeHtml(String(r.name))}">${escapeHtml(String(r.name))}</option>`).join('');
-        const limitNote = nameRows.length === MAX_FILE_OPTIONS ? `<small class="text-muted">Showing first ${MAX_FILE_OPTIONS} files.</small>` : '';
-        controlsDiv.innerHTML += `
-          <div style="max-width:400px;flex:1 1 240px;${hasRange ? '' : 'opacity:0.45;pointer-events:none'}">
-            <div style="font-weight:600;margin-bottom:6px">Overlay specific file (optional):</div>
-            <select id="${FILE_SEL_ID}" class="form-select form-select-sm" ${hasRange ? '' : 'disabled'}>
-              <option value="">- none -</option>${nameOpts}
-            </select>${limitNote}
-            ${!hasRange ? '<div style="font-size:0.8em;color:#888;margin-top:4px">requires histogram_min / histogram_max columns</div>' : ''}
-          </div>
-        `;
-      }
+      const nameRows = hasNames
+        ? await ctx.queryRows(`SELECT DISTINCT "name" FROM pp_data ${ctx.where} ORDER BY 1 LIMIT ${MAX_FILE_OPTIONS}`)
+        : [];
+      container.appendChild(buildControls(ctx, { hasNames, nameRows }));
 
-      controlsDiv.innerHTML += `
-        <div style="align-self:flex-end">
-          <label style="font-weight:600">
-            Max samples per group:
-            <input type="number" id="${SAMPLE_INPUT_ID}" value="${DEFAULT_SAMPLES_PER_GROUP}"
-                   min="50" step="100"
-                   style="width:90px;margin-left:8px;padding:2px 6px;border:1px solid #ccc;border-radius:4px">
-          </label>
-        </div>
-      `;
-
-      container.appendChild(controlsDiv);
-  
       const plotDiv = document.createElement('div');
       container.appendChild(plotDiv);
-  
-      const render = async () => {
-        const mode            = container.querySelector(`input[name="${MODE_ID}"]:checked`)?.value ?? 'shape';
-        const groupSelEl      = document.getElementById(GROUP_SEL_ID);
-        const fileSelEl       = document.getElementById(FILE_SEL_ID);
-        const sampleInputEl   = document.getElementById(SAMPLE_INPUT_ID);
-        const selectedGroups  = groupSelEl ? [...groupSelEl.selectedOptions].map(o => o.value).filter(Boolean) : [];
-        const selectedFile    = fileSelEl?.value ?? '';
-        const samplesPerGroup = Math.max(50, parseInt(sampleInputEl?.value ?? DEFAULT_SAMPLES_PER_GROUP, 10) || DEFAULT_SAMPLES_PER_GROUP);
-        plotDiv.innerHTML = '';
-        await renderHistogram(plotDiv, ctx, { mode, selectedGroups, selectedFile, hasRange, hasNames, samplesPerGroup });
-      };
 
-      container.querySelectorAll(`input[name="${MODE_ID}"]`).forEach(el => el.addEventListener('change', render));
-      const groupSelEl = document.getElementById(GROUP_SEL_ID);
-      if (groupSelEl) groupSelEl.addEventListener('change', render);
-      const fileSelEl = document.getElementById(FILE_SEL_ID);
-      if (fileSelEl) fileSelEl.addEventListener('change', render);
-      const sampleInputEl = document.getElementById(SAMPLE_INPUT_ID);
-      if (sampleInputEl) sampleInputEl.addEventListener('change', render);
-  
-      await render();
-    
+      const draw = async () => {
+        plotDiv.innerHTML = '';
+        await renderHistogram(plotDiv, ctx, { ...readControls(container), hasRange, hasNames });
+      };
+      wireControls(container, draw);
+      await draw();
     } catch {
       container.innerHTML = '<div class="no-data">Failed to load data.</div>';
     }
   },
 };
+
+// All histogram controls (plot mode, group multiselect, optional file overlay,
+// max-samples cap) as one flex row.
+function buildControls(ctx, { hasNames, nameRows }) {
+  const { escapeHtml } = ctx.plot;
+  const groupOpts = ctx.groups.map(g => `<option value="${g}">${ctx.groupLabel(g)}</option>`).join('');
+
+  let fileBlock = '';
+  if (hasNames) {
+    const nameOpts  = nameRows.map(r => `<option value="${escapeHtml(String(r.name))}">${escapeHtml(String(r.name))}</option>`).join('');
+    const limitNote = nameRows.length === MAX_FILE_OPTIONS ? `<small class="text-muted">Showing first ${MAX_FILE_OPTIONS} files.</small>` : '';
+    fileBlock = `
+      <div style="max-width:400px;flex:1 1 240px">
+        <div style="font-weight:600;margin-bottom:6px">Overlay specific file (optional):</div>
+        <select id="${FILE_SEL_ID}" class="form-select form-select-sm">
+          <option value="">- none -</option>${nameOpts}
+        </select>${limitNote}
+      </div>`;
+  }
+
+  const controls = document.createElement('div');
+  controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;margin-bottom:20px';
+  controls.innerHTML = `
+    <div>
+      <div style="font-weight:600;margin-bottom:6px">Histogram plot mode:</div>
+      <label style="margin-right:16px;cursor:pointer"><input type="radio" name="${MODE_ID}" value="shape" checked> Fixed 0–255 bins (Shape)</label>
+      <label style="cursor:pointer"><input type="radio" name="${MODE_ID}" value="native"> Native pixel range (Absolute)</label>
+    </div>
+    <div style="max-width:360px;flex:1 1 240px">
+      <div style="font-weight:600;margin-bottom:6px">Select specific groups to compare (optional):</div>
+      <select id="${GROUP_SEL_ID}" class="form-select form-select-sm" multiple style="height:80px">${groupOpts}</select>
+      <small class="text-muted">Hold Ctrl/Cmd to multi-select. Empty = all groups.</small>
+    </div>
+    ${fileBlock}
+    <div style="align-self:flex-end">
+      <label style="font-weight:600">Max samples per group:
+        <input type="number" id="${SAMPLE_INPUT_ID}" value="${DEFAULT_SAMPLES_PER_GROUP}" min="50" step="100"
+               style="width:90px;margin-left:8px;padding:2px 6px;border:1px solid #ccc;border-radius:4px"></label>
+    </div>
+  `;
+  return controls;
+}
+
+// Current selections from the controls.
+function readControls(container) {
+  const groupSel = container.querySelector(`#${GROUP_SEL_ID}`);
+  const sampleRaw = container.querySelector(`#${SAMPLE_INPUT_ID}`)?.value ?? DEFAULT_SAMPLES_PER_GROUP;
+  return {
+    mode:            container.querySelector(`input[name="${MODE_ID}"]:checked`)?.value ?? 'shape',
+    selectedGroups:  groupSel ? [...groupSel.selectedOptions].map(o => o.value).filter(Boolean) : [],
+    selectedFile:    container.querySelector(`#${FILE_SEL_ID}`)?.value ?? '',
+    samplesPerGroup: Math.max(50, parseInt(sampleRaw, 10) || DEFAULT_SAMPLES_PER_GROUP),
+  };
+}
+
+// Re-draw whenever any control changes.
+function wireControls(container, onChange) {
+  container.querySelectorAll(`input[name="${MODE_ID}"]`).forEach(el => el.addEventListener('change', onChange));
+  for (const id of [GROUP_SEL_ID, FILE_SEL_ID, SAMPLE_INPUT_ID]) {
+    container.querySelector(`#${id}`)?.addEventListener('change', onChange);
+  }
+}
 
 async function renderHistogram(container, ctx, { mode, selectedGroups, selectedFile, hasRange, samplesPerGroup }) {
   const { q, groupExpr: geFn } = ctx.sql;
@@ -152,23 +210,26 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
     const group  = String(row.__group__);
     const counts = extractBinary(row.histogram_counts);
     if (!counts?.length) continue;
+    const total = histTotal(counts);
+    if (total <= 0) continue;
     if (!groupData[group]) groupData[group] = { sums: new Float64Array(counts.length), count: 0, min: hasRange ? Number(row.histogram_min) : 0, max: hasRange ? Number(row.histogram_max) : 255 };
     const gd = groupData[group];
-    for (let i = 0; i < counts.length; i++) gd.sums[i] += counts[i];
+    // Normalize each image to area 1 before accumulating, so the group curve is
+    // the mean per-image histogram (every image weighted equally, not by size).
+    for (let i = 0; i < counts.length; i++) gd.sums[i] += counts[i] / total;
     gd.count++;
     if (hasRange) { gd.min = Math.min(gd.min, Number(row.histogram_min)); gd.max = Math.max(gd.max, Number(row.histogram_max)); }
   }
 
-  const visibleGroups = (selectedGroups.length ? selectedGroups : ctx.groups).filter(g => groupData[g]);
+  const visibleGroups = (selectedGroups.length ? selectedGroups : ctx.groups).filter(g => groupData[g]?.count);
   if (!visibleGroups.length) {
     container.innerHTML = '<div class="no-data">No histogram data available for the current filter.</div>';
     return;
   }
   const traces = visibleGroups.map(g => {
     const { sums, count, min, max } = groupData[g];
-    const total = sums.reduce((s, v) => s + v, 0);
     const nBins = sums.length;
-    const ys    = Array.from(sums, v => total > 0 ? v / total : 0);
+    const ys    = Array.from(sums, v => v / count);
     const xs    = histXAxis(mode, nBins, min, max);
     return { type: 'scatter', mode: 'lines', name: ctx.groupLabel(String(g)), x: xs, y: ys, fill: 'tozeroy', opacity: 0.6, line: { color: ctx.color.group(g), width: 2 } };
   });
@@ -214,6 +275,13 @@ async function renderHistogram(container, ctx, { mode, selectedGroups, selectedF
     bargap: 0, height: 500, showlegend: showLegend,
     ...(showLegend ? { legend: plotlyLegendConfig } : {}),
   });
+}
+
+// Total pixel count of one image's histogram, used to normalize it to area 1.
+function histTotal(counts) {
+  let total = 0;
+  for (let i = 0; i < counts.length; i++) total += counts[i];
+  return total;
 }
 
 function histXAxis(mode, nBins, min, max) {
