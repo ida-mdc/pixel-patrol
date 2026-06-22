@@ -124,8 +124,14 @@ function prependUnevenGroupWarning(container, ctx, rows) {
 // The Files / Images / Total Size / Extensions tiles.
 function renderKpis(container, ctx, s) {
   const { escapeHtml, formatBytes } = ctx.plot;
-  const kpis = [{ label: 'Files', value: (s.totalFiles ?? s.totalRecords).toLocaleString() }];
-  if (s.totalImages > 0) kpis.push({ label: 'Images', value: s.totalImages.toLocaleString() });
+  const fileCount = s.totalFiles ?? s.totalRecords;
+  const kpis = [{ label: 'Files', value: fileCount.toLocaleString() }];
+  // Show the image count alongside the file count whenever the two differ
+  // (e.g. multi-image stacks/series); when it's one-image-per-file the extra
+  // tile would just repeat the file count, so it's omitted.
+  if (s.totalImages > 0 && s.totalImages !== fileCount) {
+    kpis.push({ label: 'Images', value: s.totalImages.toLocaleString() });
+  }
   kpis.push({ label: 'Total Size', value: formatBytes(s.totalBytes) });
   kpis.push({ label: 'File Extensions', value: formatFileTypes(s.extensions) });
 
