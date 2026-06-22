@@ -303,11 +303,11 @@ const EXPORT_HINTS = {
   'parquet:full':    'Full table - including rows of dim slice stats.',
 };
 
+// One labelled button per export option (no dropdown), each with its own
+// description line, so every choice is visible at a glance.
 function buildExportControls(schema, onExport, canParquet) {
-  const selectEl = el('export-select');
-  const hintEl   = el('export-hint');
-  const btnEl    = el('export-btn');
-  if (!selectEl || !btnEl) return;
+  const listEl = el('export-buttons');
+  if (!listEl) return;
 
   const hasSlicing = (schema.dimCols ?? []).length > 0;
 
@@ -326,16 +326,25 @@ function buildExportControls(schema, onExport, canParquet) {
     }
   }
 
-  selectEl.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  listEl.innerHTML = '';
+  for (const o of options) {
+    const wrap = document.createElement('div');
 
-  function updateHint() {
-    hintEl.textContent = EXPORT_HINTS[selectEl.value] ?? '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'export-opt-btn';
+    btn.innerHTML = `<i class="bi bi-download me-1"></i>${o.label}`;
+    btn.onclick = () => {
+      const [format, scope] = o.value.split(':');
+      onExport(format, scope);
+    };
+
+    const desc = document.createElement('div');
+    desc.className = 'export-opt-desc';
+    desc.textContent = EXPORT_HINTS[o.value] ?? '';
+
+    wrap.appendChild(btn);
+    if (desc.textContent) wrap.appendChild(desc);
+    listEl.appendChild(wrap);
   }
-  selectEl.onchange = updateHint;
-  updateHint();
-
-  btnEl.onclick = () => {
-    const [format, scope] = selectEl.value.split(':');
-    onExport(format, scope);
-  };
 }

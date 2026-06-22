@@ -17,10 +17,10 @@ export default {
   id: 'mosaic',
   group: 'Visualization',
   scope: 'image',
-  label: 'Image Mosaic',
-  shortLabel: 'Mosaic',
+  label: 'Image Thumbnails',
+  shortLabel: 'Thumbnails',
   info: [
-    'Displays an **image mosaic**, one thumbnail per file.',
+    'Displays a **thumbnail mosaic**, one thumbnail per file.',
     '',
     '- Thumbnails are generated from the central slice in all non-XY dimensions.',
     '- Sorting by a measurement (e.g. mean, min, max) can reveal visual trends.',

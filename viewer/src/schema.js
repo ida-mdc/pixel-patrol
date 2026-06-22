@@ -9,9 +9,13 @@ export const BLOB_COLS = new Set([
 
 export const SKIP_METRIC_COLS = new Set([
   'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
-  'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size', 'S_size',
   'size_bytes',
 ]);
+
+// Per-axis pixel-extent columns (X_size, Y_size, Z_size, …). Matched by shape
+// rather than a fixed axis list so any dimension a dataset carries is excluded
+// from metrics, not just the canonical X/Y/Z/T/C/S set.
+const AXIS_SIZE_RE = /^[A-Za-z]_size$/;
 
 export const META_COLS = [
   'dim_order', 'dtype', 'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size',
@@ -84,11 +88,13 @@ export function detectSchema(columns) {
 
     allCols.push(name);
 
-    if (isNumeric && !SKIP_METRIC_COLS.has(name)) {
+    const isSkipped = SKIP_METRIC_COLS.has(name) || AXIS_SIZE_RE.test(name);
+
+    if (isNumeric && !isSkipped) {
       metricCols.push(name);
     }
 
-    if (!SKIP_METRIC_COLS.has(name)) {
+    if (!isSkipped) {
       if (KNOWN_GROUP_COLS.has(name)) {
         groupCols.push(name);
       } else if (isString) {

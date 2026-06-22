@@ -156,7 +156,7 @@ function buildSlotControls(available, paletteNames, getColors) {
   const sigToggle     = Object.assign(document.createElement('input'), { type: 'checkbox' });
   const sigToggleWrap = document.createElement('label');
   sigToggleWrap.style.cssText = 'font-size:13px;display:none;align-items:center;gap:4px;cursor:pointer;white-space:nowrap';
-  sigToggleWrap.append(sigToggle, document.createTextNode('Significance'));
+  sigToggleWrap.append(sigToggle, document.createTextNode('U-test significance'));
 
   const colorBySel = makeCombobox([NO_COLOR, GLOBAL_COLOR, ...available], 'Color by…');
   const paletteSel = mkSelect(paletteNames.map(n => [n, n]));

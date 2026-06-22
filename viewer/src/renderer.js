@@ -426,17 +426,22 @@ async function buildTile(cell, plugin, ctx) {
 
   // No per-tile colour legend: the group → colour mapping is shown once, as a
   // coloured dot per group in the summary table at the top of the report.
+  // The band is always rendered (even with no text) so the plot area, message,
+  // and "view all plots" bar stay the same size on every tile.
+  const msg = document.createElement('div');
+  msg.className = warning ? 'widget-tile-msg widget-tile-msg-warning' : 'widget-tile-msg';
   if (text) {
-    const msg = document.createElement('div');
-    msg.className = 'widget-tile-msg';
     msg.innerHTML = `${warning ? '<span class="widget-tile-msg-icon" aria-hidden="true">⚠️</span>' : ''}<span>${text}</span>`;
-    tile.appendChild(msg);
   }
+  tile.appendChild(msg);
 
   const open = document.createElement('span');
   open.className = 'widget-tile-open';
-  open.textContent = 'Open ▸';
+  // "View all plots" (rather than just "Open") signals the tile is a preview and
+  // the full widget may hold more than the single hero plot shown here.
+  open.textContent = 'View all plots ▸';
   tile.appendChild(open);
+  tile.title = 'View all plots';
 
   cell.appendChild(tile);
 

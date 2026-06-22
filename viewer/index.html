@@ -43,27 +43,35 @@
 <div id="main-app" style="display:none">
   <!-- Top bar -->
   <div class="topbar">
-    <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
-      <i class="bi bi-list" style="font-size:1.1rem"></i>
-    </button>
-    <img src="./icon.png" alt="Pixel Patrol" class="topbar-icon"/>
-    <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
-    <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
-      <i class="bi bi-folder2-open"></i> Open File
-    </label>
-    <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
-    <span id="current-filename" class="text-muted small text-truncate" style="max-width:300px"></span>
-    <div class="ms-auto d-flex align-items-center gap-2">
+    <!-- Left: navigation + open + current file -->
+    <div class="topbar-left">
+      <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
+        <i class="bi bi-list" style="font-size:1.1rem"></i>
+      </button>
+      <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
+        <i class="bi bi-folder2-open"></i><span class="d-none d-sm-inline ms-1">Open different file</span>
+      </label>
+      <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
+      <span id="current-filename" class="text-muted small text-truncate"></span>
+      <span id="row-count-badge" class="badge bg-secondary"></span>
+    </div>
+
+    <!-- Center: brand -->
+    <div class="topbar-center">
+      <img src="./icon.png" alt="Pixel Patrol" class="topbar-icon"/>
+      <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
+    </div>
+
+    <!-- Right: view mode + actions -->
+    <div class="topbar-right">
 
       <div class="form-check form-switch mb-0">
         <input class="form-check-input" type="checkbox" role="switch" id="condensed-mode-cb">
         <label class="form-check-label small fw-bold" for="condensed-mode-cb">
-          <span class="d-none d-sm-inline">Condensed mode</span>
+          <span class="d-none d-sm-inline">Overview mode</span>
           <span class="d-sm-none">🗜️</span>
         </label>
       </div>
-
-      <span id="row-count-badge" class="badge bg-secondary"></span>
 
       <!-- Export menu (popover anchored to this button) -->
       <div class="header-menu">
@@ -73,17 +81,13 @@
         </button>
         <div id="export-menu-panel" class="header-menu-panel" role="menu" aria-label="Export" hidden>
           <div class="header-menu-title">Export data</div>
-          <div class="d-flex gap-1">
-            <select id="export-select" class="form-select form-select-sm flex-grow-1" aria-label="Export format"></select>
-            <button id="export-btn" type="button" class="btn btn-outline-secondary btn-sm px-2" title="Export">
-              <i class="bi bi-download"></i>
-            </button>
-          </div>
-          <div id="export-hint" class="text-muted mt-1" style="font-size:0.72rem;line-height:1.3"></div>
+          <div id="export-buttons" class="export-btn-list"></div>
           <div id="export-error" class="text-danger mt-1" style="font-size:0.72rem;line-height:1.3;display:none"></div>
-          <button id="export-baked-btn" type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2">
-            <i class="bi bi-file-earmark-code me-1"></i>Export static HTML snapshot…
+          <hr class="my-2"/>
+          <button id="export-baked-btn" type="button" class="export-opt-btn">
+            <i class="bi bi-file-earmark-code me-1"></i>Static HTML snapshot…
           </button>
+          <div class="export-opt-desc">A single self-contained HTML file with the current view baked in — opens in any browser, no server needed.</div>
         </div>
       </div>
 
@@ -99,6 +103,11 @@
             <input type="text" name="name" class="form-control form-control-sm mb-2" placeholder="Your name (optional)" />
             <input type="email" name="email" class="form-control form-control-sm mb-2" placeholder="Your email (optional)" />
             <textarea name="message" class="form-control form-control-sm mb-2" rows="3" placeholder="Your feedback" required></textarea>
+            <p class="feedback-privacy-note">
+              <i class="bi bi-exclamation-triangle me-1"></i>Submitted via <strong>Formspree</strong>, a third-party
+              service, and forwarded to our email inbox — it leaves your device and is processed outside Pixel Patrol.
+              Do not include patient data, file contents, or other confidential information.
+            </p>
             <button type="submit" class="btn btn-primary btn-sm w-100">Send Feedback</button>
           </form>
         </div>
@@ -155,7 +164,7 @@
               <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" id="show-significance-cb">
                 <label class="form-check-label small" for="show-significance-cb">
-                  Show significance brackets
+                  Show U-test significance
                 </label>
               </div>
             </div>
@@ -222,6 +231,11 @@
         <div style="margin-bottom:16px">
           <textarea name="message" class="form-control" rows="4" placeholder="Your feedback" required></textarea>
         </div>
+        <p class="feedback-privacy-note text-center">
+          <i class="bi bi-exclamation-triangle me-1"></i>Submitted via <strong>Formspree</strong>, a third-party service,
+          and forwarded to our email inbox — it leaves your device and is processed outside Pixel Patrol.
+          Do not include patient data, file contents, or other confidential information.
+        </p>
         <div style="text-align:center">
           <button type="submit" class="btn btn-primary">Send Feedback</button>
         </div>

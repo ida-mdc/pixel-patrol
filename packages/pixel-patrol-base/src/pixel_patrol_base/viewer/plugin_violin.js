@@ -293,7 +293,7 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicCondensedSummary,
     ['mean_intensity'], 'Intensity'),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityCondensedSummary,
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality'),
+    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality'),
 ];
 
 function resolveMetrics(schema, dimensions) {
