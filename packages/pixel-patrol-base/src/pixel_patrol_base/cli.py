@@ -233,6 +233,34 @@ def build_viewer_html(output: Path):
     api_build_viewer(output)
 
 
+@cli.command()
+@click.option('--output', '-o',
+              type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
+              default=None,
+              help='Write the catalog JSON here. Defaults to stdout.')
+@click.option('--no-widgets', is_flag=True, default=False,
+              help='Skip viewer-widget metadata (which requires Node to read the JS plugins).')
+def schema(output: Path | None, no_widgets: bool):
+    """
+    Export the report schema and plugin catalog as JSON.
+
+    Describes the columns of the final parquet report and the registered loaders,
+    processors, and viewer widgets that produce or consume them - each with a
+    human description. Intended for documentation and tooling.
+    """
+    import json
+    from pixel_patrol_base.core.schema_catalog import build_catalog
+
+    catalog = build_catalog(include_widgets=not no_widgets)
+    text = json.dumps(catalog, indent=2)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text)
+        click.echo(f"Wrote schema catalog to '{output}'.")
+    else:
+        click.echo(text)
+
+
 def _parse_slice_size(items: tuple) -> dict:
     """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means full extent."""
     result = {}

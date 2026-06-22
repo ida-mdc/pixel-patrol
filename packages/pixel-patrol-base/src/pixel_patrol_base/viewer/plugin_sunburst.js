@@ -3,6 +3,7 @@ const MIXED_COLOR = '#aaaaaa';
 
 export default {
   id: 'sunburst',
+  inputs: ['path', 'size_bytes'],
   group: 'Summary',
   scope: 'file',
   info: 'Sunburst view of the **file and folder hierarchy**.\n\nClick a slice to zoom in; click the center to zoom out.',

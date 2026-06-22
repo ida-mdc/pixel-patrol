@@ -497,6 +497,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
 
 export default {
   id:    'custom-plot',
+  inputs: ['any metric column'],
   label: 'Custom Plot',
   group: 'Explore',
   info:  'Build your own plot from the columns in your current data.\n\n' +

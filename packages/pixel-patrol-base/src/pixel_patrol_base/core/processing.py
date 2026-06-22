@@ -1252,9 +1252,10 @@ def save_parquet_from_parts(
     unified = unified.select(ordered)
 
     # ── Step 5: build target Arrow schema with footer metadata ──
+    from pixel_patrol_base.io.parquet_io import with_field_descriptions
     kv_meta      = metadata.to_parquet_meta()
     arrow_kv     = {k.encode(): v.encode() for k, v in kv_meta.items()}
-    arrow_schema = unified.to_arrow().schema.with_metadata(arrow_kv)
+    arrow_schema = with_field_descriptions(unified.to_arrow().schema.with_metadata(arrow_kv))
 
     # ── Step 6: stream-write one part at a time ──
     rg_size    = row_group_size or 2048

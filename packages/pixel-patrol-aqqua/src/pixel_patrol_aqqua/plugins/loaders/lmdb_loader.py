@@ -15,6 +15,10 @@ import numpy as np
 import polars as pl
 
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.loader_schema import (
+    RASTER_IMAGE_LOADER_SCHEMA,
+    RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
+)
 from pixel_patrol_base.core.record import record_from, Record
 
 logger = logging.getLogger(__name__)
@@ -151,20 +155,12 @@ def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
 class LmdbLoader:
 
     NAME = "aqqua_lmdb"
+    DESCRIPTION = "Loads images stored as records in an LMDB key-value database (Aqqua format), one sub-image per key."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"lmdb", "mdb"}
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {
-        "dim_order": str,
-        "ndim": int,
-        "num_pixels": int,
-        "shape": pl.Array,
-        "dtype": str,
-    }
-
-    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = [
-        (r"^[A-Za-z]+_size$", int),
-    ]
+    OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
+    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     FOLDER_EXTENSIONS:    Set[str] = {"lmdb"}
     CONTAINER_EXTENSIONS: Set[str] = {"lmdb", "mdb"}

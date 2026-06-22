@@ -140,15 +140,22 @@ class ThumbnailProcessor:
     from the patches themselves.
     """
 
-    NAME       = "thumbnail"
-    CHUNK_KIND = ChunkKind.MEMORY
-    INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
-    OUTPUT     = "features"
+    NAME        = "thumbnail"
+    DESCRIPTION = "Generates a small downsampled RGBA thumbnail of each image, assembled from per-chunk spatial patches."
+    CHUNK_KIND  = ChunkKind.MEMORY
+    INPUT       = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
+    OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "thumbnail":          bytes,
         "thumbnail_norm_min": float,
         "thumbnail_norm_max": float,
         "thumbnail_dtype":    str,
+    }
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "thumbnail":          "Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size).",
+        "thumbnail_norm_min": "Lower intensity bound used to normalize the thumbnail.",
+        "thumbnail_norm_max": "Upper intensity bound used to normalize the thumbnail.",
+        "thumbnail_dtype":    "Original pixel dtype of the source image the thumbnail was built from.",
     }
 
     def get_aggregation(self, name: str):
