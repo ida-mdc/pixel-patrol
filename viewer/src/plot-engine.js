@@ -682,7 +682,10 @@ function computeSignificancePairs(categories, rankData) {
 }
 
 function addSignificanceBrackets(plotDiv, pairs, categories) {
-  const sigPairs = pairs.filter(p => p.symbol !== 'ns');
+  // Show every compared pair, including non-significant ones: a greyed-out "ns"
+  // bracket tells the reader the comparison *was* run and came back not
+  // significant, rather than silently omitting it (which reads as "no test").
+  const sigPairs = pairs;
   if (!sigPairs.length) return Promise.resolve();
   // Defer to the next frame: unlike main (static box-plot cards), the beginner-mode
   // tile-expand flow can resize/re-layout the plot after the initial draw, so a
@@ -703,12 +706,16 @@ function addSignificanceBrackets(plotDiv, pairs, categories) {
     for (const { c1, c2, symbol } of sigPairs) {
       const x1 = Math.min(xPos[c1], xPos[c2]);
       const x2 = Math.max(xPos[c1], xPos[c2]);
+      // Non-significant pairs are drawn in muted grey so the significant ones
+      // (black) still read as the headline result.
+      const ns    = symbol === 'ns';
+      const color = ns ? '#adb5bd' : 'black';
       shapes.push(
-        { type:'line', x0:x1, x1:x1, y0:currentY-tickH, y1:currentY, xref:'x', yref:'y', line:{color:'black',width:1} },
-        { type:'line', x0:x1, x1:x2, y0:currentY,       y1:currentY, xref:'x', yref:'y', line:{color:'black',width:1} },
-        { type:'line', x0:x2, x1:x2, y0:currentY-tickH, y1:currentY, xref:'x', yref:'y', line:{color:'black',width:1} },
+        { type:'line', x0:x1, x1:x1, y0:currentY-tickH, y1:currentY, xref:'x', yref:'y', line:{color,width:1} },
+        { type:'line', x0:x1, x1:x2, y0:currentY,       y1:currentY, xref:'x', yref:'y', line:{color,width:1} },
+        { type:'line', x0:x2, x1:x2, y0:currentY-tickH, y1:currentY, xref:'x', yref:'y', line:{color,width:1} },
       );
-      annotations.push({ x:(x1+x2)/2, y:currentY+tickH*0.5, text:symbol, showarrow:false, font:{size:12,color:'black'}, xref:'x', yref:'y' });
+      annotations.push({ x:(x1+x2)/2, y:currentY+tickH*0.5, text:symbol, showarrow:false, font:{size:ns?10:12,color}, xref:'x', yref:'y' });
       currentY += gap + tickH;
     }
     Plotly.relayout(plotDiv, { shapes, annotations, 'yaxis.range': [yBottom, currentY + gap], 'yaxis.autorange': false })
