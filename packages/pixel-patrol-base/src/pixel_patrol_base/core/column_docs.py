@@ -43,7 +43,8 @@ BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
     "child_id":            "Stable identifier of a sub-image within a container file (null for plain files).",
     # pipeline-generated obs columns
     "obs_level":           "Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns.",
-    "num_pixels":          "Number of pixels covered by this row's spatial extent.",
+    "num_pixels":          "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels).",
+    "ndim":                "Number of image dimensions, derived from dim_order.",
 }
 
 # Regex-keyed descriptions for pipeline column families whose exact names depend on

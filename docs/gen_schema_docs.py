@@ -46,11 +46,11 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <style>
   :root { --bg:#fff; --fg:#1b1b1f; --muted:#6a6a73; --line:#e3e3e8; --chip:#eef1f6;
           --accent:#4051b5; --panel:#f7f8fb; --edge:#c8c8c8;
-          --c-file:#3b6ea5; --c-image:#2e7d6b; --c-agg:#a03868; --c-metric:#b8742a; --c-widget:#6a4bb5; }
+          --c-file:#3b6ea5; --c-image:#2e7d6b; --c-derived:#6a8040; --c-agg:#a03868; --c-metric:#b8742a; --c-widget:#6a4bb5; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#1b1b1f; --fg:#e6e6ea; --muted:#9b9ba4; --line:#33343a; --chip:#2a2b31;
             --accent:#8a9bff; --panel:#212229; --edge:#4a4a4a;
-            --c-file:#69a8e0; --c-image:#5fcdb4; --c-agg:#d080a8; --c-metric:#e2a35a; --c-widget:#b39bff; }
+            --c-file:#69a8e0; --c-image:#5fcdb4; --c-derived:#a0ba70; --c-agg:#d080a8; --c-metric:#e2a35a; --c-widget:#b39bff; }
   }
   * { box-sizing:border-box; }
   html, body { margin:0; }
@@ -116,6 +116,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
       <span><i class="dot" style="background:var(--c-metric)"></i> Processor metrics</span>
       <span><i class="dot" style="background:var(--c-widget)"></i> Widgets</span>
       <span><i class="dot" style="background:var(--c-file)"></i> File data</span>
+      <span><i class="dot" style="background:var(--c-derived)"></i> Image derived columns</span>
       <span><i class="dot" style="background:var(--c-agg)"></i> Aggregation</span>
     </div>
   </header>
@@ -182,6 +183,8 @@ const widgetCols = Object.fromEntries(CAT.widgets.map(w => ['widget:'+w.id, widg
 const byNode = {};
 byNode['file'] = {kind:'producer', label:'File data', sub:'file-system scan',
   desc:'Scans the input directory and records each file: paths, sizes, extensions and timestamps.'};
+byNode['derived'] = {kind:'producer', label:'Derived metadata', sub:'computed from image data',
+  desc:'The pipeline computes these from the image data: ndim from dim_order, num_pixels from shape, and <axis>_size columns from the actual array shape per dimension. Loaders do not need to provide these.'};
 byNode['agg']  = {kind:'producer', label:'Aggregation', sub:'adds per-dimension rows',
   desc:'Pixel Patrol offers per-dimension slice statistics in the report. Aggregation of those statistics creates multiple rows per image - one per dimension slice (Z, T, C, ...) - and adds obs_level and dim_* coordinate columns to identify each slice.'};
 if (rasterSchema) byNode['schema:'+rasterSchema.id] = {kind:'schema', label:rasterSchema.label, data:rasterSchema};
@@ -254,6 +257,10 @@ const fileSection = el('div', {class:'col-section'});
 fileSection.append(el('div', {class:'col-section-label'}, 'Always created columns'));
 fileSection.append(nodeEl('file', 'File data', colCount('file') + ' columns', 'var(--c-file)'));
 left.append(fileSection);
+const derivedSection = el('div', {class:'col-section'});
+derivedSection.append(el('div', {class:'col-section-label'}, 'Image derived columns'));
+derivedSection.append(nodeEl('derived', 'Derived metadata', colCount('derived') + ' columns', 'var(--c-derived)'));
+left.append(derivedSection);
 const aggSection = el('div', {class:'col-section'});
 aggSection.append(el('div', {class:'col-section-label'}, 'Per-Dim Statistics'));
 aggSection.append(nodeEl('agg', 'Aggregation', colCount('agg') + ' columns', 'var(--c-agg)'));
@@ -362,7 +369,15 @@ function renderDetails(id) {
       data.extensions.forEach(x => e.append(el('span', {class:'chip'}, x)));
       panel.append(e);
     }
-    if (rasterSchema) { const s = el('div', {class:'sec'}, el('h4', {}, 'Inherits')); s.append(chipLink('schema:'+rasterSchema.id)); panel.append(s); }
+    if (rasterSchema) {
+      const req = rasterSchema.columns.filter(c => c.required);
+      if (req.length) {
+        const s = el('div', {class:'sec'}, el('h4', {}, 'Required columns'));
+        req.forEach(c => s.append(el('span', {class:'chip'}, c.name)));
+        s.append(el('p', {style:'font-size:.8rem;color:var(--muted);margin:.4rem 0 0'}, 'Loaders may also add additional image metadata fields (e.g. channel_names, dim_names).'));
+        panel.append(s);
+      }
+    }
     if (data.extra_columns?.length)
       panel.append(el('div', {class:'sec'}, el('h4', {}, 'Loader-specific columns'), colTable(data.extra_columns)));
   } else if (kind === 'processor') {
@@ -402,7 +417,7 @@ requestAnimationFrame(relayout);
 """
 
 
-_SOURCE_LABELS = {"file": "File system", "agg": "Aggregation", "image": "Loaders"}
+_SOURCE_LABELS = {"file": "File system", "agg": "Aggregation", "image": "Loaders", "derived": "Pipeline"}
 
 
 def _source_label(producer: str) -> str:
