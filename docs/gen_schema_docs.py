@@ -45,12 +45,12 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <title>Pixel Patrol - Report Map</title>
 <style>
   :root { --bg:#fff; --fg:#1b1b1f; --muted:#6a6a73; --line:#e3e3e8; --chip:#eef1f6;
-          --accent:#4051b5; --panel:#f7f8fb; --edge:#ccced8;
-          --c-file:#3b6ea5; --c-image:#2e7d6b; --c-agg:#8a8a93; --c-metric:#b8742a; --c-widget:#6a4bb5; }
+          --accent:#4051b5; --panel:#f7f8fb; --edge:#c8c8c8;
+          --c-file:#3b6ea5; --c-image:#2e7d6b; --c-agg:#a03868; --c-metric:#b8742a; --c-widget:#6a4bb5; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#1b1b1f; --fg:#e6e6ea; --muted:#9b9ba4; --line:#33343a; --chip:#2a2b31;
-            --accent:#8a9bff; --panel:#212229; --edge:#3a3b44;
-            --c-file:#69a8e0; --c-image:#5fcdb4; --c-agg:#a9a9b3; --c-metric:#e2a35a; --c-widget:#b39bff; }
+            --accent:#8a9bff; --panel:#212229; --edge:#4a4a4a;
+            --c-file:#69a8e0; --c-image:#5fcdb4; --c-agg:#d080a8; --c-metric:#e2a35a; --c-widget:#b39bff; }
   }
   * { box-sizing:border-box; }
   html, body { margin:0; }
@@ -62,9 +62,9 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .legend { margin-top:.4rem; display:flex; gap:1.1rem; flex-wrap:wrap; font-size:.8rem; align-items:center; }
   .legend span { display:inline-flex; align-items:center; gap:.35rem; }
   .dot { width:.7rem; height:.7rem; border-radius:50%; display:inline-block; }
-  .main { display:flex; height:70vh; min-height:380px; border-bottom:1px solid var(--line); }
+  .main { display:flex; flex:1; min-height:380px; border-bottom:1px solid var(--line); }
   #graph-wrap { position:relative; flex:1; min-width:0; overflow:auto; padding:.3rem .8rem 1rem; }
-  #edges { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+  #edges { position:absolute; top:0; left:0; pointer-events:none; z-index:0; }
   #graph { position:relative; z-index:1; display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.6rem; align-items:start; }
   .colhead { font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
              font-weight:700; margin:.5rem 0 .2rem; position:sticky; top:0; background:var(--bg); padding:.2rem 0; z-index:2; }
@@ -98,6 +98,11 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .sec h4 { margin:0 0 .25rem; font-size:.74rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
   button.reset { float:right; font:inherit; font-size:.8rem; background:var(--chip); color:var(--fg);
                  border:1px solid var(--line); border-radius:6px; padding:.2rem .55rem; cursor:pointer; }
+  .col-divider { border:none; border-top:1px solid var(--line); margin:1.1rem 0 .6rem; }
+  .col-section { border:1px dashed var(--line); border-radius:7px; padding:.4rem .5rem .5rem; margin:.5rem 0; }
+  .col-section .node { background:var(--panel); margin:.25rem 0; }
+  .col-section-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+                       font-weight:700; margin-bottom:.3rem; }
 </style>
 </head>
 <body>
@@ -105,20 +110,20 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <header>
     <button class="reset" id="reset">Clear selection</button>
     <h1>Report Map</h1>
-    <p>How a report is built: <b>sources</b> (the file scan, aggregation and image loaders) feed the <b>processors</b> that compute metrics, and all of them feed the <b>widgets</b> shown in the report. Click a node for details; hover to trace its links.</p>
+    <p>Pixel Patrol creates a report - a <code>.parquet</code> file (a table). <b>File data</b> columns are always created. Pixel Patrol plugins: <b>Loaders</b> create columns with image metadata and feed the image data to the <b>Processors</b>, which compute metrics and add metric columns to the table. <b>Widgets</b> offer different visualizations of the table and its columns. Click a node for details; hover to trace its links.</p>
     <div class="legend">
-      <span><i class="dot" style="background:var(--c-file)"></i> File metadata</span>
-      <span><i class="dot" style="background:var(--c-image)"></i> Image metadata (loaders)</span>
-      <span><i class="dot" style="background:var(--c-agg)"></i> Aggregation</span>
+      <span><i class="dot" style="background:var(--c-image)"></i> Loader columns</span>
       <span><i class="dot" style="background:var(--c-metric)"></i> Processor metrics</span>
       <span><i class="dot" style="background:var(--c-widget)"></i> Widgets</span>
+      <span><i class="dot" style="background:var(--c-file)"></i> File data</span>
+      <span><i class="dot" style="background:var(--c-agg)"></i> Aggregation</span>
     </div>
   </header>
   <div class="main">
     <div id="graph-wrap">
       <svg id="edges"></svg>
       <div id="graph">
-        <div class="col" id="col-left"><div class="colhead">Sources<small>file scan, aggregation &amp; loaders</small></div></div>
+        <div class="col" id="col-loaders"><div class="colhead">Loaders<small>read images &amp; extract image metadata</small></div></div>
         <div class="col" id="col-mid"><div class="colhead">Processors<small>compute metrics</small></div></div>
         <div class="col" id="col-right"><div class="colhead">Widgets<small>shown in the report</small></div></div>
       </div>
@@ -175,10 +180,10 @@ const widgetCols = Object.fromEntries(CAT.widgets.map(w => ['widget:'+w.id, widg
 
 // ---- node registry ---------------------------------------------------------
 const byNode = {};
-byNode['file'] = {kind:'producer', label:'File system', sub:'file-system scan',
+byNode['file'] = {kind:'producer', label:'File data', sub:'file-system scan',
   desc:'Scans the input directory and records each file: paths, sizes, extensions and timestamps.'};
-byNode['agg']  = {kind:'producer', label:'Aggregation', sub:'obs rollup',
-  desc:'Rolls per-image rows up into the obs hierarchy, adding obs_level, per-dimension coordinates and pixel counts.'};
+byNode['agg']  = {kind:'producer', label:'Aggregation', sub:'adds per-dimension rows',
+  desc:'Pixel Patrol offers per-dimension slice statistics in the report. Aggregation of those statistics creates multiple rows per image - one per dimension slice (Z, T, C, ...) - and adds obs_level and dim_* coordinate columns to identify each slice.'};
 if (rasterSchema) byNode['schema:'+rasterSchema.id] = {kind:'schema', label:rasterSchema.label, data:rasterSchema};
 for (const l of CAT.loaders) byNode['loader:'+l.name] = {kind:'loader', label:l.name, data:l};
 for (const p of CAT.processors) byNode['processor:'+p.name] = {kind:'processor', label:p.name, data:p};
@@ -237,18 +242,22 @@ function nodeEl(id, title, sub, color, opts={}) {
   return node;
 }
 
-const left = document.getElementById('col-left');
-left.append(el('div', {class:'group-label'}, 'Base processing'));
-left.append(nodeEl('file', 'File system', colCount('file') + ' columns', 'var(--c-file)'));
-left.append(nodeEl('agg', 'Aggregation', colCount('agg') + ' columns', 'var(--c-agg)'));
-if (CAT.loaders.length) {
-  left.append(el('div', {class:'group-label'}, 'Loaders'));
-  for (const l of CAT.loaders) {
-    const ex = (l.extra_columns || []).length;
-    const sub = (l.extensions || []).slice(0,3).join(', ') + (ex ? '  (+' + ex + ' extra)' : '');
-    left.append(nodeEl('loader:'+l.name, l.name, sub, 'var(--c-image)'));
-  }
+const left = document.getElementById('col-loaders');
+for (const l of CAT.loaders) {
+  const exts = l.extensions || [];
+  const extPreview = exts.slice(0,3).join(', ') + (exts.length > 3 ? ` (+${exts.length - 3} more)` : '');
+  const sub = 'Extensions: ' + (extPreview || 'none');
+  left.append(nodeEl('loader:'+l.name, l.name, sub, 'var(--c-image)'));
 }
+left.append(el('hr', {class:'col-divider'}));
+const fileSection = el('div', {class:'col-section'});
+fileSection.append(el('div', {class:'col-section-label'}, 'Always created columns'));
+fileSection.append(nodeEl('file', 'File data', colCount('file') + ' columns', 'var(--c-file)'));
+left.append(fileSection);
+const aggSection = el('div', {class:'col-section'});
+aggSection.append(el('div', {class:'col-section-label'}, 'Per-Dim Statistics'));
+aggSection.append(nodeEl('agg', 'Aggregation', colCount('agg') + ' columns', 'var(--c-agg)'));
+left.append(aggSection);
 
 const mid = document.getElementById('col-mid');
 for (const p of CAT.processors)
@@ -288,7 +297,7 @@ function highlight(id) {
   paths.forEach((p, i) => {
     if (!p) return;
     const on = id && conn.eset.has(i);
-    p.setAttribute('stroke', on ? 'var(--accent)' : 'var(--edge)');
+    p.setAttribute('stroke', on ? '#666' : 'var(--edge)');
     p.setAttribute('stroke-width', on ? '2.2' : '1.3');
     p.setAttribute('opacity', id ? (on ? '1' : '.1') : '.55');
   });
@@ -370,6 +379,12 @@ function renderDetails(id) {
     if (data.group) meta.append(el('span', {class:'chip'}, data.group));
     if (data.scope) meta.append(el('span', {class:'chip'}, data.scope));
     panel.append(meta);
+    const exactInputs = (data.inputs || []).filter(t => t !== '*' && t !== 'any metric column' && !t.startsWith('!') && !t.includes('*'));
+    if (exactInputs.length) {
+      const s = el('div', {class:'sec'}, el('h4', {}, 'Required column' + (exactInputs.length > 1 ? 's' : '')));
+      exactInputs.forEach(t => s.append(el('span', {class:'chip'}, t)));
+      panel.append(s);
+    }
     const cols = widgetCols[id] || [];
     if (cols.length) panel.append(el('div', {class:'sec'}, el('h4', {}, 'Columns it uses'), colTable(cols)));
   }
@@ -380,7 +395,7 @@ function renderDetails(id) {
 function relayout() { layoutEdges(); highlight(selected); }
 window.addEventListener('resize', relayout);
 window.addEventListener('load', relayout);
-relayout();
+requestAnimationFrame(relayout);
 </script>
 </body>
 </html>
