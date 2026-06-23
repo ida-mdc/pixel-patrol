@@ -42,17 +42,17 @@ table is generated from the installed plugins.
 | `size_bytes` |  | File system | base processing | pixel-patrol-base | Size on disk in bytes (aggregated for folders). |
 | `size_readable` |  | File system | base processing | pixel-patrol-base | Human-readable size on disk (e.g. '2.4 MB'). |
 | `type` |  | File system | base processing | pixel-patrol-base | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). |
-| `<axis>_size` | `int` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Extent (number of elements) of this row along the given axis. |
 | `channel_names` | `list` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Names of the image channels, if available. |
 | `dim_names` | `list` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Human-readable names of the image axes. |
 | `dim_order` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Axis order of the image, e.g. 'TCZYX'. |
 | `dtype` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Pixel data type of the source image (e.g. 'uint8', 'float32'). |
 | `n_images` | `int` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Number of sub-images in the source (>1 for container formats). |
-| `ndim` | `int` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Number of image dimensions. |
-| `num_pixels` | `int` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Total number of pixels in the image. |
+| `ndim` | `int` | Loaders | bioio | pixel-patrol-loader-bio | Number of image dimensions, derived from dim_order. |
+| `num_pixels` | `int` | Loaders | bioio | pixel-patrol-loader-bio | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). |
 | `pixel_size_<axis>` | `float` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Physical pixel size along the given axis, in the image's spatial unit. |
 | `shape` | `array` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Size of the image along each axis, in dim_order. |
 | `zarr_attributes` | `dict` | Loaders | zarr | pixel-patrol-loader-bio |  |
+| `<axis>_size` | `int` | Pipeline | base processing | pixel-patrol-base | Extent (number of elements) of this row along the given axis. |
 | `dim_<axis>` | `int` | Aggregation | base processing | pixel-patrol-base | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. |
 | `obs_level` |  | Aggregation | base processing | pixel-patrol-base | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. |
 | `blocking_index` | `float32` | raster-compression | raster-compression | pixel-patrol-image |  |
