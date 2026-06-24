@@ -321,12 +321,15 @@ def _column_view(loaders: List[Dict], processors: List[Dict]) -> List[Dict[str, 
             put(col["name"], col["dtype"], col["description"], f"processor:{proc['name']}", "metric",
                 [proc["name"]], [proc["package"]])
 
-    # image metadata: only the shared raster-image columns and per-axis families an
-    # installed loader actually emits, each credited to the loaders that emit it. With
-    # no raster loader present there are no image rows, so no image columns are listed;
-    # a partial loader contributes exactly the schema subset it declares.
+    # image metadata: shared raster-image columns credited to the loaders that declare them.
+    # With no raster loader present there are no image rows, so no image columns are listed.
+    raster_loaders = [l for l in loaders if l.get("schema") == RASTER_IMAGE_SCHEMA_ID]
+    raster_names = [l["name"] for l in raster_loaders]
+    raster_pkgs  = [l["package"] for l in raster_loaders]
     for col in _common_schema_columns():
         names, packages = col_emitters.get(col["name"], ([], []))
+        if not names:
+            names, packages = raster_names, raster_pkgs
         if names:
             put(col["name"], col["dtype"], col["description"], "image", "image", names, packages)
     for pat, spec in RASTER_IMAGE_LOADER_SCHEMA_PATTERNS:
