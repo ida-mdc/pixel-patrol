@@ -29,7 +29,6 @@ table is generated from the installed plugins.
 <!-- BEGIN GENERATED COLUMNS (docs/gen_schema_docs.py) -->
 | Column | Type | Source | Created by | Package | Description |
 | --- | --- | --- | --- | --- | --- |
-| `child_id` |  | File system | base processing | pixel-patrol-base | Stable identifier of a sub-image within a container file (null for plain files). |
 | `common_base` |  | File system | base processing | pixel-patrol-base | Longest path prefix shared by all imported files. |
 | `depth` |  | File system | base processing | pixel-patrol-base | Depth of the path below the imported base directory. |
 | `file_extension` |  | File system | base processing | pixel-patrol-base | Lower-cased file extension without the leading dot. |
@@ -43,6 +42,7 @@ table is generated from the installed plugins.
 | `size_readable` |  | File system | base processing | pixel-patrol-base | Human-readable size on disk (e.g. '2.4 MB'). |
 | `type` |  | File system | base processing | pixel-patrol-base | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). |
 | `channel_names` | `list` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Names of the image channels, if available. |
+| `child_id` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Identifier of a sub-image within a container file (null for single-image files). |
 | `dim_names` | `list` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Human-readable names of the image axes. |
 | `dim_order` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Axis order of the image, e.g. 'TCZYX'. |
 | `dtype` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Pixel data type of the source image (e.g. 'uint8', 'float32'). |
