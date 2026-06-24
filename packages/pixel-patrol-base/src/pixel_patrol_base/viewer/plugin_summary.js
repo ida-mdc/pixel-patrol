@@ -1,6 +1,7 @@
 export default {
   id: 'summary',
-  inputs: ['size_bytes', 'file_extension'],
+  required_inputs: ['size_bytes', 'file_extension'],
+  inputs: ['path', 'n_images'],
   label: 'File Data Summary',
   group: 'Summary',
   info: 'High-level overview of the dataset: total files, total size, file types present, ' +
