@@ -18,7 +18,9 @@ they always match the build:
   plugin catalog. Also available from the CLI:
 
   ```bash
-  pixel-patrol schema -o schema.json
+  pixel-patrol schema              # writes schema.json in the current directory
+  pixel-patrol schema -o my/path/schema.json  # custom output path
+  pixel-patrol schema --print      # print to stdout (e.g. for piping)
   ```
 
 ## All report columns
