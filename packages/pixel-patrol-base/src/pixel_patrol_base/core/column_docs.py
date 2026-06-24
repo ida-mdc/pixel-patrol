@@ -51,6 +51,7 @@ BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
 # schema in loader_schema.py.)
 PATTERN_COLUMN_DESCRIPTIONS: List[Tuple[str, str]] = [
     (r"^dim_[A-Za-z]+$", "Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis."),
+    (r"^[A-Za-z]_size$", "Extent (number of elements) of this row along the given axis."),
 ]
 
 
