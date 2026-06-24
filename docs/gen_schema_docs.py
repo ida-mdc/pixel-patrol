@@ -372,8 +372,7 @@ function renderDetails(id) {
     if (rasterSchema) {
       const req = rasterSchema.columns.filter(c => c.required);
       if (req.length) {
-        const s = el('div', {class:'sec'}, el('h4', {}, 'Required columns'));
-        req.forEach(c => s.append(el('span', {class:'chip'}, c.name)));
+        const s = el('div', {class:'sec'}, el('h4', {}, 'Required columns'), colTable(req));
         s.append(el('p', {style:'font-size:.8rem;color:var(--muted);margin:.4rem 0 0'}, 'Loaders may also add additional image metadata fields (e.g. channel_names, dim_names).'));
         panel.append(s);
       }
@@ -396,9 +395,9 @@ function renderDetails(id) {
     panel.append(meta);
     const exactInputs = (data.inputs || []).filter(t => t !== '*' && t !== 'any metric column' && !t.startsWith('!') && !t.includes('*'));
     if (exactInputs.length) {
-      const s = el('div', {class:'sec'}, el('h4', {}, 'Required column' + (exactInputs.length > 1 ? 's' : '')));
-      exactInputs.forEach(t => s.append(el('span', {class:'chip'}, t)));
-      panel.append(s);
+      const byName = Object.fromEntries(CAT.columns.map(c => [c.name, c]));
+      const reqCols = exactInputs.map(t => byName[t] || {name: t, dtype: '', description: ''});
+      panel.append(el('div', {class:'sec'}, el('h4', {}, 'Required column' + (exactInputs.length > 1 ? 's' : '')), colTable(reqCols)));
     }
     const cols = widgetCols[id] || [];
     if (cols.length) panel.append(el('div', {class:'sec'}, el('h4', {}, 'Columns it uses'), colTable(cols)));
