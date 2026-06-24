@@ -158,8 +158,9 @@ def _loader_entry(loader: Any) -> Dict[str, Any]:
     # A raster-image loader emits the core pixel descriptors; it may still declare
     # only a subset of the optional metadata columns (zarr, aqqua_lmdb do). "extra"
     # columns are whatever it emits beyond the shared raster-image schema.
+    _PIPELINE_KEYS = {name for name, _ in _PIPELINE_COLUMNS}
     is_raster = _RASTER_CORE_KEYS.issubset(c["name"] for c in columns)
-    extra_columns = [c for c in columns if c["name"] not in _COMMON_SCHEMA_KEYS] if is_raster else columns
+    extra_columns = [c for c in columns if c["name"] not in _COMMON_SCHEMA_KEYS and c["name"] not in _PIPELINE_KEYS] if is_raster else columns
     extra_patterns = [p for p in patterns if p["pattern"] not in _COMMON_SCHEMA_PATTERNS] if is_raster else patterns
     return {
         "name": getattr(loader, "NAME", ""),

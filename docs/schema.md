@@ -47,12 +47,12 @@ table is generated from the installed plugins.
 | `dim_order` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Axis order of the image, e.g. 'TCZYX'. |
 | `dtype` | `string` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Pixel data type of the source image (e.g. 'uint8', 'float32'). |
 | `n_images` | `int` | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio | Number of sub-images in the source (>1 for container formats). |
-| `ndim` | `int` | Loaders | bioio | pixel-patrol-loader-bio | Number of image dimensions, derived from dim_order. |
-| `num_pixels` | `int` | Loaders | bioio | pixel-patrol-loader-bio | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). |
 | `pixel_size_<axis>` | `float` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Physical pixel size along the given axis, in the image's spatial unit. |
 | `shape` | `array` | Loaders | bioio, tifffile | pixel-patrol-loader-bio | Size of the image along each axis, in dim_order. |
 | `zarr_attributes` | `dict` | Loaders | zarr | pixel-patrol-loader-bio |  |
 | `<axis>_size` | `int` | Pipeline | base processing | pixel-patrol-base | Extent (number of elements) of this row along the given axis. |
+| `ndim` | `int` | Pipeline | base processing | pixel-patrol-base | Number of image dimensions, derived from dim_order. |
+| `num_pixels` | `int` | Pipeline | base processing | pixel-patrol-base | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). |
 | `dim_<axis>` | `int` | Aggregation | base processing | pixel-patrol-base | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. |
 | `obs_level` |  | Aggregation | base processing | pixel-patrol-base | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. |
 | `blocking_index` | `float32` | raster-compression | raster-compression | pixel-patrol-image |  |
