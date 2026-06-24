@@ -99,8 +99,38 @@ def test_connections_resolve_widget_inputs():
         import pytest
         pytest.skip("widget metadata unavailable (Node not found)")
     edges = {(e["source"], e["target"]) for e in cat["connections"]}
-    assert ("processor:raster-histogram", "widget:histogram") in edges
-    assert ("processor:thumbnail", "widget:mosaic") in edges
+    # required_inputs create edges
+    assert ("processor:raster-histogram", "widget:histogram") in edges   # histogram_counts
+    assert ("processor:thumbnail", "widget:mosaic") in edges              # thumbnail
+    assert ("file", "widget:sunburst") in edges                           # path (required)
+    # optional inputs also create edges
+    assert ("processor:raster-histogram", "widget:histogram") in edges   # histogram_min/max
+    assert ("file", "widget:summary") in edges                            # path (optional)
+
+
+def test_widget_required_inputs_disjoint_from_inputs():
+    """required_inputs and inputs must never share a column."""
+    cat = schema_catalog.build_catalog()
+    if not cat["widgets"]:
+        import pytest
+        pytest.skip("widget metadata unavailable (Node not found)")
+    for w in cat["widgets"]:
+        req = set(w.get("required_inputs") or [])
+        inp = set(w.get("inputs") or [])
+        overlap = req & inp
+        assert not overlap, f"widget '{w['id']}' has columns in both required_inputs and inputs: {overlap}"
+
+
+def test_widget_required_inputs_in_catalog():
+    """Widgets with required_inputs declare columns that exist in the catalog."""
+    cat = schema_catalog.build_catalog()
+    if not cat["widgets"]:
+        import pytest
+        pytest.skip("widget metadata unavailable (Node not found)")
+    col_names = {c["name"] for c in cat["columns"]}
+    for w in cat["widgets"]:
+        for col in (w.get("required_inputs") or []):
+            assert col in col_names, f"widget '{w['id']}' required_input '{col}' not in catalog columns"
 
 
 # --- producer hierarchy + column view ---------------------------------------
@@ -124,10 +154,10 @@ def test_columns_tagged_with_producer_and_category():
     assert by_name["size_bytes"]["producer"] == "file"
     # (image-category columns only appear when a loader emits them; asserted in the umbrella suite)
     # every column carries a producer + category, and every producer is a real node
-    valid_producers = {"file", "image", "agg"} | {"processor:" + p["name"] for p in cat["processors"]}
+    valid_producers = {"file", "image", "agg", "derived"} | {"processor:" + p["name"] for p in cat["processors"]}
     for c in cat["columns"]:
         assert c["producer"] in valid_producers, c
-        assert c["category"] in {"file", "image", "agg", "metric"}
+        assert c["category"] in {"file", "image", "agg", "derived", "metric"}
 
 
 def test_aggregation_pattern_column_present_with_regex():
