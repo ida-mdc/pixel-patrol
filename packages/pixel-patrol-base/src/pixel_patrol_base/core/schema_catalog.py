@@ -507,7 +507,7 @@ def _connections(
     # categories are baked in here. See _consumed_columns for the input grammar.
     for widget in widgets:
         wid = f"widget:{widget['id']}"
-        inputs = widget.get("inputs") or []
+        inputs = (widget.get("required_inputs") or []) + (widget.get("inputs") or [])
         for col in _consumed_columns(inputs, producers):
             for node in producers[col]:
                 add(node, wid, col)

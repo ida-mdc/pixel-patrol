@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const FIELDS = ['id', 'group', 'scope', 'label', 'shortLabel', 'info', 'inputs'];
+const FIELDS = ['id', 'group', 'scope', 'label', 'shortLabel', 'info', 'inputs', 'required_inputs'];
 
 function pick(plugin) {
   const out = {};

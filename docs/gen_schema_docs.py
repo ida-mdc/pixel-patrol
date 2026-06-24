@@ -159,12 +159,12 @@ function globToRe(t) { return new RegExp('^' + t.replace(/[-[\]{}()+?.,\\^$|#\s]
 // column' sentinel.
 function widgetColumns(w) {
   const out = new Map();
-  const inputs = w.inputs || [];
-  const excluded = new Set(inputs.filter(t => t.startsWith('!')).map(t => t.slice(1)));
+  const allInputs = [...(w.required_inputs || []), ...(w.inputs || [])];
+  const excluded = new Set(allInputs.filter(t => t.startsWith('!')).map(t => t.slice(1)));
   const add = c => { if (!excluded.has(c.name)) out.set(c.name, c); };
-  if (inputs.includes('*')) CAT.columns.forEach(add);
-  if (inputs.includes('any metric column')) CAT.columns.filter(c => c.category === 'metric').forEach(add);
-  for (const t of inputs) {
+  if (allInputs.includes('*')) CAT.columns.forEach(add);
+  if (allInputs.includes('any metric column')) CAT.columns.filter(c => c.category === 'metric').forEach(add);
+  for (const t of allInputs) {
     if (t === '*' || t === 'any metric column' || t.startsWith('!')) continue;
     const ex = CAT.columns.find(c => c.name === t);
     if (ex) { add(ex); continue; }
@@ -393,13 +393,14 @@ function renderDetails(id) {
     if (data.group) meta.append(el('span', {class:'chip'}, data.group));
     if (data.scope) meta.append(el('span', {class:'chip'}, data.scope));
     panel.append(meta);
-    const exactInputs = (data.inputs || []).filter(t => t !== '*' && t !== 'any metric column' && !t.startsWith('!') && !t.includes('*'));
-    if (exactInputs.length) {
+    const reqTokens = data.required_inputs || [];
+    if (reqTokens.length) {
       const byName = Object.fromEntries(CAT.columns.map(c => [c.name, c]));
-      const reqCols = exactInputs.map(t => byName[t] || {name: t, dtype: '', description: ''});
-      panel.append(el('div', {class:'sec'}, el('h4', {}, 'Required column' + (exactInputs.length > 1 ? 's' : '')), colTable(reqCols)));
+      const reqCols = reqTokens.map(t => byName[t] || {name: t, dtype: '', description: ''});
+      panel.append(el('div', {class:'sec'}, el('h4', {}, 'Required column' + (reqCols.length > 1 ? 's' : '')), colTable(reqCols)));
     }
-    const cols = widgetCols[id] || [];
+    const reqSet = new Set(reqTokens);
+    const cols = (widgetCols[id] || []).filter(c => !reqSet.has(c.name));
     if (cols.length) panel.append(el('div', {class:'sec'}, el('h4', {}, 'Columns it uses'), colTable(cols)));
   }
   connList(panel, id);
