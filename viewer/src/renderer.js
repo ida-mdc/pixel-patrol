@@ -277,8 +277,13 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     catch { return false; }
   });
 
+  // Always reset the collapse-all button before rendering; renderCondensedGallery
+  // will re-wire it if tiles are expanded.
+  const collapseAllBtn = document.getElementById('collapse-all-btn');
+  if (collapseAllBtn) { collapseAllBtn.hidden = true; collapseAllBtn.onclick = null; }
+
   if (state.condensedMode) {
-    await renderCondensedGallery(container, activePlugins, ctx);
+    await renderCondensedGallery(container, activePlugins, ctx, collapseAllBtn);
   } else {
     await renderClassic(container, activePlugins, ctx);
   }
@@ -349,7 +354,7 @@ function orderActivePlugins(activePlugins) {
  * the open set is persisted in state.openedWidgets (and the URL), so a filter
  * change or reload restores the same expanded widgets.
  */
-async function renderCondensedGallery(container, activePlugins, ctx) {
+async function renderCondensedGallery(container, activePlugins, ctx, collapseAllBtn) {
   const ordered      = orderActivePlugins(activePlugins);
   const summaryPlugs = ordered.filter(p => pluginGroup(p) === 'Summary' && p.id === 'summary');
   const tilePlugs    = ordered.filter(p => !summaryPlugs.includes(p));
@@ -368,6 +373,19 @@ async function renderCondensedGallery(container, activePlugins, ctx) {
   grid.className = 'widget-grid';
   container.appendChild(grid);
 
+  // Registry: plugin id → that tile's collapse function. Tiles register on expand
+  // and unregister on collapse; the topbar button syncs its visibility to the registry size.
+  const collapseRegistry = new Map();
+  const syncBar = () => {
+    if (collapseAllBtn) collapseAllBtn.hidden = collapseRegistry.size === 0;
+  };
+
+  if (collapseAllBtn) {
+    collapseAllBtn.onclick = () => {
+      for (const collapse of [...collapseRegistry.values()]) collapse({ focus: false });
+    };
+  }
+
   // Pre-create the cells in order so tiles keep their grouped ordering, then
   // fill them in parallel: each tile's condensedSummary/condensedPlot queries are
   // independent, so DuckDB can pipeline them instead of running one tile at a time.
@@ -377,7 +395,7 @@ async function renderCondensedGallery(container, activePlugins, ctx) {
     grid.appendChild(cell);
     return cell;
   });
-  await Promise.all(tilePlugs.map((plugin, i) => buildTile(cells[i], plugin, ctx)));
+  await Promise.all(tilePlugs.map((plugin, i) => buildTile(cells[i], plugin, ctx, collapseRegistry, syncBar)));
 }
 
 /** Persist the opened-widget set to the URL (skipped for locked snapshots). */
@@ -401,7 +419,7 @@ const GROUP_GLYPH = {
  * expands the cell in place; the card's × collapses it back. The open state is
  * mirrored into state.openedWidgets so it survives re-renders.
  */
-async function buildTile(cell, plugin, ctx) {
+async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
   let summary = null;
   if (plugin.condensedSummary) {
     try { summary = await plugin.condensedSummary(ctx); } catch { /* best-effort */ }
@@ -469,6 +487,8 @@ async function buildTile(cell, plugin, ctx) {
     if (card) card.hidden = true;
     tile.hidden = false;
     if (state.openedWidgets.delete(plugin.id)) persistOpened();
+    collapseRegistry.delete(plugin.id);
+    syncBar();
     ensureHero();
     if (focus) { tile.focus(); cell.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   };
@@ -503,6 +523,8 @@ async function buildTile(cell, plugin, ctx) {
     } else {
       card.hidden = false;
     }
+    collapseRegistry.set(plugin.id, collapse);
+    syncBar();
     if (!state.openedWidgets.has(plugin.id)) { state.openedWidgets.add(plugin.id); persistOpened(); }
     if (focus) card.querySelector('.widget-card-close')?.focus();
   };

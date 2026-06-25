@@ -227,6 +227,7 @@ button.widget-narrative:hover { background: #ece0fb; }
 .gallery-summary { margin: 0 0 28px; }
 .gallery-summary > :first-child { margin-top: 0; }
 
+
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
