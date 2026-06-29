@@ -36,7 +36,7 @@ Paths are relative to the base directory, or can be absolute.
 
 Loaders are responsible for opening image files and reading their metadata - they determine which file formats are supported. Each piece of image metadata a loader extracts becomes a column in the parquet (e.g. `dtype`, pixel size, dimension sizes, acquisition metadata, ...). If multiple loaders support the same format, the metadata they extract may differ, so it is worth choosing the one best suited to your format.
 
-Without a loader, only file-system metadata is collected (`file_name`, `file_extension`, `file_size`, `path`, ...).
+Without a loader, only file-system metadata is collected (`name`, `file_extension`, `size_bytes`, `path`, ...).
 
 Some loaders support **container files** - single files that hold multiple images. Each sub-image in a container generates its own rows in the parquet, identified by a `child_id` column.
 
@@ -129,9 +129,9 @@ A file does not always map to a single row. The parquet uses an `obs_level` colu
 
 A simple 2D image produces a single row at obs_level 0. Container files produce rows for each sub-image, linked by a `child_id` column.
 
-**Example: a TIFF with Z_size=2, C_size=2** would produce the following rows (among many other columns):
+**Example: a TIFF with size_Z=2, size_C=2** would produce the following rows (among many other columns):
 
-| `imported_path` | `obs_level` | `dim_z` | `dim_c` | `Z_size` | `C_size` | `mean_intensity` |
+| `imported_path` | `obs_level` | `dim_z` | `dim_c` | `size_Z` | `size_C` | `mean_intensity` |
 |---|---|---|---|---|---|---|
 | `/data/img01.tif` | `0` | `null` | `null` | `2` | `2` | `285.1` |
 | `/data/img01.tif` | `1` | `0` | `null` | `1` | `2` | `271.3` |
@@ -151,16 +151,16 @@ Key columns that are always present:
 |---|---|
 | `imported_path` | Path to the source file |
 | `obs_level` | Observation level (0 = full-image aggregate, 1 = per single dim, 2+ = dim combinations) |
-| `file_name` | Filename |
+| `name` | Filename |
 | `file_extension` | File extension |
-| `file_size` / `size_readable` | File size |
+| `size_bytes` / `size_readable` | File size |
 | `path` | Condition label (from `-p`) |
 | `dim_z`, `dim_t`, `dim_c`, `dim_s` | Slice index for this row (null for level-0 aggregate rows) |
 | `child_id` | Sub-image identifier for container files |
 
-**Image metadata columns** (when a loader is used) are extracted by the loader and include dimension sizes (`X_size`, `Y_size`, `Z_size`, `T_size`, `C_size`), `dtype`, pixel size, `dim_order`, and any embedded acquisition metadata. Some of these are shown in the viewer header.
+**Image metadata columns** (when a loader is used) are extracted by the loader and include dimension sizes (`size_X`, `size_Y`, `size_Z`, `size_T`, `size_C`), `dtype`, pixel size, `dim_order`, and any embedded acquisition metadata. Some of these are shown in the viewer header.
 
-**`*_size` columns at higher obs levels:** For `obs_level=0`, all `*_size` values reflect the full image (e.g. `Z_size=2`). For per-dimension rows, the `*_size` shows its slice size instead.
+**`size_*` columns at higher obs levels:** For `obs_level=0`, all `size_*` values reflect the full image (e.g. `size_Z=2`). For per-dimension rows, the `size_*` shows its slice size instead.
 
 **Processor columns** are listed in the [Processors](#processors) section above.
 

@@ -1,7 +1,9 @@
-const BASIC_METRIC_BASES = new Set([
+// The exact metric columns this widget plots (BasicStatsProcessor.OUTPUT_SCHEMA).
+const BASIC_METRICS = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
-const QUALITY_METRIC_BASES = new Set([
+// QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
+const QUALITY_METRICS = new Set([
   'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
   'blocking_index', 'ringing_index',
 ]);
@@ -291,9 +293,12 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   );
 }
 
-function makeAcrossDimsPlugin(id, label, info, filterMetric) {
+function makeAcrossDimsPlugin(id, label, info, metrics) {
+  const filterMetric = m => metrics.has(m);
   return {
     id, label, info, group: 'Dataset Stats', scope: 'slice',
+    // This widget plots only its own metric family, not every metric column.
+    inputs: [...metrics],
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
@@ -308,8 +313,8 @@ function makeAcrossDimsPlugin(id, label, info, filterMetric) {
 }
 
 export default [
-  makeAcrossDimsPlugin('stats-across-dims-basic',   'Basic Statistics Across Dimensions', BASIC_INFO,   base => BASIC_METRIC_BASES.has(base)),
-  makeAcrossDimsPlugin('stats-across-dims-quality', 'Quality Metrics Across Dimensions',  QUALITY_INFO, base => QUALITY_METRIC_BASES.has(base)),
+  makeAcrossDimsPlugin('stats-across-dims-basic',   'Basic Statistics Across Dimensions', BASIC_INFO,   BASIC_METRICS),
+  makeAcrossDimsPlugin('stats-across-dims-quality', 'Quality Metrics Across Dimensions',  QUALITY_INFO, QUALITY_METRICS),
 ];
 
 function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {

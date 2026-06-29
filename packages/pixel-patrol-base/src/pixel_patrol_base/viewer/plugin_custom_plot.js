@@ -2,7 +2,7 @@
 const EXCLUDED_SUBSTRINGS = ['thumbnail', 'histogram', 'obs_level', 'channel_names', 'file_row_number'];
 
 const EXTRA_NUMERIC = new Set([
-  'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size', 'S_size',
+  'size_Y', 'size_X', 'size_Z', 'size_T', 'size_C', 'size_S',
   'n_images', 'ndim', 'num_pixels', 'depth', 'size_bytes',
   'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ]);
@@ -497,6 +497,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
 
 export default {
   id:    'custom-plot',
+  inputs: ['any metric column'],
   label: 'Custom Plot',
   group: 'Explore',
   info:  'Build your own plot from the columns in your current data.\n\n' +

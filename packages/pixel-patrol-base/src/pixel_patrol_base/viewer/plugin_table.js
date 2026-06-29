@@ -20,6 +20,9 @@ function orderBy(col, dir) {
 
 export default {
   id: 'image-table',
+  // One row per image showing every column except the binary / per-row ones it
+  // can't render - declared as "everything minus those", straight from SKIP_COLS.
+  inputs: ['*', ...[...SKIP_COLS].map(c => '!' + c)],
   label: 'Image Table',
   group: 'Summary',
   scope: 'image',

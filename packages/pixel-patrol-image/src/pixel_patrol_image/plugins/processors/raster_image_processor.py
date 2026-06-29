@@ -50,12 +50,14 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
 class RasterImageProcessor:
     """Base class for image processors requiring Y and X at the last two axes."""
 
-    NAME:       str = ""
+    NAME:        str = ""
+    DESCRIPTION: str = ""
     CHUNK_KIND  = ChunkKind.LEAF
     METRICS:    Tuple[RasterMetricSpec, ...] = ()
     INPUT       = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {}
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {}
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
@@ -80,20 +82,30 @@ class RasterImageProcessor:
 
 
 class QualityMetricsProcessor(RasterImageProcessor):
-    NAME    = "raster-quality"
+    NAME        = "raster-quality"
+    DESCRIPTION = "Computes no-reference image quality metrics (contrast, sharpness, texture) over the 2D spatial extent of each image."
     METRICS = (
-        RasterMetricSpec(name="michelson_contrast", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
-        RasterMetricSpec(name="mscn_variance",      data_type=np.float32, aggregate_rows=_weighted_mean_agg),
-        RasterMetricSpec(name="texture_heterogeneity", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
-        RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
+        RasterMetricSpec(name="michelson_contrast", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Michelson contrast: (max - min) / (max + min) of intensities."),
+        RasterMetricSpec(name="mscn_variance",      data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Variance of mean-subtracted contrast-normalized (MSCN) coefficients; a no-reference naturalness/quality cue."),
+        RasterMetricSpec(name="texture_heterogeneity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Local texture heterogeneity of the image."),
+        RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Variance of the Laplacian; a focus/sharpness measure (higher = sharper)."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
 
 
 class CompressionMetricsProcessor(RasterImageProcessor):
-    NAME    = "raster-compression"
+    NAME        = "raster-compression"
+    DESCRIPTION = "Computes metrics that detect lossy-compression artifacts (block edges and ringing) in each image."
     METRICS = (
-        RasterMetricSpec(name="blocking_index", data_type=np.float32, aggregate_rows=_weighted_mean_agg),
-        RasterMetricSpec(name="ringing_index",  data_type=np.float32, aggregate_rows=_weighted_mean_agg),
+        RasterMetricSpec(name="blocking_index", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Strength of block-boundary discontinuities, indicating JPEG-style blocking artifacts."),
+        RasterMetricSpec(name="ringing_index",  data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Strength of ringing artifacts near high-contrast edges."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

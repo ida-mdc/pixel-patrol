@@ -15,6 +15,8 @@ const DISPLAY_DENORM = 'denormalized';
 
 export default {
   id: 'mosaic',
+  required_inputs: ['thumbnail'],
+  inputs: ['thumbnail_norm_min', 'thumbnail_norm_max', 'thumbnail_dtype', 'any metric column', 'name'],
   group: 'Visualization',
   scope: 'image',
   label: 'Image Mosaic',

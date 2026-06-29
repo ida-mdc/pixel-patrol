@@ -47,9 +47,9 @@ def test_load(zarr_folder: Path, loader):
     rec = loader.load(zarr_folder)
     assert rec.dim_order == "CYX"
     assert tuple(rec.data.shape) == (2, 10, 10)
-    assert rec.meta["C_size"] == 2
-    assert rec.meta["Y_size"] == 10
-    assert rec.meta["X_size"] == 10
+    assert rec.meta["size_C"] == 2
+    assert rec.meta["size_Y"] == 10
+    assert rec.meta["size_X"] == 10
 
 
 def test_read_header(zarr_folder: Path, loader):

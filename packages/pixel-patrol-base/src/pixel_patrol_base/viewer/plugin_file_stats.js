@@ -5,6 +5,8 @@ const FILE_STATS_MARGIN  = { l: 50, r: 80, t: 50, b: 80 };
 
 export default {
   id: 'file-stats',
+  required_inputs: ['file_extension', 'size_bytes'],
+  inputs: ['modification_date'],
   group: 'File Stats',
   scope: 'file',
   info: [

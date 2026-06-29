@@ -18,4 +18,12 @@ uv pip install -e packages/pixel-patrol-base -e packages/pixel-patrol-image -e p
 
 **Previewing the full site locally.** Use `./tools/dev_serve.sh` to build and serve the landing page, docs, and viewer together at the correct URLs (`localhost:8000/` and `localhost:8000/docs/`). For docs-only editing with live reload, `uv run --with mkdocs-material mkdocs serve` is faster.
 
+**Schema reference assets are not committed.** `docs/assets/schema.html` and `docs/assets/schema.json` are generated at deploy time and excluded from git. If you're working on schema or catalog changes and want to preview the schema page, generate them locally first:
+
+```bash
+python docs/gen_schema_docs.py
+```
+
+You don't need this for Python logic, viewer, or general doc changes.
+
 **CI runs a wider matrix on main.** Python tests run on Ubuntu only for feature branches, and additionally on Windows and macOS for pushes to `main` and PRs targeting it.

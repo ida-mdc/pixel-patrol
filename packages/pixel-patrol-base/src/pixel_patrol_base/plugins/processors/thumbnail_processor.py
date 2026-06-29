@@ -52,8 +52,8 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     if not valid:
         return {}
 
-    y_full = max(r["dim_y"] + r["Y_size"] for r in valid)
-    x_full = max(r["dim_x"] + r["X_size"] for r in valid)
+    y_full = max(r["dim_y"] + r["size_Y"] for r in valid)
+    x_full = max(r["dim_x"] + r["size_X"] for r in valid)
 
     scale  = min(SPRITE_SIZE / y_full, SPRITE_SIZE / x_full)
     h_used = max(1, round(y_full * scale))
@@ -87,7 +87,7 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     for r in selected:
         raw = r["__thumbnail_patch__"]
         y_off, x_off = r["dim_y"], r["dim_x"]
-        y_ext, x_ext = r["Y_size"], r["X_size"]
+        y_ext, x_ext = r["size_Y"], r["size_X"]
 
         cy  = y_pad + round(y_off * scale)
         cy2 = min(y_pad + h_used, max(cy + 1, y_pad + round((y_off + y_ext) * scale)))
@@ -140,15 +140,22 @@ class ThumbnailProcessor:
     from the patches themselves.
     """
 
-    NAME       = "thumbnail"
-    CHUNK_KIND = ChunkKind.MEMORY
-    INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
-    OUTPUT     = "features"
+    NAME        = "thumbnail"
+    DESCRIPTION = "Generates a small downsampled RGBA thumbnail of each image, assembled from per-chunk spatial patches."
+    CHUNK_KIND  = ChunkKind.MEMORY
+    INPUT       = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
+    OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {
         "thumbnail":          bytes,
         "thumbnail_norm_min": float,
         "thumbnail_norm_max": float,
         "thumbnail_dtype":    str,
+    }
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "thumbnail":          "Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size).",
+        "thumbnail_norm_min": "Lower intensity bound used to normalize the thumbnail.",
+        "thumbnail_norm_max": "Upper intensity bound used to normalize the thumbnail.",
+        "thumbnail_dtype":    "Original pixel dtype of the source image the thumbnail was built from.",
     }
 
     def get_aggregation(self, name: str):
