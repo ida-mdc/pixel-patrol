@@ -14,6 +14,10 @@ from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.loader_schema import (
+    RASTER_IMAGE_LOADER_SCHEMA,
+    RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
+)
 from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
@@ -26,14 +30,14 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     """
     metadata: Dict[str, Any] = {}
 
-    # Dim order and per-dimension sizes (e.g., X_size, Y_size, Z_size, C_size, T_size)
+    # Dim order and per-dimension sizes (e.g., size_X, size_Y, size_Z, size_C, size_T)
     dim_order = getattr(getattr(img, 'dims', None), 'order', '')
     metadata["dim_order"] = dim_order
     for letter in dim_order:
         dim_size= getattr(img.dims, letter, None)
         if not dim_size:
             dim_size = 1
-        metadata[f"{letter}_size"] = int(dim_size)
+        metadata[f"size_{letter}"] = int(dim_size)
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
     if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
@@ -70,8 +74,8 @@ def normalize_metadata(metadata):
     if "dim_names" in metadata:
         metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
     for ax in list(dim_order):
-        if metadata.get(f"{ax}_size", None) == 1:
-            metadata.pop(f"{ax}_size", None)
+        if metadata.get(f"size_{ax}", None) == 1:
+            metadata.pop(f"size_{ax}", None)
 
     return metadata
 
@@ -114,24 +118,12 @@ class BioIoLoader:
     """
 
     NAME = "bioio"
+    DESCRIPTION = "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes)."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {
-        "dim_order": str,
-        "dim_names": list,
-        "n_images": int,
-        "num_pixels": int,
-        "shape": pl.Array,       # or use `list` if you prefer to avoid polars types here
-        "ndim": int,
-        "channel_names": list,   # could be list[str]
-        "dtype": str,
-    }
-
-    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = [
-        (r"^pixel_size_[A-Za-z]$", float),
-        (r"^[A-Za-z]_size$", int),
-    ]
+    OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
+    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
     CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff"}

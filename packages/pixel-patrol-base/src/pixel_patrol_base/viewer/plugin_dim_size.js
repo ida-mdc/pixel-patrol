@@ -1,5 +1,6 @@
 export default {
   id: 'dim-size',
+  inputs: ['size_*'],
   group: 'Metadata',
   scope: 'image',
   label: 'Dimension Size Distribution',
@@ -14,7 +15,7 @@ export default {
   ].join('\n'),
 
   requires(schema) {
-    return schema.allCols.some(c => c.endsWith('_size') && !c.startsWith('__'));
+    return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__'));
   },
 
   async render(container, ctx) {
@@ -22,7 +23,7 @@ export default {
       const { q, sample, groupCol: gcFn, andWhere } = ctx.sql;
       const { append: appendPlot, niceName, plotlyLegendConfig, dataAvailabilityWarning } = ctx.plot;
       const gcExpr   = gcFn();
-      const sizeCols = ctx.schema.allCols.filter(c => c.endsWith('_size') && !c.startsWith('__'));
+      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
 
       const totalRes  = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
       const totalRows = Number(totalRes[0]?.n ?? 0);
@@ -36,28 +37,28 @@ export default {
 
       const MAX_XY_BUBBLE = 50_000;
       const HEATMAP_BINS  = 70;
-      const hasXY = sizeCols.includes('X_size') && sizeCols.includes('Y_size');
+      const hasXY = sizeCols.includes('size_X') && sizeCols.includes('size_Y');
       if (hasXY) {
         const xyInvRes = await ctx.queryRows(`
-          SELECT COUNT(DISTINCT "X_size") AS ndx, COUNT(DISTINCT "Y_size") AS ndy
-          FROM pp_data ${andWhere(ctx.where, '"X_size" > 1 AND "Y_size" > 1')}
+          SELECT COUNT(DISTINCT "size_X") AS ndx, COUNT(DISTINCT "size_Y") AS ndy
+          FROM pp_data ${andWhere(ctx.where, '"size_X" > 1 AND "size_Y" > 1')}
         `);
         const xyBothInvariant = Number(xyInvRes[0]?.ndx ?? 0) <= 1 && Number(xyInvRes[0]?.ndy ?? 0) <= 1;
         if (!xyBothInvariant) {
-        const xyCond  = `"X_size" > 1 AND "Y_size" > 1`;
+        const xyCond  = `"size_X" > 1 AND "size_Y" > 1`;
         const xyWhere = ctx.where ? `${ctx.where} AND ${xyCond}` : `WHERE ${xyCond}`;
   
         const statsRow = (await ctx.queryRows(`
           SELECT COUNT(*)::BIGINT         AS n,
-                 MIN("X_size")::DOUBLE   AS min_x, MAX("X_size")::DOUBLE AS max_x,
-                 MIN("Y_size")::DOUBLE   AS min_y, MAX("Y_size")::DOUBLE AS max_y
+                 MIN("size_X")::DOUBLE   AS min_x, MAX("size_X")::DOUBLE AS max_x,
+                 MIN("size_Y")::DOUBLE   AS min_y, MAX("size_Y")::DOUBLE AS max_y
           FROM pp_data ${xyWhere}
         `))[0] ?? {};
         const xyFiles = Number(statsRow.n ?? 0);
   
         if (xyFiles <= MAX_XY_BUBBLE) {
           const xyRows = await ctx.queryRows(`
-            SELECT "X_size" AS x, "Y_size" AS y, ${gcExpr} AS __group__, COUNT(*) AS bubble_size
+            SELECT "size_X" AS x, "size_Y" AS y, ${gcExpr} AS __group__, COUNT(*) AS bubble_size
             FROM pp_data ${xyWhere}
             GROUP BY 1, 2, 3 ORDER BY 1, 2
           `);
@@ -91,8 +92,8 @@ export default {
           const minY  = Number(statsRow.min_y);
   
           const binRows = await ctx.queryRows(`
-            SELECT (FLOOR(("X_size" - ${minX}) / ${binX}) * ${binX} + ${minX})::INTEGER AS xbin,
-                   (FLOOR(("Y_size" - ${minY}) / ${binY}) * ${binY} + ${minY})::INTEGER AS ybin,
+            SELECT (FLOOR(("size_X" - ${minX}) / ${binX}) * ${binX} + ${minX})::INTEGER AS xbin,
+                   (FLOOR(("size_Y" - ${minY}) / ${binY}) * ${binY} + ${minY})::INTEGER AS ybin,
                    COUNT(*)::INTEGER AS n
             FROM pp_data ${xyWhere} GROUP BY 1, 2 ORDER BY 1, 2
           `);

@@ -127,6 +127,43 @@ pixel-patrol build-viewer-html -o gh-pages/
 
 ---
 
+## `pixel-patrol schema`
+
+Exports the report schema and plugin catalog as JSON.
+
+```bash
+pixel-patrol schema [OPTIONS]
+```
+
+Two formats are available:
+
+- **`catalog`** (default) — full plugin catalog: every column with description, type, and producer; loader/processor/widget metadata; and the connection graph between them.
+- **`row-schema`** — a standard [JSON Schema](https://json-schema.org/) document describing one parquet report row. Fixed columns are in `properties`; per-axis families (`size_*`, `dim_*`, `pixel_size_*`) are in `patternProperties`.
+
+**Options**
+
+| Option | Default | Description |
+|---|---|---|
+| `-o, --output PATH` | `schema.json` | Path to write the JSON output. |
+| `--print` | off | Print to stdout instead of writing a file. |
+| `--no-widgets` | off | Skip widget metadata (requires Node). |
+| `--format [catalog\|row-schema]` | `catalog` | Output format. |
+
+**Examples**
+
+```bash
+# Full plugin catalog to a file:
+pixel-patrol schema -o catalog.json
+
+# Standard JSON Schema for integration with validators or editors:
+pixel-patrol schema --format row-schema -o row-schema.json
+
+# Print catalog to stdout:
+pixel-patrol schema --print
+```
+
+---
+
 ## `pixel-patrol launch`
 
 Opens the web-based processing dashboard for configuring and monitoring processing interactively.

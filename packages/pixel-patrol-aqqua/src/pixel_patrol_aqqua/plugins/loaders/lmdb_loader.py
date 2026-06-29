@@ -15,6 +15,10 @@ import numpy as np
 import polars as pl
 
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.loader_schema import (
+    RASTER_IMAGE_LOADER_SCHEMA,
+    RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
+)
 from pixel_patrol_base.core.record import record_from, Record
 
 logger = logging.getLogger(__name__)
@@ -117,14 +121,14 @@ def _extract_array_meta(np_arr: np.ndarray) -> Dict[str, Any]:
     if np_arr.ndim == 2:
         h, w = np_arr.shape
         metadata["dim_order"] = "YX"
-        metadata["Y_size"] = int(h)
-        metadata["X_size"] = int(w)
+        metadata["size_Y"] = int(h)
+        metadata["size_X"] = int(w)
     elif np_arr.ndim == 3:
         h, w, c = np_arr.shape
         metadata["dim_order"] = "YXS"
-        metadata["Y_size"] = int(h)
-        metadata["X_size"] = int(w)
-        metadata["C_size"] = int(c)
+        metadata["size_Y"] = int(h)
+        metadata["size_X"] = int(w)
+        metadata["size_C"] = int(c)
     else:
         metadata["dim_order"] = "".join(f"D{i}" for i in range(np_arr.ndim))
 
@@ -151,20 +155,12 @@ def _extract_metadata(array: blosc2.NDArray) -> Dict[str, Any]:
 class LmdbLoader:
 
     NAME = "aqqua_lmdb"
+    DESCRIPTION = "Loads images stored as records in an LMDB key-value database (Aqqua format), one sub-image per key."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"lmdb", "mdb"}
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {
-        "dim_order": str,
-        "ndim": int,
-        "num_pixels": int,
-        "shape": pl.Array,
-        "dtype": str,
-    }
-
-    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = [
-        (r"^[A-Za-z]+_size$", int),
-    ]
+    OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
+    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     FOLDER_EXTENSIONS:    Set[str] = {"lmdb"}
     CONTAINER_EXTENSIONS: Set[str] = {"lmdb", "mdb"}

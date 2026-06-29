@@ -7,6 +7,8 @@ const SAMPLE_INPUT_ID           = 'hist-sample-input';
 
 export default {
   id: 'histogram',
+  required_inputs: ['histogram_counts'],
+  inputs: ['histogram_min', 'histogram_max', 'name'],
   group: 'Dataset Stats',
   scope: 'image',
   label: 'Pixel Value Histograms',
@@ -43,9 +45,10 @@ export default {
           <label style="margin-right:16px;cursor:pointer">
             <input type="radio" name="${MODE_ID}" value="shape" checked> Fixed 0–255 bins (Shape)
           </label>
-          <label style="cursor:pointer">
-            <input type="radio" name="${MODE_ID}" value="native"> Native pixel range (Absolute)
+          <label style="${hasRange ? 'cursor:pointer' : 'cursor:not-allowed;opacity:0.45'}">
+            <input type="radio" name="${MODE_ID}" value="native" ${hasRange ? '' : 'disabled'}> Native pixel range (Absolute)
           </label>
+          ${!hasRange ? '<div style="font-size:0.8em;color:#888;margin-top:4px">histogram_min / histogram_max columns not present</div>' : ''}
         </div>
       `;
   
@@ -63,11 +66,12 @@ export default {
         const nameOpts = nameRows.map(r => `<option value="${escapeHtml(String(r.name))}">${escapeHtml(String(r.name))}</option>`).join('');
         const limitNote = nameRows.length === MAX_FILE_OPTIONS ? `<small class="text-muted">Showing first ${MAX_FILE_OPTIONS} files.</small>` : '';
         controlsDiv.innerHTML += `
-          <div style="max-width:400px;flex:1 1 240px">
+          <div style="max-width:400px;flex:1 1 240px;${hasRange ? '' : 'opacity:0.45;pointer-events:none'}">
             <div style="font-weight:600;margin-bottom:6px">Overlay specific file (optional):</div>
-            <select id="${FILE_SEL_ID}" class="form-select form-select-sm">
+            <select id="${FILE_SEL_ID}" class="form-select form-select-sm" ${hasRange ? '' : 'disabled'}>
               <option value="">- none -</option>${nameOpts}
             </select>${limitNote}
+            ${!hasRange ? '<div style="font-size:0.8em;color:#888;margin-top:4px">requires histogram_min / histogram_max columns</div>' : ''}
           </div>
         `;
       }

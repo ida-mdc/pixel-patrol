@@ -27,7 +27,7 @@ def _run(proc, data: np.ndarray, dim_order: str) -> dict:
     if row and "__thumbnail_patch__" in row:
         for i, d in enumerate(dims):
             row[f"dim_{d.lower()}"] = 0
-            row[f"{d}_size"] = data.shape[i]
+            row[f"size_{d}"] = data.shape[i]
     rows = [row]
     result = {}
     for name in proc.OUTPUT_SCHEMA:
@@ -47,7 +47,7 @@ def _run_chunk_with_origin(proc, data: np.ndarray, origin: list, dim_order: str)
     if row and "__thumbnail_patch__" in row:
         for i, d in enumerate(dims):
             row[f"dim_{d.lower()}"] = origin[i]
-            row[f"{d}_size"] = data.shape[i]
+            row[f"size_{d}"] = data.shape[i]
     return row
 
 

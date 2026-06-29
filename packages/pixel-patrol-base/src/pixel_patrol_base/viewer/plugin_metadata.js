@@ -7,6 +7,7 @@ const DIST_COLS = ['dtype', 'dim_order'];
 
 export default {
   id: 'metadata',
+  inputs: ['dim_order', 'dtype', 'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z'],
   group: 'Metadata',
   scope: 'image',
   label: 'Metadata',
