@@ -434,16 +434,16 @@ def _cell(text: str) -> str:
 def render_columns_table(catalog: dict) -> str:
     """Markdown table of every report column and where it comes from."""
     rows = [
-        "| Column | Type | Source | Created by | Package | Description |",
+        "| Column | Type | Description | Source | Created by | Package |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for col in catalog["columns"]:
         dtype = f"`{col['dtype']}`" if col.get("dtype") else ""
         rows.append(
-            f"| `{col['name']}` | {dtype} | {_source_label(col['producer'])} "
+            f"| `{col['name']}` | {dtype} | {_cell(col.get('description'))} "
+            f"| {_source_label(col['producer'])} "
             f"| {_cell(', '.join(col.get('creators', [])))} "
-            f"| {_cell(', '.join(col.get('packages', [])))} "
-            f"| {_cell(col.get('description'))} |"
+            f"| {_cell(', '.join(col.get('packages', [])))} |"
         )
     return "\n".join(rows)
 
