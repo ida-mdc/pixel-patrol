@@ -49,12 +49,12 @@ table is generated from the installed plugins.
 | `dim_order` | `string` | Axis order of the image, e.g. 'TCZYX'. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
 | `dtype` | `string` | Pixel data type of the source image (e.g. 'uint8', 'float32'). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
 | `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | bioio, tifffile | pixel-patrol-loader-bio |
-| `shape` | `array` | Size of the image along each axis, in dim_order. | Loaders | bioio, tifffile | pixel-patrol-loader-bio |
-| `zarr_attributes` | `dict` |  | Loaders | zarr | pixel-patrol-loader-bio |
-| `<axis>_size` | `int` | Extent (number of elements) of this row along the given axis. | Pipeline | base processing | pixel-patrol-base |
+| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
+| `shape` | `array` | Size of the image along each axis, in dim_order. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
+| `zarr_attributes` | `dict` | Raw key-value attributes stored in the Zarr/OME-Zarr group metadata. | Loaders | zarr | pixel-patrol-loader-bio |
 | `ndim` | `int` | Number of image dimensions, derived from dim_order. | Pipeline | base processing | pixel-patrol-base |
 | `num_pixels` | `int` | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). | Pipeline | base processing | pixel-patrol-base |
+| `size_<axis>` | `int` | Extent (number of elements) of this row along the given axis. | Pipeline | base processing | pixel-patrol-base |
 | `dim_<axis>` | `int` | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. | Aggregation | base processing | pixel-patrol-base |
 | `obs_level` | `int` | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. | Aggregation | base processing | pixel-patrol-base |
 | `blocking_index` | `float32` |  | raster-compression | raster-compression | pixel-patrol-image |

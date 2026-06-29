@@ -24,11 +24,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pixel_patrol_base.core.schema_catalog import build_catalog
+from pixel_patrol_base.core.schema_catalog import build_catalog, render_json_schema
 
 DOCS = Path(__file__).resolve().parent
-HTML_OUT = DOCS / "assets" / "schema.html"
-JSON_OUT = DOCS / "assets" / "schema.json"
+HTML_OUT        = DOCS / "assets" / "schema.html"
+JSON_OUT        = DOCS / "assets" / "schema.json"
+ROW_SCHEMA_OUT  = DOCS / "assets" / "row-schema.json"
 PAGE = DOCS / "schema.md"
 
 COLUMNS_BEGIN = "<!-- BEGIN GENERATED COLUMNS (docs/gen_schema_docs.py) -->"
@@ -460,9 +461,10 @@ def main() -> None:
     catalog = build_catalog()
     HTML_OUT.parent.mkdir(parents=True, exist_ok=True)
     JSON_OUT.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+    ROW_SCHEMA_OUT.write_text(json.dumps(render_json_schema(catalog), indent=2), encoding="utf-8")
     HTML_OUT.write_text(_TEMPLATE.replace("__CATALOG_JSON__", json.dumps(catalog)), encoding="utf-8")
     _write_columns_block(render_columns_table(catalog))
-    print(f"Wrote {JSON_OUT.name}, {HTML_OUT.name} and the columns table in {PAGE.name} "
+    print(f"Wrote {JSON_OUT.name}, {ROW_SCHEMA_OUT.name}, {HTML_OUT.name} and the columns table in {PAGE.name} "
           f"({len(catalog['columns'])} columns, {len(catalog['processors'])} processors, "
           f"{len(catalog.get('widgets', []))} widgets).")
 
