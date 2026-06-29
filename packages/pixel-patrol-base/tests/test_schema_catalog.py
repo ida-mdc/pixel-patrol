@@ -176,3 +176,35 @@ def test_metric_columns_carry_package_and_creators():
     # Image-column creators span sibling loader packages and are checked in the umbrella suite.
     assert by_name["min_intensity"]["creators"] == ["raster-basic"]
     assert by_name["min_intensity"]["packages"] == ["pixel-patrol-base"]
+
+
+# --- render_json_schema -----------------------------------------------------
+
+def test_render_json_schema_structure():
+    cat = schema_catalog.build_catalog(include_widgets=False)
+    js = schema_catalog.render_json_schema(cat)
+    assert js["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert js["type"] == "object"
+    assert isinstance(js["properties"], dict)
+    assert isinstance(js["patternProperties"], dict)
+
+
+def test_render_json_schema_base_columns_present():
+    cat = schema_catalog.build_catalog(include_widgets=False)
+    props = schema_catalog.render_json_schema(cat)["properties"]
+    assert props["path"] == {"type": "string", "description": props["path"]["description"]}
+    assert props["path"]["type"] == "string"
+    assert props["obs_level"]["type"] == "integer"
+    assert props["size_bytes"]["type"] == "integer"
+    assert props["min_intensity"]["type"] == "number"
+
+
+def test_render_json_schema_pattern_columns_in_pattern_properties():
+    cat = schema_catalog.build_catalog(include_widgets=False)
+    js = schema_catalog.render_json_schema(cat)
+    # dim_<axis> is present even without loaders
+    pats = js["patternProperties"]
+    assert any("dim" in k for k in pats), f"expected dim pattern in {list(pats)}"
+    for regex, entry in pats.items():
+        assert "type" in entry
+        assert "title" in entry  # human-readable family name

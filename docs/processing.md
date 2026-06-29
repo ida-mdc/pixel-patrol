@@ -36,7 +36,7 @@ Paths are relative to the base directory, or can be absolute.
 
 Loaders are responsible for opening image files and reading their metadata - they determine which file formats are supported. Each piece of image metadata a loader extracts becomes a column in the parquet (e.g. `dtype`, pixel size, dimension sizes, acquisition metadata, ...). If multiple loaders support the same format, the metadata they extract may differ, so it is worth choosing the one best suited to your format.
 
-Without a loader, only file-system metadata is collected (`file_name`, `file_extension`, `file_size`, `path`, ...).
+Without a loader, only file-system metadata is collected (`name`, `file_extension`, `size_bytes`, `path`, ...).
 
 Some loaders support **container files** - single files that hold multiple images. Each sub-image in a container generates its own rows in the parquet, identified by a `child_id` column.
 
@@ -151,9 +151,9 @@ Key columns that are always present:
 |---|---|
 | `imported_path` | Path to the source file |
 | `obs_level` | Observation level (0 = full-image aggregate, 1 = per single dim, 2+ = dim combinations) |
-| `file_name` | Filename |
+| `name` | Filename |
 | `file_extension` | File extension |
-| `file_size` / `size_readable` | File size |
+| `size_bytes` / `size_readable` | File size |
 | `path` | Condition label (from `-p`) |
 | `dim_z`, `dim_t`, `dim_c`, `dim_s` | Slice index for this row (null for level-0 aggregate rows) |
 | `child_id` | Sub-image identifier for container files |
