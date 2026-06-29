@@ -39,7 +39,7 @@ def _chunk(proc, np_arr, dim_order_str, origin=None):
     # Stamp coordinates and shape info the same way the pipeline does.
     row.update({f"dim_{d.lower()}": origin[i] for i, d in enumerate(dim_order_upper)})
     row["num_pixels"] = int(np.prod(np_arr.shape))
-    row.update({f"{d}_size": np_arr.shape[i] for i, d in enumerate(dim_order_upper)})
+    row.update({f"size_{d}": np_arr.shape[i] for i, d in enumerate(dim_order_upper)})
     return row
 
 

@@ -32,7 +32,7 @@ RASTER_IMAGE_SCHEMA_LABEL = "Raster Image Loaders"
 
 # (column, dtype, description, required) - columns the loader contract covers.
 # required=True: loader must provide; required=False: loader may provide if available.
-# ndim, num_pixels and *_size are NOT here - the pipeline derives them from shape/dim_order.
+# ndim, num_pixels and size_* are NOT here - the pipeline derives them from shape/dim_order.
 _RASTER_IMAGE_LOADER_COLUMNS: List[Tuple[str, Any, str, bool]] = [
     ("dim_order",     str,      "Axis order of the image, e.g. 'TCZYX'.",                        True),
     ("shape",         pl.Array, "Size of the image along each axis, in dim_order.",               True),
@@ -44,7 +44,7 @@ _RASTER_IMAGE_LOADER_COLUMNS: List[Tuple[str, Any, str, bool]] = [
 ]
 
 # (regex, dtype, description) - per-axis columns loader-provided; pixel_size_* only.
-# *_size is pipeline-computed from shape and lives in schema_catalog.py.
+# size_* is pipeline-computed from shape and lives in schema_catalog.py.
 _RASTER_IMAGE_LOADER_PATTERNS: List[Tuple[str, Any, str]] = [
     (r"^pixel_size_[A-Za-z]$", float, "Physical pixel size along the given axis, in the image's spatial unit."),
 ]

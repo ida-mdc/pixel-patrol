@@ -159,7 +159,7 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
     meta["chunks"] = chunks if chunks is not None else arr.chunks
 
     for i, ax in enumerate(dim_order):
-        meta[f"{ax}_size"] = int(arr.shape[i])
+        meta[f"size_{ax}"] = int(arr.shape[i])
 
     return meta
 
