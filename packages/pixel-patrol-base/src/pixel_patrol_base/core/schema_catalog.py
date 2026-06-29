@@ -541,6 +541,63 @@ def build_catalog(include_widgets: bool = True) -> Dict[str, Any]:
     }
 
 
+_JSON_DTYPE_MAP: Dict[str, Dict[str, str]] = {
+    "str":      {"type": "string"},
+    "int":      {"type": "integer"},
+    "float":    {"type": "number"},
+    "datetime": {"type": "string", "format": "date-time"},
+    "list":     {"type": "array"},
+    "dict":     {"type": "object"},
+}
+
+
+def _dtype_to_json(dtype: str) -> Optional[Dict[str, str]]:
+    if dtype in _JSON_DTYPE_MAP:
+        return _JSON_DTYPE_MAP[dtype]
+    if re.match(r"^(int|uint)\d+$", dtype):
+        return {"type": "integer"}
+    if re.match(r"^float\d+$", dtype):
+        return {"type": "number"}
+    return None  # blob or unrecognised — omit from JSON Schema
+
+
+def render_json_schema(catalog: Dict[str, Any]) -> Dict[str, Any]:
+    """Render the catalog as a JSON Schema document for one report row.
+
+    Fixed columns go into ``properties``; per-axis families (size_*, dim_*,
+    pixel_size_*) go into ``patternProperties`` using their stored regex.
+    Blob and unrecognised dtypes are omitted.
+    """
+    properties: Dict[str, Any] = {}
+    pattern_properties: Dict[str, Any] = {}
+
+    for col in catalog["columns"]:
+        json_type = _dtype_to_json(col["dtype"])
+        if json_type is None:
+            continue
+        entry: Dict[str, Any] = {**json_type}
+        if col.get("description"):
+            entry["description"] = col["description"]
+        if col.get("regex"):
+            entry["title"] = col["name"]   # human-readable family name, e.g. "size_<axis>"
+            pattern_properties[col["regex"]] = entry
+        else:
+            properties[col["name"]] = entry
+
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Pixel Patrol Report Row",
+        "description": (
+            "One row in a Pixel Patrol parquet report. "
+            "Fixed columns are in properties; "
+            "per-axis families (size_*, dim_*, pixel_size_*) are in patternProperties."
+        ),
+        "type": "object",
+        "properties": properties,
+        "patternProperties": pattern_properties,
+    }
+
+
 def column_descriptions() -> Dict[str, str]:
     """Flat ``column -> description`` map for every exact (non-pattern) column.
 

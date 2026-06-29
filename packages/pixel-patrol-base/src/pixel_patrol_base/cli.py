@@ -243,28 +243,30 @@ def build_viewer_html(output: Path):
               help='Print to stdout instead of writing a file.')
 @click.option('--no-widgets', is_flag=True, default=False,
               help='Skip viewer-widget metadata (which requires Node to read the JS plugins).')
-def schema(output: Path, print_: bool, no_widgets: bool):
+@click.option('--format', 'fmt',
+              type=click.Choice(['catalog', 'row-schema']), default='catalog', show_default=True,
+              help='catalog: full plugin catalog. row-schema: JSON Schema document for one report row.')
+def schema(output: Path, print_: bool, no_widgets: bool, fmt: str):
     """
     Export the report schema and plugin catalog as JSON.
 
-    Describes the columns of the final parquet report and the registered loaders,
-    processors, and viewer widgets that produce or consume them - each with a
-    human description. Intended for documentation and tooling.
+    catalog (default): full plugin catalog with loaders, processors, widgets and
+    every column - descriptions, types, producers, and connections.
 
-    By default writes schema.json in the current directory. Use --print to
-    output to stdout instead (useful for piping to other tools).
+    row-schema: a standard JSON Schema document (json-schema.org) describing one
+    parquet report row, with patternProperties for per-axis column families.
     """
     import json
-    from pixel_patrol_base.core.schema_catalog import build_catalog
+    from pixel_patrol_base.core.schema_catalog import build_catalog, render_json_schema
 
     catalog = build_catalog(include_widgets=not no_widgets)
-    text = json.dumps(catalog, indent=2)
+    text = json.dumps(render_json_schema(catalog) if fmt == 'row-schema' else catalog, indent=2)
     if print_:
         click.echo(text)
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(text)
-        click.echo(f"Wrote schema catalog to '{output}'.")
+        click.echo(f"Wrote schema {fmt} to '{output}'.")
 
 
 def _parse_slice_size(items: tuple) -> dict:

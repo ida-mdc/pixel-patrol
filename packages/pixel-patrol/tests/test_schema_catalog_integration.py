@@ -61,7 +61,7 @@ def test_image_columns_appear_only_with_loaders():
     assert by_name["dtype"]["category"] == "image"
     # and so are the per-axis families they declare
     patterns = {c["name"] for c in cat["columns"] if "regex" in c}
-    assert {"<axis>_size", "pixel_size_<axis>"} <= patterns
+    assert {"size_<axis>", "pixel_size_<axis>"} <= patterns
 
 
 def test_columns_credit_creators_across_packages():
