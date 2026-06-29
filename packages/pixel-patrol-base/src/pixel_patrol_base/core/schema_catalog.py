@@ -55,14 +55,14 @@ _COMMON_SCHEMA_PATTERNS = {pat for pat, _ in RASTER_IMAGE_LOADER_SCHEMA_PATTERNS
 _COMMON_PATTERN_DESCRIPTIONS = dict(RASTER_IMAGE_LOADER_SCHEMA_PATTERN_DESCRIPTIONS)
 
 # Pipeline-derived columns: computed by processing.py from image data, not provided by loaders.
-# ndim = len(dim_order), num_pixels = prod(shape), *_size = shape per axis.
+# ndim = len(dim_order), num_pixels = prod(shape), size_* = shape per axis.
 # Descriptions live in column_docs.BASE_COLUMN_DESCRIPTIONS - single source of truth.
 _PIPELINE_COLUMNS: List[Tuple[str, Any]] = [
     ("ndim",       int),
     ("num_pixels", int),
 ]
 _PIPELINE_PATTERNS: List[Tuple[str, Any, str]] = [
-    (r"^[A-Za-z]_size$", int, "Extent (number of elements) of this row along the given axis."),
+    (r"^size_[A-Za-z]$", int, "Extent (number of elements) of this row along the given axis."),
 ]
 _PIPELINE_PATTERN_DESCRIPTIONS = {pat: desc for pat, _, desc in _PIPELINE_PATTERNS}
 
@@ -275,7 +275,7 @@ _CATEGORY_ORDER = {"file": 0, "image": 1, "derived": 2, "agg": 3, "metric": 4}
 
 
 def _friendly_pattern(regex: str) -> str:
-    """Turn a column regex into a readable family name, e.g. '^[A-Za-z]_size$' -> '<axis>_size'."""
+    """Turn a column regex into a readable family name, e.g. '^size_[A-Za-z]$' -> 'size_<axis>'."""
     return regex.strip("^$").replace("[A-Za-z]+", "<axis>").replace("[A-Za-z]", "<axis>")
 
 
@@ -376,7 +376,7 @@ def _producers_tree(loaders: List[Dict], processors: List[Dict]) -> List[Dict[st
              "loaders": [l["name"] for l in loaders]},
             {"id": "derived", "label": "Derived metadata",
              "description": "Columns the pipeline computes from image data: ndim and num_pixels are "
-                            "derived from dim_order and shape; <axis>_size columns are extracted from "
+                            "derived from dim_order and shape; size_<axis> columns are extracted from "
                             "the actual array shape per dimension."},
             {"id": "agg", "label": "Aggregation",
              "description": "Columns added when per-image rows are rolled up into the obs hierarchy "
@@ -425,7 +425,7 @@ def _glob_to_regex(glob: str) -> str:
 
 
 def _input_matches_pattern(inp: str, pattern_regex: str) -> bool:
-    """True if a wildcard widget input (e.g. '*_size') covers a loader's pattern family."""
+    """True if a wildcard widget input (e.g. 'size_*') covers a loader's pattern family."""
     if "*" not in inp:
         return False
     return re.match(_glob_to_regex(inp), _representative_name(pattern_regex)) is not None
@@ -443,7 +443,7 @@ def _consumed_columns(inputs: List[str], all_columns: Any) -> set:
       ``"<col>"``   one column
       ``"*"``       every column ...
       ``"!<col>"``  ... minus this one (used together with ``"*"``)
-    Glob families like ``"*_size"`` are handled separately by :func:`_family_inputs`.
+    Glob families like ``"size_*"`` are handled separately by :func:`_family_inputs`.
     """
     excluded = {t[1:] for t in inputs if t.startswith("!")}
     cols = set(all_columns) if "*" in inputs else {t for t in inputs if t in all_columns}
@@ -451,7 +451,7 @@ def _consumed_columns(inputs: List[str], all_columns: Any) -> set:
 
 
 def _family_inputs(inputs: List[str], all_columns: Any) -> List[str]:
-    """Declared inputs that name a per-axis column family (a glob like ``"*_size"``)
+    """Declared inputs that name a per-axis column family (a glob like ``"size_*"``)
     rather than an exact column, wildcard, exclusion or the metric sentinel."""
     reserved = {"*", "any metric column"}
     return [t for t in inputs
@@ -514,7 +514,7 @@ def _connections(
         if "any metric column" in inputs:
             for node in scalar_metric_nodes:
                 add(node, wid, "metrics")
-        for inp in _family_inputs(inputs, producers):   # per-axis families e.g. '*_size'
+        for inp in _family_inputs(inputs, producers):   # per-axis families e.g. 'size_*'
             for loader in loaders:
                 if any(_input_matches_pattern(inp, p["pattern"]) for p in loader["patterns"]):
                     add(f"loader:{loader['name']}", wid, inp)

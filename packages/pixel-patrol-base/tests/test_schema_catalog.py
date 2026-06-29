@@ -68,12 +68,12 @@ def test_column_descriptions_cover_plugin_and_base():
 
 def test_with_field_descriptions_annotates_known_columns():
     schema = pl.DataFrame(
-        {"min_intensity": [1.0], "Z_size": [3], "dim_z": [0], "unknown_xyz": [1]}
+        {"min_intensity": [1.0], "size_Z": [3], "dim_z": [0], "unknown_xyz": [1]}
     ).to_arrow().schema
     annotated = with_field_descriptions(schema)
     desc = {f.name: (f.metadata or {}).get(b"description") for f in annotated}
     assert desc["min_intensity"]                 # exact plugin column
-    assert desc["Z_size"]                        # pattern column (*_size)
+    assert desc["size_Z"]                        # pattern column (size_*)
     assert desc["dim_z"]                          # pattern column (dim_*)
     assert desc["unknown_xyz"] is None            # no description known
 

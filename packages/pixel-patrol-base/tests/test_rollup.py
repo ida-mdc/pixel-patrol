@@ -46,7 +46,7 @@ def test_empty_memory_proc_col_in_global_row():
 # ── single leaf row (no active dims) ─────────────────────────────────────────
 
 def test_single_leaf_row_no_active_dims():
-    leaf_rows = [{"dim_z": 0, "num_pixels": 100, "Z_size": 1}]
+    leaf_rows = [{"dim_z": 0, "num_pixels": 100, "size_Z": 1}]
     result = _rollup([_result(leaf_rows=leaf_rows)], processors=[])
     assert len(result) == 1
     assert result[0]["obs_level"] == 0
@@ -364,30 +364,30 @@ def test_spatial_split_leaf_metric_aggregated_not_first_row():
     assert {r["dim_z"] for r in level1} == {0, 1}
 
 
-# ── *_size correctness per obs_level ─────────────────────────────────────────
+# ── size_* correctness per obs_level ─────────────────────────────────────────
 
 def test_size_fields_correct_per_obs_level():
     # Z=2, Y split into 2 halves (memory management). image_meta carries full sizes.
     # obs_level=0 (global): all dims at full-image size.
-    # obs_level=1 (per-Z): Z_size=1 (one slice), Y_size and X_size at full-image size.
-    image_meta = {"Z_size": 2, "Y_size": 1024, "X_size": 2048}
+    # obs_level=1 (per-Z): size_Z=1 (one slice), size_Y and size_X at full-image size.
+    image_meta = {"size_Z": 2, "size_Y": 1024, "size_X": 2048}
     def _result_with_meta(leaf_rows):
         return MemoryChunkResult(
             file_index=0, child_id=None, chunk_rows={}, leaf_rows=leaf_rows,
             image_meta=image_meta,
         )
     chunks = [
-        _result_with_meta([{"dim_z": 0, "dim_y": 0,    "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
-        _result_with_meta([{"dim_z": 0, "dim_y": 512,  "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
-        _result_with_meta([{"dim_z": 1, "dim_y": 0,    "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
-        _result_with_meta([{"dim_z": 1, "dim_y": 512,  "Z_size": 1, "Y_size": 512, "X_size": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 0, "dim_y": 0,    "size_Z": 1, "size_Y": 512, "size_X": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 0, "dim_y": 512,  "size_Z": 1, "size_Y": 512, "size_X": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 1, "dim_y": 0,    "size_Z": 1, "size_Y": 512, "size_X": 2048, "num_pixels": 512  * 2048}]),
+        _result_with_meta([{"dim_z": 1, "dim_y": 512,  "size_Z": 1, "size_Y": 512, "size_X": 2048, "num_pixels": 512  * 2048}]),
     ]
     result = _rollup(chunks, processors=[])
     global_row = _rows_at(result, 0)[0]
-    assert global_row["Z_size"] == 2    # full image
-    assert global_row["Y_size"] == 1024
-    assert global_row["X_size"] == 2048
+    assert global_row["size_Z"] == 2    # full image
+    assert global_row["size_Y"] == 1024
+    assert global_row["size_X"] == 2048
     for row in _rows_at(result, 1):
-        assert row["Z_size"] == 1       # one slice
-        assert row["Y_size"] == 1024    # full extent (both Y halves aggregated)
-        assert row["X_size"] == 2048
+        assert row["size_Z"] == 1       # one slice
+        assert row["size_Y"] == 1024    # full extent (both Y halves aggregated)
+        assert row["size_X"] == 2048

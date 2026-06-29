@@ -33,8 +33,8 @@ def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     if "dim_names" in metadata:
         metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
     for ax in list(dim_order):
-        if metadata.get(f"{ax}_size", None) == 1:
-            metadata.pop(f"{ax}_size", None)
+        if metadata.get(f"size_{ax}", None) == 1:
+            metadata.pop(f"size_{ax}", None)
     return metadata
 
 
@@ -130,7 +130,7 @@ def _extract_metadata(
     }
     meta.update(_physical_pixel_sizes(tf, axes_u))
     for i, letter in enumerate(axes_u):
-        meta[f"{letter}_size"] = int(shape[i])
+        meta[f"size_{letter}"] = int(shape[i])
 
     return meta
 

@@ -30,14 +30,14 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     """
     metadata: Dict[str, Any] = {}
 
-    # Dim order and per-dimension sizes (e.g., X_size, Y_size, Z_size, C_size, T_size)
+    # Dim order and per-dimension sizes (e.g., size_X, size_Y, size_Z, size_C, size_T)
     dim_order = getattr(getattr(img, 'dims', None), 'order', '')
     metadata["dim_order"] = dim_order
     for letter in dim_order:
         dim_size= getattr(img.dims, letter, None)
         if not dim_size:
             dim_size = 1
-        metadata[f"{letter}_size"] = int(dim_size)
+        metadata[f"size_{letter}"] = int(dim_size)
 
     dim_names = getattr(getattr(img, 'dims', None), 'names', None)
     if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
@@ -74,8 +74,8 @@ def normalize_metadata(metadata):
     if "dim_names" in metadata:
         metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
     for ax in list(dim_order):
-        if metadata.get(f"{ax}_size", None) == 1:
-            metadata.pop(f"{ax}_size", None)
+        if metadata.get(f"size_{ax}", None) == 1:
+            metadata.pop(f"size_{ax}", None)
 
     return metadata
 

@@ -38,7 +38,7 @@ def test_load_tif_cyx(tmp_path: Path, loader):
 
     rec = loader.load(tmp_path / "cyx.tif")
     assert rec.dim_order == "CYX"
-    assert rec.meta["C_size"] == 3
+    assert rec.meta["size_C"] == 3
 
 
 def test_read_header(tmp_path: Path, loader):

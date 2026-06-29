@@ -99,8 +99,8 @@ def test_load_meta_contains_uuid(rgb_lmdb: Path) -> None:
 
 def test_load_meta_contains_dim_sizes(rgb_lmdb: Path) -> None:
     record = LmdbLoader.load(rgb_lmdb)
-    assert record.meta.get("Y_size") == 48
-    assert record.meta.get("X_size") == 84
+    assert record.meta.get("size_Y") == 48
+    assert record.meta.get("size_X") == 84
 
 
 # ---------------------------------------------------------------------------

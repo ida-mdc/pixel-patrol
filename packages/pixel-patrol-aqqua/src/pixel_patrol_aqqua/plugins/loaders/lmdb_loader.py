@@ -121,14 +121,14 @@ def _extract_array_meta(np_arr: np.ndarray) -> Dict[str, Any]:
     if np_arr.ndim == 2:
         h, w = np_arr.shape
         metadata["dim_order"] = "YX"
-        metadata["Y_size"] = int(h)
-        metadata["X_size"] = int(w)
+        metadata["size_Y"] = int(h)
+        metadata["size_X"] = int(w)
     elif np_arr.ndim == 3:
         h, w, c = np_arr.shape
         metadata["dim_order"] = "YXS"
-        metadata["Y_size"] = int(h)
-        metadata["X_size"] = int(w)
-        metadata["C_size"] = int(c)
+        metadata["size_Y"] = int(h)
+        metadata["size_X"] = int(w)
+        metadata["size_C"] = int(c)
     else:
         metadata["dim_order"] = "".join(f"D{i}" for i in range(np_arr.ndim))
 
