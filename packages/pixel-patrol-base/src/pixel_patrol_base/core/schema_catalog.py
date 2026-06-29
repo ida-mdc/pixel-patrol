@@ -543,10 +543,12 @@ def build_catalog(include_widgets: bool = True) -> Dict[str, Any]:
 
 _JSON_DTYPE_MAP: Dict[str, Dict[str, str]] = {
     "str":      {"type": "string"},
+    "string":   {"type": "string"},   # _scalar_name maps Python str → "string"
     "int":      {"type": "integer"},
     "float":    {"type": "number"},
     "datetime": {"type": "string", "format": "date-time"},
     "list":     {"type": "array"},
+    "array":    {"type": "array"},    # _scalar_name maps Array/ndarray → "array"
     "dict":     {"type": "object"},
 }
 

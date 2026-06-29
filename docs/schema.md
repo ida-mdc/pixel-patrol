@@ -57,21 +57,21 @@ table is generated from the installed plugins.
 | `size_<axis>` | `int` | Extent (number of elements) of this row along the given axis. | Pipeline | base processing | pixel-patrol-base |
 | `dim_<axis>` | `int` | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. | Aggregation | base processing | pixel-patrol-base |
 | `obs_level` | `int` | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. | Aggregation | base processing | pixel-patrol-base |
-| `blocking_index` | `float32` |  | raster-compression | raster-compression | pixel-patrol-image |
+| `blocking_index` | `float32` | Strength of block-boundary discontinuities, indicating JPEG-style blocking artifacts. | raster-compression | raster-compression | pixel-patrol-image |
 | `finite_pixel_count` | `uint64` | Number of finite (non-NaN/Inf) pixels contributing to the statistics. | raster-basic | raster-basic | pixel-patrol-base |
 | `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins). | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_max` | `float32` | Upper bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_min` | `float32` | Lower bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_nan_count` | `uint64` | Number of NaN pixels excluded from the histogram. | raster-histogram | raster-histogram | pixel-patrol-base |
-| `laplacian_variance` | `float32` |  | raster-quality | raster-quality | pixel-patrol-image |
+| `laplacian_variance` | `float32` | Variance of the Laplacian; a focus/sharpness measure (higher = sharper). | raster-quality | raster-quality | pixel-patrol-image |
 | `max_intensity` | `float32` | Maximum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `mean_intensity` | `float32` | Pixel-count-weighted mean intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
-| `michelson_contrast` | `float32` |  | raster-quality | raster-quality | pixel-patrol-image |
+| `michelson_contrast` | `float32` | Michelson contrast: (max - min) / (max + min) of intensities. | raster-quality | raster-quality | pixel-patrol-image |
 | `min_intensity` | `float32` | Minimum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
-| `mscn_variance` | `float32` |  | raster-quality | raster-quality | pixel-patrol-image |
-| `ringing_index` | `float32` |  | raster-compression | raster-compression | pixel-patrol-image |
+| `mscn_variance` | `float32` | Variance of mean-subtracted contrast-normalized (MSCN) coefficients; a no-reference naturalness/quality cue. | raster-quality | raster-quality | pixel-patrol-image |
+| `ringing_index` | `float32` | Strength of ringing artifacts near high-contrast edges. | raster-compression | raster-compression | pixel-patrol-image |
 | `std_intensity` | `float32` | Pooled standard deviation of intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
-| `texture_heterogeneity` | `float32` |  | raster-quality | raster-quality | pixel-patrol-image |
+| `texture_heterogeneity` | `float32` | Local texture heterogeneity of the image. | raster-quality | raster-quality | pixel-patrol-image |
 | `thumbnail` | `bytes` | Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size). | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_dtype` | `string` | Original pixel dtype of the source image the thumbnail was built from. | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_norm_max` | `float` | Upper intensity bound used to normalize the thumbnail. | thumbnail | thumbnail | pixel-patrol-base |

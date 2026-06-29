@@ -452,6 +452,11 @@ def render_columns_table(catalog: dict) -> str:
 def _write_columns_block(table: str) -> None:
     """Replace the generated columns table in schema.md, in place."""
     md = PAGE.read_text(encoding="utf-8")
+    if COLUMNS_BEGIN not in md or COLUMNS_END not in md:
+        raise RuntimeError(
+            f"Marker comments not found in {PAGE}. "
+            f"Expected '{COLUMNS_BEGIN}' and '{COLUMNS_END}'."
+        )
     start, end = md.index(COLUMNS_BEGIN), md.index(COLUMNS_END) + len(COLUMNS_END)
     block = f"{COLUMNS_BEGIN}\n{table}\n{COLUMNS_END}"
     PAGE.write_text(md[:start] + block + md[end:], encoding="utf-8")
@@ -459,6 +464,8 @@ def _write_columns_block(table: str) -> None:
 
 def main() -> None:
     catalog = build_catalog()
+    if not catalog["widgets"]:
+        print("WARNING: Node not found or no widgets loaded — widget nodes omitted from schema map.")
     HTML_OUT.parent.mkdir(parents=True, exist_ok=True)
     JSON_OUT.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
     ROW_SCHEMA_OUT.write_text(json.dumps(render_json_schema(catalog), indent=2), encoding="utf-8")

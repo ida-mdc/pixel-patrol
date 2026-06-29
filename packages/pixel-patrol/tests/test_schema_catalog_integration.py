@@ -98,3 +98,14 @@ def test_metric_widgets_connect_only_to_their_metric_family():
         assert sources(qual) == quality
     # custom-plot still accepts any metric column, so it spans every metric processor
     assert sources("custom-plot") >= {"processor:raster-basic"} | quality
+
+
+def test_render_json_schema_includes_loader_string_and_array_columns():
+    # dim_order (str), dtype (str), shape (Array) are loader columns whose dtype strings
+    # go through _scalar_name before storage. This test guards against those being
+    # silently dropped from the JSON Schema output due to a dtype key mismatch.
+    cat = schema_catalog.build_catalog(include_widgets=False)
+    props = schema_catalog.render_json_schema(cat)["properties"]
+    assert props["dim_order"]["type"] == "string", "dim_order must appear as string in row-schema"
+    assert props["dtype"]["type"] == "string",     "dtype must appear as string in row-schema"
+    assert props["shape"]["type"] == "array",      "shape must appear as array in row-schema"
