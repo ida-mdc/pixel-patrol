@@ -45,9 +45,10 @@ export default {
           <label style="margin-right:16px;cursor:pointer">
             <input type="radio" name="${MODE_ID}" value="shape" checked> Fixed 0–255 bins (Shape)
           </label>
-          <label style="cursor:pointer">
-            <input type="radio" name="${MODE_ID}" value="native"> Native pixel range (Absolute)
+          <label style="${hasRange ? 'cursor:pointer' : 'cursor:not-allowed;opacity:0.45'}">
+            <input type="radio" name="${MODE_ID}" value="native" ${hasRange ? '' : 'disabled'}> Native pixel range (Absolute)
           </label>
+          ${!hasRange ? '<div style="font-size:0.8em;color:#888;margin-top:4px">histogram_min / histogram_max columns not present</div>' : ''}
         </div>
       `;
   
