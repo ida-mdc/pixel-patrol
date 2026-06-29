@@ -360,7 +360,7 @@ def _column_view(loaders: List[Dict], processors: List[Dict]) -> List[Dict[str, 
         if name in cols:
             continue
         category = "agg" if name in _AGG_KEYS else "file"
-        put(name, "", desc, category, category, _BASE, _BASE_PKG)
+        put(name, column_docs.BASE_COLUMN_DTYPES.get(name, ""), desc, category, category, _BASE, _BASE_PKG)
 
     return sorted(cols.values(), key=lambda c: (_CATEGORY_ORDER.get(c["category"], 9), c["name"]))
 

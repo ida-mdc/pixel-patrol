@@ -46,6 +46,22 @@ BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
     "ndim":                "Number of image dimensions, derived from dim_order.",
 }
 
+BASE_COLUMN_DTYPES: Dict[str, str] = {
+    "path":                "str",
+    "name":                "str",
+    "type":                "str",
+    "parent":              "str",
+    "depth":               "int",
+    "size_bytes":          "int",
+    "size_readable":       "str",
+    "file_extension":      "str",
+    "modification_date":   "datetime",
+    "imported_path":       "str",
+    "imported_path_short": "str",
+    "common_base":         "str",
+    "obs_level":           "int",
+}
+
 # Regex-keyed descriptions for pipeline column families whose exact names depend on
 # the data. (Per-axis size / pixel-size families are described with the loader
 # schema in loader_schema.py.)
