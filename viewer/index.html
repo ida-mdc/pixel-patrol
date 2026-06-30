@@ -43,15 +43,22 @@
 <div id="main-app" style="display:none">
   <!-- Top bar -->
   <div class="topbar">
-    <!-- Left: navigation + open + current file -->
+    <!-- Left: navigation + view mode + current file -->
     <div class="topbar-left">
       <button id="sidebar-toggle" class="btn btn-sm btn-outline-secondary" aria-label="Toggle sidebar">
         <i class="bi bi-list" style="font-size:1.1rem"></i>
       </button>
-      <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
-        <i class="bi bi-folder2-open"></i><span class="d-none d-sm-inline ms-1">Open different file</span>
-      </label>
-      <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
+      <div class="view-toggle" role="group" aria-label="View mode">
+        <button id="view-btn-overview" type="button" class="view-toggle-btn" aria-pressed="true">
+          <span class="view-label">Overview</span><span class="view-icon" aria-hidden="true">⊞</span>
+        </button>
+        <button id="view-btn-full" type="button" class="view-toggle-btn" aria-pressed="false">
+          <span class="view-label">Full</span><span class="view-icon" aria-hidden="true">▤</span>
+        </button>
+      </div>
+      <button id="collapse-all-btn" type="button" class="btn btn-sm btn-outline-secondary" hidden>
+        <i class="bi bi-arrows-collapse"></i><span class="d-none d-sm-inline ms-1">Collapse all</span>
+      </button>
       <span id="current-filename" class="text-muted small text-truncate"></span>
       <span id="row-count-badge" class="badge bg-secondary"></span>
     </div>
@@ -62,20 +69,8 @@
       <span id="topbar-brand" class="topbar-brand">Pixel Patrol</span>
     </div>
 
-    <!-- Right: view mode + actions -->
+    <!-- Right: actions -->
     <div class="topbar-right">
-
-      <button id="collapse-all-btn" type="button" class="btn btn-sm btn-outline-secondary" hidden>
-        <i class="bi bi-arrows-collapse"></i><span class="d-none d-sm-inline ms-1">Collapse all</span>
-      </button>
-      <div class="view-toggle" role="group" aria-label="View mode">
-        <button id="view-btn-overview" type="button" class="view-toggle-btn" aria-pressed="true">
-          <span class="view-label">Overview</span><span class="view-icon" aria-hidden="true">⊞</span>
-        </button>
-        <button id="view-btn-full" type="button" class="view-toggle-btn" aria-pressed="false">
-          <span class="view-label">Full</span><span class="view-icon" aria-hidden="true">▤</span>
-        </button>
-      </div>
 
       <!-- Export menu (popover anchored to this button) -->
       <div class="header-menu">
@@ -94,6 +89,18 @@
           <div class="export-opt-desc">A single self-contained HTML file with the current view baked in — opens in any browser, no server needed.</div>
         </div>
       </div>
+
+      <!-- Open different file -->
+      <label for="file-input-top" class="btn btn-sm btn-outline-secondary mb-0">
+        <i class="bi bi-folder2-open"></i><span class="d-none d-sm-inline ms-1">Open different file</span>
+      </label>
+      <input type="file" id="file-input-top" accept=".parquet,.arrow,.ipc,.arrows" style="display:none"/>
+
+      <!-- Docs link -->
+      <a href="https://ida-mdc.github.io/pixel-patrol/docs/viewer/" target="_blank" rel="noopener"
+         class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-book"></i><span class="d-none d-sm-inline ms-1">Docs</span>
+      </a>
 
       <!-- Feedback menu (popover anchored to this button) -->
       <div class="header-menu">
