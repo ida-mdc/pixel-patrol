@@ -1,5 +1,5 @@
 import './style.css';
-import { initDuckDB, loadFromUrl, loadFromFile, finishLoad } from './loader.js';
+import { initDuckDB, terminateDuckDB, loadFromUrl, loadFromFile, finishLoad } from './loader.js';
 import { SERVER_MODE, makeServerConn } from './query.js';
 import { initControls } from './controls.js';
 import { renderAll } from './renderer.js';
@@ -211,12 +211,18 @@ async function bootWasmOfflineSnapshot() {
   afterLoad({ snapshotBundle: bundle });
 }
 
+async function resetDuckDB(oldDb, oldConn) {
+  await terminateDuckDB(oldDb, oldConn);
+  return initDuckDB();
+}
+
 // ── Open data ─────────────────────────────────────────────────────────────────
 
 async function openUrl(url) {
   const filename = url.split('/').pop();
   setLoading(`Downloading ${filename}…`);
   try {
+    ({ db, conn } = await resetDuckDB(db, conn));
     ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, url, (loaded, total) => {
       if (total > 0) {
         const pct = Math.round(loaded / total * 100);
@@ -233,8 +239,13 @@ async function openUrl(url) {
 
 async function openFiles(files) {
   const file = files[0];
+  const GB2 = 2 * 1024 * 1024 * 1024;
+  if (file.size > GB2) {
+    showSizeWarning(file.name, file.size);
+  }
   setLoading(`Loading ${file.name}…`);
   try {
+    ({ db, conn } = await resetDuckDB(db, conn));
     ({ schema, totalRows, projectName, description } = await loadFromFile(db, conn, file));
     document.getElementById('current-filename').textContent = file.name;
     hideLoading();
@@ -253,6 +264,9 @@ function loadErrorHint(err) {
     return 'Please re-run <code>pixel-patrol process</code> to regenerate the report with the current format.';
   }
   const msg = String(err?.message ?? err).toLowerCase();
+  if (msg.includes('_setthrew')) {
+    return 'Please refresh the page and try again.';
+  }
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
     return 'This file may have been created with an older version of Pixel Patrol. '
@@ -506,6 +520,7 @@ function hideLoading() {
   const bar = document.getElementById('loading-progress');
   if (bar) { bar.style.display = 'none'; bar.value = 0; }
   document.getElementById(ID_LOADING_OVERLAY).style.display = 'none';
+  document.getElementById('size-warning-note')?.remove();
 }
 
 function showWelcome() {
@@ -522,6 +537,19 @@ function hideFileOpenControls() {
   document.querySelector('label[for="file-input-welcome"]')?.style.setProperty('display', 'none');
   document.querySelector('label[for="file-input-top"]')?.style.setProperty('display', 'none');
   document.getElementById('open-file-top-btn')?.style.setProperty('display', 'none');
+}
+
+function showSizeWarning(filename, bytes) {
+  document.getElementById('size-warning-note')?.remove();
+  const gb = (bytes / (1024 ** 3)).toFixed(1);
+  const note = document.createElement('p');
+  note.id = 'size-warning-note';
+  note.className = 'mt-3 mb-0 text-center';
+  note.style.cssText = 'max-width:480px;font-size:0.95rem;line-height:1.5;background:#fff;color:#212529;border-radius:8px;padding:12px 16px';
+  note.innerHTML = `<strong>${gb} GB file — large files may fail in the browser.</strong><br>`
+    + `If it doesn't load, try: <code>pixel-patrol view ${filename}</code>`
+    + ` <span style="opacity:0.6;font-size:0.85rem">(requires pixel-patrol installed)</span>`;
+  document.getElementById(ID_LOADING_OVERLAY).appendChild(note);
 }
 
 function showFatalError(message, err, hint = null) {
