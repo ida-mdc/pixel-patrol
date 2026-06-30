@@ -86,7 +86,7 @@ const ENABLING_SCHEMA = {
   'sunburst':                  { allCols: ['path', 'size_bytes'] },
   'image-table':               { isLongFormat: true },
   'custom-plot':               { isLongFormat: true },
-  'dim-size':                  { allCols: ['X_size', 'Y_size'] },
+  'dim-size':                  { allCols: ['size_X', 'size_Y'] },
   'metadata':                  { allCols: ['dtype'] },
   'violin-basic':              { isLongFormat: true, metricCols: ['mean_intensity'] },
   'violin-quality':            { isLongFormat: true, metricCols: ['laplacian_variance'] },
