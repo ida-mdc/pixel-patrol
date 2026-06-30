@@ -575,10 +575,10 @@ function populateReportFooter(meta) {
     html += '</div>';
   }
 
-  // ── second row: base dir, paths, workers, memory ──
+  // ── second row: paths, workers, memory ──
   const subs = [];
-  if (meta.baseDir)         subs.push(`<span class="ri-label">Base dir:</span> ${_esc(meta.baseDir)}`);
-  if (meta.paths?.length)   subs.push(`<span class="ri-label">Paths:</span> ${meta.paths.map(_esc).join(', ')}`);
+  const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
+  if (nonTrivialPaths.length) subs.push(`<span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
 

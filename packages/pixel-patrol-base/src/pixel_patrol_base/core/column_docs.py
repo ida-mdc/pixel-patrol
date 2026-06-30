@@ -28,18 +28,18 @@ from pixel_patrol_base.core.loader_schema import (
 # columns assembled in core.processing (obs rollup, per-row sizes, ...).
 BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
     # file-system / import columns
-    "path":                "Absolute path of the file (or folder) on disk.",
+    "path":                "Path of the file (or folder), relative to the project base directory.",
     "name":                "File or folder name, including extension.",
     "type":                "Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container).",
-    "parent":              "Path of the containing directory.",
+    "parent":              "Path of the containing directory, relative to the project base directory ('.' for files directly in the base directory).",
     "depth":               "Depth of the path below the imported base directory.",
     "size_bytes":          "Size on disk in bytes (aggregated for folders).",
     "size_readable":       "Human-readable size on disk (e.g. '2.4 MB').",
     "file_extension":      "Lower-cased file extension without the leading dot.",
     "modification_date":   "Last modification timestamp of the file.",
-    "imported_path":       "The base directory under which this file was imported.",
-    "imported_path_short": "Shortened, disambiguated label for the imported base directory (only when several bases were imported).",
-    "common_base":         "Longest path prefix shared by all imported files.",
+    "imported_path":       "Path of the import base (the -p path or base directory) under which this file was found, relative to the project base directory ('.' when no -p paths were specified).",
+    "imported_path_short": "Shortened, disambiguated label for the import base (only when several -p paths were used).",
+    "common_base":         "Name of the longest path prefix shared by all import bases.",
     # pipeline-generated obs columns
     "obs_level":           "Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns.",
     "num_pixels":          "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels).",

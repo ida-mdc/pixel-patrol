@@ -35,12 +35,12 @@ export default {
 
   async render(container, ctx) {
     try {
-      const [rows, pathRow, basePathRow] = await fetchSummary(ctx);
+      const [rows, pathRow] = await fetchSummary(ctx);
       if (!rows.length) {
         container.innerHTML = '<div class="no-data">No data available after filtering.</div>';
         return;
       }
-      const summary = summarize(ctx, rows, pathRow, basePathRow);
+      const summary = summarize(ctx, rows, pathRow);
 
       // In condensed mode the summary is a bare header; the uneven-group warning
       // is surfaced in the File Metadata tile instead.
@@ -54,9 +54,9 @@ export default {
   },
 };
 
-// Per-group totals, plus distinct-path and path-range probes for the base path.
+// Per-group totals, plus distinct-path probe for the file count.
 function fetchSummary(ctx) {
-  const { groupCol: gcFn, andWhere } = ctx.sql;
+  const { groupCol: gcFn } = ctx.sql;
   const gcExpr     = gcFn();
   const hasPath    = ctx.schema.allCols.includes('path');
   const nImagesSql = ctx.schema.allCols.includes('n_images') ? ', SUM("n_images") AS n_images_sum' : '';
@@ -69,26 +69,17 @@ function fetchSummary(ctx) {
     hasPath
       ? ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${ctx.where}`)
       : Promise.resolve([{ n: null }]),
-    hasPath
-      ? ctx.queryRows(`
-          SELECT MIN("path")::VARCHAR AS lo, MAX("path")::VARCHAR AS hi
-          FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}
-        `)
-      : Promise.resolve([{ lo: null, hi: null }]),
   ]);
 }
 
 // Derive the headline numbers and labels the view needs from the grouped rows.
-function summarize(ctx, rows, pathRow, basePathRow) {
+function summarize(ctx, rows, pathRow) {
   const hasNImages   = ctx.schema.allCols.includes('n_images');
   const totalRecords = rows.reduce((s, r) => s + Number(r.file_count), 0);
   const totalBytes   = rows.reduce((s, r) => s + Number(r.total_bytes ?? 0), 0);
   const extensions   = new Set();
   for (const r of rows) for (const ext of (r.file_types ?? [])) if (ext) extensions.add(ext);
 
-  const basePath = (basePathRow[0]?.lo != null && basePathRow[0]?.hi != null)
-    ? commonDirPath(String(basePathRow[0].lo), String(basePathRow[0].hi))
-    : null;
   const groupCol            = ctx.state.groupCol ?? 'group';
   const isImportedPathShort = groupCol === 'imported_path_short';
 
@@ -99,7 +90,6 @@ function summarize(ctx, rows, pathRow, basePathRow) {
     extensions,
     totalFiles:    pathRow[0]?.n != null ? Number(pathRow[0].n) : null,
     totalImages:   hasNImages ? rows.reduce((s, r) => s + Number(r.n_images_sum ?? 0), 0) : null,
-    basePath,
     isImportedPathShort,
     groupColLabel: isImportedPathShort ? groupCol : ctx.plot.niceName(groupCol),
   };
@@ -146,21 +136,15 @@ function renderKpis(container, ctx, s) {
   container.appendChild(kpiRow);
 }
 
-// "Base path:" and "Grouped by:" context lines below the tiles.
+// "Grouped by:" context line below the tiles.
 function renderMetaLines(container, ctx, s) {
   const { escapeHtml } = ctx.plot;
-  if (s.basePath) {
-    const div = document.createElement('div');
-    div.className = 'summary-meta-line';
-    div.innerHTML = `<strong>Base path:</strong> <code>${escapeHtml(s.basePath)}</code>`;
-    container.appendChild(div);
-  }
   if (s.nGroups > 1) {
     const div = document.createElement('div');
     div.className = 'summary-meta-line';
     div.innerHTML = `<strong>Grouped by:</strong> <code>${escapeHtml(s.groupColLabel)}</code>` +
       (s.isImportedPathShort
-        ? ' &mdash; the top-level imported folder each file came from, relative to the common base path of all imported folders'
+        ? ' &mdash; the import folder each file came from, relative to the base directory'
         : '');
     container.appendChild(div);
   }
@@ -202,16 +186,6 @@ function renderGroupTable(container, ctx, rows, s) {
   container.appendChild(table);
 }
 
-// LCP of the lexicographically smallest and largest path equals the LCP of all paths,
-// trimmed back to the last path separator to yield a valid directory.
-function commonDirPath(lo, hi) {
-  let i = 0;
-  const len = Math.min(lo.length, hi.length);
-  while (i < len && lo[i] === hi[i]) i++;
-  const prefix  = lo.slice(0, i);
-  const lastSep = Math.max(prefix.lastIndexOf('/'), prefix.lastIndexOf('\\'));
-  return lastSep > 0 ? prefix.slice(0, lastSep) : '';
-}
 
 function barCell(value, maxValue, color, label) {
   const pct = maxValue > 0 ? Math.max(0, Math.min(100, (value / maxValue) * 100)) : 0;

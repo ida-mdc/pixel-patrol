@@ -63,6 +63,7 @@ Processes all files in the project paths and writes the `.parquet` report. Most 
 - `processors_included` / `processors_excluded` - sets of processor IDs, e.g. `{"raster-basic", "thumbnail"}`. See [Available processors](processing.md#available-processors).
 - `selected_file_extensions` - set of extensions, e.g. `{"tif", "nd2"}`, or `"all"`.
 - `progress_callback` - `Callable[[int, int], None]` called with `(done, total)` after each completed record. `total` is `-1` until the full count is known.
+- `omit_base_dir` - if `True`, the base directory and paths are not stored in the parquet metadata (default: `False`).
 
 ```python
 api.process_files(
