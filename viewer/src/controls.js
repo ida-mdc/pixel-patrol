@@ -18,20 +18,27 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
  * @param {object}   [opts.frozenSidebar]  - payload from buildFrozenSidebarPayload
  * @param {Function} [opts.onExportBakedHtml] - baked static HTML snapshot
  */
-export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
-  // ── View mode toggle ─────────────────────────────────────────────────
+let syncViewToggle = () => {};
+
+/** Wire up controls that are independent of schema and only need to run once. */
+export function initStaticUi() {
   const viewBtnOverview = el('view-btn-overview');
   const viewBtnFull     = el('view-btn-full');
-  function syncViewToggle() {
+  syncViewToggle = () => {
     viewBtnOverview?.setAttribute('aria-pressed', String(state.condensedMode));
     viewBtnFull?.setAttribute('aria-pressed',     String(!state.condensedMode));
-  }
+  };
   if (viewBtnOverview && viewBtnFull) {
     syncViewToggle();
     viewBtnOverview.onclick = () => { if (state.condensedMode) return; state.condensedMode = true;  syncViewToggle(); emit('render'); };
     viewBtnFull.onclick     = () => { if (!state.condensedMode) return; state.condensedMode = false; syncViewToggle(); emit('render'); };
   }
+  initCollapseToggle('appearance-section-header', 'appearance-section');
+  initHeaderPopover('export-menu-btn', 'export-menu-panel');
+  initHeaderPopover('feedback-menu-btn', 'feedback-menu-panel');
+}
 
+export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -67,7 +74,6 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
   // ── Widget toggles (live inside the collapsible Appearance section; Apply
   //    required to take effect) ─
   buildWidgetToggles(plugins, schema);
-  initCollapseToggle('appearance-section-header', 'appearance-section');
 
   // ── Apply button ──────────────────────────────────────────────────────
   el('apply-btn').onclick = () => {
@@ -98,10 +104,7 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     buildWidgetToggles(plugins, schema);
   };
 
-  // ── Topbar popovers (export + feedback) ───────────────────────────────
   buildExportControls(schema, onExport, !!canParquet);
-  initHeaderPopover('export-menu-btn', 'export-menu-panel');
-  initHeaderPopover('feedback-menu-btn', 'feedback-menu-panel');
 
   const bakedBtn = el('export-baked-btn');
   if (bakedBtn) {
