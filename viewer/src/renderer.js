@@ -455,11 +455,10 @@ async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
 
   const open = document.createElement('span');
   open.className = 'widget-tile-open';
-  // "View all plots" (rather than just "Open") signals the tile is a preview and
-  // the full widget may hold more than the single hero plot shown here.
-  open.textContent = 'View all plots ▸';
+  const openLabel = plugin.multiPlot ? 'View all plots' : 'Open';
+  open.textContent = openLabel + ' ▸';
   tile.appendChild(open);
-  tile.title = 'View all plots';
+  tile.title = openLabel;
 
   cell.appendChild(tile);
 

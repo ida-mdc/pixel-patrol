@@ -9,6 +9,7 @@ export default {
   inputs: ['modification_date'],
   group: 'File Stats',
   scope: 'file',
+  multiPlot: true,
   info: [
     'High-level **file statistics** for the dataset.',
     '',

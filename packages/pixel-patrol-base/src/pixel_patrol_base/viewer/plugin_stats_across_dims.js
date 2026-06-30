@@ -293,7 +293,7 @@ async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref)
 
 function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel) {
   return {
-    id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice',
+    id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },

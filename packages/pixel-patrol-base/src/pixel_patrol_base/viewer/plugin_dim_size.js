@@ -6,6 +6,7 @@ export default {
   inputs: ['size_*'],
   group: 'Metadata',
   scope: 'image',
+  multiPlot: true,
   label: 'Dimensionality',
   info: [
     'Shows how **image dimensions** (X, Y, Z, T, …) vary across the dataset.',

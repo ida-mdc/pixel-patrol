@@ -226,7 +226,7 @@ function makeViolinPlugin(id, label, info, filterMetric, condensedSummary, metri
     ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
     null;
   return {
-    id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image',
+    id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
