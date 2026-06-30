@@ -12,12 +12,12 @@ uv pip install pixel-patrol
 
 Or with pip:
 
+!!! warning
+    Installing without a virtual environment is not recommended - it can conflict with other packages. If in doubt, use the uv method above.
+
 ```bash
 pip install pixel-patrol
 ```
-
-!!! warning
-    Installing without a virtual environment is not recommended - it can conflict with other packages. If in doubt, use the uv method above.
 
 Requires Python 3.11+. See [Installation](installation.md) for more options.
 
@@ -36,7 +36,7 @@ The first command reads every supported file in `path/to/images/` - including su
 
 ## Step 1: Process your dataset
 
-For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) you can choose the `bioio` loader:
+Pixel Patrol supports several image loaders, each suited to different formats - see [Loaders](processing.md#loaders) for the full list. For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) the `bioio` loader covers everything:
 
 ```bash
 pixel-patrol process path/to/images/ -o report.parquet --loader bioio
@@ -51,7 +51,7 @@ pixel-patrol process path/to/images/ -o report.parquet --loader bioio \
 
 Pixel Patrol will process each path separately and label them in the report, letting you compare conditions in the viewer. You can also change the groupings interactively in the report.
 
-To restrict to specific file types:
+To restrict to specific file extensions:
 
 ```bash
 pixel-patrol process path/to/images/ -o report.parquet --loader bioio -e tif -e nd2

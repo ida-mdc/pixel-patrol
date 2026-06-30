@@ -79,6 +79,18 @@ If you want to visualize report data in the browser - your own extension's colum
 
 The `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing `extension.json`.
 
+Each plugin's `render(container, ctx)` method receives a `ctx` object - the render context - which gives it everything it needs to query data and respond to the viewer's current state:
+
+- `ctx.queryRows(sql)` - run a DuckDB query, returns plain JS objects
+- `ctx.where` - SQL WHERE clause for the active filter (or `''`) - append with `AND` if you have your own conditions
+- `ctx.schema` - available columns, grouped by type (`metricCols`, `groupCols`, `allCols`, ...)
+- `ctx.state` - current viewer state: active group column, filter, selected dimensions
+- `ctx.colorMap` - maps group values to hex colors from the active palette
+- `ctx.groups` - distinct values of the active group column
+- `ctx.totalRows` / `ctx.filteredCount` - row counts
+
+See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) for the full `ctx` reference and worked examples.
+
 ---
 
 !!! tip
