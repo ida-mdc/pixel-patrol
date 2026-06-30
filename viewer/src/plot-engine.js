@@ -41,7 +41,7 @@ const DATE_FMT = "'%Y-%m-%d %H:%M:%S'";
 
 export const CONSTANTS = {
   COUNT_Y, NULL_LABEL, MAX_CAT, MAX_HUE, MAX_SAMPLE, MAX_VIOLIN_POINTS,
-  VIOLIN_ALL_POINTS_BELOW, DATE_COLS: [...DATE_COLS],
+  VIOLIN_ALL_POINTS_BELOW, DATE_COLS,
 };
 
 // ── Small SQL / formatting helpers ────────────────────────────────────────────
