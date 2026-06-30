@@ -53,10 +53,40 @@ export function legendWithGrouping(baseLegend, state, fallback = '') {
   };
 }
 
+// Expand-corners icon (500×500 SVG coordinate space).
+const _EXPAND_ICON = {
+  width: 500, height: 500,
+  path: 'M80,80 L80,200 L120,200 L120,120 L200,120 L200,80 Z ' +
+        'M420,80 L300,80 L300,120 L380,120 L380,200 L420,200 Z ' +
+        'M80,420 L200,420 L200,380 L120,380 L120,300 L80,300 Z ' +
+        'M420,420 L420,300 L380,300 L380,380 L300,380 L300,420 Z',
+};
+
 const CHART_CONFIG = {
   responsive: true,
   displayModeBar: 'hover',
   modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+  modeBarButtonsToAdd: [{ name: 'maximize', title: 'Maximize', icon: _EXPAND_ICON, click: (gd) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:6px;width:95vw;height:93vh;display:flex;flex-direction:column;';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'text-align:right;padding:4px 8px;border-bottom:1px solid #ddd;flex-shrink:0;';
+    bar.innerHTML = '<button style="border:none;background:none;cursor:pointer;font-size:1rem;" title="Close (Esc)">&#x2715;</button>';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'flex:1;min-height:0;';
+    box.append(bar, wrap);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    Plotly.newPlot(wrap, gd.data, { ...gd.layout, autosize: true, height: undefined }, { ...CHART_CONFIG, displayModeBar: true });
+    Plotly.Plots.resize(wrap);
+    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    bar.querySelector('button').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+  } }],
   displaylogo: false,
   toImageButtonOptions: { format: 'png', scale: 3 },
 };
