@@ -1,7 +1,7 @@
 import './style.css';
 import { initDuckDB, terminateDuckDB, loadFromUrl, loadFromFile, finishLoad } from './loader.js';
 import { SERVER_MODE, makeServerConn } from './query.js';
-import { initControls } from './controls.js';
+import { initControls, initStaticUi } from './controls.js';
 import { renderAll } from './renderer.js';
 import { registry } from './plugin-registry.js';
 import { state, on } from './state.js';
@@ -85,6 +85,7 @@ async function boot() {
   on('query',  doRender);
   on('render', doRender);
   registry.onAdd(doRender);
+  initStaticUi();
 
   // ── Server mode: native DuckDB via local Python server ──────────────────────
   if (SERVER_MODE) {
