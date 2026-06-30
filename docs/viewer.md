@@ -54,14 +54,21 @@ https://ida-mdc.github.io/pixel-patrol/viewer/?data=https://your-server.com/repo
 
 ## The interface
 
-The report shows the project name and description at the top (if provided when processing). The sidebar on the left contains all controls and widgets:
+### View modes
+
+The topbar has an **Overview / Full** toggle.
+
+- **Overview** (default) - widgets appear as a grid of tiles. Each tile shows a short summary and a preview plot. Click a tile to expand it in place; click again (or use **Collapse all**) to close it.
+- **Full** - the classic layout: all widgets shown full-width, one after another.
+
+### Sidebar
 
 - **Group by** - choose any column to split the data into groups. Each distinct value becomes a group with its own color across all plots. Defaults to the `path` column (the conditions from `-p`).
 - **Filter** - restrict the data to rows matching a column/operator/value combination.
 - **Dimension selectors** - for multi-dimensional data (Z, T, C, S), select which slice to display across widgets.
 - **Show significance** - toggle statistical significance brackets on violin plots (Mann-Whitney U test, Bonferroni corrected).
 - **Save** - export the current data as a `.parquet` or `.csv` file.
-- **Widget list** - all available widgets. Click a widget to expand it. Widgets that require columns not present in the report hide themselves automatically.
+- **Widget list** - show or hide individual widgets.
 
 ---
 
