@@ -95,9 +95,9 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('filter-op').value     = '';
     el('filter-value').value  = '';
     if (sigCb) sigCb.checked  = false;
-    syncViewToggle();
     resetDimensions(schema.dimensionInfo);
     resetState(schema.defaultGroupCol);
+    syncViewToggle();
     // Sync DOM after reset
     groupEl.value      = state.groupCol ?? '';
     paletteEl.value    = state.palette;
