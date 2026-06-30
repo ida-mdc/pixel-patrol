@@ -103,7 +103,7 @@ def find_viewer_dist() -> Path:
 def _setup_duckdb(parquet_path: Path):
     """
     Open a native DuckDB connection with pp_all and pp_data pre-registered as views.
-    Returns (conn, project_name | None, description | None).
+    Returns (conn, parquet_meta dict).
     """
     import duckdb
 
@@ -123,22 +123,21 @@ def _setup_duckdb(parquet_path: Path):
     else:
         conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all")
 
-    project_name, description = _read_parquet_meta(conn, escaped)
-    return conn, project_name, description
+    meta = _read_parquet_meta(conn, escaped)
+    return conn, meta
 
 
-def _read_parquet_meta(conn, escaped_path: str):
-    """Read pp_project_name and pp_description from the parquet file's KV metadata."""
+def _read_parquet_meta(conn, escaped_path: str) -> dict:
+    """Read all pp_* keys from the parquet file's KV metadata footer."""
     try:
         rows = conn.execute(
             f"SELECT decode(key)::VARCHAR AS k, decode(value)::VARCHAR AS v "
             f"FROM parquet_kv_metadata('{escaped_path}') "
-            f"WHERE decode(key)::VARCHAR IN ('pp_project_name', 'pp_description')"
+            f"WHERE decode(key)::VARCHAR LIKE 'pp_%'"
         ).fetchall()
-        meta = {k: v for k, v in rows}
-        return meta.get("pp_project_name") or None, meta.get("pp_description") or None
+        return {k: v for k, v in rows}
     except Exception:
-        return None, None
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +160,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     query_lock:       threading.Lock
     project_name:     Optional[str]
     description:      Optional[str]
+    parquet_meta:     dict
     extension_dirs:   list  # list[Path] - each dir contains extension.json + plugin JS files
 
     # ------------------------------------------------------------------
@@ -399,6 +399,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             f"window.__PP_FILENAME = {json.dumps(self.parquet_path.name)};\n"
             f"window.__PP_PROJECT_NAME = {json.dumps(self.project_name)};\n"
             f"window.__PP_DESCRIPTION = {json.dumps(self.description)};\n"
+            f"window.__PP_META = {json.dumps(self.parquet_meta)};\n"
             f"window.__PP_EXTENSION_URLS = {json.dumps(extension_urls)};\n"
             "</script>\n"
         ).encode()
@@ -491,7 +492,7 @@ def serve_viewer(
     for d in extension_dirs:
         click.echo(f"Extension        : {d}")
 
-    duck_conn, project_name, description = _setup_duckdb(parquet_path)
+    duck_conn, parquet_meta = _setup_duckdb(parquet_path)
     query_lock = threading.Lock()
 
     handler = type(
@@ -502,8 +503,9 @@ def serve_viewer(
             "parquet_path":   parquet_path,
             "duck_conn":      duck_conn,
             "query_lock":     query_lock,
-            "project_name":   project_name,
-            "description":    description,
+            "project_name":   parquet_meta.get("pp_project_name") or None,
+            "description":    parquet_meta.get("pp_description") or None,
+            "parquet_meta":   parquet_meta,
             "extension_dirs": extension_dirs,
         },
     )
