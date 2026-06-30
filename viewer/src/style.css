@@ -436,11 +436,17 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 /* Wide: show label only */
 .view-icon  { display: none; }
 .view-label { display: inline; }
-/* Narrow: show icon only */
+/* Narrow: show icon only; collapse topbar to fit */
 @media (max-width: 640px) {
   .view-icon  { display: inline; }
   .view-label { display: none; }
   .view-toggle-btn { width: 36px; }
+  #topbar-brand { display: none; }
+  #row-count-badge { display: none !important; }
+}
+
+@media (max-width: 640px) {
+  .across-dims-wrap { max-width: 100% !important; }
 }
 
 /* ── Topbar icon + brand ── */

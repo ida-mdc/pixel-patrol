@@ -178,6 +178,7 @@ function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMa
   const plotJobs = [];
 
   const tableWrap = document.createElement('div');
+  tableWrap.className = 'across-dims-wrap';
   tableWrap.style.overflowX = 'auto';
   if (dimLettersVisible.length === 1) {
     const letter = dimLettersVisible[0];
