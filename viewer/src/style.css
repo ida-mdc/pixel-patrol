@@ -453,9 +453,7 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 .topbar-icon  { height: 28px; width: auto; }
 .topbar-brand {
   font-weight: 600; font-size: 16px; white-space: nowrap;
-  cursor: pointer; user-select: none;
 }
-.topbar-brand:hover { color: #0d6efd; }
 
 /* ── Export popover: one button per option, each with a description ── */
 .export-btn-list { display: flex; flex-direction: column; gap: 8px; }
