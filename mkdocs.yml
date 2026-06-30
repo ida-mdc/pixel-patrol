@@ -6,6 +6,7 @@ docs_dir: docs
 
 theme:
   name: material
+  custom_dir: docs/overrides
   logo: assets/icon.png
   favicon: assets/icon.png
   font:
