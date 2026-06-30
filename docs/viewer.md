@@ -63,7 +63,7 @@ The topbar has an **Overview / Full** toggle.
 
 ### Sidebar
 
-- **Group by** - choose any column to split the data into groups. Each distinct value becomes a group with its own color across all plots. Defaults to the `path` column (the conditions from `-p`).
+- **Group by** - choose any column to split the data into groups. Each distinct value becomes a group with its own color across all plots. Defaults to `imported_path_short` when `-p` paths were used, or `name` for small single-directory reports (≤4 files).
 - **Filter** - restrict the data to rows matching a column/operator/value combination.
 - **Dimension selectors** - for multi-dimensional data (Z, T, C, S), select which slice to display across widgets.
 - **Show significance** - toggle statistical significance brackets on violin plots (Mann-Whitney U test, Bonferroni corrected).

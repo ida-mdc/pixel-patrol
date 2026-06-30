@@ -125,12 +125,15 @@ export function detectSchema(columns) {
  * Prefers well-known columns in priority order, falls back to the first available.
  *
  * If only `common_base` is present (no `imported_path_short`), the data was not
- * grouped during processing - default to no grouping (null).
+ * grouped during processing - default to no grouping (null), unless the report
+ * is small (≤4 rows) in which case `name` is used so each file gets its own group.
  */
-export function pickDefaultGroupCol(allCols, groupCols) {
+export function pickDefaultGroupCol(allCols, groupCols, totalRows = Infinity) {
   if (allCols.includes('imported_path_short')) return 'imported_path_short';
-  // No sub-paths were specified during processing - don't impose a default grouping.
-  if (!allCols.includes('imported_path_short') && allCols.includes('common_base')) return null;
+  if (allCols.includes('common_base')) {
+    if (totalRows <= 4 && allCols.includes('name')) return 'name';
+    return null;
+  }
   if (groupCols.includes('folder_top'))        return 'folder_top';
   if (groupCols.includes('report_group'))      return 'report_group';
   return groupCols[0] ?? null;
