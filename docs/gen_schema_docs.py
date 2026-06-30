@@ -104,6 +104,38 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .col-section .node { background:var(--panel); margin:.25rem 0; }
   .col-section-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
                        font-weight:700; margin-bottom:.3rem; }
+  /* Bottom-sheet handle — hidden on desktop, shown on mobile */
+  .sheet-handle { display: none; }
+  @media (max-width: 700px) {
+    #graph { grid-template-columns: 1fr; gap: .8rem; }
+    #edges { display: none; }
+    #graph-wrap { overflow: visible; }
+    .colhead { position: relative; }
+    body { padding-bottom: 68px; }
+    aside {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      width: 100%; min-width: unset; border-left: none;
+      border-radius: 14px 14px 0 0;
+      box-shadow: 0 -2px 16px rgba(0,0,0,.15);
+      display: flex; flex-direction: column;
+      overflow: hidden; padding: 0;
+      height: 56px; max-height: 64vh;
+      transition: height .28s ease; z-index: 200;
+    }
+    aside.sheet-open { height: 64vh; }
+    .sheet-handle {
+      display: flex; align-items: center; gap: .6rem;
+      height: 56px; min-height: 56px; padding: 0 1rem;
+      background: var(--panel); border-bottom: 1px solid var(--line);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .sheet-bar { width: 36px; height: 4px; background: var(--muted); border-radius: 2px; opacity: .4; flex-shrink: 0; }
+    .sheet-label { flex: 1; font-size: .88rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    aside.sheet-open .sheet-label { color: var(--fg); }
+    .sheet-close { display: none; background: none; border: none; font-size: 1.1rem; color: var(--muted); cursor: pointer; padding: 2px 6px; font-family: inherit; }
+    aside.sheet-open .sheet-close { display: block; }
+    #details-body { flex: 1; overflow-y: auto; padding: .75rem 1rem 1.5rem; }
+  }
 </style>
 </head>
 <body>
@@ -130,7 +162,14 @@ _TEMPLATE = r"""<!DOCTYPE html>
         <div class="col" id="col-right"><div class="colhead">Widgets<small>shown in the report</small></div></div>
       </div>
     </div>
-    <aside id="details"><p class="placeholder">Select a node to see its description and columns.</p></aside>
+    <aside id="details">
+      <div class="sheet-handle" id="sheet-handle">
+        <div class="sheet-bar"></div>
+        <span class="sheet-label" id="sheet-label">Tap a node for details</span>
+        <button class="sheet-close" id="sheet-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="details-body"><p class="placeholder">Select a node to see its description and columns.</p></div>
+    </aside>
   </div>
 </div>
 
@@ -314,8 +353,23 @@ function highlight(id) {
     n.classList.toggle('selected', n.dataset.node === selected);
   });
 }
-function select(id) { selected = (selected === id) ? null : id; highlight(selected); renderDetails(selected); }
-document.getElementById('reset').addEventListener('click', () => { selected = null; highlight(null); renderDetails(null); });
+function sheetClose() {
+  selected = null; highlight(null); renderDetails(null);
+  document.getElementById('details').classList.remove('sheet-open');
+  document.getElementById('sheet-label').textContent = 'Tap a node for details';
+}
+function select(id) {
+  selected = (selected === id) ? null : id;
+  highlight(selected); renderDetails(selected);
+  if (window.innerWidth <= 700) {
+    const aside = document.getElementById('details');
+    const lbl = document.getElementById('sheet-label');
+    if (selected) { aside.classList.add('sheet-open'); lbl.textContent = byNode[selected]?.label || selected; }
+    else { aside.classList.remove('sheet-open'); lbl.textContent = 'Tap a node for details'; }
+  }
+}
+document.getElementById('reset').addEventListener('click', sheetClose);
+document.getElementById('sheet-handle').addEventListener('click', sheetClose);
 
 // ---- details panel ---------------------------------------------------------
 function colTable(cols) {
@@ -341,7 +395,7 @@ function connList(panel, id) {
 }
 
 function renderDetails(id) {
-  const panel = document.getElementById('details');
+  const panel = document.getElementById('details-body');
   panel.innerHTML = '';
   if (!id || !byNode[id]) {
     panel.append(el('p', {class:'placeholder'}, 'Select a node to see its description and columns.'));
