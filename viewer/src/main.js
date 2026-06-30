@@ -1,5 +1,5 @@
 import './style.css';
-import { initDuckDB, terminateDuckDB, loadFromUrl, loadFromFile, finishLoad } from './loader.js';
+import { initDuckDB, terminateDuckDB, loadFromUrl, loadFromFile, finishLoad, parseServerMeta } from './loader.js';
 import { SERVER_MODE, makeServerConn } from './query.js';
 import { initControls, initStaticUi } from './controls.js';
 import { renderAll } from './renderer.js';
@@ -19,6 +19,7 @@ let schema      = null;
 let totalRows   = 0;
 let projectName  = null;
 let description  = null;
+let reportMeta   = null;
 
 /** Serialize render passes so concurrent triggers cannot interleave (duplicate widgets / stale cards). */
 let renderQueue = Promise.resolve();
@@ -96,6 +97,9 @@ async function boot() {
       ({ schema, totalRows, projectName, description } = await finishLoad(conn));
       projectName  ??= window.__PP_PROJECT_NAME  ?? null;
       description  ??= window.__PP_DESCRIPTION   ?? null;
+      reportMeta = parseServerMeta(window.__PP_META ?? null);
+      reportMeta.projectName ??= projectName;
+      reportMeta.description ??= description;
 
       hideFileOpenControls();
       document.getElementById('current-filename').textContent =
@@ -200,7 +204,7 @@ async function bootWasmOfflineSnapshot() {
 
   setLoading('Loading snapshot…');
   try {
-    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, snapUrl, null));
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromUrl(db, conn, snapUrl, null));
   } catch (err) {
     showFatalError('Failed to load snapshot parquet', err, loadErrorHint(err));
     return;
@@ -224,7 +228,7 @@ async function openUrl(url) {
   setLoading(`Downloading ${filename}…`);
   try {
     ({ db, conn } = await resetDuckDB(db, conn));
-    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, url, (loaded, total) => {
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromUrl(db, conn, url, (loaded, total) => {
       if (total > 0) {
         const pct = Math.round(loaded / total * 100);
         setLoadingProgress(pct, `Downloading ${filename}… ${pct}%`);
@@ -247,7 +251,7 @@ async function openFiles(files) {
   setLoading(`Loading ${file.name}…`);
   try {
     ({ db, conn } = await resetDuckDB(db, conn));
-    ({ schema, totalRows, projectName, description } = await loadFromFile(db, conn, file));
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromFile(db, conn, file));
     document.getElementById('current-filename').textContent = file.name;
     hideLoading();
     afterLoad();
@@ -532,7 +536,71 @@ function showWelcome() {
 function showApp() {
   document.getElementById(ID_WELCOME_SCREEN).style.display = 'none';
   document.getElementById(ID_MAIN_APP).style.display       = 'flex';
+  populateReportFooter(reportMeta);
   showSidebarHint();
+}
+
+function populateReportFooter(meta) {
+  const el = document.getElementById('report-info');
+  if (!el) return;
+  if (!meta) { el.hidden = true; return; }
+
+  const stats = meta.processingStats || {};
+  let html = '';
+
+  // ── top row: name + description on left, chips on right ──
+  const nameHtml = (meta.projectName && meta.projectName !== 'Imported Project')
+    ? `<span class="ri-name">${_esc(meta.projectName)}</span>` : '';
+  const descHtml = meta.description
+    ? `<span class="ri-desc">${_esc(meta.description)}</span>` : '';
+
+  const chips = [];
+  if (meta.version)    chips.push(`v${_esc(meta.version)}`);
+  if (meta.createdAt) {
+    try {
+      const d = new Date(meta.createdAt);
+      chips.push(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
+    } catch {}
+  }
+  if (stats.n_files)   chips.push(`${Number(stats.n_files).toLocaleString()} files`);
+  if (meta.flavor)     chips.push(_esc(meta.flavor));
+  if (stats.wall_s)    chips.push(_fmtDuration(stats.wall_s));
+
+  if (nameHtml || descHtml || chips.length) {
+    html += '<div class="ri-row ri-main">';
+    if (nameHtml || descHtml) html += `<div class="ri-head">${nameHtml}${descHtml}</div>`;
+    if (chips.length) {
+      html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
+    }
+    html += '</div>';
+  }
+
+  // ── second row: base dir, paths, workers, memory ──
+  const subs = [];
+  if (meta.baseDir)         subs.push(`<span class="ri-label">Base dir:</span> ${_esc(meta.baseDir)}`);
+  if (meta.paths?.length)   subs.push(`<span class="ri-label">Paths:</span> ${meta.paths.map(_esc).join(', ')}`);
+  if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
+  if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
+
+  if (subs.length) {
+    html += `<div class="ri-row ri-sub">${subs.join('<span class="ri-sep"> · </span>')}</div>`;
+  }
+
+  if (html) {
+    el.innerHTML = html;
+    el.hidden = false;
+  }
+}
+
+function _fmtDuration(s) {
+  if (s < 60) return `${Math.round(s)}s`;
+  const m = Math.floor(s / 60);
+  const r = Math.round(s % 60);
+  return r > 0 ? `${m}m ${r}s` : `${m}m`;
+}
+
+function _esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function hideFileOpenControls() {

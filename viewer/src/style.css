@@ -490,3 +490,27 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 .pp-footer-link:hover       { color: #dee2e6; }
 .pp-footer-link-light       { color: #dee2e6; text-decoration: none; }
 .pp-footer-link-light:hover { text-decoration: underline; }
+
+/* ── Report info strip ── */
+#report-info {
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  padding: 10px 20px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ri-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.ri-main { margin-bottom: 4px; }
+.ri-head { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.ri-name { font-weight: 600; font-size: 13px; color: #212529; white-space: nowrap; }
+.ri-desc { color: #6c757d; }
+.ri-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ri-chip {
+  background: #e9ecef; color: #495057;
+  border-radius: 10px; padding: 1px 9px;
+  font-size: 11px; white-space: nowrap;
+}
+.ri-sub { color: #6c757d; font-size: 11px; flex-wrap: wrap; }
+.ri-label { color: #495057; font-weight: 500; }
+.ri-sep { color: #ced4da; }
