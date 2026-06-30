@@ -482,14 +482,14 @@ async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
 
   let card = null; // full widget card, built on first expand
 
-  const collapse = ({ focus = true } = {}) => {
+  const collapse = async ({ focus = true } = {}) => {
     cell.classList.remove('widget-cell-expanded');
     if (card) card.hidden = true;
     tile.hidden = false;
     if (state.openedWidgets.delete(plugin.id)) persistOpened();
     collapseRegistry.delete(plugin.id);
     syncBar();
-    ensureHero();
+    await ensureHero();
     if (focus) { tile.focus(); cell.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   };
 
