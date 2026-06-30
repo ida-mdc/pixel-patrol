@@ -437,7 +437,7 @@ export async function renderScatter(container, ctx, spec) {
       marker: { color: rows.map(r => Number(r.c)), colorscale: colorScale, showscale: true,
         colorbar: { title: { text: niceName(colorBy) } }, size: 5, opacity: 0.7 },
     }], {
-      title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>sampled to 5,000 points</sup>' : '') },
+      title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
       xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), showlegend: false,
     });
     return true;
@@ -462,7 +462,7 @@ export async function renderScatter(container, ctx, spec) {
     };
   }).filter(t => t.x.length);
   ctx.plot.append(container, traces, {
-    title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>sampled to 5,000 points</sup>' : '') },
+    title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
     xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), ...legendCfg(ctx, groups.length),
   });
   return true;
@@ -630,7 +630,7 @@ function mannWhitneyPFromRankSum(n1, n2, rankSum1) {
 
 /**
  * Pairwise Mann-Whitney rank sums across category values, computed in SQL.
- * Returns rankData[`${c1}|${c2}`] = { [cat]: { n, rankSum } } - one query per pair.
+ * Returns rankData[`${c1}\x00${c2}`] = { [cat]: { n, rankSum } } - one query per pair.
  */
 async function fetchCategoryRankSums(ctx, { table, where, catSql, numCol, categories }) {
   const { q, andWhere } = ctx.sql;
@@ -658,7 +658,7 @@ async function fetchCategoryRankSums(ctx, { table, where, catSql, numCol, catego
   }));
   const rankData = {};
   pairs.forEach(([c1, c2], idx) => {
-    const key = `${c1}|${c2}`;
+    const key = `${c1}\x00${c2}`;
     rankData[key] = {};
     for (const r of results[idx]) rankData[key][String(r.cat)] = { n: Number(r.n), rankSum: Number(r.rank_sum) };
   });
@@ -670,7 +670,7 @@ function computeSignificancePairs(categories, rankData) {
   for (let i = 0; i < categories.length; i++) {
     for (let j = i + 1; j < categories.length; j++) {
       const c1 = categories[i], c2 = categories[j];
-      const d = rankData[`${c1}|${c2}`];
+      const d = rankData[`${c1}\x00${c2}`];
       const p = (d && d[c1] && d[c2]) ? mannWhitneyPFromRankSum(d[c1].n, d[c2].n, d[c1].rankSum) : 1.0;
       pairs.push({ c1, c2, p });
     }
