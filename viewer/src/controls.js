@@ -19,14 +19,17 @@ import { formatFrozenSidebarHtml } from './export-snapshot.js';
  * @param {Function} [opts.onExportBakedHtml] - baked static HTML snapshot
  */
 export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
-  // ── Condensed mode ────────────────────────────────────────────────────
-  const condensedCb = el('condensed-mode-cb');
-  if (condensedCb) {
-    condensedCb.checked = state.condensedMode;
-    condensedCb.onchange = () => {
-      state.condensedMode = condensedCb.checked;
-      emit('render');
-    };
+  // ── View mode toggle ─────────────────────────────────────────────────
+  const viewBtnOverview = el('view-btn-overview');
+  const viewBtnFull     = el('view-btn-full');
+  function syncViewToggle() {
+    viewBtnOverview?.setAttribute('aria-pressed', String(state.condensedMode));
+    viewBtnFull?.setAttribute('aria-pressed',     String(!state.condensedMode));
+  }
+  if (viewBtnOverview && viewBtnFull) {
+    syncViewToggle();
+    viewBtnOverview.onclick = () => { if (state.condensedMode) return; state.condensedMode = true;  syncViewToggle(); emit('render'); };
+    viewBtnFull.onclick     = () => { if (!state.condensedMode) return; state.condensedMode = false; syncViewToggle(); emit('render'); };
   }
 
   // ── Palette ──────────────────────────────────────────────────────────
@@ -86,7 +89,7 @@ export function initControls(schema, totalRows, plugins, onExport, canParquet, o
     el('filter-op').value     = '';
     el('filter-value').value  = '';
     if (sigCb) sigCb.checked  = false;
-    if (condensedCb) condensedCb.checked = true;
+    syncViewToggle();
     resetDimensions(schema.dimensionInfo);
     resetState(schema.defaultGroupCol);
     // Sync DOM after reset
