@@ -68,12 +68,13 @@
       <button id="collapse-all-btn" type="button" class="btn btn-sm btn-outline-secondary" hidden>
         <i class="bi bi-arrows-collapse"></i><span class="d-none d-sm-inline ms-1">Collapse all</span>
       </button>
-      <div class="form-check form-switch mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="condensed-mode-cb">
-        <label class="form-check-label small fw-bold" for="condensed-mode-cb">
-          <span class="d-none d-sm-inline">Overview mode</span>
-          <span class="d-sm-none">🗜️</span>
-        </label>
+      <div class="view-toggle" role="group" aria-label="View mode">
+        <button id="view-btn-overview" type="button" class="view-toggle-btn" aria-pressed="true">
+          <span class="view-label">Overview</span><span class="view-icon" aria-hidden="true">⊞</span>
+        </button>
+        <button id="view-btn-full" type="button" class="view-toggle-btn" aria-pressed="false">
+          <span class="view-label">Full</span><span class="view-icon" aria-hidden="true">▤</span>
+        </button>
       </div>
 
       <!-- Export menu (popover anchored to this button) -->

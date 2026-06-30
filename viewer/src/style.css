@@ -378,6 +378,48 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 .topbar-center { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 #current-filename { max-width: 240px; }
 
+/* ── View mode toggle ── */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid #dee2e6;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #f8f9fa;
+  flex-shrink: 0;
+}
+.view-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  width: 72px;          /* fixed equal width — wider of the two labels */
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6c757d;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.4;
+}
+.view-toggle-btn[aria-pressed="true"] {
+  background: #fff;
+  color: #212529;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  border-radius: 999px;
+}
+.view-toggle-btn:not([aria-pressed="true"]):hover {
+  color: #212529;
+}
+/* Wide: show label only */
+.view-icon  { display: none; }
+.view-label { display: inline; }
+/* Narrow: show icon only */
+@media (max-width: 640px) {
+  .view-icon  { display: inline; }
+  .view-label { display: none; }
+  .view-toggle-btn { width: 36px; }
+}
+
 /* ── Topbar icon + brand ── */
 .topbar-icon  { height: 28px; width: auto; }
 .topbar-brand {
