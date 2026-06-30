@@ -202,7 +202,7 @@ describe('dim-size widget · condensedSummary', () => {
 
   it('says all images are 2D and the same size', async () => {
     const out = await dimSize.condensedSummary(makeCtx({
-      allCols: ['X_size', 'Y_size'],
+      allCols: ['size_X', 'size_Y'],
       rows: router({ total: 5, ndx: 1, ndy: 1 }),
     }));
     expect(out).toBe('All 2D, same size.');
@@ -210,7 +210,7 @@ describe('dim-size widget · condensedSummary', () => {
 
   it('warns when image size varies', async () => {
     const out = await dimSize.condensedSummary(makeCtx({
-      allCols: ['X_size', 'Y_size'],
+      allCols: ['size_X', 'size_Y'],
       rows: router({ total: 5, ndx: 3, ndy: 1 }),
     }));
     expect(out).toMatchObject({ warning: true });
