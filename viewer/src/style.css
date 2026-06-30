@@ -42,6 +42,29 @@ body { background: #f8f9fa; }
 
 #sidebar-toggle { display: inline-flex; align-items: center; }
 
+@keyframes pp-sidebar-pulse {
+  0%   { outline: 3px solid rgba(13,110,253,0); background: transparent; }
+  20%  { outline: 3px solid rgba(13,110,253,0.9); background: rgba(13,110,253,0.12); }
+  80%  { outline: 3px solid rgba(13,110,253,0.9); background: rgba(13,110,253,0.12); }
+  100% { outline: 3px solid rgba(13,110,253,0); background: transparent; }
+}
+.sidebar-toggle-pulse {
+  animation: pp-sidebar-pulse 1.2s ease-in-out 4;
+  outline-offset: 2px;
+}
+
+#sidebar-hint-label {
+  font-size: 0.8rem; font-weight: 700; color: #fff; white-space: nowrap;
+  background: #0d6efd; border-radius: 4px; padding: 2px 8px;
+  animation: pp-hint-fade 5.5s ease forwards;
+}
+@keyframes pp-hint-fade {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Floating panel: taken out of the flex flow so the report centres on the full
    viewport width (not width-minus-sidebar); only as tall as its content; not a
    full-height modal wall. */
