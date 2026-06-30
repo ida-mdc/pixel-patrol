@@ -23,6 +23,12 @@ function pickRowIdColumnFromSchema(allCols) {
   return null;
 }
 
+/** Shut down an existing DuckDB instance and its worker. */
+export async function terminateDuckDB(db, conn) {
+  try { await conn?.close(); } catch {}
+  try { await db?.terminate(); } catch {}
+}
+
 /** Initialise DuckDB WASM using locally bundled files (avoids CDN version mismatches). */
 export async function initDuckDB() {
   const absWorkerUrl = new URL(duckdbMvpWorkerUrl, location.href).href;
