@@ -50,5 +50,6 @@ export function resetState(defaultGroupCol) {
   state.showSignificance = false;
   state.condensedMode     = true;
   state.openedWidgets    = new Set();
+  state.hiddenWidgets    = new Set();
   emit('query');
 }
