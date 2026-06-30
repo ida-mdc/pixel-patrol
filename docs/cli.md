@@ -41,6 +41,7 @@ pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 | `--rows-per-part N` | 10000 | Flush intermediate results to disk every N rows. |
 | `--parquet-row-group-size N` | 2048 | Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer. |
 | `--log-file` | off | Write a debug log file alongside the output parquet. |
+| `--omit-base-dir` | off | Do not store the base directory and paths in the parquet metadata. Useful when sharing reports without revealing local filesystem paths. |
 
 **Examples**
 

@@ -25,6 +25,7 @@ def _discover_files(
     bases:               List[Path],
     accepted_extensions: Union[Set[str], str],
     folder_extensions:   Optional[Set[str]] = None,
+    base_dir:            Optional[Path] = None,
 ) -> Iterator[Tuple[Path, dict]]:
     """Yield (file_path, file_metadata) for every matching file under bases, one at a time.
 
@@ -62,17 +63,21 @@ def _discover_files(
 
         def _make_meta(path: Path, stat, depth: int) -> Dict[str, Any]:
             ext = path.suffix.lower().lstrip(".")
+            anchor = base_dir if base_dir is not None else None
+            path_val   = str(path.relative_to(anchor))   if anchor else str(path)
+            parent_val = str(path.parent.relative_to(anchor)) if anchor else str(path.parent)
+            import_val = str(base_path.relative_to(anchor)) if anchor else base_str
             m: Dict[str, Any] = {
-                "path":              str(path),
+                "path":              path_val,
                 "name":              path.name,
                 "type":              "file",
-                "parent":            str(path.parent),
+                "parent":            parent_val,
                 "depth":             depth,
                 "size_bytes":        stat.st_size,
                 "file_extension":    ext,
                 "modification_date": datetime.fromtimestamp(stat.st_mtime),
                 "size_readable":     _format_size_readable(stat.st_size),
-                "imported_path":     base_str,
+                "imported_path":     import_val,
                 "common_base":       common_base_name,
             }
             if multiple_bases:

@@ -31,15 +31,15 @@ table is generated from the installed plugins.
 <!-- BEGIN GENERATED COLUMNS (docs/gen_schema_docs.py) -->
 | Column | Type | Description | Source | Created by | Package |
 | --- | --- | --- | --- | --- | --- |
-| `common_base` | `str` | Longest path prefix shared by all imported files. | File system | base processing | pixel-patrol-base |
+| `common_base` | `str` | Name of the longest path prefix shared by all import bases. | File system | base processing | pixel-patrol-base |
 | `depth` | `int` | Depth of the path below the imported base directory. | File system | base processing | pixel-patrol-base |
 | `file_extension` | `str` | Lower-cased file extension without the leading dot. | File system | base processing | pixel-patrol-base |
-| `imported_path` | `str` | The base directory under which this file was imported. | File system | base processing | pixel-patrol-base |
-| `imported_path_short` | `str` | Shortened, disambiguated label for the imported base directory (only when several bases were imported). | File system | base processing | pixel-patrol-base |
+| `imported_path` | `str` | Path of the import base (the -p path or base directory) under which this file was found, relative to the project base directory ('.' when no -p paths were specified). | File system | base processing | pixel-patrol-base |
+| `imported_path_short` | `str` | Shortened, disambiguated label for the import base (only when several -p paths were used). | File system | base processing | pixel-patrol-base |
 | `modification_date` | `datetime` | Last modification timestamp of the file. | File system | base processing | pixel-patrol-base |
 | `name` | `str` | File or folder name, including extension. | File system | base processing | pixel-patrol-base |
-| `parent` | `str` | Path of the containing directory. | File system | base processing | pixel-patrol-base |
-| `path` | `str` | Absolute path of the file (or folder) on disk. | File system | base processing | pixel-patrol-base |
+| `parent` | `str` | Path of the containing directory, relative to the project base directory ('.' for files directly in the base directory). | File system | base processing | pixel-patrol-base |
+| `path` | `str` | Path of the file (or folder), relative to the project base directory. | File system | base processing | pixel-patrol-base |
 | `size_bytes` | `int` | Size on disk in bytes (aggregated for folders). | File system | base processing | pixel-patrol-base |
 | `size_readable` | `str` | Human-readable size on disk (e.g. '2.4 MB'). | File system | base processing | pixel-patrol-base |
 | `type` | `str` | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). | File system | base processing | pixel-patrol-base |

@@ -1355,6 +1355,7 @@ def _collect_file_metadata_only(
     bases:       List[Path],
     config:      ProcessingConfig,
     on_progress: Optional[Callable[[int, int], None]],
+    base_dir:    Optional[Path] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """No-loader mode: discover files and return their filesystem metadata only.
 
@@ -1366,7 +1367,7 @@ def _collect_file_metadata_only(
     pbar = tqdm(unit=" files", unit_scale=False, desc="Scanning",
                 disable=on_progress is not None, dynamic_ncols=True,
                 bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
-    for _, file_meta in _discover_files(bases, config.selected_file_extensions):
+    for _, file_meta in _discover_files(bases, config.selected_file_extensions, base_dir=base_dir):
         rows.append({"obs_level": 0, **file_meta})
         pbar.update(1)
         if on_progress:
@@ -1398,6 +1399,7 @@ def build_records_df(
     config:       Optional[ProcessingConfig] = None,
     parts_dir:    Optional[Path] = None,
     on_progress:  Optional[Callable[[int, int], None]] = None,
+    base_dir:     Optional[Path] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Scan files, distribute processing across Dask workers, return (records_df, stats).
 
@@ -1426,13 +1428,13 @@ def build_records_df(
     cfg = config or ProcessingConfig()
 
     if loader is None:
-        return _collect_file_metadata_only(bases, cfg, on_progress)
+        return _collect_file_metadata_only(bases, cfg, on_progress, base_dir=base_dir)
 
     with _get_or_create_client(cfg) as (client, is_distributed):
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
-            _discover_files(bases, cfg.selected_file_extensions, folder_exts),
+            _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir),
             config=cfg,
             loader=loader,
             files_meta=files_meta,
