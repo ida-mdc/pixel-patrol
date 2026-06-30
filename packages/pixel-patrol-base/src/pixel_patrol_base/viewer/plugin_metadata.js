@@ -80,6 +80,7 @@ export default {
   inputs: ['dim_order', 'dtype', 'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z'],
   group: 'Metadata',
   scope: 'image',
+  multiPlot: true,
   label: 'Metadata',
   shortLabel: 'Image Metadata',
   info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nAlso lists properties shared by all files, and available dimension ranges.',
