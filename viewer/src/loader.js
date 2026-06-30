@@ -176,7 +176,7 @@ export async function finishLoad(conn, parquetPath = null) {
     schema.groupCols.push(urlGroup);
   }
 
-  schema.defaultGroupCol = pickDefaultGroupCol(schema.allCols, schema.groupCols);
+  schema.defaultGroupCol = pickDefaultGroupCol(schema.allCols, schema.groupCols, totalRows);
 
   // Always include the default group col too.
   if (schema.defaultGroupCol && !schema.groupCols.includes(schema.defaultGroupCol)) {
