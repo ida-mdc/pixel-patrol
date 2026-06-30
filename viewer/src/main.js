@@ -532,6 +532,7 @@ function showWelcome() {
 function showApp() {
   document.getElementById(ID_WELCOME_SCREEN).style.display = 'none';
   document.getElementById(ID_MAIN_APP).style.display       = 'flex';
+  showSidebarHint();
 }
 
 function hideFileOpenControls() {
@@ -588,13 +589,14 @@ function showFatalError(message, err, hint = null) {
   const sidebar  = document.getElementById('sidebar');
   const backdrop = document.getElementById(ID_SIDEBAR_BACKDROP);
 
-  const isMobile = () => window.matchMedia('(max-width: 967px)').matches;
+  const isMobile        = () => window.matchMedia('(max-width: 967px)').matches;
+  const isNarrowDesktop = () => window.matchMedia('(min-width: 968px) and (max-width: 1823px)').matches;
 
-  // The sidebar's default visibility differs by mode: shown on desktop (a
-  // floating panel), hidden on mobile (a slide-in drawer). `open` tracks the
-  // single source of truth; `apply` maps it to the right class for the mode.
-  let open      = !isMobile();
-  let wasMobile = isMobile();
+  // Default visibility: open on wide desktop only. Narrow desktops (laptops)
+  // start closed because the floating panel overlaps the report at those widths.
+  let open        = !isMobile() && !isNarrowDesktop();
+  let wasMobile   = isMobile();
+  let wasNarrow   = isNarrowDesktop();
 
   function apply() {
     if (isMobile()) {
@@ -613,10 +615,15 @@ function showFatalError(message, err, hint = null) {
   toggle?.addEventListener('click',   () => { open = !open; apply(); });
   backdrop?.addEventListener('click', () => { open = false; apply(); });
 
-  // Crossing the breakpoint resets to that mode's default (desktop open, mobile closed).
+  // Crossing any breakpoint resets to that mode's default state.
   window.addEventListener('resize', () => {
     const mobile = isMobile();
-    if (mobile !== wasMobile) { wasMobile = mobile; open = !mobile; apply(); }
+    const narrow = isNarrowDesktop();
+    if (mobile !== wasMobile || narrow !== wasNarrow) {
+      wasMobile = mobile; wasNarrow = narrow;
+      open = !mobile && !narrow;
+      apply();
+    }
   });
 
   // Close sidebar when a filter/apply button is tapped on mobile.
@@ -626,6 +633,30 @@ function showFatalError(message, err, hint = null) {
 
   apply();
 })();
+
+// ── First-open sidebar hint (narrow desktop only, shown once) ─────────────────
+
+function showSidebarHint() {
+  if (window.matchMedia('(max-width: 967px)').matches) return;
+  if (!window.matchMedia('(max-width: 1823px)').matches) return;
+
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!toggle) return;
+
+  toggle.classList.add('sidebar-toggle-pulse');
+
+  const label = document.createElement('span');
+  label.id = 'sidebar-hint-label';
+  label.textContent = 'Filters & Settings';
+  toggle.insertAdjacentElement('afterend', label);
+
+  const cleanup = () => {
+    toggle.classList.remove('sidebar-toggle-pulse');
+    label.remove();
+  };
+  toggle.addEventListener('click', cleanup, { once: true });
+  setTimeout(cleanup, 5500);
+}
 
 // ── Go ─────────────────────────────────────────────────────────────────────────
 boot();
