@@ -169,15 +169,6 @@ async function boot() {
 }
 
 function attachWasmFileUi() {
-  document.getElementById('topbar-brand').addEventListener('click', () => {
-    if (state.sidebarLocked) return;
-    if (window.__PP_HOMEPAGE) {
-      window.location.href = window.__PP_HOMEPAGE;
-    } else {
-      showWelcome();
-    }
-  });
-
   document.getElementById('file-input-welcome').addEventListener('change', e => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
