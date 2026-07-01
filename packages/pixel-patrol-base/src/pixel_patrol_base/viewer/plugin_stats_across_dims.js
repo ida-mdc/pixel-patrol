@@ -292,9 +292,10 @@ async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref)
   return false;
 }
 
-function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel) {
+function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel, inputMetrics) {
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
+    inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
@@ -317,13 +318,13 @@ export default [
     'stats-across-dims-basic', 'Basic Statistics Across Dimensions', BASIC_INFO,
     base => BASIC_METRIC_BASES.has(base),
     ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'brightness statistics' }),
-    ['mean_intensity'], 'Intensity across Slices',
+    ['mean_intensity'], 'Intensity across Slices', BASIC_METRIC_BASES,
   ),
   makeAcrossDimsPlugin(
     'stats-across-dims-quality', 'Quality Metrics Across Dimensions', QUALITY_INFO,
     base => QUALITY_METRIC_BASES.has(base),
     ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'image quality metrics' }),
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality across Slices',
+    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality across Slices', QUALITY_METRIC_BASES,
   ),
 ];
 
