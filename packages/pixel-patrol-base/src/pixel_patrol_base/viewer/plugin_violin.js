@@ -220,13 +220,14 @@ async function violinCondensedPlot(ctx, container, metric) {
   });
 }
 
-function makeViolinPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel) {
+function makeViolinPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel, inputMetrics) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
     ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
     null;
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
+    inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
@@ -291,9 +292,9 @@ async function qualityCondensedSummary() {
 
 export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicCondensedSummary,
-    ['mean_intensity'], 'Intensity'),
+    ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityCondensedSummary,
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality'),
+    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality', QUALITY_METRIC_BASES),
 ];
 
 function resolveMetrics(schema, dimensions) {
