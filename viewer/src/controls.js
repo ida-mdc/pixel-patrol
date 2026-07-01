@@ -3,6 +3,7 @@ import { BLOB_COLS } from './schema.js';
 import { getPaletteNames } from './colors.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 import { formatFrozenSidebarHtml } from './export-snapshot.js';
+import { escapeHtml } from './plot-utils.js';
 
 /**
  * Wire up all sidebar controls for a loaded schema.
@@ -153,7 +154,7 @@ export function updateFilteredInfo(filteredRows, totalRows) {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function el(id) { return document.getElementById(id); }
-function opt(val, label) { return `<option value="${val}">${label}</option>`; }
+function opt(val, label) { return `<option value="${escapeHtml(String(val))}">${escapeHtml(String(label))}</option>`; }
 
 function buildDimensionControls(dimensionInfo, activeDimensions = {}) {
   const container = el('dimension-controls');

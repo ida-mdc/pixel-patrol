@@ -29,6 +29,24 @@ from typing import Callable, Optional
 import importlib.resources
 from urllib.parse import urlencode
 
+
+def _js(value) -> str:
+    """Serialise a value as JSON safe to embed in an inline <script>.
+
+    json.dumps does not escape '/', so a value containing '</script>' (or the
+    U+2028/U+2029 line separators) would break out of the script element. Since
+    parquet metadata is untrusted input, escape those into unicode form.
+    """
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(chr(0x2028), "\\u2028")
+        .replace(chr(0x2029), "\\u2029")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Installed extension discovery
 # ---------------------------------------------------------------------------
@@ -396,11 +414,11 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         script = (
             "<script>\n"
             "window.__PP_SERVER = true;\n"
-            f"window.__PP_FILENAME = {json.dumps(self.parquet_path.name)};\n"
-            f"window.__PP_PROJECT_NAME = {json.dumps(self.project_name)};\n"
-            f"window.__PP_DESCRIPTION = {json.dumps(self.description)};\n"
-            f"window.__PP_META = {json.dumps(self.parquet_meta)};\n"
-            f"window.__PP_EXTENSION_URLS = {json.dumps(extension_urls)};\n"
+            f"window.__PP_FILENAME = {_js(self.parquet_path.name)};\n"
+            f"window.__PP_PROJECT_NAME = {_js(self.project_name)};\n"
+            f"window.__PP_DESCRIPTION = {_js(self.description)};\n"
+            f"window.__PP_META = {_js(self.parquet_meta)};\n"
+            f"window.__PP_EXTENSION_URLS = {_js(extension_urls)};\n"
             "</script>\n"
         ).encode()
         return html.replace(b"</head>", script + b"</head>", 1)
