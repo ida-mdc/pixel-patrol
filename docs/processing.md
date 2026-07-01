@@ -153,7 +153,7 @@ Key columns that are always present:
 | `obs_level` | Observation level (0 = full-image aggregate, 1 = per single dim, 2+ = dim combinations) |
 | `name` | Filename |
 | `file_extension` | File extension |
-| `size_bytes` / `size_readable` | File size |
+| `size_bytes` | File size in bytes |
 | `imported_path` | The `-p` path (or `.`) under which this file was found, relative to the base directory |
 | `imported_path_short` | Short label for the import base, used as the default grouping column when multiple `-p` paths are given |
 | `dim_z`, `dim_t`, `dim_c`, `dim_s` | Slice index for this row (null for level-0 aggregate rows) |

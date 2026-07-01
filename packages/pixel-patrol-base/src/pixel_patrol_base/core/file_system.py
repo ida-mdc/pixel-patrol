@@ -1,5 +1,4 @@
 import logging
-import math
 from typing import Dict, Any, Iterator, List, Literal, Optional, Set, Tuple, Union
 import os
 from datetime import datetime
@@ -7,18 +6,9 @@ from pathlib import Path
 import polars as pl
 from yaspin import yaspin
 
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 
 logger = logging.getLogger(__name__)
-
-
-def _format_size_readable(size_bytes: int) -> str:
-    if size_bytes == 0:
-        return "0 Bytes"
-    names = ("Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    return f"{round(size_bytes / math.pow(1024, i), 2)} {names[i]}"
 
 
 def _discover_files(
@@ -39,7 +29,7 @@ def _discover_files(
 
     file_metadata contains all filesystem attributes compatible with the original
     processing output: path, name, type, parent, depth, size_bytes, file_extension,
-    modification_date, size_readable, imported_path, common_base, and
+    modification_date, imported_path, common_base, and
     imported_path_short (only when len(bases) > 1).
 
     No file is opened or loaded. Runs concurrently with _plan_tasks via the generator
@@ -76,7 +66,6 @@ def _discover_files(
                 "size_bytes":        stat.st_size,
                 "file_extension":    ext,
                 "modification_date": datetime.fromtimestamp(stat.st_mtime),
-                "size_readable":     _format_size_readable(stat.st_size),
                 "imported_path":     import_val,
                 "common_base":       common_base_name,
             }

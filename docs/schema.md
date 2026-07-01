@@ -41,7 +41,6 @@ table is generated from the installed plugins.
 | `parent` | `str` | Path of the containing directory, relative to the project base directory ('.' for files directly in the base directory). | File system | base processing | pixel-patrol-base |
 | `path` | `str` | Path of the file (or folder), relative to the project base directory. | File system | base processing | pixel-patrol-base |
 | `size_bytes` | `int` | Size on disk in bytes (aggregated for folders). | File system | base processing | pixel-patrol-base |
-| `size_readable` | `str` | Human-readable size on disk (e.g. '2.4 MB'). | File system | base processing | pixel-patrol-base |
 | `type` | `str` | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). | File system | base processing | pixel-patrol-base |
 | `channel_names` | `list` | Names of the image channels, if available. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
 | `child_id` | `string` | Identifier of a sub-image within a container file (null for single-image files). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |

@@ -19,13 +19,13 @@ export default {
   ].join('\n'),
 
   requires(schema) {
-    return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__') && c !== 'size_readable');
+    return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__'));
   },
 
   async condensedSummary(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
-      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__') && c !== 'size_readable');
+      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
       const hasXY    = sizeCols.includes('size_X') && sizeCols.includes('size_Y');
       const KNOWN_DIMS = { size_Z: 'Z slices', size_T: 'timepoints', size_C: 'channels', size_S: 'series/tiles' };
       const extraDimCols = sizeCols.filter(c => c !== 'size_X' && c !== 'size_Y' && c !== 'num_pixels');
@@ -67,7 +67,7 @@ export default {
 
   async condensedPlot(container, ctx) {
     const { andWhere, sample, groupCol: gcFn } = ctx.sql;
-    const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__') && c !== 'size_readable');
+    const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
     if (!(sizeCols.includes('size_X') && sizeCols.includes('size_Y'))) return false;
 
     const rows = await ctx.queryRows(`
@@ -93,7 +93,7 @@ export default {
 
   async render(container, ctx) {
     try {
-      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__') && c !== 'size_readable');
+      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
       await renderSizeAvailability(container, ctx, sizeCols);
       await renderXYDistribution(container, ctx, sizeCols);
       await renderDimDistributions(container, ctx, sizeCols);

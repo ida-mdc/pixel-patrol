@@ -6,7 +6,6 @@ import os
 
 
 from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 
 _AGGREGATE_SCHEMA = {
     "path":              pl.String,
@@ -17,7 +16,6 @@ _AGGREGATE_SCHEMA = {
     "size_bytes":        pl.Int64,
     "modification_date": pl.Datetime(time_unit="us", time_zone=None),
     "file_extension":    pl.String,
-    "size_readable":     pl.String,
     "imported_path":     pl.String,
 }
 
