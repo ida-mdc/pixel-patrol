@@ -106,7 +106,7 @@ export function detectSchema(columns) {
   const dimensionInfo = {};
   // Long-format dimensionInfo is populated later in finishLoad() via a DB query.
 
-  for (const mustHave of ['imported_path_short', 'folder_top', 'report_group', 'common_base']) {
+  for (const mustHave of ['imported_path_short', 'common_base']) {
     if (allCols.includes(mustHave) && !groupCols.includes(mustHave)) {
       groupCols.push(mustHave);
     }
@@ -122,11 +122,12 @@ export function detectSchema(columns) {
 
 /**
  * Pick the default group column after cardinality filtering.
- * Prefers well-known columns in priority order, falls back to the first available.
  *
- * If only `common_base` is present (no `imported_path_short`), the data was not
- * grouped during processing - default to no grouping (null), unless the report
- * is small (≤4 rows) in which case `name` is used so each file gets its own group.
+ * `imported_path_short` means the data was grouped during processing, so it is
+ * the natural default. If only `common_base` is present the data was not grouped
+ * - default to no grouping (null), unless the report is small (≤4 rows) in which
+ * case `name` is used so each file gets its own group. Otherwise fall back to the
+ * first available group column.
  */
 export function pickDefaultGroupCol(allCols, groupCols, totalRows = Infinity) {
   if (allCols.includes('imported_path_short')) return 'imported_path_short';
@@ -134,7 +135,5 @@ export function pickDefaultGroupCol(allCols, groupCols, totalRows = Infinity) {
     if (totalRows <= 4 && allCols.includes('name')) return 'name';
     return null;
   }
-  if (groupCols.includes('folder_top'))        return 'folder_top';
-  if (groupCols.includes('report_group'))      return 'report_group';
   return groupCols[0] ?? null;
 }

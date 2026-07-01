@@ -148,8 +148,8 @@ describe('detectSchema', () => {
 
 describe('pickDefaultGroupCol', () => {
   it('prefers imported_path_short when present', () => {
-    const allCols = ['imported_path_short', 'folder_top', 'dtype'];
-    const groupCols = ['imported_path_short', 'folder_top', 'dtype'];
+    const allCols = ['imported_path_short', 'common_base', 'dtype'];
+    const groupCols = ['imported_path_short', 'common_base', 'dtype'];
     expect(pickDefaultGroupCol(allCols, groupCols)).toBe('imported_path_short');
   });
 
@@ -159,16 +159,10 @@ describe('pickDefaultGroupCol', () => {
     expect(pickDefaultGroupCol(allCols, groupCols)).toBeNull();
   });
 
-  it('falls back to folder_top when imported_path_short is absent', () => {
-    const allCols = ['folder_top', 'dtype'];
-    const groupCols = ['folder_top', 'dtype'];
-    expect(pickDefaultGroupCol(allCols, groupCols)).toBe('folder_top');
-  });
-
-  it('falls back to report_group', () => {
-    const allCols = ['report_group', 'dtype'];
-    const groupCols = ['report_group', 'dtype'];
-    expect(pickDefaultGroupCol(allCols, groupCols)).toBe('report_group');
+  it('groups by name for small common_base reports so each file is its own group', () => {
+    const allCols = ['common_base', 'name', 'dtype'];
+    const groupCols = ['common_base', 'dtype'];
+    expect(pickDefaultGroupCol(allCols, groupCols, 4)).toBe('name');
   });
 
   it('falls back to first groupCol when no priority col present', () => {
