@@ -9,6 +9,7 @@ import polars as pl
 import tifffile
 
 from pixel_patrol_base import api
+from pixel_patrol_base.core.feature_schema import validate_processor_output
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
@@ -121,3 +122,52 @@ def test_all_processors_return_dict():
         )
 
 
+def test_processor_schemata_return_declared_dtypes():
+    """Every processor's OUTPUT_SCHEMA keys must be returned with the declared dtypes."""
+    procs = discover_processor_plugins()
+    for proc_cls in procs:
+        proc = proc_cls() if isinstance(proc_cls, type) else proc_cls
+        schema   = getattr(proc, "OUTPUT_SCHEMA", {}) or {}
+        patterns = getattr(proc, "OUTPUT_SCHEMA_PATTERNS", []) or []
+
+        raw = {key: _sample_for_type(type_spec) for key, type_spec in schema.items()}
+        validated = validate_processor_output(
+            raw, schema, patterns,
+            processor_name=getattr(proc, "NAME", proc.__class__.__name__),
+        )
+
+        for key, type_spec in schema.items():
+            val = validated.get(key)
+            if isinstance(type_spec, tuple):
+                assert val is None or isinstance(val, (list, np.ndarray)), (
+                    f"{proc.NAME}:{key} expected array-like, got {type(val)}"
+                )
+            elif type_spec is float:
+                assert isinstance(val, (float, np.floating)), (
+                    f"{proc.NAME}:{key} expected float-like, got {type(val)}"
+                )
+            elif type_spec is int:
+                assert isinstance(val, (int, np.integer)), (
+                    f"{proc.NAME}:{key} expected int-like, got {type(val)}"
+                )
+            elif type_spec is bool:
+                assert isinstance(val, (bool, np.bool_, int, np.integer)), (
+                    f"{proc.NAME}:{key} expected bool-like, got {type(val)}"
+                )
+            elif type_spec is str:
+                assert isinstance(val, str), (
+                    f"{proc.NAME}:{key} expected str, got {type(val)}"
+                )
+            else:
+                assert key in validated
+
+
+def _sample_for_type(type_spec):
+    if type_spec is float:   return "1.23"
+    if type_spec is int:     return "7"
+    if type_spec is bool:    return "1"
+    if type_spec is str:     return 123
+    if isinstance(type_spec, tuple):
+        length = type_spec[1] if isinstance(type_spec[1], int) and type_spec[1] > 0 else 1
+        return [1] * length
+    return None
