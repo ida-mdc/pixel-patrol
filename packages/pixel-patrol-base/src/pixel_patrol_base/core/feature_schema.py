@@ -27,8 +27,6 @@ def get_requirements_as_patterns(component: Type[PixelPatrolLoader]) -> List[str
 def patterns_from_processor(prcssr) -> List[str]:
     """Extract regex strings from OUTPUT_SCHEMA_PATTERNS. Accepts class or instance."""
     schema_patterns = getattr(prcssr, "OUTPUT_SCHEMA_PATTERNS", None)
-    if schema_patterns is None and hasattr(prcssr, "__class__"):
-        schema_patterns = getattr(prcssr.__class__, "OUTPUT_SCHEMA_PATTERNS", None)
     return [getattr(pat, "pattern", pat) for pat, _typ in (schema_patterns or [])]
 
 
@@ -70,7 +68,7 @@ def _find_matching_spec(key: str, schema: Schema, patterns: PatternSpec) -> Any 
 
 
 def _cast_value(key: str, value: Any, type_spec: Any, processor_name: str) -> Any:
-    """Cast value to match the schema spec. Returns original value with a warning on failure."""
+    """Cast value to match the schema spec. Returns None with a warning on failure."""
     dtype, expected_size = _parse_schema_type(type_spec)
     try:
         if expected_size is not None:
@@ -86,4 +84,4 @@ def _cast_value(key: str, value: Any, type_spec: Any, processor_name: str) -> An
         return np.array(value, dtype=dtype).reshape(1)[0]
     except Exception as e:
         logger.warning(f"[{processor_name}] Failed to cast '{key}': {e}")
-        return value
+        return None

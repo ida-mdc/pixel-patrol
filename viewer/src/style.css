@@ -443,9 +443,6 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   .view-toggle-btn { width: 36px; }
   #topbar-brand { display: none; }
   #row-count-badge { display: none !important; }
-}
-
-@media (max-width: 640px) {
   .across-dims-wrap { max-width: 100% !important; }
 }
 
