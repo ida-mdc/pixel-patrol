@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import pytest
 
-from pixel_patrol_base.core.processing import MemoryChunkResult, _process_memory_chunk, _rollup
+from pixel_patrol_base.core.processing import MemoryChunkResult, _process_memory_chunk, _rollup, build_records_df
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import record_from
 from _processing_mocks import MockLeafProcessor, MockMemoryProcessor
@@ -428,3 +428,19 @@ def test_guard_does_not_fire_for_normal_spatial_image():
     record = _chunk_record((3, 5, 5), "CYX")
     result = _process_memory_chunk(record, 0, None, [], ProcessingConfig(), "/f.tif", {})
     assert result is not None
+
+
+# ── startup guard: X=1 Y=1 config rejection ──────────────────────────────────
+
+def test_startup_guard_rejects_x1_y1_no_other_larger(caplog, tmp_path):
+    config = ProcessingConfig(slice_size={"X": 1, "Y": 1})
+    with caplog.at_level(logging.ERROR, logger=_PROC_LOGGER):
+        result = build_records_df([tmp_path], loader=None, processors=[], config=config)
+    assert result == (None, {})
+    assert any("slice_size" in m for m in caplog.messages)
+
+
+def test_startup_guard_does_not_fire_when_z_larger(tmp_path):
+    config = ProcessingConfig(slice_size={"X": 1, "Y": 1, "Z": 5})
+    df, stats = build_records_df([tmp_path], loader=None, processors=[], config=config)
+    assert "slice_size" not in stats
