@@ -79,9 +79,9 @@ const CHART_CONFIG = {
     box.append(bar, wrap);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    Plotly.newPlot(wrap, gd.data, { ...gd.layout, autosize: true, height: undefined }, { ...CHART_CONFIG, displayModeBar: true });
+    Plotly.newPlot(wrap, gd.data, { ...gd.layout, autosize: true, height: undefined }, { ...CHART_CONFIG, displayModeBar: true, modeBarButtonsToAdd: [] });
     Plotly.Plots.resize(wrap);
-    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    const close = () => { Plotly.purge(wrap); overlay.remove(); document.removeEventListener('keydown', onKey); };
     bar.querySelector('button').onclick = close;
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     const onKey = e => { if (e.key === 'Escape') close(); };
