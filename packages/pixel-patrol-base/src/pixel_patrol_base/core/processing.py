@@ -1445,6 +1445,15 @@ def build_records_df(
     """
     cfg = config or ProcessingConfig()
 
+    _ss = cfg.slice_size or {}
+    if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 for v in _ss.values()):
+        logger.error(
+            "slice_size sets both X and Y to 1 with no other dim larger than 1 — "
+            "Pixel Patrol does not support slicing all dims to 1. "
+            "Please set at least one dim to a value larger than 1."
+        )
+        return None, {}
+
     if loader is None:
         return _collect_file_metadata_only(bases, cfg, on_progress)
 
