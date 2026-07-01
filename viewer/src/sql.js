@@ -20,7 +20,7 @@ export function buildWhere(filter) {
   const { col, op, val } = filter;
   if (!col || !op || val === '') return '';
 
-  const c = `"${col}"`;
+  const c = q(col);
 
   switch (op) {
     case 'contains':

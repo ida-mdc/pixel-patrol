@@ -120,7 +120,7 @@ export default {
 // max-samples cap) as one flex row.
 function buildControls(ctx, { hasNames, nameRows }) {
   const { escapeHtml } = ctx.plot;
-  const groupOpts = ctx.groups.map(g => `<option value="${g}">${ctx.groupLabel(g)}</option>`).join('');
+  const groupOpts = ctx.groups.map(g => `<option value="${escapeHtml(String(g))}">${escapeHtml(ctx.groupLabel(g))}</option>`).join('');
 
   let fileBlock = '';
   if (hasNames) {

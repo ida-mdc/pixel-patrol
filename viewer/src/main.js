@@ -608,7 +608,7 @@ function showSizeWarning(filename, bytes) {
   note.className = 'mt-3 mb-0 text-center';
   note.style.cssText = 'max-width:480px;font-size:0.95rem;line-height:1.5;background:#fff;color:#212529;border-radius:8px;padding:12px 16px';
   note.innerHTML = `<strong>${gb} GB file — large files may fail in the browser.</strong><br>`
-    + `If it doesn't load, try: <code>pixel-patrol view ${filename}</code>`
+    + `If it doesn't load, try: <code>pixel-patrol view ${_esc(filename)}</code>`
     + ` <span style="opacity:0.6;font-size:0.85rem">(requires pixel-patrol installed)</span>`;
   document.getElementById(ID_LOADING_OVERLAY).appendChild(note);
 }
@@ -627,11 +627,11 @@ function showFatalError(message, err, hint = null) {
   banner.style.cssText = 'max-width:680px;position:absolute;top:12px;left:0;right:0;z-index:200';
   banner.innerHTML = `
     <button type="button" class="btn-close" onclick="this.closest('#error-banner').remove()"></button>
-    <strong>${message}</strong>
-    ${hint ? `<p class="mb-1 mt-2">${hint}</p>` : ''}
+    <strong>${_esc(message)}</strong>
+    ${hint ? `<p class="mb-1 mt-2">${_esc(hint)}</p>` : ''}
     <details class="mt-2">
       <summary class="small text-muted" style="cursor:pointer">Technical details</summary>
-      <pre class="mt-1 mb-0 small" style="white-space:pre-wrap">${err?.message ?? err}</pre>
+      <pre class="mt-1 mb-0 small" style="white-space:pre-wrap">${_esc(err?.message ?? err)}</pre>
     </details>
   `;
 
