@@ -163,11 +163,14 @@ def test_processor_schemata_return_declared_dtypes():
 
 
 def _sample_for_type(type_spec):
-    if type_spec is float:   return "1.23"
-    if type_spec is int:     return "7"
-    if type_spec is bool:    return "1"
-    if type_spec is str:     return 123
+    import numpy as np
     if isinstance(type_spec, tuple):
         length = type_spec[1] if isinstance(type_spec[1], int) and type_spec[1] > 0 else 1
         return [1] * length
+    if type_spec is str:     return 123
+    if type_spec is bool:    return "1"
+    if isinstance(type_spec, type) and issubclass(type_spec, np.floating):  return "1.23"
+    if isinstance(type_spec, type) and issubclass(type_spec, np.integer):   return "7"
+    if type_spec is float:   return "1.23"
+    if type_spec is int:     return "7"
     return None
