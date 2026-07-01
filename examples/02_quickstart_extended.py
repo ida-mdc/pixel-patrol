@@ -53,7 +53,7 @@ def main():
     # --- View with filters and grouping ---
     api.view(
         project,
-        group_col="size_readable",
+        group_col="file_extension",
         filter_by={"file_extension": {"op": "in", "value": "tif, png"}},
         dimensions={"c": "0"},   # show channel 0 by default
     )
