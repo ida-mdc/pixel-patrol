@@ -22,7 +22,7 @@ export default {
     return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__'));
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
       const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));

@@ -39,7 +39,7 @@ const andWhere = (where, condition) =>
 const groupCol = state => (state.groupCol ? q(state.groupCol) : `'__ALL__'`);
 const groupExpr = state => `${groupCol(state)} AS __group__`;
 
-// condensedSummary() only ever reaches for ctx.queryRows plus the pure string
+// condensedMessage() only ever reaches for ctx.queryRows plus the pure string
 // helpers above, so a thin fake ctx is enough to drive it deterministically.
 // `rows` is either a function (sql) => rows[] (a router) or a fixed array.
 function makeCtx({ allCols = [], metricCols = [], blobCols = [], where = '', rows = [], state = {} } = {}) {
@@ -54,11 +54,11 @@ function makeCtx({ allCols = [], metricCols = [], blobCols = [], where = '', row
   };
 }
 
-describe('summary widget · condensedSummary', () => {
+describe('summary widget · condensedMessage', () => {
   const summary = widget('summary');
 
   it('reports a plain file count when there is one image per file', async () => {
-    const out = await summary.condensedSummary(makeCtx({
+    const out = await summary.condensedMessage(makeCtx({
       allCols: ['size_bytes', 'file_extension'],
       rows: [{ file_count: 42 }],
     }));
@@ -67,7 +67,7 @@ describe('summary widget · condensedSummary', () => {
   });
 
   it('reports the image total when files contain multiple images', async () => {
-    const out = await summary.condensedSummary(makeCtx({
+    const out = await summary.condensedMessage(makeCtx({
       allCols: ['size_bytes', 'file_extension', 'n_images'],
       rows: [{ file_count: 10, n_images_sum: 30 }],
     }));
@@ -76,7 +76,7 @@ describe('summary widget · condensedSummary', () => {
   });
 
   it('uses the singular for a single file', async () => {
-    const out = await summary.condensedSummary(makeCtx({
+    const out = await summary.condensedMessage(makeCtx({
       allCols: ['size_bytes', 'file_extension'],
       rows: [{ file_count: 1 }],
     }));
@@ -84,7 +84,7 @@ describe('summary widget · condensedSummary', () => {
   });
 });
 
-describe('file-stats widget · condensedSummary', () => {
+describe('file-stats widget · condensedMessage', () => {
   const fileStats = widget('file-stats');
   // The widget fires two queries in parallel: distinct extensions, then per-group
   // counts. Route by a marker in the SQL so order doesn't matter.
@@ -94,7 +94,7 @@ describe('file-stats widget · condensedSummary', () => {
       : counts.map(c => ({ c }));
 
   it('says all files share one extension when nothing varies', async () => {
-    const out = await fileStats.condensedSummary(makeCtx({
+    const out = await fileStats.condensedMessage(makeCtx({
       allCols: ['file_extension', 'size_bytes'],
       rows: router({ exts: ['tif'], counts: [5] }),
     }));
@@ -102,7 +102,7 @@ describe('file-stats widget · condensedSummary', () => {
   });
 
   it('flags mixed file types as a warning', async () => {
-    const out = await fileStats.condensedSummary(makeCtx({
+    const out = await fileStats.condensedMessage(makeCtx({
       allCols: ['file_extension', 'size_bytes'],
       rows: router({ exts: ['tif', 'png'], counts: [5] }),
     }));
@@ -111,7 +111,7 @@ describe('file-stats widget · condensedSummary', () => {
   });
 
   it('flags an imbalanced per-group file count', async () => {
-    const out = await fileStats.condensedSummary(makeCtx({
+    const out = await fileStats.condensedMessage(makeCtx({
       allCols: ['file_extension', 'size_bytes'],
       rows: router({ exts: ['tif'], counts: [10, 3] }),
     }));
@@ -120,46 +120,46 @@ describe('file-stats widget · condensedSummary', () => {
   });
 });
 
-describe('sunburst widget · condensedSummary', () => {
+describe('sunburst widget · condensedMessage', () => {
   const sunburst = widget('sunburst');
 
   it('describes the folder structure by file count', async () => {
-    const out = await sunburst.condensedSummary(makeCtx({ rows: [{ n: 7 }] }));
+    const out = await sunburst.condensedMessage(makeCtx({ rows: [{ n: 7 }] }));
     expect(out).toBe('Folder structure of <strong>7 files</strong>.');
   });
 
   it('uses the singular for one file', async () => {
-    const out = await sunburst.condensedSummary(makeCtx({ rows: [{ n: 1 }] }));
+    const out = await sunburst.condensedMessage(makeCtx({ rows: [{ n: 1 }] }));
     expect(out).toContain('<strong>1 file</strong>');
   });
 });
 
-describe('image-table widget · condensedSummary', () => {
+describe('image-table widget · condensedMessage', () => {
   it('lists the image count with a sort/search hint', async () => {
-    const out = await widget('image-table').condensedSummary(makeCtx({ rows: [{ n: 3 }] }));
+    const out = await widget('image-table').condensedMessage(makeCtx({ rows: [{ n: 3 }] }));
     expect(out).toContain('<strong>3 images</strong>');
     expect(out).toContain('sort');
   });
 });
 
-describe('histogram widget · condensedSummary', () => {
+describe('histogram widget · condensedMessage', () => {
   const histogram = widget('histogram');
 
   it('teases the comparison when every image has a histogram', async () => {
-    const out = await histogram.condensedSummary(makeCtx({ rows: [{ total: 10, n: 10 }] }));
+    const out = await histogram.condensedMessage(makeCtx({ rows: [{ total: 10, n: 10 }] }));
     expect(out).toBe('Compare pixel intensity distributions across groups.');
   });
 
   it('warns when only some images have histograms', async () => {
-    const out = await histogram.condensedSummary(makeCtx({ rows: [{ total: 10, n: 4 }] }));
+    const out = await histogram.condensedMessage(makeCtx({ rows: [{ total: 10, n: 4 }] }));
     expect(out).toMatchObject({ warning: true });
     expect(out.text).toContain('<strong>4</strong>/10');
   });
 });
 
-describe('mosaic widget · condensedSummary', () => {
+describe('mosaic widget · condensedMessage', () => {
   it('names the metric the thumbnails are sorted by', async () => {
-    const out = await widget('mosaic').condensedSummary(makeCtx({
+    const out = await widget('mosaic').condensedMessage(makeCtx({
       blobCols: ['thumbnail'],
       metricCols: ['mean_intensity'],
       allCols: ['mean_intensity'],
@@ -170,14 +170,14 @@ describe('mosaic widget · condensedSummary', () => {
   });
 });
 
-describe('metadata widget · condensedSummary', () => {
+describe('metadata widget · condensedMessage', () => {
   const metadata = widget('metadata');
   // distinct-count probe per DIST col, then a MODE() lookup for the headline.
   const router = ({ nDistinct, mode }) => sql =>
     /COUNT\(DISTINCT/.test(sql) ? [{ n: nDistinct }] : [{ dtype: mode }];
 
   it('reports a single pixel type when dtype is uniform', async () => {
-    const out = await metadata.condensedSummary(makeCtx({
+    const out = await metadata.condensedMessage(makeCtx({
       allCols: ['dtype'],
       rows: router({ nDistinct: 1, mode: 'uint8' }),
     }));
@@ -185,7 +185,7 @@ describe('metadata widget · condensedSummary', () => {
   });
 
   it('warns when pixel types are mixed', async () => {
-    const out = await metadata.condensedSummary(makeCtx({
+    const out = await metadata.condensedMessage(makeCtx({
       allCols: ['dtype'],
       rows: router({ nDistinct: 2, mode: 'uint8' }),
     }));
@@ -194,14 +194,14 @@ describe('metadata widget · condensedSummary', () => {
   });
 });
 
-describe('dim-size widget · condensedSummary', () => {
+describe('dim-size widget · condensedMessage', () => {
   const dimSize = widget('dim-size');
   // COUNT(*) total first, then the X/Y distinctness probe.
   const router = ({ total, ndx, ndy }) => sql =>
     /COUNT\(DISTINCT/.test(sql) ? [{ ndx, ndy }] : [{ total }];
 
   it('says all images are 2D and the same size', async () => {
-    const out = await dimSize.condensedSummary(makeCtx({
+    const out = await dimSize.condensedMessage(makeCtx({
       allCols: ['size_X', 'size_Y'],
       rows: router({ total: 5, ndx: 1, ndy: 1 }),
     }));
@@ -209,7 +209,7 @@ describe('dim-size widget · condensedSummary', () => {
   });
 
   it('warns when image size varies', async () => {
-    const out = await dimSize.condensedSummary(makeCtx({
+    const out = await dimSize.condensedMessage(makeCtx({
       allCols: ['size_X', 'size_Y'],
       rows: router({ total: 5, ndx: 3, ndy: 1 }),
     }));
@@ -218,31 +218,31 @@ describe('dim-size widget · condensedSummary', () => {
   });
 });
 
-describe('custom-plot widget · condensedSummary', () => {
+describe('custom-plot widget · condensedMessage', () => {
   const customPlot = widget('custom-plot');
 
   it('invites exploration with no suggestion when no familiar columns exist', async () => {
-    const out = await customPlot.condensedSummary(makeCtx({ allCols: [] }));
+    const out = await customPlot.condensedMessage(makeCtx({ allCols: [] }));
     expect(out).toContain('pick any two columns');
     expect(out).not.toContain('e.g.');
   });
 
   it('suggests a sharpness comparison when intensity + laplacian are present', async () => {
-    const out = await customPlot.condensedSummary(makeCtx({
+    const out = await customPlot.condensedMessage(makeCtx({
       allCols: ['mean_intensity', 'laplacian_variance'],
     }));
     expect(out).toContain('Laplacian Variance');
   });
 });
 
-describe('violin widgets · condensedSummary', () => {
+describe('violin widgets · condensedMessage', () => {
   it('basic teases per-image intensity stats when pixel types are uniform', async () => {
-    const out = await widget('violin-basic').condensedSummary(makeCtx({ allCols: ['mean_intensity'] }));
+    const out = await widget('violin-basic').condensedMessage(makeCtx({ allCols: ['mean_intensity'] }));
     expect(out).toBe('Compare per-image intensity statistics across groups.');
   });
 
   it('basic warns when pixel types are mixed (intensities not comparable)', async () => {
-    const out = await widget('violin-basic').condensedSummary(makeCtx({
+    const out = await widget('violin-basic').condensedMessage(makeCtx({
       allCols: ['mean_intensity', 'dtype'],
       rows: [{ n_dtypes: 2 }],
     }));
@@ -251,31 +251,31 @@ describe('violin widgets · condensedSummary', () => {
   });
 
   it('quality returns a static, query-free teaser', async () => {
-    const out = await widget('violin-quality').condensedSummary(makeCtx());
+    const out = await widget('violin-quality').condensedMessage(makeCtx());
     expect(out).toBe('Spot quality differences and outliers across groups.');
   });
 });
 
-describe('stats-across-dims widgets · condensedSummary', () => {
+describe('stats-across-dims widgets · condensedMessage', () => {
   it('names the varying dimensions in upper case, sorted', async () => {
     const ctx = makeCtx();
     ctx.schema.dimensionInfo = { c: [0, 1], t: [0, 1, 2] };
-    const out = await widget('stats-across-dims-basic').condensedSummary(ctx);
+    const out = await widget('stats-across-dims-basic').condensedMessage(ctx);
     expect(out).toBe('Per-slice trend along <strong>C, T</strong>.');
   });
 
   it('returns null when no dimension varies', async () => {
-    const out = await widget('stats-across-dims-quality').condensedSummary(makeCtx());
+    const out = await widget('stats-across-dims-quality').condensedMessage(makeCtx());
     expect(out).toBeNull();
   });
 });
 
-describe('condensedSummary robustness', () => {
+describe('condensedMessage robustness', () => {
   // A failing query (DB hiccup, unexpected schema) must degrade to null rather
   // than throwing and breaking the whole condensed gallery render.
-  const summaries = [...byId.values()].filter(p => typeof p.condensedSummary === 'function');
+  const summaries = [...byId.values()].filter(p => typeof p.condensedMessage === 'function');
 
-  it('covers every widget that declares a condensedSummary', () => {
+  it('covers every widget that declares a condensedMessage', () => {
     expect(summaries.length).toBeGreaterThanOrEqual(11);
   });
 
@@ -286,7 +286,7 @@ describe('condensedSummary robustness', () => {
         allCols: ['dtype', 'mean_intensity'],
         rows: () => { throw new Error('db down'); },
       });
-      const out = await plugin.condensedSummary(ctx);
+      const out = await plugin.condensedMessage(ctx);
       // Either a graceful null or a still-valid summary (string / {text}).
       const ok = out == null || typeof out === 'string' || typeof out?.text === 'string';
       expect(ok).toBe(true);

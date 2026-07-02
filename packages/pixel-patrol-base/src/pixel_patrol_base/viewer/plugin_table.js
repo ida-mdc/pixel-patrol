@@ -36,7 +36,7 @@ export default {
     return schema.isLongFormat;
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const [{ n }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
       const count = Number(n ?? 0);
