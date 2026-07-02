@@ -221,6 +221,7 @@ function _parseRawMeta(raw) {
     flavor:          raw.pp_flavor       || null,
     version:         raw.pp_version      || null,
     createdAt:       raw.pp_created_at   || null,
+    loader:          raw.pp_loader       || null,
     baseDir:         raw.pp_base_dir     || null,
     paths,
     processingStats,
@@ -229,7 +230,7 @@ function _parseRawMeta(raw) {
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
-           createdAt: null, baseDir: null, paths: [], processingStats: {} };
+           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {} };
 }
 
 async function filterGroupColsByCardinality(conn, cols) {

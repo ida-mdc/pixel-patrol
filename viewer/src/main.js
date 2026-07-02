@@ -569,6 +569,7 @@ function populateReportFooter(meta) {
   const subs = [];
   const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
   if (nonTrivialPaths.length) subs.push(`<span class="ri-paths"><span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}</span>`);
+  if (meta.loader)          subs.push(`<span class="ri-loader"><span class="ri-label">Loader:</span> ${_esc(meta.loader)}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
 
