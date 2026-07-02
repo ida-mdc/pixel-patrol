@@ -486,6 +486,31 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     return meta
 
 
+def _check_all_leaf_dims_size_1(
+    dim_order: Tuple[str, ...],
+    config:    ProcessingConfig,
+    file_path: str,
+) -> bool:
+    """Return True (and log an error) if every dim resolves to leaf block size 1."""
+    _user_spec  = config.slice_size or {}
+    _leaf_block = _resolve_leaf_block_shape(dim_order, config.slice_size)
+    if not (dim_order and all(v == 1 for v in _leaf_block.values())):
+        return False
+    if all(d in _user_spec for d in dim_order):
+        logger.error(
+            "worker: skipping '%s' — slice_size is set to 1 for all dims (dim_order=%r). "
+            "At least one spatial dim (e.g. X, Y) must have a larger block size or be unpinned.",
+            file_path, dim_order,
+        )
+    else:
+        logger.error(
+            "worker: skipping '%s' — all dims resolve to leaf block size 1 (dim_order=%r). "
+            "The loader likely did not include spatial dims (e.g. X, Y) in dim_order.",
+            file_path, dim_order,
+        )
+    return True
+
+
 def _process_memory_chunk(
     mem_record:  Record,
     file_index:  int,
@@ -499,6 +524,12 @@ def _process_memory_chunk(
     arr        = mem_record.data
     dim_order  = mem_record.dim_order
     mem_origin = tuple(mem_record.meta.get(f"dim_{d.lower()}", 0) for d in dim_order)
+
+    if _check_all_leaf_dims_size_1(dim_order, config, file_path):
+        return MemoryChunkResult(
+            file_index=file_index, child_id=child_id,
+            chunk_rows={}, leaf_rows=[], image_meta=image_meta,
+        )
 
     # MEMORY pass
     chunk_rows: Dict[str, dict] = {}
@@ -1426,6 +1457,15 @@ def build_records_df(
     stats_dict always contains wall_s, n_files, n_tasks, n_workers, load_cpu_s, proc_* keys.
     """
     cfg = config or ProcessingConfig()
+
+    _ss = cfg.slice_size or {}
+    if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 for v in _ss.values()):
+        logger.error(
+            "slice_size sets both X and Y to 1 with no other dim larger than 1 — "
+            "Pixel Patrol does not support slicing all dims to 1. "
+            "Please set at least one dim to a value larger than 1."
+        )
+        return None, {}
 
     if loader is None:
         return _collect_file_metadata_only(bases, cfg, on_progress, base_dir=base_dir)
