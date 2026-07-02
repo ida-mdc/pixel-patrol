@@ -188,13 +188,6 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     )
     _inject_extension_urls(viewer_dir / "index.html", urls)
 
-    # Tell the viewer that the logo should navigate back to the site landing page.
-    viewer_index = viewer_dir / "index.html"
-    html = viewer_index.read_text(encoding="utf-8")
-    homepage_script = "<script>\nwindow.__PP_HOMEPAGE = '../';\n</script>\n"
-    html = html.replace("</head>", homepage_script + "</head>", 1)
-    viewer_index.write_text(html, encoding="utf-8")
-
     return out_dir
 
 

@@ -8,6 +8,10 @@ import numpy as np
 import zarr
 
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.loader_schema import (
+    RASTER_IMAGE_LOADER_SCHEMA,
+    RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
+)
 from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
@@ -155,7 +159,7 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
     meta["chunks"] = chunks if chunks is not None else arr.chunks
 
     for i, ax in enumerate(dim_order):
-        meta[f"{ax}_size"] = int(arr.shape[i])
+        meta[f"size_{ax}"] = int(arr.shape[i])
 
     return meta
 
@@ -167,23 +171,19 @@ class ZarrLoader:
     """
 
     NAME = "zarr"
+    DESCRIPTION = "Loads Zarr / OME-Zarr stores, reading pixel data, image metadata, and the store's raw Zarr attributes."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"zarr", "ome.zarr"}
     FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
     CONTAINER_EXTENSIONS: Set[str] = set()
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {
-        "dim_order": str,
-        "dim_names": list,
-        "n_images": int,
-        "channel_names": list,
-        "dtype": str,
-        "zarr_attributes": dict,
+    OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA, "zarr_attributes": dict}
+
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "zarr_attributes": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata.",
     }
 
-    OUTPUT_SCHEMA_PATTERNS = [
-        (r"^[A-Za-z]_size$", int),
-    ]
+    OUTPUT_SCHEMA_PATTERNS = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)

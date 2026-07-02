@@ -52,15 +52,23 @@ jobs:
 
       - name: Install Python packages
         run: |
+          uv pip install --system -e packages/pixel-patrol-base
           uv pip install --system \
-            -e packages/pixel-patrol-base \
+            -e packages/pixel-patrol-image \
+            -e packages/pixel-patrol-loader-bio \
             mkdocs-material
 
-      # 3. Build the MkDocs documentation.
+      # 3. Regenerate the interactive schema/plugin reference from the installed
+      #    plugins (the widget metadata is read from the JS plugins via Node,
+      #    which is already on PATH from the viewer build above).
+      - name: Generate schema reference
+        run: python docs/gen_schema_docs.py
+
+      # 4. Build the MkDocs documentation.
       - name: Build docs
         run: mkdocs build --site-dir gh-pages-site/docs
 
-      # 4. Assemble the full site: promote landing page + assets, copy viewer
+      # 5. Assemble the full site: promote landing page + assets, copy viewer
       #    to /viewer/, and inject installed extension URLs.
       - name: Assemble site
         run: |

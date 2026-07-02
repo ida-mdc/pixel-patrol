@@ -424,7 +424,7 @@ def _stamp_coordinates_to_row(
     row.update({f"dim_{d.lower()}": origin[i] for i, d in enumerate(dim_order)})
     row.update({
         "num_pixels": int(np.prod(shape)),
-        **{f"{d.upper()}_size": shape[i] for i, d in enumerate(dim_order)},
+        **{f"size_{d.upper()}": shape[i] for i, d in enumerate(dim_order)},
     })
     return row
 
@@ -468,7 +468,7 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     Starts with all loader-provided fields in record.meta, drops PP-internal
     per-chunk fields (shape, num_pixels) and dim_* coordinate keys, then
     adds/overrides the canonical image-level fields:
-    dim_order, dtype, ndim, *_size (full image extent per dim (e.g. S_size=3, Y_size=512))
+    dim_order, dtype, ndim, size_* (full image extent per dim (e.g. size_S=3, size_Y=512))
     Any additional loader-provided fields in record.meta are included as-is. 
     Image metadata is available at all obs_levels.
 
@@ -482,7 +482,7 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     meta["dtype"]     = str(np.dtype(record.data.dtype))  # canonical form, e.g. "uint16"
     meta["ndim"]      = len(record.dim_order)
     for i, d in enumerate(record.dim_order):
-        meta[f"{d}_size"] = int(record.data.shape[i])
+        meta[f"size_{d}"] = int(record.data.shape[i])
     return meta
 
 
@@ -671,7 +671,7 @@ def _rollup(
     Power-set over non-degenerate (varying) dims.
 
     Every returned row is augmented with image_meta so it is
-    available at all obs_levels.  Each row's *_size reflects the spatial extent
+    available at all obs_levels.  Each row's size_* reflects the spatial extent
     that row covers, not the full-image extent.
     """
     all_leaf_rows = [row for cr in chunk_results for row in cr.leaf_rows]
@@ -703,7 +703,7 @@ def _rollup(
     n = len(active_dims)
 
     image_meta: Dict[str, Any] = chunk_results[0].image_meta if chunk_results else {}
-    dim_to_size_key = {d: f"{d[4:].upper()}_size" for d in all_dim_keys}  # "dim_z" → "Z_size"
+    dim_to_size_key = {d: f"size_{d[4:].upper()}" for d in all_dim_keys}  # "dim_z" → "size_Z"
 
     obs_rows: List[dict] = []
 
@@ -714,7 +714,7 @@ def _rollup(
         obs["obs_level"] = len(g_dim_dict)
         for col in leaf_metric_cols:
             obs[col] = col_to_proc[col].get_aggregation(col)(group_rows, g_dim_dict)
-        # *_size: fixed dims share one per-slice size across all rows in the group;
+        # size_*: fixed dims share one per-slice size across all rows in the group;
         # non-fixed dims span the full image extent (from image_meta).
         ref = group_rows[0] if group_rows else {}
         for d, sk in dim_to_size_key.items():
@@ -754,7 +754,7 @@ def _rollup(
                 obs_rows.append(_make_aggregate_row(group_rows, dict(zip(g_dim_combo, key_vals))))
 
     # Merge image-level metadata into every obs row.
-    # Row values take priority so per-row *_size fields (set correctly above) are preserved.
+    # Row values take priority so per-row size_* fields (set correctly above) are preserved.
     # image_meta never contains dim_* coords, num_pixels, or obs_level, so
     # all PP-computed per-row fields survive unchanged.
     return [{**image_meta, **row} for row in obs_rows]
@@ -1283,9 +1283,10 @@ def save_parquet_from_parts(
     unified = unified.select(ordered)
 
     # ── Step 5: build target Arrow schema with footer metadata ──
+    from pixel_patrol_base.io.parquet_io import with_field_descriptions
     kv_meta      = metadata.to_parquet_meta()
     arrow_kv     = {k.encode(): v.encode() for k, v in kv_meta.items()}
-    arrow_schema = unified.to_arrow().schema.with_metadata(arrow_kv)
+    arrow_schema = with_field_descriptions(unified.to_arrow().schema.with_metadata(arrow_kv))
 
     # ── Step 6: stream-write one part at a time ──
     rg_size    = row_group_size or 2048
@@ -1385,6 +1386,7 @@ def _collect_file_metadata_only(
     bases:       List[Path],
     config:      ProcessingConfig,
     on_progress: Optional[Callable[[int, int], None]],
+    base_dir:    Optional[Path] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """No-loader mode: discover files and return their filesystem metadata only.
 
@@ -1396,7 +1398,7 @@ def _collect_file_metadata_only(
     pbar = tqdm(unit=" files", unit_scale=False, desc="Scanning",
                 disable=on_progress is not None, dynamic_ncols=True,
                 bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
-    for _, file_meta in _discover_files(bases, config.selected_file_extensions):
+    for _, file_meta in _discover_files(bases, config.selected_file_extensions, base_dir=base_dir):
         rows.append({"obs_level": 0, **file_meta})
         pbar.update(1)
         if on_progress:
@@ -1428,6 +1430,7 @@ def build_records_df(
     config:       Optional[ProcessingConfig] = None,
     parts_dir:    Optional[Path] = None,
     on_progress:  Optional[Callable[[int, int], None]] = None,
+    base_dir:     Optional[Path] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Scan files, distribute processing across Dask workers, return (records_df, stats).
 
@@ -1465,13 +1468,13 @@ def build_records_df(
         return None, {}
 
     if loader is None:
-        return _collect_file_metadata_only(bases, cfg, on_progress)
+        return _collect_file_metadata_only(bases, cfg, on_progress, base_dir=base_dir)
 
     with _get_or_create_client(cfg) as (client, is_distributed):
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
-            _discover_files(bases, cfg.selected_file_extensions, folder_exts),
+            _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir),
             config=cfg,
             loader=loader,
             files_meta=files_meta,

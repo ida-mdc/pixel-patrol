@@ -2,19 +2,23 @@
 import { FILE_ROW_NUMBER } from './constants.js';
 
 // Columns that contain binary data. Must correspond to actual Arrow binary types!!
-// TODO: maybe 'histogram_min', 'histogram_max', should be excluded in another way - they are numeric but not metrics.
 export const BLOB_COLS = new Set([
-  'thumbnail', 'histogram_counts', 'histogram_min', 'histogram_max',
+  'thumbnail', 'histogram_counts',
 ]);
 
 export const SKIP_METRIC_COLS = new Set([
   'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
-  'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size', 'S_size',
   'size_bytes',
+  'histogram_min', 'histogram_max',  // range scalars, not user-facing metrics
 ]);
 
+// Per-axis pixel-extent columns (size_X, size_Y, size_Z, …). Matched by shape
+// rather than a fixed axis list so any dimension a dataset carries is excluded
+// from metrics, not just the canonical X/Y/Z/T/C/S set.
+const AXIS_SIZE_RE = /^size_[A-Za-z]$/;
+
 export const META_COLS = [
-  'dim_order', 'dtype', 'Y_size', 'X_size', 'Z_size', 'T_size', 'C_size',
+  'dim_order', 'dtype', 'size_Y', 'size_X', 'size_Z', 'size_T', 'size_C',
   'ndim', 'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ];
 
@@ -84,11 +88,13 @@ export function detectSchema(columns) {
 
     allCols.push(name);
 
-    if (isNumeric && !SKIP_METRIC_COLS.has(name)) {
+    const isSkipped = SKIP_METRIC_COLS.has(name) || AXIS_SIZE_RE.test(name);
+
+    if (isNumeric && !isSkipped) {
       metricCols.push(name);
     }
 
-    if (!SKIP_METRIC_COLS.has(name)) {
+    if (!isSkipped) {
       if (KNOWN_GROUP_COLS.has(name)) {
         groupCols.push(name);
       } else if (isString) {
@@ -100,7 +106,7 @@ export function detectSchema(columns) {
   const dimensionInfo = {};
   // Long-format dimensionInfo is populated later in finishLoad() via a DB query.
 
-  for (const mustHave of ['imported_path_short', 'folder_top', 'report_group', 'common_base']) {
+  for (const mustHave of ['imported_path_short', 'common_base']) {
     if (allCols.includes(mustHave) && !groupCols.includes(mustHave)) {
       groupCols.push(mustHave);
     }
@@ -116,16 +122,18 @@ export function detectSchema(columns) {
 
 /**
  * Pick the default group column after cardinality filtering.
- * Prefers well-known columns in priority order, falls back to the first available.
  *
- * If only `common_base` is present (no `imported_path_short`), the data was not
- * grouped during processing - default to no grouping (null).
+ * `imported_path_short` means the data was grouped during processing, so it is
+ * the natural default. If only `common_base` is present the data was not grouped
+ * - default to no grouping (null), unless the report is small (≤4 rows) in which
+ * case `name` is used so each file gets its own group. Otherwise fall back to the
+ * first available group column.
  */
-export function pickDefaultGroupCol(allCols, groupCols) {
+export function pickDefaultGroupCol(allCols, groupCols, totalRows = Infinity) {
   if (allCols.includes('imported_path_short')) return 'imported_path_short';
-  // No sub-paths were specified during processing - don't impose a default grouping.
-  if (!allCols.includes('imported_path_short') && allCols.includes('common_base')) return null;
-  if (groupCols.includes('folder_top'))        return 'folder_top';
-  if (groupCols.includes('report_group'))      return 'report_group';
+  if (allCols.includes('common_base')) {
+    if (totalRows <= 4 && allCols.includes('name')) return 'name';
+    return null;
+  }
   return groupCols[0] ?? null;
 }

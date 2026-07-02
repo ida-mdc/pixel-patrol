@@ -79,6 +79,9 @@ def cli():
               help='Number of rows buffered in memory before being flushed to a temporary file on disk (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,
               help='Write a debug log file alongside the output parquet (auto-named).')
+@click.option('--omit-base-dir', is_flag=True, default=False,
+              help='Do not store the base directory and paths in the parquet metadata. '
+                   'Useful when sharing reports without revealing local filesystem paths.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
@@ -90,7 +93,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               max_images_per_task: int | None,
               slice_size: tuple[str, ...],
               rows_per_part: int | None,
-              log_file: bool):
+              log_file: bool,
+              omit_base_dir: bool):
     """
     Scan images in BASE_DIRECTORY, process them, and write a .parquet report file.
 
@@ -125,6 +129,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
+        omit_base_dir=omit_base_dir,
         parquet_row_group_size=parquet_row_group_size,
         log_file=log_file,
     )
@@ -231,6 +236,42 @@ def build_viewer_html(output: Path):
     Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
     api_build_viewer(output)
+
+
+@cli.command()
+@click.option('--output', '-o',
+              type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
+              default=Path('schema.json'),
+              show_default=True,
+              help='Path to write the catalog JSON to.')
+@click.option('--print', 'print_', is_flag=True, default=False,
+              help='Print to stdout instead of writing a file.')
+@click.option('--no-widgets', is_flag=True, default=False,
+              help='Skip viewer-widget metadata (which requires Node to read the JS plugins).')
+@click.option('--format', 'fmt',
+              type=click.Choice(['catalog', 'row-schema']), default='catalog', show_default=True,
+              help='catalog: full plugin catalog. row-schema: JSON Schema document for one report row.')
+def schema(output: Path, print_: bool, no_widgets: bool, fmt: str):
+    """
+    Export the report schema and plugin catalog as JSON.
+
+    catalog (default): full plugin catalog with loaders, processors, widgets and
+    every column - descriptions, types, producers, and connections.
+
+    row-schema: a standard JSON Schema document (json-schema.org) describing one
+    parquet report row, with patternProperties for per-axis column families.
+    """
+    import json
+    from pixel_patrol_base.core.schema_catalog import build_catalog, render_json_schema
+
+    catalog = build_catalog(include_widgets=not no_widgets)
+    text = json.dumps(render_json_schema(catalog) if fmt == 'row-schema' else catalog, indent=2)
+    if print_:
+        click.echo(text)
+    else:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text)
+        click.echo(f"Wrote schema {fmt} to '{output}'.")
 
 
 def _parse_slice_size(items: tuple) -> dict:

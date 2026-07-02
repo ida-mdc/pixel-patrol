@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWhere, andWhere, q, groupCol, groupExpr } from '../sql.js';
+import { buildWhere, andWhere, q, groupCol, groupExpr, dimSubsetWhere, stripWhere } from '../sql.js';
 
 describe('buildWhere', () => {
   it('returns empty string when col is missing', () => {
@@ -95,6 +95,72 @@ describe('q', () => {
 
   it('escapes embedded double quotes', () => {
     expect(q('col"name')).toBe('"col""name"');
+  });
+});
+
+describe('stripWhere', () => {
+  it('strips a leading WHERE (case-insensitive, any whitespace)', () => {
+    expect(stripWhere(`WHERE "x" = 1`)).toBe(`"x" = 1`);
+    expect(stripWhere(`  where "x" = 1`)).toBe(`"x" = 1`);
+  });
+  it('returns empty string for empty input', () => {
+    expect(stripWhere('')).toBe('');
+    expect(stripWhere(undefined)).toBe('');
+  });
+});
+
+describe('dimSubsetWhere', () => {
+  const dimCols = ['dim_t', 'dim_c', 'dim_z', 'dim_y', 'dim_x'];
+
+  it('whole-image aggregate: obs_level 0, every dim NULL', () => {
+    expect(dimSubsetWhere({ dimCols }))
+      .toEqual([
+        'obs_level = 0',
+        '"dim_t" IS NULL', '"dim_c" IS NULL', '"dim_z" IS NULL',
+        '"dim_y" IS NULL', '"dim_x" IS NULL',
+      ]);
+  });
+
+  it('one split dim: that dim IS NOT NULL, others NULL, obs_level 1', () => {
+    expect(dimSubsetWhere({ dimCols, split: new Set(['c']) }))
+      .toEqual([
+        'obs_level = 1',
+        '"dim_t" IS NULL', '"dim_c" IS NOT NULL', '"dim_z" IS NULL',
+        '"dim_y" IS NULL', '"dim_x" IS NULL',
+      ]);
+  });
+
+  it('fixed dim is pinned and excluded from the NULL loop; obs_level counts it', () => {
+    expect(dimSubsetWhere({ dimCols, fixed: { y: 3 }, split: new Set(['c']) }))
+      .toEqual([
+        'obs_level = 2',
+        '"dim_y" = 3',
+        '"dim_t" IS NULL', '"dim_c" IS NOT NULL', '"dim_z" IS NULL',
+        '"dim_x" IS NULL',
+      ]);
+  });
+
+  it('baseWhere is prepended', () => {
+    expect(dimSubsetWhere({ dimCols, baseWhere: `"dtype" = 'uint8'`, split: new Set(['t']) }))
+      .toEqual([
+        `"dtype" = 'uint8'`,
+        'obs_level = 1',
+        '"dim_t" IS NOT NULL', '"dim_c" IS NULL', '"dim_z" IS NULL',
+        '"dim_y" IS NULL', '"dim_x" IS NULL',
+      ]);
+  });
+
+  it('obsLevel: null omits the obs_level clause (spatial strips)', () => {
+    expect(dimSubsetWhere({ dimCols, split: new Set(['x']), obsLevel: null }))
+      .toEqual([
+        '"dim_t" IS NULL', '"dim_c" IS NULL', '"dim_z" IS NULL',
+        '"dim_y" IS NULL', '"dim_x" IS NOT NULL',
+      ]);
+  });
+
+  it('explicit obsLevel overrides the auto count', () => {
+    expect(dimSubsetWhere({ dimCols: ['dim_c'], split: new Set(['c']), obsLevel: 5 }))
+      .toEqual(['obs_level = 5', '"dim_c" IS NOT NULL']);
   });
 });
 
