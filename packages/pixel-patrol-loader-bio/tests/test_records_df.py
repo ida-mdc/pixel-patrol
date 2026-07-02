@@ -53,16 +53,13 @@ def test_postprocess_basic_file_metadata_df_adds_modification_month(tmp_path):
             datetime(2025, 7, 1, 9, 30),
         ],
         "file_extension": ["txt", "txt"],
-        "size_readable": ["", ""],
         "imported_path": [str(base), str(base)],
     })
 
     out = postprocess_basic_file_metadata_df(df)
 
     assert "modification_month" in out.columns
-    assert "size_readable" in out.columns
     assert out["modification_month"].to_list() == [3, 7]
-    assert out["size_readable"].to_list() == ["1.0 KB", "2.0 KB"]
 
 
 def test_full_records_df_computes_real_mean_intensity(tmp_path, loader, processors):

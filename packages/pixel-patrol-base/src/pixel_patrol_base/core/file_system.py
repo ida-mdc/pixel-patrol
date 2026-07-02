@@ -1,5 +1,4 @@
 import logging
-import math
 from typing import Dict, Any, Iterator, List, Literal, Optional, Set, Tuple, Union
 import os
 from datetime import datetime
@@ -7,24 +6,16 @@ from pathlib import Path
 import polars as pl
 from yaspin import yaspin
 
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 from pixel_patrol_base.core.contracts import PixelPatrolLoader
 
 logger = logging.getLogger(__name__)
-
-
-def _format_size_readable(size_bytes: int) -> str:
-    if size_bytes == 0:
-        return "0 Bytes"
-    names = ("Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    return f"{round(size_bytes / math.pow(1024, i), 2)} {names[i]}"
 
 
 def _discover_files(
     bases:               List[Path],
     accepted_extensions: Union[Set[str], str],
     folder_extensions:   Optional[Set[str]] = None,
+    base_dir:            Optional[Path] = None,
 ) -> Iterator[Tuple[Path, dict]]:
     """Yield (file_path, file_metadata) for every matching file under bases, one at a time.
 
@@ -38,7 +29,7 @@ def _discover_files(
 
     file_metadata contains all filesystem attributes compatible with the original
     processing output: path, name, type, parent, depth, size_bytes, file_extension,
-    modification_date, size_readable, imported_path, common_base, and
+    modification_date, imported_path, common_base, and
     imported_path_short (only when len(bases) > 1).
 
     No file is opened or loaded. Runs concurrently with _plan_tasks via the generator
@@ -62,17 +53,20 @@ def _discover_files(
 
         def _make_meta(path: Path, stat, depth: int) -> Dict[str, Any]:
             ext = path.suffix.lower().lstrip(".")
+            anchor = base_dir if base_dir is not None else None
+            path_val   = str(path.relative_to(anchor))   if anchor else str(path)
+            parent_val = str(path.parent.relative_to(anchor)) if anchor else str(path.parent)
+            import_val = str(base_path.relative_to(anchor)) if anchor else base_str
             m: Dict[str, Any] = {
-                "path":              str(path),
+                "path":              path_val,
                 "name":              path.name,
                 "type":              "file",
-                "parent":            str(path.parent),
+                "parent":            parent_val,
                 "depth":             depth,
                 "size_bytes":        stat.st_size,
                 "file_extension":    ext,
                 "modification_date": datetime.fromtimestamp(stat.st_mtime),
-                "size_readable":     _format_size_readable(stat.st_size),
-                "imported_path":     base_str,
+                "imported_path":     import_val,
                 "common_base":       common_base_name,
             }
             if multiple_bases:

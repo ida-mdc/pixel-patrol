@@ -18,6 +18,17 @@
  *     label:    string   - card header title
  *     requires(schema) → bool        - return false to hide when columns absent
  *     async render(container, ctx) → void  - draw into the provided DOM element
+ *     async condensedSummary(ctx) → string | {text, warning} | null  - OPTIONAL.
+ *       Only called when the user has enabled "Condensed mode" in the sidebar
+ *       (ctx.state.condensedMode). Returns one short, plain-language, data-aware
+ *       sentence describing what this widget found (may include <strong> for
+ *       key numbers). Shown as a clickable summary line; the widget's normal
+ *       render() output is collapsed underneath until the user expands it.
+ *       Set `warning: true` (or return {text, warning: true}) to use a ⚠️
+ *       icon instead of 🎓 when something is worth a closer look. Return
+ *       null/falsy to fall back to the normal always-expanded rendering.
+ *       For the "Summary" group, the sentence is shown as a static line above
+ *       the (always-expanded) body instead of a collapse toggle.
  *   }
  *
  * ctx fields available to plugins:
@@ -25,13 +36,19 @@
  *   ctx.queryRows(sql)       → plain JS objects (binary cols as Uint8Array)
  *   ctx.querySample(cols, n) → sampled scalar query shorthand
  *   ctx.schema               → { metricCols, groupCols, dimensionInfo, allCols, blobCols }
- *   ctx.state                → { palette, groupCol, filter, dimensions }
+ *   ctx.state                → { palette, groupCol, filter, dimensions, condensedMode }
  *   ctx.colorMap             → { groupValue: hexColor }
  *   ctx.where                → SQL WHERE fragment (or '')
  *   ctx.groups               → distinct group values
  *   ctx.filteredCount        → rows matching current filter
  *   ctx.totalRows            → total rows in file
  *   ctx.data.extractBinary   → decode Arrow binary/list column to JS numeric array
+ *   ctx.plot.dtypeRange      → [min, max] for a known integer dtype name, or null
+ *   ctx.plot.formatBytes     → human-readable byte size ("1.5 KB")
+ *   ctx.plot.statTable       → build a <table class="stat-table"> from headers + rows
+ *   ctx.plot.invariantTable  → append a titled two-column "shared properties" table
+ *   ctx.sql.dimSubsetWhere   → WHERE parts pinning one long-format aggregation
+ *                              subset ({ fixed, split, obsLevel }); see sql.js
  */
 
 // Built-in plugins are now loaded at runtime from installed Python packages

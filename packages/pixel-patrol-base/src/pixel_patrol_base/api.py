@@ -49,6 +49,7 @@ def process_files(
         # --- Metadata ---
         flavor: Optional[str] = None,
         description: Optional[str] = None,
+        omit_base_dir: bool = False,
         # --- Logging ---
         log_file: bool = False,
 ) -> Project:
@@ -80,6 +81,9 @@ def process_files(
                                     Smaller values speed up thumbnail sampling in the viewer.
         flavor:                     Label shown next to the title in the viewer.
         description:                Free-form description shown below the title in the viewer and embedded in the report metadata.
+        omit_base_dir:              If True, the base directory and paths are not stored in the
+                                    parquet metadata. Useful when sharing reports without revealing
+                                    local filesystem paths (default: False).
         log_file:                   Write a DEBUG-level log file alongside the output parquet.
                                     INFO and WARNING still appear in the terminal as usual.
 
@@ -106,6 +110,7 @@ def process_files(
         metadata=ProjectMetadata(
             flavor=flavor or "",
             description=description or "",
+            omit_base_dir=omit_base_dir,
         ),
         **config_kwargs,
     )

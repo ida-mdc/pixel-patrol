@@ -25,7 +25,7 @@ from pixel_patrol_base.viewer_server import _setup_duckdb, _ViewerHandler, find_
 def _running_viewer_server(parquet_path):
     """Start the static viewer server in-process and yield its URL."""
     dist_dir = find_viewer_dist()
-    duck_conn, project_name, description = _setup_duckdb(parquet_path)
+    duck_conn, parquet_meta = _setup_duckdb(parquet_path)
     query_lock = threading.Lock()
 
     handler = type(
@@ -36,8 +36,9 @@ def _running_viewer_server(parquet_path):
             "parquet_path": parquet_path,
             "duck_conn": duck_conn,
             "query_lock": query_lock,
-            "project_name": project_name,
-            "description": description,
+            "project_name": parquet_meta.get("pp_project_name") or None,
+            "description": parquet_meta.get("pp_description") or None,
+            "parquet_meta": parquet_meta,
             "extension_dirs": [],
         },
     )
