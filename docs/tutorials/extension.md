@@ -360,7 +360,16 @@ export default {
 };
 ```
 
-<p>Both plugins are listed in a small manifest, loaded automatically by the viewer:</p>
+<p>Both plugins are picked up automatically from a small manifest file (<code>extension.json</code>). With <code>"auto_detect": true</code>, every <code>plugin_*.js</code> file in the directory is loaded — no list to maintain. Just drop a new file in and it appears:</p>
+
+```json
+{
+  "name": "Pixel HAI Watch Extension",
+  "auto_detect": true
+}
+```
+
+<p>If you prefer to be explicit, list the files instead:</p>
 
 ```json
 {
