@@ -29,7 +29,7 @@ export default {
            schema.allCols.includes('size_bytes');
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const { andWhere, groupCol: gcFn } = ctx.sql;
       const { escapeHtml } = ctx.plot;
@@ -53,24 +53,22 @@ export default {
     const { andWhere, groupCol: gcFn } = ctx.sql;
     const gcExpr = gcFn();
 
-    const [extRows, sizeStats] = await Promise.all([
+    const [extRows, groupRows] = await Promise.all([
       ctx.queryRows(`
         SELECT "file_extension" AS ext, ${gcExpr} AS __group__, COUNT(*) AS c
         FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}
         GROUP BY 1, 2
       `),
-      ctx.queryRows(`
-        SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s, COUNT(DISTINCT "size_bytes") AS n_unique
-        FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
-      `).then(r => r[0]),
+      ctx.queryRows(`SELECT ${gcExpr} AS g, COUNT(*) AS c FROM pp_data ${ctx.where} GROUP BY 1`),
     ]);
 
-    const exts  = [...new Set(extRows.map(r => String(r.ext)))];
-    const nUniq = Number(sizeStats?.n_unique ?? 0);
+    const exts   = [...new Set(extRows.map(r => String(r.ext)))];
+    const counts = groupRows.map(r => Number(r.c)).filter(n => n > 0);
+    const countImbalance = counts.length > 1 &&
+      Math.max(...counts) / Math.min(...counts) >= 1.5;
 
-    // One mini-plot per property that actually varies. When several vary (e.g.
-    // mixed file types *and* a spread of file sizes) the tile shows them stacked,
-    // so a single preview surfaces every inconsistency the widget would.
+    // One mini-plot per warning condition — same thresholds as condensedMessage,
+    // capped at 2 (beyond that the tile becomes too cramped to read).
     const drawers = [];
     if (exts.length > 1) {
       drawers.push({ title: 'File type', draw: (host) => {
@@ -81,39 +79,25 @@ export default {
         return true;
       }});
     }
-    if (nUniq > 1) {
-      drawers.push({ title: 'File size', draw: async (host) => {
-        // Reuse the full widget's log/linear size bins so the preview reads like a
-        // shrunk version of its "File Count by Size Bin" chart (shared bin edges
-        // across groups, then stacked - instead of per-trace auto-binning).
-        const minS = Number(sizeStats.min_s ?? 0), maxS = Number(sizeStats.max_s ?? 0);
-        const { breaks, labels } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
-        if (!labels.length) return false;
-        const binRows = await ctx.queryRows(`
-          SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${gcExpr} AS __group__, COUNT(*) AS c
-          FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
-          GROUP BY 1, 2
-        `);
-        if (!binRows.length) return false;
-        const idx = new Map(binRows.map(r => [`${r.bin}\x00${r.__group__}`, Number(r.c)]));
-        const binCount = (b, g) => idx.get(`${b}\x00${g}`) ?? 0;
-        ctx.plot.appendMini(host, ctx.plot.groupedBarTraces(labels, binCount, { mini: true }),
-          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.04 });
+    if (countImbalance) {
+      drawers.push({ title: 'File count', draw: (host) => {
+        const groups = groupRows.map(r => String(r.g));
+        const idx = new Map(groupRows.map(r => [String(r.g), Number(r.c)]));
+        ctx.plot.appendMini(host, ctx.plot.groupedBarTraces(groups, (g) => idx.get(g) ?? 0, { mini: true }),
+          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
         return true;
       }});
     }
 
     // Nothing varies: mirror the full widget, which only shows an invariant table.
     if (!drawers.length) {
-      const invariants = [['File Extension', exts[0] ?? '—']];
-      if (sizeStats?.min_s != null) invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeStats.min_s))]);
-      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
+      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], [['File Extension', exts[0] ?? '—']]);
       return true;
     }
 
     if (drawers.length === 1) return drawers[0].draw(container);
 
-    // Several issues: split the tile vertically, one labelled mini-plot each.
+    // Two issues: split the tile vertically, one labelled mini-plot each.
     container.style.cssText += ';display:flex;flex-direction:column;gap:2px';
     let drew = false;
     for (const { title, draw } of drawers) {

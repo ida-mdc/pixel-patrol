@@ -26,7 +26,7 @@ export default {
     return schema.blobCols.includes('histogram_counts');
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const [{ total, n }] = await ctx.queryRows(
         `SELECT COUNT(*) AS total, COUNT("histogram_counts") AS n FROM pp_data ${ctx.where}`,

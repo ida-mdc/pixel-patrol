@@ -12,7 +12,7 @@ export default {
            schema.allCols.includes('file_extension');
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const hasNImages = ctx.schema.allCols.includes('n_images');
       const [row] = await ctx.queryRows(`

@@ -91,7 +91,7 @@ export default {
     return hasDist || hasMeta || Object.keys(schema.dimensionInfo).length > 0;
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
       const { escapeHtml } = ctx.plot;
@@ -120,38 +120,62 @@ export default {
     const { q, andWhere } = ctx.sql;
     const cols = ctx.schema.allCols;
 
-    // Prefer a categorical that actually varies (the interesting case); else
-    // fall back to the first one present (a single bar still says "all the same").
-    let firstPresent = null, varying = null;
+    // One mini-plot per DIST_COL that actually varies — matching exactly the
+    // columns condensedMessage flags as inconsistencies. Capped at 2 (beyond
+    // that the tile becomes too cramped to read).
+    const varying = [];
+    let firstPresent = null;
     for (const c of DIST_COLS) {
       if (!cols.includes(c)) continue;
       firstPresent ??= c;
       const [r] = await ctx.queryRows(`SELECT COUNT(DISTINCT ${q(c)}) AS n FROM pp_data ${andWhere(ctx.where, `${q(c)} IS NOT NULL`)}`);
-      if (Number(r?.n ?? 0) > 1) { varying = c; break; }
+      if (Number(r?.n ?? 0) > 1) varying.push(c);
+      if (varying.length === 2) break;
     }
     if (!firstPresent) return false;
 
-    // Something varies → the interesting case: a grouped distribution bar.
-    if (varying) {
-      const { cats, count } = await distCounts(ctx, varying);
+    if (varying.length === 0) {
+      // Nothing varies → mirror the invariant table the full widget would show.
+      const invariants = [];
+      for (const c of DIST_COLS) {
+        if (!cols.includes(c)) continue;
+        const { cats } = await distCounts(ctx, c);
+        if (cats.length === 1) invariants.push([ctx.plot.niceName(c), cats[0]]);
+      }
+      await collectScalarInvariants(ctx, invariants);
+      if (!invariants.length) return false;
+      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
+      return true;
+    }
+
+    if (varying.length === 1) {
+      const { cats, count } = await distCounts(ctx, varying[0]);
       if (!cats.length) return false;
       ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(cats, count, { mini: true }),
         { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
       return true;
     }
 
-    // Nothing varies → the full widget would only show an invariant table, so a
-    // single-category bar is meaningless; mirror that table in the preview instead.
-    const invariants = [];
-    for (const c of DIST_COLS) {
-      if (!cols.includes(c)) continue;
-      const { cats } = await distCounts(ctx, c);
-      if (cats.length === 1) invariants.push([ctx.plot.niceName(c), cats[0]]);
+    // Two vary → stack both, one labelled mini-plot each.
+    container.style.cssText += ';display:flex;flex-direction:column;gap:2px';
+    let drew = false;
+    for (const col of varying) {
+      const { cats, count } = await distCounts(ctx, col);
+      if (!cats.length) continue;
+      const cell = document.createElement('div');
+      cell.style.cssText = 'flex:1 1 0;min-height:0;display:flex;flex-direction:column';
+      const cap = document.createElement('div');
+      cap.textContent = ctx.plot.niceName(col);
+      cap.style.cssText = 'font-size:10px;font-weight:600;color:#6c757d;text-align:center;flex-shrink:0';
+      const plotHost = document.createElement('div');
+      plotHost.style.cssText = 'flex:1 1 0;min-height:0;position:relative';
+      cell.append(cap, plotHost);
+      container.appendChild(cell);
+      ctx.plot.appendMini(plotHost, ctx.plot.groupedBarTraces(cats, count, { mini: true }),
+        { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
+      drew = true;
     }
-    await collectScalarInvariants(ctx, invariants);
-    if (!invariants.length) return false;
-    ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
-    return true;
+    return drew;
   },
 
   async render(container, ctx) {

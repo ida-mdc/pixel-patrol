@@ -15,7 +15,7 @@ export default {
     return schema.allCols.includes('path') && schema.allCols.includes('size_bytes');
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const { andWhere } = ctx.sql;
       const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}`);

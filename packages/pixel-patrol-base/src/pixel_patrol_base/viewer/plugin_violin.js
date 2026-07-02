@@ -220,7 +220,7 @@ async function violinCondensedPlot(ctx, container, metric) {
   });
 }
 
-function makeViolinPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel, inputMetrics) {
+function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metricPref = [], shortLabel, inputMetrics) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
     ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
@@ -231,7 +231,7 @@ function makeViolinPlugin(id, label, info, filterMetric, condensedSummary, metri
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
-    ...(condensedSummary ? { condensedSummary } : {}),
+    ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {
       return violinCondensedPlot(ctx, container, pickMetric(ctx));
     },
