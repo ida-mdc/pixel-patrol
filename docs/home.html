@@ -14,13 +14,16 @@
     body { font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
 
     /* Nav */
-    .pp-nav { border-bottom: 1px solid #dee2e6; padding: 0 24px; height: 64px; display: flex; align-items: center; gap: 10px; background: #fff; }
+    .pp-navbar { border-bottom: 1px solid #dee2e6; background: #fff; padding: 0; }
+    .pp-brand { height: 64px; display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
     .pp-nav-logo { width: 36px; height: 36px; border-radius: 6px; }
-    .pp-nav-title { font-weight: 600; font-size: 1.1rem; color: #212529; text-decoration: none; }
-    .pp-nav-title:hover { color: #0d6efd; }
-    .pp-nav-links { margin-left: auto; display: flex; gap: 20px; align-items: center; }
-    .pp-nav-links a { font-size: 1rem; color: #6c757d; text-decoration: none; }
-    .pp-nav-links a:hover { color: #212529; }
+    .pp-nav-title { font-weight: 600; font-size: 1.1rem; color: #212529; }
+    .pp-brand:hover .pp-nav-title { color: #0d6efd; }
+    .pp-nav-link { font-size: 1rem; color: #6c757d; text-decoration: none; }
+    .pp-nav-link:hover { color: #212529; }
+    @media (max-width: 767.98px) {
+      .pp-nav-open { border-top: 1px solid #dee2e6; padding-bottom: 12px; }
+    }
 
     /* Sections */
     .section { padding: 72px 0; }
@@ -58,7 +61,7 @@
     .pp-footer { background: #212529; margin-top: auto; }
     .pp-footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; flex-wrap: wrap; gap: 12px; }
     .pp-footer-left { display: flex; align-items: center; }
-    .pp-footer-right { display: flex; align-items: center; gap: 20px; }
+    .pp-footer-right { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
     .pp-footer-logo { height: 36px; width: auto; margin-right: 14px; }
     .pp-footer-text { font-size: 12px; line-height: 1.4; color: #adb5bd; }
     .pp-footer-link { color: #adb5bd; text-decoration: none; font-size: 12px; }
@@ -70,24 +73,39 @@
       .hero { padding: 48px 0 40px; }
       .hero-img { max-width: 200px; }
       .carousel-img { height: 240px; }
+      .perf-value { font-size: 1.4rem; }
+      .section { padding: 48px 0; }
     }
   </style>
 </head>
 <body>
 
 <!-- Nav -->
-<header class="pp-nav">
-  <img class="pp-nav-logo" src="assets/icon.png" alt="Pixel Patrol"/>
-  <a class="pp-nav-title" href="#">Pixel Patrol</a>
-  <nav class="pp-nav-links">
-    <a href="./why.html">Why?</a>
-    <a href="./docs/">Documentation</a>
-    <a href="./docs/tutorials/">Tutorials</a>
-    <a href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
-      <i class="bi bi-github me-1"></i>GitHub
+<nav class="navbar navbar-expand-md pp-navbar">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand pp-brand" href="./">
+      <img class="pp-nav-logo" src="assets/icon.png" alt="Pixel Patrol"/>
+      <span class="pp-nav-title">Pixel Patrol</span>
     </a>
-  </nav>
-</header>
+    <button class="navbar-toggler border-0 shadow-none" type="button"
+            data-bs-toggle="collapse" data-bs-target="#ppNav"
+            aria-controls="ppNav" aria-expanded="false" aria-label="Toggle navigation">
+      <i class="bi bi-list" style="font-size:1.5rem;color:#6c757d"></i>
+    </button>
+    <div class="collapse navbar-collapse pp-nav-open" id="ppNav">
+      <div class="d-flex flex-column flex-md-row ms-auto gap-3 gap-md-4 align-items-md-center py-3 py-md-0">
+        <a class="pp-nav-link" href="./why.html">Why?</a>
+        <a class="pp-nav-link" href="./docs/">
+          <span class="d-md-none">Docs</span><span class="d-none d-md-inline">Documentation</span>
+        </a>
+        <a class="pp-nav-link" href="./docs/tutorials/">Tutorials</a>
+        <a class="pp-nav-link" href="https://github.com/ida-mdc/pixel-patrol" target="_blank" rel="noopener">
+          <i class="bi bi-github"></i><span class="d-none d-md-inline ms-1">GitHub</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</nav>
 
 <!-- Hero -->
 <section class="hero">
@@ -354,6 +372,8 @@
       </a>
       <a href="https://pypi.org/project/pixel-patrol/" target="_blank" rel="noopener" class="pp-footer-link">PyPI</a>
       <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/LICENSE" target="_blank" rel="noopener" class="pp-footer-link">License</a>
+      <a href="docs/impressum/" class="pp-footer-link">Impressum</a>
+      <a href="docs/privacy/" class="pp-footer-link">Privacy Policy</a>
     </div>
   </div>
 </footer>

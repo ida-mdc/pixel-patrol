@@ -1,7 +1,7 @@
 import './style.css';
-import { initDuckDB, loadFromUrl, loadFromFile, finishLoad } from './loader.js';
+import { initDuckDB, terminateDuckDB, loadFromUrl, loadFromFile, finishLoad, parseServerMeta } from './loader.js';
 import { SERVER_MODE, makeServerConn } from './query.js';
-import { initControls } from './controls.js';
+import { initControls, initStaticUi } from './controls.js';
 import { renderAll } from './renderer.js';
 import { registry } from './plugin-registry.js';
 import { state, on } from './state.js';
@@ -19,6 +19,7 @@ let schema      = null;
 let totalRows   = 0;
 let projectName  = null;
 let description  = null;
+let reportMeta   = null;
 
 /** Serialize render passes so concurrent triggers cannot interleave (duplicate widgets / stale cards). */
 let renderQueue = Promise.resolve();
@@ -85,6 +86,7 @@ async function boot() {
   on('query',  doRender);
   on('render', doRender);
   registry.onAdd(doRender);
+  initStaticUi();
 
   // ── Server mode: native DuckDB via local Python server ──────────────────────
   if (SERVER_MODE) {
@@ -95,6 +97,9 @@ async function boot() {
       ({ schema, totalRows, projectName, description } = await finishLoad(conn));
       projectName  ??= window.__PP_PROJECT_NAME  ?? null;
       description  ??= window.__PP_DESCRIPTION   ?? null;
+      reportMeta = parseServerMeta(window.__PP_META ?? null);
+      reportMeta.projectName ??= projectName;
+      reportMeta.description ??= description;
 
       hideFileOpenControls();
       document.getElementById('current-filename').textContent =
@@ -164,15 +169,6 @@ async function boot() {
 }
 
 function attachWasmFileUi() {
-  document.getElementById('topbar-brand').addEventListener('click', () => {
-    if (state.sidebarLocked) return;
-    if (window.__PP_HOMEPAGE) {
-      window.location.href = window.__PP_HOMEPAGE;
-    } else {
-      showWelcome();
-    }
-  });
-
   document.getElementById('file-input-welcome').addEventListener('change', e => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
@@ -199,7 +195,7 @@ async function bootWasmOfflineSnapshot() {
 
   setLoading('Loading snapshot…');
   try {
-    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, snapUrl, null));
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromUrl(db, conn, snapUrl, null));
   } catch (err) {
     showFatalError('Failed to load snapshot parquet', err, loadErrorHint(err));
     return;
@@ -211,13 +207,19 @@ async function bootWasmOfflineSnapshot() {
   afterLoad({ snapshotBundle: bundle });
 }
 
+async function resetDuckDB(oldDb, oldConn) {
+  await terminateDuckDB(oldDb, oldConn);
+  return initDuckDB();
+}
+
 // ── Open data ─────────────────────────────────────────────────────────────────
 
 async function openUrl(url) {
   const filename = url.split('/').pop();
   setLoading(`Downloading ${filename}…`);
   try {
-    ({ schema, totalRows, projectName, description } = await loadFromUrl(db, conn, url, (loaded, total) => {
+    ({ db, conn } = await resetDuckDB(db, conn));
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromUrl(db, conn, url, (loaded, total) => {
       if (total > 0) {
         const pct = Math.round(loaded / total * 100);
         setLoadingProgress(pct, `Downloading ${filename}… ${pct}%`);
@@ -233,9 +235,14 @@ async function openUrl(url) {
 
 async function openFiles(files) {
   const file = files[0];
+  const GB2 = 2 * 1024 * 1024 * 1024;
+  if (file.size > GB2) {
+    showSizeWarning(file.name, file.size);
+  }
   setLoading(`Loading ${file.name}…`);
   try {
-    ({ schema, totalRows, projectName, description } = await loadFromFile(db, conn, file));
+    ({ db, conn } = await resetDuckDB(db, conn));
+    ({ schema, totalRows, projectName, description, reportMeta } = await loadFromFile(db, conn, file));
     document.getElementById('current-filename').textContent = file.name;
     hideLoading();
     afterLoad();
@@ -253,6 +260,9 @@ function loadErrorHint(err) {
     return 'Please re-run <code>pixel-patrol process</code> to regenerate the report with the current format.';
   }
   const msg = String(err?.message ?? err).toLowerCase();
+  if (msg.includes('_setthrew')) {
+    return 'Please refresh the page and try again.';
+  }
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
     return 'This file may have been created with an older version of Pixel Patrol. '
@@ -271,6 +281,7 @@ function applySnapshotBundle(bundle) {
   state.dimensions       = {};
   state.showSignificance = !!rs.showSignificance;
   state.hiddenWidgets    = new Set(Array.isArray(rs.hiddenWidgets) ? rs.hiddenWidgets : []);
+  state.openedWidgets    = new Set(Array.isArray(rs.openedWidgets) ? rs.openedWidgets : []);
   state.sidebarLocked    = true;
 }
 
@@ -281,6 +292,7 @@ function afterLoad(options = {}) {
   state.dimensions      = {};
   state.groupCol        = schema.defaultGroupCol ?? null;
   state.hiddenWidgets   = new Set();
+  state.openedWidgets   = new Set();
   state.sidebarLocked   = false;
   state.filter          = { col: '', op: '', val: '' };
 
@@ -300,7 +312,9 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
+  if ('condensedMode' in urlParams)     state.condensedMode     = urlParams.condensedMode;
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
+  if (urlParams.openedWidgets)    state.openedWidgets    = urlParams.openedWidgets;
 
   // 3. Init controls (syncs DOM from state).
   initControls(schema, totalRows, registry.plugins, handleExport,
@@ -502,6 +516,7 @@ function hideLoading() {
   const bar = document.getElementById('loading-progress');
   if (bar) { bar.style.display = 'none'; bar.value = 0; }
   document.getElementById(ID_LOADING_OVERLAY).style.display = 'none';
+  document.getElementById('size-warning-note')?.remove();
 }
 
 function showWelcome() {
@@ -512,12 +527,90 @@ function showWelcome() {
 function showApp() {
   document.getElementById(ID_WELCOME_SCREEN).style.display = 'none';
   document.getElementById(ID_MAIN_APP).style.display       = 'flex';
+  populateReportFooter(reportMeta);
+  showSidebarHint();
+}
+
+function populateReportFooter(meta) {
+  const el = document.getElementById('report-info');
+  if (!el) return;
+  if (!meta) { el.hidden = true; return; }
+
+  const stats = meta.processingStats || {};
+  let html = '';
+
+  // ── top row: name + description on left, chips on right ──
+  const nameHtml = (meta.projectName && meta.projectName !== 'Imported Project')
+    ? `<span class="ri-name">${_esc(meta.projectName)}</span>` : '';
+  const descHtml = meta.description
+    ? `<span class="ri-desc">${_esc(meta.description)}</span>` : '';
+
+  const chips = [];
+  if (meta.version)    chips.push(`v${_esc(meta.version)}`);
+  if (meta.createdAt) {
+    try {
+      const d = new Date(meta.createdAt);
+      chips.push(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
+    } catch {}
+  }
+  if (stats.n_files)   chips.push(`${Number(stats.n_files).toLocaleString()} files`);
+  if (meta.flavor)     chips.push(_esc(meta.flavor));
+  if (stats.wall_s)    chips.push(_fmtDuration(stats.wall_s));
+
+  if (nameHtml || descHtml || chips.length) {
+    html += '<div class="ri-row ri-main">';
+    if (nameHtml || descHtml) html += `<div class="ri-head">${nameHtml}${descHtml}</div>`;
+    if (chips.length) {
+      html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
+    }
+    html += '</div>';
+  }
+
+  // ── second row: paths, workers, memory ──
+  const subs = [];
+  const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
+  if (nonTrivialPaths.length) subs.push(`<span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}`);
+  if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
+  if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
+
+  if (subs.length) {
+    html += `<div class="ri-row ri-sub">${subs.join('<span class="ri-sep"> · </span>')}</div>`;
+  }
+
+  if (html) {
+    el.innerHTML = html;
+    el.hidden = false;
+  }
+}
+
+function _fmtDuration(s) {
+  if (s < 60) return `${Math.round(s)}s`;
+  const m = Math.floor(s / 60);
+  const r = Math.round(s % 60);
+  return r > 0 ? `${m}m ${r}s` : `${m}m`;
+}
+
+function _esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function hideFileOpenControls() {
   document.querySelector('label[for="file-input-welcome"]')?.style.setProperty('display', 'none');
   document.querySelector('label[for="file-input-top"]')?.style.setProperty('display', 'none');
   document.getElementById('open-file-top-btn')?.style.setProperty('display', 'none');
+}
+
+function showSizeWarning(filename, bytes) {
+  document.getElementById('size-warning-note')?.remove();
+  const gb = (bytes / (1024 ** 3)).toFixed(1);
+  const note = document.createElement('p');
+  note.id = 'size-warning-note';
+  note.className = 'mt-3 mb-0 text-center';
+  note.style.cssText = 'max-width:480px;font-size:0.95rem;line-height:1.5;background:#fff;color:#212529;border-radius:8px;padding:12px 16px';
+  note.innerHTML = `<strong>${gb} GB file — large files may fail in the browser.</strong><br>`
+    + `If it doesn't load, try: <code>pixel-patrol view ${_esc(filename)}</code>`
+    + ` <span style="opacity:0.6;font-size:0.85rem">(requires pixel-patrol installed)</span>`;
+  document.getElementById(ID_LOADING_OVERLAY).appendChild(note);
 }
 
 function showFatalError(message, err, hint = null) {
@@ -534,11 +627,11 @@ function showFatalError(message, err, hint = null) {
   banner.style.cssText = 'max-width:680px;position:absolute;top:12px;left:0;right:0;z-index:200';
   banner.innerHTML = `
     <button type="button" class="btn-close" onclick="this.closest('#error-banner').remove()"></button>
-    <strong>${message}</strong>
-    ${hint ? `<p class="mb-1 mt-2">${hint}</p>` : ''}
+    <strong>${_esc(message)}</strong>
+    ${hint ? `<p class="mb-1 mt-2">${_esc(hint)}</p>` : ''}
     <details class="mt-2">
       <summary class="small text-muted" style="cursor:pointer">Technical details</summary>
-      <pre class="mt-1 mb-0 small" style="white-space:pre-wrap">${err?.message ?? err}</pre>
+      <pre class="mt-1 mb-0 small" style="white-space:pre-wrap">${_esc(err?.message ?? err)}</pre>
     </details>
   `;
 
@@ -548,26 +641,81 @@ function showFatalError(message, err, hint = null) {
   ws.appendChild(banner);
 }
 
-// ── Sidebar toggle (mobile) ───────────────────────────────────────────────────
+// ── Sidebar toggle (mobile slide-in + desktop hide) ──────────────────────────
 
 (function initSidebarToggle() {
   const toggle   = document.getElementById('sidebar-toggle');
   const sidebar  = document.getElementById('sidebar');
   const backdrop = document.getElementById(ID_SIDEBAR_BACKDROP);
 
-  function setSidebarOpen(open) {
-    sidebar.classList.toggle('sidebar-open', open);
-    backdrop.classList.toggle('sidebar-open', open);
+  const isMobile        = () => window.matchMedia('(max-width: 967px)').matches;
+  const isNarrowDesktop = () => window.matchMedia('(min-width: 968px) and (max-width: 1823px)').matches;
+
+  // Default visibility: open on wide desktop only. Narrow desktops (laptops)
+  // start closed because the floating panel overlaps the report at those widths.
+  let open        = !isMobile() && !isNarrowDesktop();
+  let wasMobile   = isMobile();
+  let wasNarrow   = isNarrowDesktop();
+
+  function apply() {
+    if (isMobile()) {
+      // Mobile: slide-in drawer with a dimming backdrop.
+      sidebar.classList.remove('sidebar-hidden');
+      sidebar.classList.toggle('sidebar-open', open);
+      backdrop.classList.toggle('sidebar-open', open);
+    } else {
+      // Desktop: floating panel, collapsed out of the way when hidden.
+      sidebar.classList.remove('sidebar-open');
+      backdrop.classList.remove('sidebar-open');
+      sidebar.classList.toggle('sidebar-hidden', !open);
+    }
   }
 
-  toggle?.addEventListener('click',   () => setSidebarOpen(!sidebar.classList.contains('sidebar-open')));
-  backdrop?.addEventListener('click', () => setSidebarOpen(false));
+  toggle?.addEventListener('click',   () => { open = !open; apply(); });
+  backdrop?.addEventListener('click', () => { open = false; apply(); });
+
+  // Crossing any breakpoint resets to that mode's default state.
+  window.addEventListener('resize', () => {
+    const mobile = isMobile();
+    const narrow = isNarrowDesktop();
+    if (mobile !== wasMobile || narrow !== wasNarrow) {
+      wasMobile = mobile; wasNarrow = narrow;
+      open = !mobile && !narrow;
+      apply();
+    }
+  });
 
   // Close sidebar when a filter/apply button is tapped on mobile.
   document.getElementById('apply-btn')?.addEventListener('click', () => {
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    if (isMobile()) { open = false; apply(); }
   });
+
+  apply();
 })();
+
+// ── First-open sidebar hint (narrow desktop only, shown once) ─────────────────
+
+function showSidebarHint() {
+  if (window.matchMedia('(max-width: 967px)').matches) return;
+  if (!window.matchMedia('(max-width: 1823px)').matches) return;
+
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!toggle) return;
+
+  toggle.classList.add('sidebar-toggle-pulse');
+
+  const label = document.createElement('span');
+  label.id = 'sidebar-hint-label';
+  label.textContent = 'Filters & Settings';
+  toggle.insertAdjacentElement('afterend', label);
+
+  const cleanup = () => {
+    toggle.classList.remove('sidebar-toggle-pulse');
+    label.remove();
+  };
+  toggle.addEventListener('click', cleanup, { once: true });
+  setTimeout(cleanup, 5500);
+}
 
 // ── Go ─────────────────────────────────────────────────────────────────────────
 boot();

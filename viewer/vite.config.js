@@ -49,6 +49,17 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
+    // The viewer is the repo's only JS toolchain, so it also runs the unit tests
+    // for any built-in widgets. Widgets ship inside Python packages (no
+    // package.json of their own), and by convention each package keeps its
+    // widget tests next to the widget source under tests/viewer/. The wildcard
+    // picks up every such package - not just today's - so a new widget-bearing
+    // package needs no change here. server.fs.allow below lets Vitest read those
+    // sibling files.
+    include: [
+      'src/**/*.test.js',
+      '../packages/*/tests/viewer/**/*.test.js',
+    ],
   },
 
   // Relative base so the built output works from any subdirectory or

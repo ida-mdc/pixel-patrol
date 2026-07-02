@@ -53,12 +53,61 @@ export function legendWithGrouping(baseLegend, state, fallback = '') {
   };
 }
 
+// Expand-corners icon (500×500 SVG coordinate space).
+const _EXPAND_ICON = {
+  width: 500, height: 500,
+  path: 'M80,80 L80,200 L120,200 L120,120 L200,120 L200,80 Z ' +
+        'M420,80 L300,80 L300,120 L380,120 L380,200 L420,200 Z ' +
+        'M80,420 L200,420 L200,380 L120,380 L120,300 L80,300 Z ' +
+        'M420,420 L420,300 L380,300 L380,380 L300,380 L300,420 Z',
+};
+
 const CHART_CONFIG = {
   responsive: true,
   displayModeBar: 'hover',
   modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+  modeBarButtonsToAdd: [{ name: 'maximize', title: 'Maximize', icon: _EXPAND_ICON, click: (gd) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:6px;width:95vw;height:93vh;display:flex;flex-direction:column;';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'text-align:right;padding:4px 8px;border-bottom:1px solid #ddd;flex-shrink:0;';
+    bar.innerHTML = '<button style="border:none;background:none;cursor:pointer;font-size:1rem;" title="Close (Esc)">&#x2715;</button>';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'flex:1;min-height:0;';
+    box.append(bar, wrap);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    Plotly.newPlot(wrap, gd.data, { ...gd.layout, autosize: true, height: undefined }, { ...CHART_CONFIG, displayModeBar: true, modeBarButtonsToAdd: [] });
+    Plotly.Plots.resize(wrap);
+    const close = () => { Plotly.purge(wrap); overlay.remove(); document.removeEventListener('keydown', onKey); };
+    bar.querySelector('button').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+  } }],
   displaylogo: false,
   toImageButtonOptions: { format: 'png', scale: 3 },
+};
+
+// Config for the small "hero" plot shown inside a condensed-mode tile: no toolbar,
+// no interactivity hints - it's a glanceable preview, the full plot lives in the
+// expanded detail view.
+const MINI_CONFIG = {
+  responsive: true,
+  displayModeBar: false,
+  staticPlot: false,
+};
+
+/**
+ * Compact layout defaults for condensed-mode tile previews. Tiny margins, no
+ * legend, small fonts - just enough to read the shape of the data at a glance.
+ */
+export const MINI_LAYOUT = {
+  margin:     { l: 38, r: 12, t: 10, b: 30 },
+  showlegend: false,
+  font:       { size: 10 },
 };
 
 /**
@@ -98,6 +147,30 @@ export function appendPlot(container, traces, layout, divStyle = '') {
   if (divStyle) div.style.cssText = divStyle;
   container.appendChild(div);              // ← must precede newPlot
   Plotly.newPlot(div, traces, mergeLayout(layout), CHART_CONFIG);
+  return div;
+}
+
+/**
+ * Render a single compact "hero" plot for a condensed-mode tile. Fills the
+ * given container (which should already be sized by CSS), merges MINI_LAYOUT
+ * defaults, and hides the mode bar. Same DOM-first ordering rule as appendPlot.
+ *
+ * @param {HTMLElement} container  Tile plot area (already attached + sized).
+ * @param {object[]}    traces
+ * @param {object}      [layout]   Layout overrides on top of MINI_LAYOUT.
+ * @returns {HTMLElement} the plot div.
+ */
+export function appendMiniPlot(container, traces, layout = {}) {
+  const div = document.createElement('div');
+  div.style.cssText = 'width:100%;height:100%';
+  container.appendChild(div);
+  const merged = {
+    ...LAYOUT, ...MINI_LAYOUT, ...layout,
+    margin: { ...MINI_LAYOUT.margin, ...layout.margin },
+    xaxis:  { automargin: true, ...layout.xaxis },
+    yaxis:  { automargin: true, ...layout.yaxis },
+  };
+  Plotly.newPlot(div, traces, merged, MINI_CONFIG);
   return div;
 }
 
@@ -183,6 +256,34 @@ export function createFlexGrid(container, plotsPerRow, gap = '15px') {
   return { wrap, flexBasisPct };
 }
 
+/**
+ * The "Slice by" control row shared by the violin and custom-plot widgets: a
+ * labelled row of dim toggles that add/remove dimension letters from `splitDims`
+ * (mutated in place) and re-render via `onChange`. The caller owns where its
+ * scope badge lives, so badge-syncing just happens inside `onChange`.
+ *
+ * @param {string[]} dims         Dimension letters that can be split on.
+ * @param {Set<string>} splitDims Mutated in place as toggles flip.
+ * @param {() => void} onChange   Run after each toggle (sync badge + redraw).
+ * @returns {HTMLElement} The control row (not yet attached).
+ */
+export function sliceToggles(dims, splitDims, onChange) {
+  const row = document.createElement('div');
+  row.className = 'violin-controls';
+  row.innerHTML = '<span class="violin-controls-label">Slice by:</span>';
+  for (const letter of dims) {
+    const sw = document.createElement('label');
+    sw.className = 'dim-switch';
+    sw.innerHTML = `<input type="checkbox"><span class="dim-switch-track"></span><span class="dim-switch-label">${letter.toUpperCase()}</span>`;
+    sw.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) splitDims.add(letter); else splitDims.delete(letter);
+      onChange();
+    });
+    row.appendChild(sw);
+  }
+  return row;
+}
+
 const WARNING_ICONS = { red: '🚩', yellow: '⚠️' };
 
 /**
@@ -207,6 +308,21 @@ export function prependWarning(container, { level = 'yellow', html }) {
   div.innerHTML = `<span class="widget-warning-icon">${WARNING_ICONS[level] ?? WARNING_ICONS.yellow}</span><div>${html}</div>`;
   container.insertBefore(div, container.firstChild);
   return div;
+}
+
+/** Pixel value ranges for common integer dtypes - used to phrase condensed-mode summaries. */
+const DTYPE_RANGES = {
+  uint8:  [0, 255],
+  int8:   [-128, 127],
+  uint16: [0, 65535],
+  int16:  [-32768, 32767],
+  uint32: [0, 4294967295],
+  int32:  [-2147483648, 2147483647],
+};
+
+/** Returns [min, max] for a known integer dtype name, or null (e.g. for float dtypes). */
+export function dtypeRange(name) {
+  return DTYPE_RANGES[String(name || '').toLowerCase()] ?? null;
 }
 
 /**
@@ -248,6 +364,84 @@ export function dataAvailabilityWarning(container, items, total, { unit = 'files
     level,
     html: `Not all ${unit} report every value:<ul style="margin:6px 0 0;padding-left:0;list-style:none">${rows}</ul>`,
   });
+}
+
+/** Join items into prose: [] → "", [a] → "a", [a,b] → "a and b", [a,b,c] → "a, b and c". */
+export function humanList(items) {
+  const a = (items ?? []).filter(x => x != null && x !== '');
+  if (a.length <= 1) return a[0] ?? '';
+  return `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`;
+}
+
+/** Human-readable byte size, e.g. 1536 → "1.5 KB", 12_000_000 → "11 MB". */
+export function formatBytes(v) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let val = Number(v), u = 0;
+  while (val >= 1024 && u < units.length - 1) { val /= 1024; u++; }
+  return val >= 10 ? `${Math.round(val)} ${units[u]}` : `${val.toFixed(1)} ${units[u]}`;
+}
+
+/**
+ * Build a `<table class="stat-table">` from header strings and an array of row
+ * cell arrays. Cells are inserted as text (no HTML interpretation).
+ */
+export function statTable(headers, rowData) {
+  const t = document.createElement('table');
+  t.className = 'stat-table';
+  const thead = document.createElement('thead');
+  thead.appendChild(headers.reduce((tr, h) => {
+    tr.appendChild(Object.assign(document.createElement('th'), { textContent: h }));
+    return tr;
+  }, document.createElement('tr')));
+  const tbody = document.createElement('tbody');
+  for (const cells of rowData) {
+    tbody.appendChild(cells.reduce((tr, c) => {
+      tr.appendChild(Object.assign(document.createElement('td'), { textContent: c }));
+      return tr;
+    }, document.createElement('tr')));
+  }
+  t.append(thead, tbody);
+  return t;
+}
+
+/**
+ * Render a cropped table "peek" into a condensed-mode tile plot area. Used as a
+ * tile preview when the full widget would only show a table (e.g. a metadata
+ * column that's constant across every image, so there's no distribution to plot).
+ * Mirrors the Image Table tile's markup so the shared clip/fade styling applies.
+ *
+ * @param {HTMLElement} container  the tile plot area
+ * @param {string[]} headers
+ * @param {Array<Array<string|number>>} rows
+ */
+export function tilePreviewTable(container, headers, rows) {
+  const thead = `<tr>${headers.map(h => `<th>${escapeHtml(String(h))}</th>`).join('')}</tr>`;
+  const tbody = rows.map(r =>
+    `<tr>${r.map(c => `<td>${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('');
+  container.classList.add('widget-tile-plot-table');
+  container.innerHTML =
+    `<table class="widget-tile-table-preview"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+}
+
+/**
+ * Append a titled two-column "invariant" section: an optional `<hr>`, an `<h6>`
+ * heading, then a stat-table. Used by widgets to list properties that are
+ * constant across the dataset (single file extension, no-variance metrics, …).
+ *
+ * @param {HTMLElement} container
+ * @param {object} o
+ * @param {string} o.title            heading text
+ * @param {[string,string]} o.headers column headers
+ * @param {Array<[string,string]>} o.rows  cell pairs
+ * @param {boolean} [o.hr=false]      prepend a horizontal rule
+ */
+export function appendInvariantTable(container, { title, headers, rows, hr = false }) {
+  if (hr) container.appendChild(document.createElement('hr'));
+  const h = document.createElement('h6');
+  h.style.cssText = 'margin-top:20px;margin-bottom:12px';
+  h.textContent = title;
+  container.appendChild(h);
+  container.appendChild(statTable(headers, rows));
 }
 
 /**

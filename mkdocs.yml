@@ -6,6 +6,7 @@ docs_dir: docs
 
 theme:
   name: material
+  custom_dir: docs/overrides
   logo: assets/icon.png
   favicon: assets/icon.png
   font:
@@ -47,6 +48,7 @@ nav:
     - Report Viewer: viewer.md
     - CLI Reference: cli.md
     - Python API: api.md
+    - Report Schema: schema.md
     - Extensions: extensions.md
     - Contributing: contributing.md
   - Tutorials:

@@ -30,9 +30,9 @@ def test_load_cyx_imagej_roundtrip(tmp_path: Path, loader):
     rec = loader.load(path)
     assert rec.dim_order == "CYX"
     assert tuple(rec.data.shape) == (3, 24, 32)
-    assert rec.meta["C_size"] == 3
-    assert rec.meta["Y_size"] == 24
-    assert rec.meta["X_size"] == 32
+    assert rec.meta["size_C"] == 3
+    assert rec.meta["size_Y"] == 24
+    assert rec.meta["size_X"] == 32
     np.testing.assert_array_almost_equal(im, rec.data.compute())
 
 

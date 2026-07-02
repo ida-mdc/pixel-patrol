@@ -1,14 +1,27 @@
 import { describe, it, expect } from 'vitest';
 import { detectSchema, pickDefaultGroupCol } from '../schema.js';
 
-// Helper: build a column descriptor array from {name: type} pairs
+// Helper: build a column descriptor array from {name: type} pairs.
+// detectSchema only accepts long-format schemas, so every fixture below spells
+// out the `obs_level` column it requires (see the gate test for the wide-format
+// rejection path).
 function cols(obj) {
   return Object.entries(obj).map(([name, type]) => ({ name, type }));
 }
 
 describe('detectSchema', () => {
+  it('rejects wide-format schemas that lack an obs_level column', () => {
+    expect(() => detectSchema([{ name: 'mean_intensity', type: 'Float64' }]))
+      .toThrow(/obs_level/);
+  });
+
+  it('marks schemas with an obs_level column as long-format', () => {
+    expect(detectSchema(cols({ obs_level: 'Int64', mean_intensity: 'Float64' })).isLongFormat).toBe(true);
+  });
+
   it('classifies numeric columns as metricCols', () => {
     const { metricCols } = detectSchema(cols({
+      obs_level: 'Int64',
       mean_intensity: 'Float64',
       max_intensity: 'Float32',
       size_bytes: 'Int64',
@@ -19,6 +32,7 @@ describe('detectSchema', () => {
 
   it('excludes SKIP_METRIC_COLS from metricCols', () => {
     const { metricCols } = detectSchema(cols({
+      obs_level: 'Int64',
       row_index: 'Int32',
       file_row_number: 'Int32',
       ndim: 'Int32',
@@ -30,20 +44,22 @@ describe('detectSchema', () => {
     expect(metricCols).toContain('mean_intensity');
   });
 
-  it('puts dimension-suffix numeric columns into dimMetricCols', () => {
-    const { metricCols, dimMetricCols } = detectSchema(cols({
+  it('routes long-format dim_* columns into dimCols, out of metric/allCols', () => {
+    const { dimCols, metricCols, allCols } = detectSchema(cols({
+      obs_level: 'Int64',
       mean_intensity: 'Float64',
-      mean_intensity_t0: 'Float64',
-      mean_intensity_c1: 'Float32',
+      dim_t: 'Int32',
+      dim_c: 'Int32',
     }));
+    expect(dimCols).toEqual(expect.arrayContaining(['dim_t', 'dim_c']));
     expect(metricCols).toContain('mean_intensity');
-    expect(metricCols).not.toContain('mean_intensity_t0');
-    expect(dimMetricCols).toContain('mean_intensity_t0');
-    expect(dimMetricCols).toContain('mean_intensity_c1');
+    expect(metricCols).not.toContain('dim_t');
+    expect(allCols).not.toContain('dim_t');
   });
 
   it('excludes blob cols from metricCols and puts them in blobCols', () => {
     const { metricCols, blobCols } = detectSchema(cols({
+      obs_level: 'Int64',
       thumbnail: 'LargeBinary',
       histogram_counts: 'LargeBinary',
       mean_intensity: 'Float64',
@@ -55,6 +71,7 @@ describe('detectSchema', () => {
 
   it('classifies known string group columns into groupCols', () => {
     const { groupCols } = detectSchema(cols({
+      obs_level: 'Int64',
       imported_path_short: 'Utf8',
       folder_top: 'Utf8',
       dtype: 'Utf8',
@@ -68,9 +85,10 @@ describe('detectSchema', () => {
   });
 
   it('includes novel string cols not in KNOWN_GROUP_COLS via the string heuristic', () => {
-    // These names are not in KNOWN_GROUP_COLS and don't match the high-cardinality regex,
-    // so they should be admitted via the generic string-column heuristic.
+    // These names are not in KNOWN_GROUP_COLS, so they are admitted via the
+    // generic string-column heuristic (any string col is a group candidate).
     const { groupCols } = detectSchema(cols({
+      obs_level: 'Int64',
       tissue_type: 'Utf8',
       experiment_arm: 'Utf8',
     }));
@@ -78,44 +96,34 @@ describe('detectSchema', () => {
     expect(groupCols).toContain('experiment_arm');
   });
 
-  it('excludes high-cardinality string columns from groupCols', () => {
+  it('admits string columns as group candidates (cardinality filtering is deferred to runtime)', () => {
+    // detectSchema is a pure structural classifier: every string column becomes
+    // a group candidate here, and high-cardinality ones (path, filename, …) are
+    // pruned later by a runtime DB cardinality query, not at this stage.
     const { groupCols } = detectSchema(cols({
+      obs_level: 'Int64',
       path: 'Utf8',
       filename: 'Utf8',
-      description: 'Utf8',
-      id: 'Utf8',
-      uuid: 'Utf8',
-      hash: 'Utf8',
+      dtype: 'Utf8',
     }));
-    expect(groupCols).not.toContain('path');
-    expect(groupCols).not.toContain('filename');
-    expect(groupCols).not.toContain('description');
+    expect(groupCols).toContain('path');
+    expect(groupCols).toContain('filename');
+    expect(groupCols).toContain('dtype');
   });
 
-  it('builds dimensionInfo from dim-suffix columns', () => {
+  it('leaves dimensionInfo empty (it is populated later from a runtime DB query)', () => {
     const { dimensionInfo } = detectSchema(cols({
-      mean_intensity_t0: 'Float64',
-      mean_intensity_t1: 'Float64',
-      mean_intensity_c0: 'Float64',  // only one c index → not in dimensionInfo
+      obs_level: 'Int64',
+      mean_intensity: 'Float64',
+      dim_t: 'Int32',
     }));
-    expect(dimensionInfo).toHaveProperty('t');
-    expect(dimensionInfo.t).toEqual(['0', '1']);
-    // c has only one index - should not be promoted
-    expect(dimensionInfo).not.toHaveProperty('c');
-  });
-
-  it('sorts dimension indices numerically', () => {
-    const { dimensionInfo } = detectSchema(cols({
-      metric_t0: 'Float64',
-      metric_t2: 'Float64',
-      metric_t10: 'Float64',
-    }));
-    expect(dimensionInfo.t).toEqual(['0', '2', '10']);
+    expect(dimensionInfo).toEqual({});
   });
 
   it('always includes canonical group cols even with non-standard Arrow types', () => {
     // Dictionary type would bypass the Utf8 heuristic but should still be promoted
     const { groupCols } = detectSchema(cols({
+      obs_level: 'Int64',
       imported_path_short: 'Dictionary',
       folder_top: 'Dictionary',
       common_base: 'Dictionary',
@@ -127,6 +135,7 @@ describe('detectSchema', () => {
 
   it('allCols contains every column including blobs', () => {
     const { allCols } = detectSchema(cols({
+      obs_level: 'Int64',
       thumbnail: 'LargeBinary',
       mean_intensity: 'Float64',
       dtype: 'Utf8',
@@ -139,8 +148,8 @@ describe('detectSchema', () => {
 
 describe('pickDefaultGroupCol', () => {
   it('prefers imported_path_short when present', () => {
-    const allCols = ['imported_path_short', 'folder_top', 'dtype'];
-    const groupCols = ['imported_path_short', 'folder_top', 'dtype'];
+    const allCols = ['imported_path_short', 'common_base', 'dtype'];
+    const groupCols = ['imported_path_short', 'common_base', 'dtype'];
     expect(pickDefaultGroupCol(allCols, groupCols)).toBe('imported_path_short');
   });
 
@@ -150,16 +159,10 @@ describe('pickDefaultGroupCol', () => {
     expect(pickDefaultGroupCol(allCols, groupCols)).toBeNull();
   });
 
-  it('falls back to folder_top when imported_path_short is absent', () => {
-    const allCols = ['folder_top', 'dtype'];
-    const groupCols = ['folder_top', 'dtype'];
-    expect(pickDefaultGroupCol(allCols, groupCols)).toBe('folder_top');
-  });
-
-  it('falls back to report_group', () => {
-    const allCols = ['report_group', 'dtype'];
-    const groupCols = ['report_group', 'dtype'];
-    expect(pickDefaultGroupCol(allCols, groupCols)).toBe('report_group');
+  it('groups by name for small common_base reports so each file is its own group', () => {
+    const allCols = ['common_base', 'name', 'dtype'];
+    const groupCols = ['common_base', 'dtype'];
+    expect(pickDefaultGroupCol(allCols, groupCols, 4)).toBe('name');
   });
 
   it('falls back to first groupCol when no priority col present', () => {

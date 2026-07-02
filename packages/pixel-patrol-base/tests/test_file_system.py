@@ -5,8 +5,7 @@ from datetime import datetime, timezone
 import os
 
 
-from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
+from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes, _discover_files
 
 _AGGREGATE_SCHEMA = {
     "path":              pl.String,
@@ -17,7 +16,6 @@ _AGGREGATE_SCHEMA = {
     "size_bytes":        pl.Int64,
     "modification_date": pl.Datetime(time_unit="us", time_zone=None),
     "file_extension":    pl.String,
-    "size_readable":     pl.String,
     "imported_path":     pl.String,
 }
 
@@ -183,6 +181,54 @@ def test_walk_filesystem_invalid_paths(tmp_path: Path, path_type_creator):
     invalid_path = path_type_creator(tmp_path)
     df = walk_filesystem([invalid_path], accepted_extensions="all")
     assert isinstance(df, pl.DataFrame) and df.is_empty()
+
+
+# --- Tests for _discover_files relative-path conversion ---
+
+def _discover_by_name(bases: list[Path], base_dir: Path | None = None) -> dict[str, dict]:
+    """Run _discover_files and key the yielded metadata by file name for assertions."""
+    return {
+        meta["name"]: meta
+        for _, meta in _discover_files(bases, "all", base_dir=base_dir)
+    }
+
+
+def test_discover_files_paths_relative_to_base_dir(complex_temp_dir: Path):
+    """With base_dir set, path/parent/imported_path are stored relative to it."""
+    root = complex_temp_dir.resolve()
+    meta = _discover_by_name([root], base_dir=root)
+
+    assert meta["file1.txt"]["path"] == "file1.txt"
+    assert meta["file1.txt"]["parent"] == "."
+    assert meta["file1.txt"]["imported_path"] == "."
+
+    assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
+    assert meta["fileA.jpg"]["parent"] == "subdir_a"
+
+    assert meta["fileAA.csv"]["path"] == os.path.join("subdir_a", "subdir_aa", "fileAA.csv")
+    assert meta["fileAA.csv"]["parent"] == os.path.join("subdir_a", "subdir_aa")
+
+
+def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
+    """When base_dir is an ancestor of the scanned base, paths stay relative to base_dir
+    and imported_path names the base's location beneath it."""
+    root = complex_temp_dir.resolve()
+    subdir = root / "subdir_a"
+    meta = _discover_by_name([subdir], base_dir=root)
+
+    assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
+    assert meta["fileA.jpg"]["parent"] == "subdir_a"
+    assert meta["fileA.jpg"]["imported_path"] == "subdir_a"
+
+
+def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
+    """Without base_dir, path/parent/imported_path remain absolute (default behavior)."""
+    root = complex_temp_dir.resolve()
+    meta = _discover_by_name([root])
+
+    assert meta["file1.txt"]["path"] == str(root / "file1.txt")
+    assert meta["file1.txt"]["parent"] == str(root)
+    assert meta["file1.txt"]["imported_path"] == str(root)
 
 
 # --- Tests for _aggregate_folder_sizes ---

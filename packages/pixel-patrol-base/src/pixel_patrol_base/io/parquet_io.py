@@ -17,6 +17,30 @@ from pixel_patrol_base.core.project_metadata import ProjectMetadata
 logger = logging.getLogger(__name__)
 
 
+def with_field_descriptions(schema):
+    """Return a copy of an Arrow schema where each field carries a per-column
+    'description' in its field metadata, so the parquet file is self-describing.
+
+    Descriptions come from the registered plugins + base/pipeline column docs
+    (see pixel_patrol_base.core.schema_catalog). Schema-level (footer) metadata
+    is preserved unchanged. Unknown columns are left without a description.
+    """
+    import pyarrow as pa
+    from pixel_patrol_base.core import column_docs
+    from pixel_patrol_base.core.schema_catalog import column_descriptions
+
+    exact = column_descriptions()
+    fields = []
+    for field in schema:
+        desc = exact.get(field.name) or column_docs.base_column_description(field.name)
+        if desc:
+            meta = dict(field.metadata or {})
+            meta[b"description"] = desc.encode()
+            field = field.with_metadata(meta)
+        fields.append(field)
+    return pa.schema(fields, metadata=schema.metadata)
+
+
 def write_chunk(df: pl.DataFrame, path: Path, compression: Literal["lz4", "uncompressed", "snappy", "gzip", "brotli", "zstd"] = "zstd") -> Optional[Path]:
     """
     Write a single DataFrame chunk to parquet. Used for intermediate batch files.
@@ -65,6 +89,7 @@ def save_parquet(
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     table = df.to_arrow()
+    table = table.cast(with_field_descriptions(table.schema))
     _write_with_metadata(table, dest, metadata.to_parquet_meta(), row_group_size)
 
     logger.info("Parquet IO: Saved '%s' to '%s'.", metadata.project_name, dest)

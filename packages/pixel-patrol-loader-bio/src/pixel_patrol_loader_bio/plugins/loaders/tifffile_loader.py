@@ -15,6 +15,10 @@ import polars as pl
 import tifffile
 import zarr
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.loader_schema import (
+    RASTER_IMAGE_LOADER_SCHEMA,
+    RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
+)
 from pixel_patrol_base.core.record import Record, record_from
 
 logger = logging.getLogger(__name__)
@@ -29,8 +33,8 @@ def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     if "dim_names" in metadata:
         metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
     for ax in list(dim_order):
-        if metadata.get(f"{ax}_size", None) == 1:
-            metadata.pop(f"{ax}_size", None)
+        if metadata.get(f"size_{ax}", None) == 1:
+            metadata.pop(f"size_{ax}", None)
     return metadata
 
 
@@ -126,7 +130,7 @@ def _extract_metadata(
     }
     meta.update(_physical_pixel_sizes(tf, axes_u))
     for i, letter in enumerate(axes_u):
-        meta[f"{letter}_size"] = int(shape[i])
+        meta[f"size_{letter}"] = int(shape[i])
 
     return meta
 
@@ -155,26 +159,14 @@ class TifffileLoader:
     """Load TIFF / OME-TIFF via tifffile."""
 
     NAME = "tifffile"
+    DESCRIPTION = "Loads TIFF and OME-TIFF images via tifffile, reading pixel data and OME image metadata."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif"}
     FOLDER_EXTENSIONS:    Set[str] = set()
     CONTAINER_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif"}
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {
-        "dim_order": str,
-        "dim_names": list,
-        "n_images": int,
-        "num_pixels": int,
-        "shape": pl.Array,
-        "ndim": int,
-        "channel_names": list,
-        "dtype": str,
-    }
-
-    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = [
-        (r"^pixel_size_[A-Za-z]$", float),
-        (r"^[A-Za-z]_size$", int),
-    ]
+    OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
+    OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     def is_folder_supported(self, path: Path) -> bool:
         return False

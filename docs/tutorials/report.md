@@ -30,6 +30,14 @@ Each widget also carries a small **scope badge** telling you what one datapoint 
 
 ---
 
+## Overview and Full view
+
+By default the viewer opens in **Overview** mode: widgets appear as a compact grid of tiles, each with a one-line summary and a preview plot. Click any tile to expand it in place and see the full widget. Click it again, or use **Collapse all** in the topbar, to close it.
+
+If you prefer to see all widgets expanded at once, switch to **Full** view with the **Overview / Full** toggle in the top right.
+
+---
+
 ## Opening your report
 
 ```bash
