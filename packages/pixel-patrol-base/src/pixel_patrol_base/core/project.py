@@ -163,6 +163,7 @@ class Project:
 
         self.records_df, stats = processing.build_records_df(
             bases=self.paths,
+            base_dir=self.base_dir,
             loader=self.loader,
             processors=processors,
             config=config,

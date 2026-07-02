@@ -15,6 +15,9 @@ export const state = {
   dimensions:       {},       // { dimLetter: idx }   e.g. { t: '0', c: '1' }
   showSignificance: false,
   hiddenWidgets:    new Set(), // set of plugin IDs to hide
+  openedWidgets:    new Set(), // condensed gallery: plugin IDs expanded in place
+  /** When true, plugins render an optional friendly intro box before their content. */
+  condensedMode:     true,
   /** Offline snapshot bundle: sidebar is read-only and URL sync is disabled */
   sidebarLocked:    false,
 };
@@ -45,5 +48,8 @@ export function resetState(defaultGroupCol) {
   state.filter           = { col: '', op: '', val: '' };
   state.dimensions       = {};
   state.showSignificance = false;
+  state.condensedMode     = true;
+  state.openedWidgets    = new Set();
+  state.hiddenWidgets    = new Set();
   emit('query');
 }

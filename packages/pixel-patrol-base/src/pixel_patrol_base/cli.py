@@ -79,6 +79,9 @@ def cli():
               help='Number of rows buffered in memory before being flushed to a temporary file on disk (default: 10000).')
 @click.option('--log-file', is_flag=True, default=False,
               help='Write a debug log file alongside the output parquet (auto-named).')
+@click.option('--omit-base-dir', is_flag=True, default=False,
+              help='Do not store the base directory and paths in the parquet metadata. '
+                   'Useful when sharing reports without revealing local filesystem paths.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
@@ -90,7 +93,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               max_images_per_task: int | None,
               slice_size: tuple[str, ...],
               rows_per_part: int | None,
-              log_file: bool):
+              log_file: bool,
+              omit_base_dir: bool):
     """
     Scan images in BASE_DIRECTORY, process them, and write a .parquet report file.
 
@@ -125,6 +129,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         rows_per_part=rows_per_part,
         flavor=flavor or None,
         description=description or None,
+        omit_base_dir=omit_base_dir,
         parquet_row_group_size=parquet_row_group_size,
         log_file=log_file,
     )

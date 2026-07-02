@@ -20,7 +20,7 @@ export function buildWhere(filter) {
   const { col, op, val } = filter;
   if (!col || !op || val === '') return '';
 
-  const c = `"${col}"`;
+  const c = q(col);
 
   switch (op) {
     case 'contains':
@@ -73,6 +73,52 @@ export function q(name) {
  */
 export function sample(n) {
   return `USING SAMPLE ${n} ROWS (reservoir, 42)`;
+}
+
+/**
+ * WHERE-part strings that pin a single long-format aggregation subset.
+ *
+ * Long-format parquet carries one row per fixed-dim subset (the power set of the
+ * dimensions): a row's `obs_level` is the size of its fixed subset and every
+ * other `dim_*` column is NULL. To isolate exactly the subset (fixed ∪ split)
+ * and avoid pooling values from different aggregated row classes, constrain:
+ *   - fixed dims  → `= idx`              (pinned to a coordinate)
+ *   - split dims  → `IS NOT NULL`        (kept un-aggregated; one point each)
+ *   - every other → `IS NULL`
+ *
+ * obs_level defaults to |fixed| + |split|. Pass `obsLevel: null` to omit it -
+ * spatial strips (varying x or y) span datasets that mix dim_orders (YX vs CYX
+ * vs TCYX in one file), so obs_level is not reliable per row class there; the
+ * IS NULL / IS NOT NULL constraints alone select the right rows.
+ *
+ * Returns the parts; callers AND-join them into a WHERE clause.
+ *
+ * @param {object} o
+ * @param {(s:string)=>string} o.q                 identifier quoter
+ * @param {string[]} o.dimCols                      all dim_* columns (schema.dimCols)
+ * @param {string} [o.baseWhere='']                 extra predicate, no leading WHERE
+ * @param {Record<string,number>} [o.fixed={}]      {letter: index} dims pinned to a value
+ * @param {Set<string>} [o.split=new Set()]         letters kept un-aggregated
+ * @param {number|null} [o.obsLevel]                obs_level to require (default auto)
+ * @returns {string[]}
+ */
+export function dimSubsetWhere({ q: quote = q, dimCols = [], baseWhere = '', fixed = {}, split = new Set(), obsLevel } = {}) {
+  const parts = [];
+  if (baseWhere) parts.push(baseWhere);
+  const level = obsLevel === undefined ? Object.keys(fixed).length + split.size : obsLevel;
+  if (level != null) parts.push(`obs_level = ${level}`);
+  for (const [letter, idx] of Object.entries(fixed)) parts.push(`${quote(`dim_${letter}`)} = ${idx}`);
+  for (const col of dimCols) {
+    const letter = col.slice(4); // strip "dim_"
+    if (letter in fixed) continue; // already pinned above
+    parts.push(split.has(letter) ? `${quote(col)} IS NOT NULL` : `${quote(col)} IS NULL`);
+  }
+  return parts;
+}
+
+/** Strip a leading `WHERE ` so a fragment can be AND-joined into a larger clause. */
+export function stripWhere(where) {
+  return where ? where.replace(/^\s*WHERE\s+/i, '') : '';
 }
 
 /**

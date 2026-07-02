@@ -119,5 +119,3 @@ def test_all_processors_return_dict():
             f"Processor '{processor.NAME}' returned {type(result).__name__} "
             f"instead of dict. Processors must return Dict from run_chunk()."
         )
-
-

@@ -1,6 +1,5 @@
 import polars as pl
 from pixel_patrol_base.utils.path_utils import find_common_base
-from pixel_patrol_base.utils.utils import format_bytes_to_human_readable
 from pathlib import PurePath
 
 
@@ -30,7 +29,6 @@ def postprocess_basic_file_metadata_df(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.with_columns([
         pl.col("modification_date").dt.month().alias("modification_month"),
-        pl.col("size_bytes").map_elements(format_bytes_to_human_readable).alias("size_readable"),
         pl.lit(common_base_name).alias("common_base"),
     ])
 

@@ -679,6 +679,13 @@ details.wc-how code { font-size: 0.82rem; }
 .wc-shots.two-col { grid-template-columns: 1fr 1fr; }
 .wc-shots.compact { max-width: 65%; margin-left: auto; margin-right: auto; }
 
+@media (max-width: 599px) {
+  .wc-shots.two-col { grid-template-columns: 1fr; }
+  .wc-shots.two-col .wc-shot:first-child { border-right: none; border-bottom: 1px solid var(--wc-border); }
+  .wc-shots.compact { max-width: 100%; }
+  .wc-shots.match-height .wc-shot img { height: auto; }
+}
+
 .wc-shot { display: flex; flex-direction: column; }
 .wc-shots.two-col .wc-shot:first-child { border-right: 1px solid var(--wc-border); }
 

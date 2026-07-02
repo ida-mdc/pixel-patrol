@@ -163,8 +163,11 @@ export async function exportBakedHtml(state, schema, plugins) {
 
   // Strip scripts and non-content chrome
   doc.querySelectorAll('script[type="module"], script[src]').forEach(s => s.remove());
-  [ID_WELCOME_SCREEN, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP].forEach(id => doc.getElementById(id)?.remove());
+  [ID_WELCOME_SCREEN, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP, 'sidebar-footer'].forEach(id => doc.getElementById(id)?.remove());
   doc.querySelectorAll('input[type="file"]').forEach(el => el.remove());
+  // Interactive chrome that lives outside the sidebar card-body (which is
+  // replaced by the frozen banner below): the topbar export/feedback popovers.
+  doc.querySelectorAll('.header-menu').forEach(el => el.remove());
 
   // Ensure main app is visible
   const mainApp = doc.getElementById(ID_MAIN_APP);

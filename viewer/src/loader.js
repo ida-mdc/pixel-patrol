@@ -23,6 +23,12 @@ function pickRowIdColumnFromSchema(allCols) {
   return null;
 }
 
+/** Shut down an existing DuckDB instance and its worker. */
+export async function terminateDuckDB(db, conn) {
+  try { await conn?.close(); } catch {}
+  try { await db?.terminate(); } catch {}
+}
+
 /** Initialise DuckDB WASM using locally bundled files (avoids CDN version mismatches). */
 export async function initDuckDB() {
   const absWorkerUrl = new URL(duckdbMvpWorkerUrl, location.href).href;
@@ -170,37 +176,60 @@ export async function finishLoad(conn, parquetPath = null) {
     schema.groupCols.push(urlGroup);
   }
 
-  schema.defaultGroupCol = pickDefaultGroupCol(schema.allCols, schema.groupCols);
+  schema.defaultGroupCol = pickDefaultGroupCol(schema.allCols, schema.groupCols, totalRows);
 
   // Always include the default group col too.
   if (schema.defaultGroupCol && !schema.groupCols.includes(schema.defaultGroupCol)) {
     schema.groupCols.push(schema.defaultGroupCol);
   }
 
-  const { projectName, description } = parquetPath
+  const reportMeta = parquetPath
     ? await _readParquetMeta(conn, parquetPath)
-    : { projectName: null, description: null };
+    : _emptyReportMeta();
 
-  return { schema, totalRows, projectName, description };
+  return { schema, totalRows, projectName: reportMeta.projectName, description: reportMeta.description, reportMeta };
 }
 
-/** Read pp_project_name and pp_description from the parquet file's KV metadata footer. */
+/** Read all pp_* keys from the parquet file's KV metadata footer. */
 async function _readParquetMeta(conn, path) {
   try {
     const p   = path.replace(/'/g, "''");
     const res = await conn.query(
       `SELECT decode(key)::VARCHAR AS k, decode(value)::VARCHAR AS v
        FROM parquet_kv_metadata('${p}')
-       WHERE decode(key)::VARCHAR IN ('pp_project_name', 'pp_description')`,
+       WHERE decode(key)::VARCHAR LIKE 'pp_%'`,
     );
-    const meta = Object.fromEntries(res.toArray().map(r => [String(r.k), String(r.v)]));
-    return {
-      projectName: meta.pp_project_name  || null,
-      description: meta.pp_description   || null,
-    };
+    const raw = Object.fromEntries(res.toArray().map(r => [String(r.k), String(r.v)]));
+    return _parseRawMeta(raw);
   } catch {
-    return { projectName: null, description: null };
+    return _emptyReportMeta();
   }
+}
+
+export function parseServerMeta(raw) {
+  return raw ? _parseRawMeta(raw) : _emptyReportMeta();
+}
+
+function _parseRawMeta(raw) {
+  let paths = [];
+  try { paths = JSON.parse(raw.pp_paths || '[]'); } catch {}
+  let processingStats = {};
+  try { processingStats = JSON.parse(raw.pp_processing_stats || '{}'); } catch {}
+  return {
+    projectName:     raw.pp_project_name || null,
+    description:     raw.pp_description  || null,
+    flavor:          raw.pp_flavor       || null,
+    version:         raw.pp_version      || null,
+    createdAt:       raw.pp_created_at   || null,
+    baseDir:         raw.pp_base_dir     || null,
+    paths,
+    processingStats,
+  };
+}
+
+function _emptyReportMeta() {
+  return { projectName: null, description: null, flavor: null, version: null,
+           createdAt: null, baseDir: null, paths: [], processingStats: {} };
 }
 
 async function filterGroupColsByCardinality(conn, cols) {
