@@ -1,6 +1,6 @@
 # Exploring the Report
 
-Open your report in one browser tab and keep this page in another. No report of your own yet? <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
+Open your report in one browser tab and keep this page in another. No report of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
 
 The example screenshots below are from the WHOI plankton microscopy dataset, which we deliberately tampered with to create four synthetic conditions: **original** images, **blurred** images, **JPEG-compressed** images, and **noisy** images. This makes it easy to see what each widget catches.
 
@@ -44,7 +44,7 @@ If you prefer to see all widgets expanded at once, switch to **Full** view with 
 pixel-patrol view report.parquet
 ```
 
-This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [ida-mdc.github.io/pixel-patrol/viewer/](https://ida-mdc.github.io/pixel-patrol/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
+This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [pixelpatrol.app/viewer/](https://pixelpatrol.app/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
 
 **Useful launch flags:**
 

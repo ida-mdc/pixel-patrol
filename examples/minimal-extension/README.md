@@ -288,6 +288,6 @@ Ready to build? Copy this folder, then work through it one piece at a time:
 4. You probably want to create your own toy dataset to test your new
    extension, and run the full pipeline on it.
 
-Check out our [docs](https://ida-mdc.github.io/pixel-patrol/docs/) and
-[tutorials](https://ida-mdc.github.io/pixel-patrol/docs/tutorials/) for more
+Check out our [docs](https://pixelpatrol.app/docs/) and
+[tutorials](https://pixelpatrol.app/docs/tutorials/) for more
 info on how to create your own Pixel Patrol extension.
