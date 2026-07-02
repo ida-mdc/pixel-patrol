@@ -559,17 +559,16 @@ function populateReportFooter(meta) {
 
   if (nameHtml || descHtml || chips.length) {
     html += '<div class="ri-row ri-main">';
-    if (nameHtml || descHtml) html += `<div class="ri-head">${nameHtml}${descHtml}</div>`;
-    if (chips.length) {
-      html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
-    }
+    if (nameHtml) html += `<div class="ri-head">${nameHtml}</div>`;
+    if (chips.length) html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
+    if (descHtml) html += descHtml;
     html += '</div>';
   }
 
   // ── second row: paths, workers, memory ──
   const subs = [];
   const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
-  if (nonTrivialPaths.length) subs.push(`<span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}`);
+  if (nonTrivialPaths.length) subs.push(`<span class="ri-paths"><span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
 
