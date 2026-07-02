@@ -2,7 +2,7 @@
 
 The Pixel Patrol viewer is a browser-based interactive dashboard for exploring `.parquet` reports. It is built with [DuckDB](https://duckdb.org/) and [Plotly](https://plotly.com/javascript/) and runs in two modes:
 
-- **Static** - the viewer runs entirely using DuckDB WASM with no server. Used when opening the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) or a static HTML file built with `pixel-patrol build-viewer-html`.
+- **Static** - the viewer runs entirely using DuckDB WASM with no server. Used when opening the [hosted viewer](https://pixelpatrol.app/viewer/) or a static HTML file built with `pixel-patrol build-viewer-html`.
 - **Python-served** - `pixel-patrol view` starts a local HTTP server backed by native DuckDB. SQL queries run server-side, making it significantly faster for large files.
 
 ---
@@ -19,7 +19,7 @@ Starts a local HTTP server backed by native DuckDB and opens the viewer in your 
 
 **From the hosted viewer:**
 
-Open [ida-mdc.github.io/pixel-patrol/viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) and drag and drop your `.parquet` file, or use the file picker.
+Open [pixelpatrol.app/viewer](https://pixelpatrol.app/viewer/) and drag and drop your `.parquet` file, or use the file picker.
 
 **From a built static viewer:**
 
@@ -44,7 +44,7 @@ pixel-patrol build-viewer-html -o my-site/
 **Via URL parameter (hosted viewer):**
 
 ```
-https://ida-mdc.github.io/pixel-patrol/viewer/?data=https://your-server.com/report.parquet
+https://pixelpatrol.app/viewer/?data=https://your-server.com/report.parquet
 ```
 
 !!! warning

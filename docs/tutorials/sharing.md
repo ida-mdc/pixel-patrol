@@ -51,7 +51,7 @@ A Pixel Patrol report is a single `.parquet` file holding everything about your 
 
 <p>The zero-effort option. No installation required on either end - send your collaborator the <code>.parquet</code> file and point them to:</p>
 
-<p style="text-align:center;font-size:1.05rem;margin:0.9rem 0"><strong><a href="https://ida-mdc.github.io/pixel-patrol/viewer/" target="_blank">ida-mdc.github.io/pixel-patrol/viewer/</a></strong></p>
+<p style="text-align:center;font-size:1.05rem;margin:0.9rem 0"><strong><a href="https://pixelpatrol.app/viewer/" target="_blank">pixelpatrol.app/viewer/</a></strong></p>
 
 <p>They drag the file into the browser and the full interactive viewer loads. Everything runs locally in their browser - no data is uploaded anywhere.</p>
 
@@ -174,7 +174,7 @@ cp report.parquet docs/viewer/
 </details>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted Pixel Patrol viewer accepts a <code>?data=</code> URL too - <code>https://ida-mdc.github.io/pixel-patrol/viewer/?data=https://your-server.com/report.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted Pixel Patrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/report.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> publishing results alongside a paper, a project page, or a team dashboard that anyone can land on.</div></div>
 </div>
 

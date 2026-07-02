@@ -53,7 +53,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       No images of your own yet? The repo ships a small example dataset at
       <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/datasets/WHOI_processed_color"><code>examples/datasets/WHOI_processed_color/</code></a> (40 plankton images, four tampered
       variants of the same originals, ~1.3 MB total) - point <code>BASE_DIRECTORY</code> there and
-      follow along. It's the very dataset behind the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet" target="_blank">example report</a>
+      follow along. It's the very dataset behind the <a href="https://pixelpatrol.app/viewer/?data=../example.parquet" target="_blank">example report</a>
       used in the next tutorial.
     </div>
     <input class="wiz-input" type="text" id="pwi-base_dir"
@@ -171,7 +171,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-hint">
       A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
-      who can open it in the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/" target="_blank">online viewer</a> without installing anything.
+      who can open it in the <a href="https://pixelpatrol.app/viewer/" target="_blank">online viewer</a> without installing anything.
     </div>
     <input class="wiz-input" type="text" id="pwi-output"
            value="report.parquet"
@@ -795,4 +795,4 @@ document.addEventListener('DOMContentLoaded', function() {
     ```bash
     pixel-patrol view report.parquet
     ```
-    Or drag the `.parquet` file into the [online viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no install needed on the recipient's side.
+    Or drag the `.parquet` file into the [online viewer](https://pixelpatrol.app/viewer/) - no install needed on the recipient's side.

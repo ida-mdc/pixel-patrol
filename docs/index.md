@@ -67,7 +67,7 @@ This starts a local server and opens the viewer in your browser. The viewer show
 
 ### Sharing a report
 
-The easiest way to share a report is to send the `.parquet` file and open it in the [Pixel Patrol viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no installation needed on the recipient's side.
+The easiest way to share a report is to send the `.parquet` file and open it in the [Pixel Patrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
 
 !!! warning
     The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large reports use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.

@@ -4,7 +4,7 @@
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
-**[Documentation](https://ida-mdc.github.io/pixel-patrol/docs/) | [Tutorials](https://ida-mdc.github.io/pixel-patrol/docs/tutorials/) | [Example Report](https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://ida-mdc.github.io/pixel-patrol/viewer/)**
+**[Documentation](https://pixelpatrol.app/docs/) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://pixelpatrol.app/viewer/)**
 
 Image datasets are rarely as clean or consistent as they appear. Pixel Patrol scans your images and generates a shareable, interactive browser report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
 
@@ -100,7 +100,7 @@ api.view(project)
 
 ## Sharing a report
 
-Send the `.parquet` file and open it in the [hosted viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no installation needed. Or build a self-contained static viewer:
+Send the `.parquet` file and open it in the [hosted viewer](https://pixelpatrol.app/viewer/) - no installation needed. Or build a self-contained static viewer:
 
 ```bash
 pixel-patrol build-viewer-html -o viewer.html
@@ -112,10 +112,10 @@ pixel-patrol build-viewer-html -o viewer.html
 
 ## Extending Pixel Patrol
 
-Pixel Patrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See `examples/minimal-extension/` for a working template, and the [Extensions](https://ida-mdc.github.io/pixel-patrol/docs/extensions/) documentation.
+Pixel Patrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See `examples/minimal-extension/` for a working template, and the [Extensions](https://pixelpatrol.app/docs/extensions/) documentation.
 
 ---
 
 ## Full documentation
 
-[ida-mdc.github.io/pixel-patrol/docs/](https://ida-mdc.github.io/pixel-patrol/docs/)
+[pixelpatrol.app/docs/](https://pixelpatrol.app/docs/)
