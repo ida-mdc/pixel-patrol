@@ -171,6 +171,7 @@ export function appendMiniPlot(container, traces, layout = {}) {
     yaxis:  { automargin: true, ...layout.yaxis },
   };
   Plotly.newPlot(div, traces, merged, MINI_CONFIG);
+  requestAnimationFrame(() => Plotly.Plots.resize(div));
   return div;
 }
 
