@@ -80,6 +80,18 @@ def _discover_installed_extensions() -> list[Path]:
         return []
 
 
+def resolve_extension_plugins(ext_dir: Path, manifest: dict) -> list[str]:
+    """Return the plugin file list for an extension directory.
+
+    If the manifest contains ``"auto_detect": true``, every ``plugin_*.js``
+    file in *ext_dir* is returned (sorted alphabetically) — no explicit list
+    needed.  Otherwise the manifest's ``"plugins"`` list is returned as-is.
+    """
+    if manifest.get("auto_detect"):
+        return sorted(f"./{p.name}" for p in ext_dir.glob("plugin_*.js"))
+    return manifest.get("plugins", [])
+
+
 # ---------------------------------------------------------------------------
 # Viewer dist discovery
 # ---------------------------------------------------------------------------
@@ -401,7 +413,15 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         if not file_path.is_file():
             self.send_error(404)
             return
-        data         = file_path.read_bytes()
+
+        # When serving extension.json, resolve auto_detect before sending so
+        # the browser receives a concrete plugins list it can fetch.
+        if filename == "extension.json":
+            manifest = json.loads(file_path.read_text(encoding="utf-8"))
+            manifest["plugins"] = resolve_extension_plugins(ext_dir, manifest)
+            data = json.dumps(manifest).encode()
+        else:
+            data = file_path.read_bytes()
         content_type = "application/json" if file_path.suffix == ".json" else "application/javascript"
         self.send_response(200)
         self._common_headers(content_type, len(data))

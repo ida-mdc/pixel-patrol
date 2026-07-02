@@ -71,15 +71,25 @@ See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 ## Viewer plugin
 
-If you want to visualize interactive report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest:
+If you want to visualize interactive report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest, and the `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing it.
+
+**Option A — explicit list** (recommended for published extensions): list every plugin file by name. Clear and predictable.
 
 ```json
 {
-  "plugins": ["my_widget.js"]
+  "name": "My Extension",
+  "plugins": ["./plugin_foo.js", "./plugin_bar.js"]
 }
 ```
 
-The `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing `extension.json`.
+**Option B — auto-detect** (convenient during development): set `"auto_detect": true` and every file matching `plugin_*.js` in the directory is loaded automatically, sorted alphabetically. No list to maintain.
+
+```json
+{
+  "name": "My Extension",
+  "auto_detect": true
+}
+```
 
 Each plugin's `render(container, ctx)` method receives a `ctx` object - the render context - which gives it everything it needs to query data and respond to the viewer's current state:
 
