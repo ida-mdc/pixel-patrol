@@ -97,7 +97,7 @@ const CHART_CONFIG = {
 const MINI_CONFIG = {
   responsive: true,
   displayModeBar: false,
-  staticPlot: false,
+  staticPlot: true,
 };
 
 /**
