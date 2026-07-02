@@ -3,7 +3,7 @@
 !!! tip "Used the launcher instead?"
     Double-click it, a browser tab opens, and you can set up your project and start processing from there - no terminal needed. The rest of this page is for the CLI workflow.
 
-`pixel-patrol process` is the first step in the Pixel Patrol workflow. It scans your images and produces a `.parquet` table containing everything Pixel Patrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
+`pixel-patrol process` is the first step in the PixelPatrol workflow. It scans your images and produces a `.parquet` table containing everything PixelPatrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
 
 Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just *what* to run, but *why* each flag is there.
 
@@ -48,7 +48,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-q">📁 Where are your images?</div>
     <div class="wiz-step-hint">
       This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
-      Pixel Patrol will scan it recursively, so you don't need to list subdirectories separately.
+      PixelPatrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
       No images of your own yet? The repo ships a small example dataset at
       <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/datasets/WHOI_processed_color"><code>examples/datasets/WHOI_processed_color/</code></a> (40 plankton images, four tampered
@@ -65,7 +65,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-loader">
     <div class="wiz-step-q">🔬 What format are your images?</div>
     <div class="wiz-step-hint">
-      Pixel Patrol uses <strong>loaders</strong> to open image files and extract their content. This sets the <code>--loader</code> flag
+      PixelPatrol uses <strong>loaders</strong> to open image files and extract their content. This sets the <code>--loader</code> flag
       and determines what ends up in your table: without a loader you only get basic file system info (names, sizes, extensions);
       with one you also get image dimensions, pixel type, acquisition metadata, and the pixel data needed for statistics and thumbnails.
       Choose the one that matches your file format.
@@ -167,7 +167,7 @@ Answer the questions below and we'll walk you through each decision together, bu
 
   <!-- Q4: Output path -->
   <div class="wiz-step wiz-hidden" id="pws-output">
-    <div class="wiz-step-q">💾 Where should the output parquet (Pixel Patrol table) be saved?</div>
+    <div class="wiz-step-q">💾 Where should the output parquet (PixelPatrol table) be saved?</div>
     <div class="wiz-step-hint">
       A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
@@ -206,7 +206,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-cluster">
     <div class="wiz-step-q">🖥️ Are you running on an HPC cluster?</div>
     <div class="wiz-step-hint">
-      Pixel Patrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
+      PixelPatrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
       On a local machine it auto-detects a sensible number of workers based on your CPUs and RAM - no configuration needed.
       On a cluster you can harness many more resources, which makes a real difference for large datasets
       with thousands of images or very large volumes.

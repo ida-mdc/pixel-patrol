@@ -1,6 +1,6 @@
 # Tutorials
 
-Step-by-step interactive guides for getting started with Pixel Patrol.  
+Step-by-step interactive guides for getting started with PixelPatrol.  
 Answer a few questions about your setup and we'll build the exact commands for you.
 
 ---
@@ -10,7 +10,7 @@ Answer a few questions about your setup and we'll build the exact commands for y
 <a href="installation/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
   <div style="font-size:1.4rem;margin-bottom:.5rem">🛠️</div>
   <div style="font-weight:600;margin-bottom:.3rem">Installation</div>
-  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Get Pixel Patrol installed on your machine, step by step.</div>
+  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Get PixelPatrol installed on your machine, step by step.</div>
 </a>
 
 <a href="processing/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">

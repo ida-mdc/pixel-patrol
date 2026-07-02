@@ -1,7 +1,7 @@
 [project]
 name = "pixel-patrol-hai-watch"
 version = "0.1.0"
-description = "Minimal extension example for Pixel Patrol."
+description = "Minimal extension example for PixelPatrol."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

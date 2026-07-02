@@ -1,6 +1,6 @@
 # Viewer
 
-The Pixel Patrol viewer is a browser-based interactive dashboard for exploring `.parquet` tables. It is built with [DuckDB](https://duckdb.org/) and [Plotly](https://plotly.com/javascript/) and runs in two modes:
+The PixelPatrol viewer is a browser-based interactive dashboard for exploring `.parquet` tables. It is built with [DuckDB](https://duckdb.org/) and [Plotly](https://plotly.com/javascript/) and runs in two modes:
 
 - **Static** - the viewer runs entirely using DuckDB WASM with no server. Used when opening the [hosted viewer](https://pixelpatrol.app/viewer/) or a static HTML file built with `pixel-patrol build-viewer-html`.
 - **Python-served** - `pixel-patrol view` starts a local HTTP server backed by native DuckDB. SQL queries run server-side, making it significantly faster for large files.

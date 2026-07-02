@@ -1,12 +1,12 @@
 # Exploring the Interactive Report
 
-Open your interactive report in one browser tab and keep this page in another. No Pixel Patrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
+Open your interactive report in one browser tab and keep this page in another. No PixelPatrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
 
 The example screenshots below are from the WHOI plankton microscopy dataset, which we deliberately tampered with to create four synthetic conditions: **original** images, **blurred** images, **JPEG-compressed** images, and **noisy** images. This makes it easy to see what each widget catches.
 
 A few things to know before you start:
 
-- **Some charts collapse into a table.** If all your images share the same value for a property (e.g. they're all the same size, or all the same dtype), Pixel Patrol shows a summary table instead of a chart.
+- **Some charts collapse into a table.** If all your images share the same value for a property (e.g. they're all the same size, or all the same dtype), PixelPatrol shows a summary table instead of a chart.
 - **Widget availability depends on what was processed.** Widgets that need data not collected simply don't appear. The colored pill on each card tells you what's required.
 - **Everything reacts to the sidebar.** Grouping, filters, and dimension selectors update all widgets instantly - we'll cover the sidebar [at the end](#working-with-the-sidebar).
 
@@ -553,7 +553,7 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>Build your own plot from any columns in the table - pick an X column, a Y column (or <code>(count)</code>), and Pixel Patrol picks a sensible chart type:</p>
+<p>Build your own plot from any columns in the table - pick an X column, a Y column (or <code>(count)</code>), and PixelPatrol picks a sensible chart type:</p>
 
 <ul style="font-size:0.9rem;line-height:1.6">
 <li><strong>Two numerics</strong> → scatter</li>
@@ -600,7 +600,7 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>💾</span> Save</div>
-<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> creates a new parquet file (Pixel Patrol table) with only the filtered data. You can open it as an interactive report.</div>
+<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report.</div>
 </div>
 
 <div class="wc-ctrl">
@@ -626,7 +626,7 @@ NaN pixels are excluded from all calculations.
 | Find saturated images | `max_intensity` | `ge` | `254` |
 | Exclude a format | `file_extension` | `not_contains` | `.tif` |
 
-**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new parquet file (Pixel Patrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset.
+**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset.
 
 ---
 

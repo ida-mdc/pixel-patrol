@@ -1,7 +1,7 @@
 """
 Minimal extension example.
 
-Shows how a Pixel Patrol extension adds a custom loader and processor (Python)
+Shows how a PixelPatrol extension adds a custom loader and processor (Python)
 and viewer plugins (JavaScript) to the browser-based viewer.
 
 The "Pixel HAI Watch" dataset is a handful of tiny `.parquet` tables, each

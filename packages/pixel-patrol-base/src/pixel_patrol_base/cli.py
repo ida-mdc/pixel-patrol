@@ -18,7 +18,7 @@ from pixel_patrol_base.launch_server import serve_launch
 @click.version_option(package_name="pixel-patrol-base")
 def cli():
     """
-    A command-line tool for processing image reports with Pixel Patrol.
+    A command-line tool for processing image reports with PixelPatrol.
 
     Two-step workflow:
       1. pixel-patrol process  - scan images, write a .parquet table
@@ -46,7 +46,7 @@ def cli():
               help='File extension to include (e.g. tif, nd2). Repeatable. '
                    'Defaults to all extensions supported by the loader.')
 @click.option('--flavor', type=str, default="", show_default=True,
-              help='Label shown next to the Pixel Patrol title in the viewer.')
+              help='Label shown next to the PixelPatrol title in the viewer.')
 @click.option('--description', type=str, default="",
               help='Free-form description shown below the title in the viewer and embedded in the parquet metadata.')
 @click.option('--processors-include', multiple=True, type=str,
@@ -153,7 +153,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               help='Do not open the browser automatically.')
 def launch(port: int, no_browser: bool):
     """
-    Launches the web-based processing dashboard for configuring and monitoring Pixel Patrol processing.
+    Launches the web-based processing dashboard for configuring and monitoring PixelPatrol processing.
     """
     serve_launch(port=port, open_browser=not no_browser)
 
@@ -192,7 +192,7 @@ def view(parquet_file, port, no_browser,
          group_by, filter_col, filter_op, filter_value, dims,
          widgets_exclude, is_show_significance, palette):
     """
-    Open a parquet file in the Pixel Patrol static viewer.
+    Open a parquet file in the PixelPatrol static viewer.
 
     PARQUET_FILE is the path to a .parquet file produced by the 'process' command.
     Starts a local HTTP server backed by native DuckDB and opens the viewer in

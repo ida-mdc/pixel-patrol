@@ -1,5 +1,5 @@
 """
-Local HTTP server for the static Pixel Patrol viewer.
+Local HTTP server for the static PixelPatrol viewer.
 
 Serves the pre-built viewer SPA and the requested parquet file over HTTP,
 including byte-range support so DuckDB WASM can stream only the row groups

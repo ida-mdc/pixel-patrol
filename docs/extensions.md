@@ -1,6 +1,6 @@
 # Extensions
 
-Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
+PixelPatrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
 The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - "Pixel HAI Watch", which reads `.parquet` tables as if they were tiny snapshots from a deep-sea shark camera. It implements:
 
@@ -16,7 +16,7 @@ Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`
 
 ## How extensions are discovered
 
-Pixel Patrol uses Python entry points. When your package is installed in the same environment, its loaders, processors, and viewer plugins are discovered automatically at runtime.
+PixelPatrol uses Python entry points. When your package is installed in the same environment, its loaders, processors, and viewer plugins are discovered automatically at runtime.
 
 Register them in your `pyproject.toml`:
 
@@ -53,7 +53,7 @@ def get_viewer_extension_dir():
 
 ## Loader
 
-If Pixel Patrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
+If PixelPatrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
 
 `dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` — the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
 

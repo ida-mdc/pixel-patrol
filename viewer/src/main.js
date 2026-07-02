@@ -253,7 +253,7 @@ async function openFiles(files) {
 
 /**
  * Return a user-friendly hint when a parquet load error looks like a format
- * incompatibility (old report generated with an earlier Pixel Patrol version).
+ * incompatibility (old report generated with an earlier PixelPatrol version).
  */
 function loadErrorHint(err) {
   if (err?.isOldFormat) {
@@ -265,7 +265,7 @@ function loadErrorHint(err) {
   }
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
-    return 'This file may have been created with an older version of Pixel Patrol. '
+    return 'This file may have been created with an older version of PixelPatrol. '
       + 'Please re-run <code>pixel-patrol process</code> to regenerate the report.';
   }
   return null;

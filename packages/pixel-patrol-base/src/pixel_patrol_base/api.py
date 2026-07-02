@@ -130,7 +130,7 @@ def view(
         palette: Optional[str] = None,
 ) -> None:
     """
-    Open a parquet file in the Pixel Patrol viewer backed by a local Python server.
+    Open a parquet file in the PixelPatrol viewer backed by a local Python server.
 
     Args:
         source:               A processed Project or path to a .parquet file.

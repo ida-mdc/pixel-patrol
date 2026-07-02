@@ -1,6 +1,6 @@
 # Table Schema
 
-Every Pixel Patrol table is a single `.parquet` file. Its columns are assembled
+Every PixelPatrol table is a single `.parquet` file. Its columns are assembled
 from the registered **loaders** (image metadata), **processors** (metrics), and a
 set of pipeline-generated columns; the **viewer widgets** then consume those
 columns to draw the interactive report.
