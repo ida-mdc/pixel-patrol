@@ -5,8 +5,8 @@
 Pixel Patrol is built to be extended - without forking it. An **extension** is a regular, installable Python package that can add any combination of:
 
 - a custom **loader** - read a file format Pixel Patrol doesn't support out of the box
-- a custom **processor** - compute new metrics and add them as report columns
-- custom **viewer plugins** - visualize anything in the report with your own widgets
+- a custom **processor** - compute new metrics and add them as table columns
+- custom **viewer plugins** - visualize anything in the interactive report with your own widgets
 
 All three are optional, and one package can mix and match freely. The contracts for each (`PixelPatrolLoader`, `PixelPatrolProcessor`, the plugin object shape) are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes - your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
 
@@ -127,7 +127,7 @@ def get_viewer_extension_dir():
 <tbody>
 <tr><td><code>NAME</code></td><td><code>str</code></td><td>yes</td><td>unique identifier passed to <code>create_project(..., loader=...)</code></td></tr>
 <tr><td><code>SUPPORTED_EXTENSIONS</code></td><td><code>set[str]</code></td><td>yes</td><td>file extensions this loader can read (lower-case, no dot)</td></tr>
-<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>yes</td><td>extra metadata columns this loader adds to the report, with their types</td></tr>
+<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>yes</td><td>extra metadata columns this loader adds to the table, with their types</td></tr>
 <tr><td><code>read_header(path)</code></td><td><code>(Path) -> FileInfo</code></td><td>yes</td><td>cheap shape/dtype/dim-order probe, <strong>no pixel data loaded</strong></td></tr>
 <tr><td><code>load(path)</code></td><td><code>(Path) -> Record</code></td><td>yes</td><td>loads one image and returns a <code>Record</code>; the metadata passed to <code>record_from()</code> must include <code>dim_order</code> with at least <code>X</code> and/or <code>Y</code> for spatial images</td></tr>
 <tr><td><code>load_range(path, start, stop)</code></td><td><code>(Path, int, int) -> Iterator[(str, Record)]</code></td><td>yes</td><td>yields sub-images for container formats; raise <code>NotImplementedError</code> otherwise</td></tr>
@@ -205,7 +205,7 @@ class SharkCamLoader:
 <div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to compute a metric on images - any images, regardless of who loaded them. Quality scores, object counts, anything beyond what the built-in processors already cover.</div></div>
 </div>
 
-<p>A processor receives loaded records and returns derived values that get merged into the report as new columns. Implement the <code>PixelPatrolProcessor</code> protocol - every member below is required:</p>
+<p>A processor receives loaded records and returns derived values that get merged into the table as new columns. Implement the <code>PixelPatrolProcessor</code> protocol - every member below is required:</p>
 
 <table>
 <thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
@@ -254,7 +254,7 @@ class GlowSpotterProcessor:
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>CHUNK_KIND</code> shapes how your data arrives, and which unit your computation needs to handle. <code>LEAF</code> - the more common pick for metric processors - tiles large images into memory-safe pieces and runs your computation on each one; <code>MEMORY</code> hands you the whole record at once, which is only safe when you know it comfortably fits in memory.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>OUTPUT = "features"</code> merges your columns into the existing report - the right choice for almost any custom metric. <code>"record"</code> is for processors that produce a brand-new derived image instead (a mask, a projection, ...).</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>OUTPUT = "features"</code> merges your columns into the existing table - the right choice for almost any custom metric. <code>"record"</code> is for processors that produce a brand-new derived image instead (a mask, a projection, ...).</div></div>
 </div>
 
 </div>
@@ -271,10 +271,10 @@ class GlowSpotterProcessor:
 <div class="wc-body">
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to visualise report data in the browser - your own extension's columns, anyone else's, or any mix - with a chart the built-in widgets don't cover.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to visualise interactive report data in the browser - your own extension's columns, anyone else's, or any mix - with a chart the built-in widgets don't cover.</div></div>
 </div>
 
-<p>A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the report's data through an in-browser DuckDB instance (the table is always called <code>pp_data</code>). It exports one default object:</p>
+<p>A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called <code>pp_data</code>). It exports one default object:</p>
 
 ```js
 export default {
@@ -309,7 +309,7 @@ export default {
 <tr><td><code>ctx.querySample(cols, n)</code></td><td><code>async → object[]</code></td><td>sampled scalar shorthand</td></tr>
 <tr><td><code>ctx.schema</code></td><td><code>object</code></td><td><code>{ metricCols, groupCols, dimensionInfo, allCols, blobCols }</code></td></tr>
 <tr><td><code>ctx.state</code></td><td><code>object</code></td><td><code>{ palette, groupCol, filter, dimensions }</code></td></tr>
-<tr><td><code>ctx.colorMap</code></td><td><code>object</code></td><td><code>{ groupValue: hexColor }</code> - matches the colors used everywhere else in the report</td></tr>
+<tr><td><code>ctx.colorMap</code></td><td><code>object</code></td><td><code>{ groupValue: hexColor }</code> - matches the colors used everywhere else in the interactive report</td></tr>
 <tr><td><code>ctx.color.getColors(palette, n)</code></td><td><code>(string, number) -&gt; string[]</code></td><td><code>n</code> colors from the named palette - for ad-hoc groupings (e.g. a column other than the active group-by) not covered by <code>colorMap</code></td></tr>
 <tr><td><code>ctx.color.getPaletteNames()</code></td><td><code>() -&gt; string[]</code></td><td>palette names accepted by <code>ctx.color.getColors</code></td></tr>
 <tr><td><code>ctx.where</code></td><td><code>string</code></td><td>SQL <code>WHERE</code> clause for the active filter (or <code>''</code>) - merge with <code>AND</code> if your query needs its own</td></tr>
@@ -370,7 +370,7 @@ export default {
 ```
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Both plugins declare <code>group: 'Pixel HAI Watch'</code>, so they get their own named section in the sidebar instead of being lumped under "Other Widgets" - a small touch that makes an extension feel like a first-class part of the report.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Both plugins declare <code>group: 'Pixel HAI Watch'</code>, so they appear under their own named section in the sidebar instead of being grouped under "Other Widgets".</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>See the <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/viewer/README.md" target="_blank">viewer README</a> for the full plugin-writing guide, the complete <code>ctx</code> reference, and the extension-manifest format.</div></div>
 </div>
 
@@ -405,7 +405,7 @@ uv run python create_and_show_report.py
 <div class="wc-shots two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">📦 Pip package</div>
-    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any report opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
+    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any table opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
   </div>
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">🌐 GitHub Pages</div>

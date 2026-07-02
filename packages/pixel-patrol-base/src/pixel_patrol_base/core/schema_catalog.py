@@ -1,4 +1,4 @@
-"""Build a machine-readable catalog of the final report schema and the plugins
+"""Build a machine-readable catalog of the final table schema and the plugins
 that produce / consume it.
 
 The catalog is assembled from the *registered* plugins (not from a sample file):
@@ -292,7 +292,7 @@ def _emitters_by_key(loaders: List[Dict], field: str, key: str) -> Dict[str, Any
 
 
 def _column_view(loaders: List[Dict], processors: List[Dict]) -> List[Dict[str, Any]]:
-    """Every column that can appear in a report, tagged with the producer that
+    """Every column that can appear in a table, tagged with the producer that
     creates it and a category. Pattern columns (per-axis families) are included
     as representative '<axis>' entries with their matching ``regex``.
     """
@@ -564,7 +564,7 @@ def _dtype_to_json(dtype: str) -> Optional[Dict[str, str]]:
 
 
 def render_json_schema(catalog: Dict[str, Any]) -> Dict[str, Any]:
-    """Render the catalog as a JSON Schema document for one report row.
+    """Render the catalog as a JSON Schema document for one table row.
 
     Fixed columns go into ``properties``; per-axis families (size_*, dim_*,
     pixel_size_*) go into ``patternProperties`` using their stored regex.
@@ -588,9 +588,9 @@ def render_json_schema(catalog: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Pixel Patrol Report Row",
+        "title": "Pixel Patrol Table Row",
         "description": (
-            "One row in a Pixel Patrol parquet report. "
+            "One row in a Pixel Patrol table. "
             "Fixed columns are in properties; "
             "per-axis families (size_*, dim_*, pixel_size_*) are in patternProperties."
         ),

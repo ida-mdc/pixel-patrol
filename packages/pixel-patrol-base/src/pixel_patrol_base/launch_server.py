@@ -3,7 +3,7 @@ Local HTTP server for the Pixel Patrol processing launch page.
 
 Serves a small static JS/HTML frontend (``launch_assets/``) that configures
 and monitors a Pixel Patrol processing run, then hands off to the existing
-JS report viewer (``viewer_server.serve_viewer``) once a parquet file has
+viewer (``viewer_server.serve_viewer``) once a parquet file has
 been produced.
 
 Mirrors the architecture of ``viewer_server.py``: a plain
@@ -245,7 +245,7 @@ def _update_pixel_patrol() -> Dict[str, Any]:
 
 
 def _list_directory(path: Path) -> Dict[str, Any]:
-    """List subdirectories and .parquet files in path, for the report file picker."""
+    """List subdirectories and .parquet files in path, for the table file picker."""
     entries = []
     for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         if child.is_dir():

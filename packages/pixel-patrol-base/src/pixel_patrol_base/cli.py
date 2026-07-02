@@ -21,8 +21,8 @@ def cli():
     A command-line tool for processing image reports with Pixel Patrol.
 
     Two-step workflow:
-      1. pixel-patrol process  - scan images, write a .parquet report file
-      2. pixel-patrol view     - open the report in the interactive viewer
+      1. pixel-patrol process  - scan images, write a .parquet table
+      2. pixel-patrol view     - open the table in the viewer as an interactive report
     """
     pass
 
@@ -36,7 +36,7 @@ def cli():
 @click.option('--paths', '-p', multiple=True, type=str,
               help='Subdirectory to process, relative to BASE_DIRECTORY. Repeatable. '
                    'If specified, only files within those paths are processed and they become '
-                   'the default grouping when the report opens. If omitted, all supported files '
+                   'the default grouping when the interactive report opens. If omitted, all supported files '
                    'under BASE_DIRECTORY are processed together.')
 @click.option('--loader', '-l', type=str, show_default=True,
               help='Loader plugin to use (e.g. bioio, zarr, tifffile). '
@@ -48,7 +48,7 @@ def cli():
 @click.option('--flavor', type=str, default="", show_default=True,
               help='Label shown next to the Pixel Patrol title in the viewer.')
 @click.option('--description', type=str, default="",
-              help='Free-form description shown below the title in the viewer and embedded in the report metadata.')
+              help='Free-form description shown below the title in the viewer and embedded in the parquet metadata.')
 @click.option('--processors-include', multiple=True, type=str,
               help='Run only these processors by ID (e.g. raster-basic, thumbnail). Repeatable. '
                    'If specified, --processors-exclude is ignored.')
@@ -71,7 +71,7 @@ def cli():
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,
-              help='Per-dimension granularity of statistics in the output report. '
+              help='Per-dimension granularity of statistics in the output table. '
                    'Z=1 produces one set of statistics per Z slice; Z=5 groups every 5 slices. '
                    'By default X and Y are full extent and all other dims (Z, T, C, S) step by 1. '
                    'Use -1 for full extent. Repeatable, e.g. --slice-size Z=1 --slice-size C=1.')
@@ -80,8 +80,8 @@ def cli():
 @click.option('--log-file', is_flag=True, default=False,
               help='Write a debug log file alongside the output parquet (auto-named).')
 @click.option('--omit-base-dir', is_flag=True, default=False,
-              help='Do not store the base directory and paths in the parquet metadata. '
-                   'Useful when sharing reports without revealing local filesystem paths.')
+              help='Do not store the base directory in the parquet metadata. '
+                   'Useful when sharing tables without revealing local filesystem paths.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
@@ -96,13 +96,13 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               log_file: bool,
               omit_base_dir: bool):
     """
-    Scan images in BASE_DIRECTORY, process them, and write a .parquet report file.
+    Scan images in BASE_DIRECTORY, process them, and write a .parquet table.
 
     The two-step workflow:
 
     \b
-      pixel-patrol process path/to/images/ -o report.parquet --loader bioio
-      pixel-patrol view report.parquet
+      pixel-patrol process path/to/images/ -o results.parquet --loader bioio
+      pixel-patrol view results.parquet
     """
     base_directory = base_directory.resolve()
 
@@ -201,11 +201,11 @@ def view(parquet_file, port, no_browser,
     Examples:
 
     \b
-      pixel-patrol view report.parquet
-      pixel-patrol view report.parquet --group-by file_extension
-      pixel-patrol view report.parquet --filter-col dtype --filter-op eq --filter-val uint8
-      pixel-patrol view report.parquet --dim t=0 --dim c=1
-      pixel-patrol view report.parquet --widgets-exclude histogram --widgets-exclude summary
+      pixel-patrol view results.parquet
+      pixel-patrol view results.parquet --group-by file_extension
+      pixel-patrol view results.parquet --filter-col dtype --filter-op eq --filter-val uint8
+      pixel-patrol view results.parquet --dim t=0 --dim c=1
+      pixel-patrol view results.parquet --widgets-exclude histogram --widgets-exclude summary
     """
     api_view(
         parquet_file,
@@ -250,16 +250,16 @@ def build_viewer_html(output: Path):
               help='Skip viewer-widget metadata (which requires Node to read the JS plugins).')
 @click.option('--format', 'fmt',
               type=click.Choice(['catalog', 'row-schema']), default='catalog', show_default=True,
-              help='catalog: full plugin catalog. row-schema: JSON Schema document for one report row.')
+              help='catalog: full plugin catalog. row-schema: JSON Schema document for one table row.')
 def schema(output: Path, print_: bool, no_widgets: bool, fmt: str):
     """
-    Export the report schema and plugin catalog as JSON.
+    Export the table schema and plugin catalog as JSON.
 
     catalog (default): full plugin catalog with loaders, processors, widgets and
     every column - descriptions, types, producers, and connections.
 
     row-schema: a standard JSON Schema document (json-schema.org) describing one
-    parquet report row, with patternProperties for per-axis column families.
+    parquet table row, with patternProperties for per-axis column families.
     """
     import json
     from pixel_patrol_base.core.schema_catalog import build_catalog, render_json_schema

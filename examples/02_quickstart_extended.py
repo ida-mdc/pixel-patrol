@@ -11,7 +11,7 @@ def main():
     # output path for parquet file
     output_path = Path("out/quickstart_extended.parquet")
 
-    # Optional: Define sub-dirs that in the report are compared as experimental conditions
+    # Optional: Define sub-dirs that in the interactive report are compared as experimental conditions
     # If you don't specify any paths, all files in base_path and its subfolders are processed as one condition.
     # You can specify the paths either as absolute or relevant to base_path.
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]

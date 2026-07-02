@@ -10,7 +10,7 @@ def main():
     output_path = Path("out/plankton.parquet")
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
 
-    project = api.create_project("plankton", base_path, loader="bioio", output_path=output_path)
+    project = api.create_project("plankton_testeestestetetetete", base_path, loader="bioio", output_path=output_path)
     api.add_paths(project, paths)
 
     api.process_files(project, max_workers=5, description=(f"Original dataset: https://hdl.handle.net/1912/7350 - WHOI-Plankton\n"

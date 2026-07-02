@@ -29,7 +29,7 @@ class ProjectMetadata:
     base_dir: Optional[str] = None          # stored for future project reconstruction
     paths: List[str] = field(default_factory=list)  # stored for future project reconstruction
     processing_stats: dict = field(default_factory=dict)  # timing/throughput from build_records_df
-    omit_base_dir: bool = False  # when True, pp_base_dir and pp_paths are not written to parquet metadata
+    omit_base_dir: bool = False  # when True, pp_base_dir is not written to parquet metadata
 
     def to_parquet_meta(self) -> dict[str, str]:
         """Serialise to parquet footer key-value pairs."""
@@ -40,10 +40,10 @@ class ProjectMetadata:
             "pp_version":          self.version,
             "pp_created_at":       self.created_at,
             "pp_processing_stats": json.dumps(self.processing_stats),
+            "pp_paths":            json.dumps(self.paths),
         }
         if not self.omit_base_dir:
             meta["pp_base_dir"] = self.base_dir or ""
-            meta["pp_paths"]    = json.dumps(self.paths)
         return meta
 
     @classmethod
@@ -80,7 +80,8 @@ class ProjectMetadata:
         self.project_name = project.name
         self.base_dir = str(project.base_dir) if project.base_dir else None
         if project.base_dir:
-            self.paths = [str(Path(p).relative_to(project.base_dir)) for p in project.paths]
+            rel = [str(Path(p).relative_to(project.base_dir)) for p in project.paths]
+            self.paths = [p for p in rel if p != "."]
         else:
             self.paths = [str(p) for p in project.paths]
         return self

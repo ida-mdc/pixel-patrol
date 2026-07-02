@@ -1,18 +1,18 @@
-# Report Viewer
+# Viewer
 
-The Pixel Patrol viewer is a browser-based interactive dashboard for exploring `.parquet` reports. It is built with [DuckDB](https://duckdb.org/) and [Plotly](https://plotly.com/javascript/) and runs in two modes:
+The Pixel Patrol viewer is a browser-based interactive dashboard for exploring `.parquet` tables. It is built with [DuckDB](https://duckdb.org/) and [Plotly](https://plotly.com/javascript/) and runs in two modes:
 
 - **Static** - the viewer runs entirely using DuckDB WASM with no server. Used when opening the [hosted viewer](https://pixelpatrol.app/viewer/) or a static HTML file built with `pixel-patrol build-viewer-html`.
 - **Python-served** - `pixel-patrol view` starts a local HTTP server backed by native DuckDB. SQL queries run server-side, making it significantly faster for large files.
 
 ---
 
-## Opening a report
+## Opening a table
 
 **From the command line:**
 
 ```bash
-pixel-patrol view report.parquet
+pixel-patrol view results.parquet
 ```
 
 Starts a local HTTP server backed by native DuckDB and opens the viewer in your browser. Recommended for large files - SQL queries run server-side rather than in the browser.
@@ -38,17 +38,17 @@ Deploy a viewer site folder and load a remote parquet via URL parameter:
 ```bash
 pixel-patrol build-viewer-html -o my-site/
 # deploy my-site/ to any static host, then open:
-# https://your-host.com/my-site/?data=https://your-host.com/report.parquet
+# https://your-host.com/my-site/?data=https://your-host.com/results.parquet
 ```
 
 **Via URL parameter (hosted viewer):**
 
 ```
-https://pixelpatrol.app/viewer/?data=https://your-server.com/report.parquet
+https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet
 ```
 
 !!! warning
-    The static viewer may not be able to load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large reports.
+    The static viewer may not be able to load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large tables.
 
 ---
 
@@ -63,7 +63,7 @@ The topbar has an **Overview / Full** toggle.
 
 ### Sidebar
 
-- **Group by** - choose any column to split the data into groups. Each distinct value becomes a group with its own color across all plots. Defaults to `imported_path_short` when `-p` paths were used, or `name` for small single-directory reports (≤4 files).
+- **Group by** - choose any column to split the data into groups. Each distinct value becomes a group with its own color across all plots. Defaults to `imported_path_short` when `-p` paths were used, or `name` for small single-directory tables (≤4 files).
 - **Filter** - restrict the data to rows matching a column/operator/value combination.
 - **Dimension selectors** - for multi-dimensional data (Z, T, C, S), select which slice to display across widgets.
 - **Show significance** - toggle statistical significance brackets on violin plots (Mann-Whitney U test, Bonferroni corrected).
@@ -88,7 +88,7 @@ The topbar has an **Overview / Full** toggle.
 | `violin-quality` | Image Quality Metrics | Violin and box plots comparing image quality metrics across groups. Requires `pixel-patrol-image`. Supports the same **Slice by** toggles and box-summary fallback as Pixel Value Statistics. Metrics: **Michelson contrast** (global contrast ratio; higher = greater dynamic range), **MSCN variance** (Mean Subtracted Contrast Normalized variance; sensitive to noise and blur), **Texture heterogeneity** (coefficient of variation of local standard deviations; captures spatial non-uniformity of texture), **Laplacian variance** (variance of discrete Laplacian; higher = sharper image; scale-dependent), **Blocking index** (strength of blocky compression artifacts), **Ringing index** (edge oscillation artifacts from compression). |
 | `stats-across-dims-basic` | Basic Statistics Across Dimensions | How pixel statistics (mean, std, min, max) change across Z, T, C, or S slices. Useful for detecting drift or unexpected variation within a dimension. A dashed line shows the percentage of images that still have a slice at each position, for spotting datasets where images don't all have the same number of slices. |
 | `stats-across-dims-quality` | Quality Metrics Across Dimensions | How image quality metrics change across dimension slices. Useful for detecting focus drift over time (T), channel-specific artifacts (C), or depth-dependent quality changes (Z). Requires `pixel-patrol-image`. A dashed line shows the percentage of images that still have a slice at each position, for spotting datasets where images don't all have the same number of slices. |
-| `custom-plot` | Custom Plot | Build your own scatter, violin, bar, count, or heatmap plot from any columns in the report, with grouping, coloring, and palette controls. Each plot has its own **Slice by** toggles and per-image/per-slice badge. Add multiple plots, and export any of them as a standalone viewer plugin file. |
+| `custom-plot` | Custom Plot | Build your own scatter, violin, bar, count, or heatmap plot from any columns in the table, with grouping, coloring, and palette controls. Each plot has its own **Slice by** toggles and per-image/per-slice badge. Add multiple plots, and export any of them as a standalone viewer plugin file. |
 
 ---
 

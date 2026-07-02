@@ -1,6 +1,6 @@
-# Sharing a Report
+# Sharing a Table
 
-A Pixel Patrol report is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Pair it with a viewer and you get the full interactive experience; this page covers all the ways to get a viewer to your collaborators (or the other way around).
+A Pixel Patrol table is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around).
 
 ---
 
@@ -10,7 +10,7 @@ A Pixel Patrol report is a single `.parquet` file holding everything about your 
   <div class="wc-setup-title">📤 Tell us about your situation</div>
   <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for methods that don't fit will dim out - so the right one stands out at a glance.</p>
   <div class="wc-setup-row">
-    <span class="wc-setup-q">Roughly how big is your report?</span>
+    <span class="wc-setup-q">Roughly how big is your table?</span>
     <span class="wc-setup-btns">
       <button class="wc-setup-btn" data-key="size" data-val="small" onclick="shSetup(this)">Under a few GB</button>
       <button class="wc-setup-btn" data-key="size" data-val="large" onclick="shSetup(this)">5 GB or more</button>
@@ -58,7 +58,7 @@ A Pixel Patrol report is a single `.parquet` file holding everything about your 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>Browser memory limits:</strong> the hosted viewer runs DuckDB in a browser WebAssembly context, capped by available browser memory. Files under 1-2 GB typically work fine; 5 GB+ may fail to load or get sluggish - reach for <code>pixel-patrol view</code> instead.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>No custom widgets:</strong> the hosted viewer only ships with the built-in widgets - your own viewer plugins aren't bundled in. If your collaborator needs to see those, build and host your own viewer instead (see "Host on a static server" below).</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium report to one person who doesn't have Pixel Patrol installed.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium table to one person who doesn't have Pixel Patrol installed.</div></div>
 </div>
 
 </div>
@@ -77,7 +77,7 @@ A Pixel Patrol report is a single `.parquet` file holding everything about your 
 <p>Your collaborator will need Pixel Patrol installed - a single <code>pip install pixel-patrol</code> away (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
 
 ```bash
-pixel-patrol view report.parquet
+pixel-patrol view results.parquet
 ```
 
 <p>This starts a local server backed by <strong>native DuckDB</strong> - no browser memory ceiling, fast even for very large reports.</p>
@@ -85,7 +85,7 @@ pixel-patrol view report.parquet
 <div class="wc-flags">
 <div class="wc-flag wc-flag-green"><span class="fi">✅</span><div><strong>The recommended method for files above a few gigabytes.</strong> No upload, no waiting on browser WASM - just your data and your collaborator's machine.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Custom widgets:</strong> they'll show up here too, but only if your collaborator also installs your extension package - it isn't bundled into <code>pixel-patrol view</code> the way it is into a self-contained HTML or hosted site (see below).</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> labmates, frequent collaborators, or anyone already in the Pixel Patrol ecosystem - and the best option once your report gets big, custom widgets and all.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> labmates, frequent collaborators, or anyone already in the Pixel Patrol ecosystem - and the best option once your table gets big, custom widgets and all.</div></div>
 </div>
 
 </div>
@@ -107,7 +107,7 @@ pixel-patrol view report.parquet
 pixel-patrol build-viewer-html -o viewer.html
 ```
 
-<p>Send both <code>viewer.html</code> and <code>report.parquet</code> to your collaborator. They open <code>viewer.html</code> in any browser, pick the parquet from the file picker, and get the full interactive experience - with nothing to install and no external link to track down.</p>
+<p>Send both <code>viewer.html</code> and <code>results.parquet</code> to your collaborator. They open <code>viewer.html</code> in any browser, pick the parquet from the file picker, and get the full interactive report - with nothing to install and no external link to track down.</p>
 
 <details class="wc-how">
 <summary>🔬 What's actually inside <code>viewer.html</code></summary>
@@ -150,7 +150,7 @@ pixel-patrol build-viewer-html -o my-report-site/
 <p><strong>Step 3 - link to the viewer with a <code>?data=</code> parameter:</strong></p>
 
 ```
-https://your-host.com/my-report-site/?data=https://your-host.com/report.parquet
+https://your-host.com/my-report-site/?data=https://your-host.com/results.parquet
 ```
 
 <p>The viewer fetches the parquet from the URL, so it can live anywhere publicly reachable - S3, GitHub releases, institutional storage, you name it.</p>
@@ -164,17 +164,17 @@ https://your-host.com/my-report-site/?data=https://your-host.com/report.parquet
 pixel-patrol build-viewer-html -o docs/viewer/
 
 # Add the parquet to the same repo (or reference an external URL)
-cp report.parquet docs/viewer/
+cp results.parquet docs/viewer/
 
 # After deploying to GitHub Pages, share:
-# https://your-org.github.io/your-repo/viewer/?data=https://your-org.github.io/your-repo/viewer/report.parquet
+# https://your-org.github.io/your-repo/viewer/?data=https://your-org.github.io/your-repo/viewer/results.parquet
 ```
 
 </div>
 </details>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted Pixel Patrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/report.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted Pixel Patrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> publishing results alongside a paper, a project page, or a team dashboard that anyone can land on.</div></div>
 </div>
 
@@ -189,7 +189,7 @@ cp report.parquet docs/viewer/
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>✂️</span> Share a filtered subset</div>
-<div class="wc-ctrl-body">After exploring your report, <strong>apply your filters</strong> in the sidebar (by quality metric, condition, file type, ...), then <strong>Save as Parquet</strong> to export the current view as a new, fully-interactive report - or <strong>Save as CSV</strong> for the same data as a plain spreadsheet, handy for building include/exclude lists or just browsing the numbers yourself. Share either via any method above. Useful for sending a "clean" dataset after removing outliers, handing a teammate just their relevant subset, or publishing a curated, low-noise version of your results.</div>
+<div class="wc-ctrl-body">After exploring your interactive report, <strong>apply your filters</strong> in the sidebar (by quality metric, condition, file type, ...), then <strong>Save as Parquet</strong> to create a new parquet file (pp table) with only the filtered data - you can open it as an interactive report - or <strong>Save as CSV</strong> for the same data as a plain spreadsheet, handy for building include/exclude lists or just browsing the numbers yourself. Share either via any method above. Useful for sending a "clean" dataset after removing outliers, handing a teammate just their relevant subset, or publishing a curated, low-noise version of your results.</div>
 </div>
 
 <div class="wc-ctrl">
@@ -198,7 +198,7 @@ cp report.parquet docs/viewer/
 
 ```bash
 pixel-patrol process /data/my_experiment \
-    -o experiment_report.parquet \
+    -o experiment_results.parquet \
     --name "Experiment 42 - Drug Screen" \
     --description "Round 1, n=384, 20x brightfield. Processed 2026-06-07."
 ```

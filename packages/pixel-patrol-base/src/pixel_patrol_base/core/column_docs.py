@@ -1,4 +1,4 @@
-"""Human-readable descriptions for the columns of a final Pixel Patrol report
+"""Human-readable descriptions for the columns of a Pixel Patrol table
 that are *not* declared by a single loader or processor.
 
 Two groups are covered here:
@@ -10,7 +10,7 @@ Two groups are covered here:
 
 The shared raster-image loader columns are described where their types are
 declared, in :mod:`pixel_patrol_base.core.loader_schema`.
-:func:`base_column_description` also resolves those, so any report column not
+:func:`base_column_description` also resolves those, so any table column not
 owned by a specific plugin instance can be looked up by name here.
 """
 
@@ -70,7 +70,7 @@ PATTERN_COLUMN_DESCRIPTIONS: List[Tuple[str, str]] = [
 
 
 def base_column_description(name: str) -> Optional[str]:
-    """Return a description for any report column not owned by a specific plugin
+    """Return a description for any table column not owned by a specific plugin
     instance: base/pipeline columns and the shared raster-image loader columns.
 
     Exact matches take priority over pattern matches.
