@@ -38,6 +38,13 @@
 
     /* Pipeline */
     .pipeline-img { max-width: 1260px; width: 100%; height: auto; display: block; margin: 0 auto; }
+    .pipeline-step-num {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #2563eb; color: #fff;
+      font-size: 0.78rem; font-weight: 700; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 6px;
+    }
 
     /* Carousel */
     .carousel-img { width: 100%; height: 500px; object-fit: contain; background: #f8f9fa; border-radius: 8px; }
@@ -186,16 +193,20 @@
     <p class="section-lead mb-3">Set up a directory and a few parameters. Pixel Patrol handles the rest.</p>
     <img class="pipeline-img mb-2" src="assets/pipeline.png" alt="Pipeline: Pick images → Process images → Collect metadata and metrics → Visualize as interactive report"/>
     <div class="row g-3 text-center mt-0">
-      <div class="col-6 col-md-3">
+      <div class="col-6 col-md-3 order-md-1">
+        <div class="pipeline-step-num d-md-none">1</div>
         <p class="text-muted small mb-0">Point to any folder. Common formats supported, subdirectories walked automatically.</p>
       </div>
-      <div class="col-6 col-md-3">
-        <p class="text-muted small mb-0">Files scanned in parallel. Pixel statistics, quality metrics, and metadata extracted in one pass.</p>
-      </div>
-      <div class="col-6 col-md-3">
+      <div class="col-6 col-md-3 order-md-3">
+        <div class="pipeline-step-num d-md-none">3</div>
         <p class="text-muted small mb-0">Results written to a compact, portable Parquet file - ready to share or load into other tools.</p>
       </div>
-      <div class="col-6 col-md-3">
+      <div class="col-6 col-md-3 order-md-2">
+        <div class="pipeline-step-num d-md-none">2</div>
+        <p class="text-muted small mb-0">Files scanned in parallel. Pixel statistics, quality metrics, and metadata extracted in one pass.</p>
+      </div>
+      <div class="col-6 col-md-3 order-md-4">
+        <div class="pipeline-step-num d-md-none">4</div>
         <p class="text-muted small mb-0">Open in any browser. Group, filter, compare distributions, inspect images.</p>
       </div>
     </div>
