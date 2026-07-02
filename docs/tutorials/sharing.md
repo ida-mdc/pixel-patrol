@@ -1,6 +1,6 @@
 # Sharing a Table
 
-A Pixel Patrol table is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around).
+A PixelPatrol table is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around).
 
 ---
 
@@ -58,7 +58,7 @@ A Pixel Patrol table is a single `.parquet` file holding everything about your d
 <div class="wc-flags">
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>Browser memory limits:</strong> the hosted viewer runs DuckDB in a browser WebAssembly context, capped by available browser memory. Files under 1-2 GB typically work fine; 5 GB+ may fail to load or get sluggish - reach for <code>pixel-patrol view</code> instead.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>No custom widgets:</strong> the hosted viewer only ships with the built-in widgets - your own viewer plugins aren't bundled in. If your collaborator needs to see those, build and host your own viewer instead (see "Host on a static server" below).</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium table to one person who doesn't have Pixel Patrol installed.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium table to one person who doesn't have PixelPatrol installed.</div></div>
 </div>
 
 </div>
@@ -74,7 +74,7 @@ A Pixel Patrol table is a single `.parquet` file holding everything about your d
 </div>
 <div class="wc-body">
 
-<p>Your collaborator will need Pixel Patrol installed - a single <code>pip install pixel-patrol</code> away (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
+<p>Your collaborator will need PixelPatrol installed - a single <code>pip install pixel-patrol</code> away (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
 
 ```bash
 pixel-patrol view results.parquet
@@ -85,7 +85,7 @@ pixel-patrol view results.parquet
 <div class="wc-flags">
 <div class="wc-flag wc-flag-green"><span class="fi">✅</span><div><strong>The recommended method for files above a few gigabytes.</strong> No upload, no waiting on browser WASM - just your data and your collaborator's machine.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Custom widgets:</strong> they'll show up here too, but only if your collaborator also installs your extension package - it isn't bundled into <code>pixel-patrol view</code> the way it is into a self-contained HTML or hosted site (see below).</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> labmates, frequent collaborators, or anyone already in the Pixel Patrol ecosystem - and the best option once your table gets big, custom widgets and all.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> labmates, frequent collaborators, or anyone already in the PixelPatrol ecosystem - and the best option once your table gets big, custom widgets and all.</div></div>
 </div>
 
 </div>
@@ -174,7 +174,7 @@ cp results.parquet docs/viewer/
 </details>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted Pixel Patrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted PixelPatrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> publishing results alongside a paper, a project page, or a team dashboard that anyone can land on.</div></div>
 </div>
 

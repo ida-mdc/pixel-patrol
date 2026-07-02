@@ -201,7 +201,7 @@ export async function exportBakedHtml(state, schema, plugins) {
   ].join('\n');
   doc.head.appendChild(staticFixes);
 
-  doc.title = `Pixel Patrol Snapshot – ${new Date().toLocaleDateString()}`;
+  doc.title = `PixelPatrol Snapshot – ${new Date().toLocaleDateString()}`;
 
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }

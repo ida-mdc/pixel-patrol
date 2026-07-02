@@ -72,7 +72,7 @@ pixel-patrol view PARQUET_FILE [OPTIONS]
 
 | Argument | Description |
 |---|---|
-| `PARQUET_FILE` | Path to a `.parquet` file (Pixel Patrol table) produced by `process`. |
+| `PARQUET_FILE` | Path to a `.parquet` file (PixelPatrol table) produced by `process`. |
 
 **Options**
 

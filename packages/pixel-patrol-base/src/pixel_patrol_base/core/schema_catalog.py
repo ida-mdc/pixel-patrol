@@ -588,9 +588,9 @@ def render_json_schema(catalog: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Pixel Patrol Table Row",
+        "title": "PixelPatrol Table Row",
         "description": (
-            "One row in a Pixel Patrol table. "
+            "One row in a PixelPatrol table. "
             "Fixed columns are in properties; "
             "per-axis families (size_*, dim_*, pixel_size_*) are in patternProperties."
         ),

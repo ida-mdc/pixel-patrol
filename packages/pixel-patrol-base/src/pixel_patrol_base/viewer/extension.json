@@ -1,5 +1,5 @@
 {
-  "name": "Pixel Patrol Base Plugins",
+  "name": "PixelPatrol Base Plugins",
   "plugins": [
     "./plugin_summary.js",
     "./plugin_table.js",

@@ -1,6 +1,6 @@
 # Installation
 
-Pixel Patrol requires Python 3.11 or higher.
+PixelPatrol requires Python 3.11 or higher.
 
 ---
 
@@ -47,7 +47,7 @@ pip install pixel-patrol
 
 ## Modular install
 
-Pixel Patrol is split into focused packages so you only install what you need. The core package (`pixel-patrol-base`) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.
+PixelPatrol is split into focused packages so you only install what you need. The core package (`pixel-patrol-base`) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.
 
 ```bash
 uv pip install pixel-patrol-base           # core only
@@ -68,13 +68,13 @@ uv pip install pixel-patrol-image          # image quality metrics and extra vie
 | `pixel-patrol-loader-bio` | BioIO, Zarr, and Tifffile loaders for scientific image formats |
 | `pixel-patrol-image` | Image quality metrics (blur, contrast, noise) and extra viewer widgets |
 
-Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend Pixel Patrol by creating your own packages; see [Extensions](extensions.md).
+Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend PixelPatrol by creating your own packages; see [Extensions](extensions.md).
 
 ---
 
 ## Prefer a one-click app?
 
-If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
+If you'd rather skip the command line entirely, download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
 
 [🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }

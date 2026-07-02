@@ -2,7 +2,7 @@
 
 <img src="assets/shark.png" alt="A softly glowing cartoon shark" width="260" align="right">
 
-A guide to building your own Pixel Patrol extension - shown here as a
+A guide to building your own PixelPatrol extension - shown here as a
 complete, self-contained example. It walks through the **entire** extension
 surface: a custom **loader**, a custom **processor**, and two custom
 **viewer widgets** (one that visualises loader metadata, one that visualises
@@ -32,7 +32,7 @@ helpers, not part of the extension itself.)
 
 ## The loader
 
-**If Pixel Patrol can't read your file format - or doesn't read it (and its
+**If PixelPatrol can't read your file format - or doesn't read it (and its
 metadata) the way you want - write a loader extension.**
 
 `src/pixel_patrol_hai_watch/my_loader.py` implements `SharkCamLoader`
@@ -194,7 +194,7 @@ columns they need (`depth_zone`, `glow_count`) and hide themselves via
 ## Defining the package
 
 Any extension is a regular, installable Python package. The pieces that make
-Pixel Patrol find it:
+PixelPatrol find it:
 
 1. **`pyproject.toml` entry points** - three optional groups, each pointing at
    a function in your `plugin_registry` module:
@@ -248,7 +248,7 @@ or path needed when calling `create_project(..., loader="shark-cam")` or
 
 ## Running locally
 
-Pixel Patrol discovers loaders, processors, and viewer extensions through
+PixelPatrol discovers loaders, processors, and viewer extensions through
 Python entry points - which only works if your package is installed in the
 *same environment* as `pixel_patrol_base`. So first, make sure you're in that
 environment, then install this package into it:
@@ -288,4 +288,4 @@ Ready to build? Copy this folder, then work through it one piece at a time:
 
 Check out our [docs](https://pixelpatrol.app/docs/) and
 [tutorials](https://pixelpatrol.app/docs/tutorials/) for more
-info on how to create your own Pixel Patrol extension.
+info on how to create your own PixelPatrol extension.

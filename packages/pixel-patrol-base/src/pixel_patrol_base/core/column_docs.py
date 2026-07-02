@@ -1,4 +1,4 @@
-"""Human-readable descriptions for the columns of a Pixel Patrol table
+"""Human-readable descriptions for the columns of a PixelPatrol table
 that are *not* declared by a single loader or processor.
 
 Two groups are covered here:

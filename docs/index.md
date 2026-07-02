@@ -36,7 +36,7 @@ The first command reads every supported file in `path/to/images/` - including su
 
 ## Step 1: Process your dataset
 
-Pixel Patrol supports several image loaders, each suited to different formats - see [Loaders](processing.md#loaders) for the full list. For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) the `bioio` loader covers everything:
+PixelPatrol supports several image loaders, each suited to different formats - see [Loaders](processing.md#loaders) for the full list. For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) the `bioio` loader covers everything:
 
 ```bash
 pixel-patrol process path/to/images/ -o results.parquet --loader bioio
@@ -67,7 +67,7 @@ This starts a local server and opens the viewer in your browser. The viewer show
 
 ### Sharing a table
 
-The easiest way to share a table is to send the `.parquet` file and open it in the [Pixel Patrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
+The easiest way to share a table is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
 
 !!! warning
     The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.

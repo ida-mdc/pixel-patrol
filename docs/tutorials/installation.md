@@ -139,7 +139,7 @@ const instWiz = {
     }
 
     if (s.uv === 'pip') {
-      lines.push('# Install Pixel Patrol with pip');
+      lines.push('# Install PixelPatrol with pip');
       lines.push('pip install pixel-patrol');
       lines.push('');
       lines.push('# Verify');
@@ -152,7 +152,7 @@ const instWiz = {
       lines.push('# ' + (parseInt(step)+1) + '. Activate it');
       lines.push(activate);
       lines.push('');
-      lines.push('# ' + (parseInt(step)+2) + '. Install Pixel Patrol');
+      lines.push('# ' + (parseInt(step)+2) + '. Install PixelPatrol');
       lines.push('uv pip install pixel-patrol');
       lines.push('');
       lines.push('# ' + (parseInt(step)+3) + '. Verify');
@@ -186,7 +186,7 @@ const instWiz = {
 
 ## Prefer a one-click app?
 
-If you'd rather skip the command line entirely, download the **Pixel Patrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs Pixel Patrol, and opens the app in your browser. No Python required.
+If you'd rather skip the command line entirely, download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
 
 [🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }

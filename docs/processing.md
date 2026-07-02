@@ -1,6 +1,6 @@
 # Processing
 
-Processing is the step where Pixel Patrol scans your images and produces a `.parquet` table. The [Quickstart](index.md) covers the basic command; this page goes deeper into project configuration, loaders, conditions, and performance tuning.
+Processing is the step where PixelPatrol scans your images and produces a `.parquet` table. The [Quickstart](index.md) covers the basic command; this page goes deeper into project configuration, loaders, conditions, and performance tuning.
 
 ---
 
@@ -117,7 +117,7 @@ Use `-1` to keep a dimension at full extent.
 
 ## The parquet file
 
-The output `.parquet` file is the Pixel Patrol table. Its columns come from three sources: the file system (always), the loader (if specified), and each processor.
+The output `.parquet` file is the PixelPatrol table. Its columns come from three sources: the file system (always), the loader (if specified), and each processor.
 
 ### Row structure
 
@@ -187,7 +187,7 @@ api.process_files(project, omit_base_dir=True)
 
 ## Parallelism
 
-Processing runs in parallel using Dask workers. On a local machine (laptop or workstation), Pixel Patrol auto-detects an appropriate number of worker processes based on available CPUs and RAM. On an HPC cluster you connect to an existing Dask scheduler instead and workers are whatever the cluster provides.
+Processing runs in parallel using Dask workers. On a local machine (laptop or workstation), PixelPatrol auto-detects an appropriate number of worker processes based on available CPUs and RAM. On an HPC cluster you connect to an existing Dask scheduler instead and workers are whatever the cluster provides.
 
 ```bash
 # Override the default worker count:
@@ -231,7 +231,7 @@ Everything before `--` controls the SLURM cluster (number of jobs, cores per job
 
 ## Task sizing
 
-Pixel Patrol groups work into Dask tasks. Three kinds of task exist, each with its own sizing logic:
+PixelPatrol groups work into Dask tasks. Three kinds of task exist, each with its own sizing logic:
 
 - **Batch tasks** - many small files are grouped into one task to reduce scheduling overhead.
 - **Memory chunk tasks** - a single large file (whose uncompressed size exceeds `mb_per_task`) is split into spatial sub-regions, each processed as a separate task. Results are assembled before writing.

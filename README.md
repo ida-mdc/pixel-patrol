@@ -1,4 +1,4 @@
-# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/prevalidation.png" width="80">  Pixel Patrol
+# <img src="packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets/prevalidation.png" width="80">  PixelPatrol
 
 ### Image Dataset Quality Control and Exploration
 
@@ -6,7 +6,7 @@
 
 **[Documentation](https://pixelpatrol.app/docs/) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://pixelpatrol.app/viewer/)**
 
-Image datasets are rarely as clean or consistent as they appear. Pixel Patrol scans your images and generates a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
+Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and generates a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
 
 <img src="packages/pixel-patrol/readme_assets/overview.png" width="">
 
@@ -110,9 +110,9 @@ pixel-patrol build-viewer-html -o viewer.html
 
 ---
 
-## Extending Pixel Patrol
+## Extending PixelPatrol
 
-Pixel Patrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See `examples/minimal-extension/` for a working template, and the [Extensions](https://pixelpatrol.app/docs/extensions/) documentation.
+PixelPatrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See `examples/minimal-extension/` for a working template, and the [Extensions](https://pixelpatrol.app/docs/extensions/) documentation.
 
 ---
 
