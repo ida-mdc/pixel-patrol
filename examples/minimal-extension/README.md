@@ -47,7 +47,7 @@ not a base class, so `SharkCamLoader` needs no import or inheritance from
 |---|---|---|---|
 | `NAME` | `str` | yes | unique identifier passed to `create_project(..., loader=...)` |
 | `SUPPORTED_EXTENSIONS` | `set[str]` | yes | file extensions this loader can read (lower-case, no dot) |
-| `OUTPUT_SCHEMA` | `dict[str, type]` | yes | extra metadata columns this loader adds to the report, with their types |
+| `OUTPUT_SCHEMA` | `dict[str, type]` | yes | extra metadata columns this loader adds to the table, with their types |
 | `read_header(path)` | `(Path) -> FileInfo` | yes | cheap shape/dtype/dim-order probe, **no pixel data loaded** |
 | `load(path)` | `(Path) -> Record` | yes | loads one image and returns a `Record` |
 | `load_range(path, start, stop)` | `(Path, int, int) -> Iterator[(str, Record)]` | yes | yields sub-images for container formats; raise `NotImplementedError` otherwise |
@@ -104,7 +104,7 @@ synthetic dive patches, a microscopy stack, a photo, any loader's output.
 
 ## The viewer widgets
 
-**If you want to visualise report data in the browser - your own extension's
+**If you want to visualise your data as an interactive report in the browser - your own extension's
 columns or anyone else's - write a viewer widget.**
 
 `src/pixel_patrol_hai_watch/viewer/` ships **two** widgets, one for each kind
@@ -115,7 +115,7 @@ of data a loader can surface:
   logged in each `depth_zone`, split by dive site. `depth_zone` comes straight
   from `SharkCamLoader`; the site (`imported_path_short`, here `azores_log` /
   `kermadec_log`) is derived automatically from each file's folder by Pixel
-  Patrol itself, so every report has it - no loader involvement needed.
+  Patrol itself, so every table has it - no loader involvement needed.
 - **`plugin_glow_by_depth.js`** ("Glow Sightings by Depth") visualises a
   *metric derived from the pixel data*: a jittered scatter of `glow_count`
   (computed by `GlowSpotterProcessor`) against `depth_zone`, colored by site.
@@ -187,9 +187,7 @@ extension-manifest format in detail.
 Notice neither widget imports anything from the Python side or refers to
 `SharkCamLoader`/`GlowSpotterProcessor` by name - they just query for the
 columns they need (`depth_zone`, `glow_count`) and hide themselves via
-`requires()` when those columns are missing. A widget is just a query plus a
-chart that lights up for any report with the right columns, including ones
-produced entirely by someone else's loader and processor.
+`requires()` when those columns are missing. A viewer widget queries the table and renders a visualization — it activates whenever the right columns are present in the table.
 
 ---
 
@@ -260,14 +258,14 @@ uv pip install -e .
 ```
 
 If you want to test our minimal extension with the toy data to generate a
-report, run the pipeline:
+interactive report, run the pipeline:
 
 ```sh
 uv run python create_and_show_report.py
 ```
 
 This (re)generates the tiny dataset if `data/` is missing, processes it with
-the custom loader and processor, saves `out/report.parquet`, and serves the
+the custom loader and processor, saves `out/results.parquet`, and serves the
 viewer at `http://127.0.0.1:8052`. The viewer extension is loaded
 automatically because `serve_viewer` discovers the `pixel_patrol.viewer_extensions`
 entry-point declared in `pyproject.toml` - no explicit path needed.

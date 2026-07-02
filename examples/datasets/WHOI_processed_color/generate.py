@@ -1,5 +1,5 @@
 """
-Generate a colorised subset of the WHOI plankton dataset for use as an example report.
+Generate a colorised subset of the WHOI plankton dataset for use as an example interactive report.
 
 Takes 10 randomly selected images from each of the 4 conditions, preserving the
 species subdirectory structure. Each image is converted from grayscale to 3-channel

@@ -26,11 +26,11 @@ Requires Python 3.11+. See [Installation](installation.md) for more options.
 ## The two-step workflow
 
 ```bash
-pixel-patrol process path/to/images/ -o report.parquet
-pixel-patrol view report.parquet
+pixel-patrol process path/to/images/ -o results.parquet
+pixel-patrol view results.parquet
 ```
 
-The first command reads every supported file in `path/to/images/` - including subdirectories - in parallel and writes a `report.parquet` file. The second opens the interactive viewer in your browser.
+The first command reads every supported file in `path/to/images/` - including subdirectories - in parallel and writes a `results.parquet` table. The second opens the interactive report in your browser.
 
 ---
 
@@ -39,38 +39,38 @@ The first command reads every supported file in `path/to/images/` - including su
 Pixel Patrol supports several image loaders, each suited to different formats - see [Loaders](processing.md#loaders) for the full list. For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) the `bioio` loader covers everything:
 
 ```bash
-pixel-patrol process path/to/images/ -o report.parquet --loader bioio
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio
 ```
 
 If you have subfolders representing experimental conditions, or you only want to process images in specific subdirectories, use `-p`:
 
 ```bash
-pixel-patrol process path/to/images/ -o report.parquet --loader bioio \
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio \
   -p condition_a -p condition_b
 ```
 
-Pixel Patrol will process each path separately and label them in the report, letting you compare conditions in the viewer. You can also change the groupings interactively in the report.
+Each path becomes a group in the interactive report via the `imported_path` column. You can change the grouping column interactively.
 
 To restrict to specific file extensions:
 
 ```bash
-pixel-patrol process path/to/images/ -o report.parquet --loader bioio -e tif -e nd2
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio -e tif -e nd2
 ```
 
 ## Step 2: Open the viewer
 
 ```bash
-pixel-patrol view report.parquet
+pixel-patrol view results.parquet
 ```
 
 This starts a local server and opens the viewer in your browser. The viewer shows you plots for exploring your data and lets you filter, group, and compare conditions interactively.
 
-### Sharing a report
+### Sharing a table
 
-The easiest way to share a report is to send the `.parquet` file and open it in the [Pixel Patrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
+The easiest way to share a table is to send the `.parquet` file and open it in the [Pixel Patrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
 
 !!! warning
-    The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large reports use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
+    The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
 
 ---
 
@@ -82,7 +82,7 @@ If you prefer a visual interface, `pixel-patrol launch` opens a web UI:
 pixel-patrol launch
 ```
 
-This opens a browser tab where you can set your project, process your data, and finally view the report. An "Open Existing Report" button lets you jump straight to the viewer for a `.parquet` file from a previous run, without reprocessing.
+This opens a browser tab where you can set your project, process your data, and open the interactive report. An "Open Existing Table" button lets you jump straight to the viewer for a `.parquet` file from a previous run, without reprocessing.
 
 ---
 
@@ -97,7 +97,7 @@ project = api.create_project(
     "my-project",
     base_dir="path/to/images/",
     loader="bioio",
-    output_path="report.parquet",
+    output_path="results.parquet",
 )
 
 # Optional: define conditions as subdirectory paths
@@ -107,10 +107,10 @@ api.process_files(project)
 api.view(project)
 ```
 
-### Loading a saved report
+### Loading a saved table
 
 ```python
-records_df, metadata = api.load("report.parquet")
+records_df, metadata = api.load("results.parquet")
 print(f"{metadata.project_name}: {len(records_df)} records")
 ```
 
@@ -118,7 +118,7 @@ print(f"{metadata.project_name}: {len(records_df)} records")
 
 ```python
 api.view(
-    "report.parquet",
+    "results.parquet",
     group_col="path",
     filter_by={"file_extension": {"op": "in", "value": "tif,nd2"}},
     dimensions={"z": "0", "t": "0"},

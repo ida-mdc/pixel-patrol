@@ -1,6 +1,6 @@
-# Exploring the Report
+# Exploring the Interactive Report
 
-Open your report in one browser tab and keep this page in another. No report of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
+Open your interactive report in one browser tab and keep this page in another. No Pixel Patrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
 
 The example screenshots below are from the WHOI plankton microscopy dataset, which we deliberately tampered with to create four synthetic conditions: **original** images, **blurred** images, **JPEG-compressed** images, and **noisy** images. This makes it easy to see what each widget catches.
 
@@ -13,7 +13,7 @@ A few things to know before you start:
 **Reading the cards:**
 
 <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.75rem 0 1.5rem;font-size:0.82rem;align-items:center">
-  <span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every report &nbsp;&nbsp;
+  <span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every interactive report &nbsp;&nbsp;
   <span class="wc-pill wc-pill-loader">needs loader</span> &nbsp;requires an image loader (e.g. <code>pixel-patrol-loader-bio</code>) &nbsp;&nbsp;
   <span class="wc-pill wc-pill-image">needs pixel-patrol-image</span> &nbsp;quality metrics package &nbsp;&nbsp;
   <span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice
@@ -38,10 +38,10 @@ If you prefer to see all widgets expanded at once, switch to **Full** view with 
 
 ---
 
-## Opening your report
+## Opening your interactive report
 
 ```bash
-pixel-patrol view report.parquet
+pixel-patrol view results.parquet
 ```
 
 This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [pixelpatrol.app/viewer/](https://pixelpatrol.app/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
@@ -49,10 +49,10 @@ This starts a local server with native DuckDB and opens the viewer in your brows
 **Useful launch flags:**
 
 ```bash
-pixel-patrol view report.parquet --group-by file_extension   # start grouped differently
-pixel-patrol view report.parquet --filter-col dtype --filter-op eq --filter-val uint16
-pixel-patrol view report.parquet --dim z=5                   # lock to a Z slice on load
-pixel-patrol view report.parquet --significance              # show stat brackets from the start
+pixel-patrol view results.parquet --group-by file_extension   # start grouped differently
+pixel-patrol view results.parquet --filter-col dtype --filter-op eq --filter-val uint16
+pixel-patrol view results.parquet --dim z=5                   # lock to a Z slice on load
+pixel-patrol view results.parquet --significance              # show stat brackets from the start
 ```
 
 ---
@@ -60,7 +60,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 ## Widget walkthrough
 
 <div class="wc-setup" id="wc-setup-panel">
-  <div class="wc-setup-title">⚙ What's in your report?</div>
+  <div class="wc-setup-title">⚙ What's in your table?</div>
   <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for widgets that don't apply to your setup will dim out as you scroll through the walkthrough - so you can see at a glance which ones are actually relevant to you.</p>
   <div class="wc-setup-row">
     <span class="wc-setup-q">Did you run processing with an image loader (e.g. <code>pixel-patrol-loader-bio</code>)?</span>
@@ -194,7 +194,7 @@ pixel-patrol view report.parquet --significance              # show stat bracket
 </div>
 <div class="wc-body">
 
-<p>An interactive sunburst of your folder hierarchy. A toggle lets you size the segments by <strong>file count</strong> or by <strong>total size</strong> - the screenshot below shows the by-size view. Only files that were actually scanned into the report are included. <strong>Click any segment to zoom in; click the center ring to zoom out.</strong></p>
+<p>An interactive sunburst of your folder hierarchy. A toggle lets you size the segments by <strong>file count</strong> or by <strong>total size</strong> - the screenshot below shows the by-size view. Only files that were actually scanned into the table are included. <strong>Click any segment to zoom in; click the center ring to zoom out.</strong></p>
 
 <div class="wc-shots">
   <div class="wc-shot">
@@ -553,7 +553,7 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>Build your own plot from any columns in the report - pick an X column, a Y column (or <code>(count)</code>), and Pixel Patrol picks a sensible chart type:</p>
+<p>Build your own plot from any columns in the table - pick an X column, a Y column (or <code>(count)</code>), and Pixel Patrol picks a sensible chart type:</p>
 
 <ul style="font-size:0.9rem;line-height:1.6">
 <li><strong>Two numerics</strong> → scatter</li>
@@ -600,12 +600,12 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>💾</span> Save</div>
-<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> a new, fully-interactive PP report of only the images that passed your filters.</div>
+<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> creates a new parquet file (Pixel Patrol table) with only the filtered data. You can open it as an interactive report.</div>
 </div>
 
 <div class="wc-ctrl">
 <div class="wc-ctrl-head"><span>☰</span> Widget list</div>
-<div class="wc-ctrl-body">Collapse or expand individual widgets. Grayed-out = required columns not in this report (processor wasn't run).</div>
+<div class="wc-ctrl-body">Collapse or expand individual widgets. Grayed-out = required columns not in this table (processor wasn't run).</div>
 </div>
 
 <div class="wc-ctrl">
@@ -626,7 +626,7 @@ NaN pixels are excluded from all calculations.
 | Find saturated images | `max_intensity` | `ge` | `254` |
 | Exclude a format | `file_extension` | `not_contains` | `.tif` |
 
-**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new fully-interactive report with only the images that passed your filters - the standard way to share a curated, clean version of your dataset report.
+**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new parquet file (Pixel Patrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset.
 
 ---
 

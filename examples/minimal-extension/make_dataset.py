@@ -31,7 +31,7 @@ SEED = 42
 
 # A short, charming blurb - passed as `process_files(..., description=...)`
 # in create_and_show_report.py, where the viewer displays it below the
-# project title (and stores it in the report's own metadata).
+# project title (and stores it in the parquet metadata).
 DESCRIPTION = (
     "Some deep-sea sharks make their own light: in 2021 researchers confirmed "
     "the kitefin shark as the largest known glowing vertebrate, producing a "

@@ -19,16 +19,16 @@ Answer a few questions about your setup and we'll build the exact commands for y
   <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Build your <code>pixel-patrol process</code> command for your dataset and environment.</div>
 </a>
 
-<a href="report/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
+<a href="interactive_report/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
   <div style="font-size:1.4rem;margin-bottom:.5rem">🔍</div>
-  <div style="font-weight:600;margin-bottom:.3rem">Exploring the Report</div>
+  <div style="font-weight:600;margin-bottom:.3rem">Exploring the Interactive Report</div>
   <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">Walk through every widget, learn what each metric means, and know what to look for.</div>
 </a>
 
 <a href="sharing/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
   <div style="font-size:1.4rem;margin-bottom:.5rem">📤</div>
-  <div style="font-weight:600;margin-bottom:.3rem">Sharing a Report</div>
-  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">All the ways to share a report: drag-and-drop, self-contained HTML, static hosting, and more.</div>
+  <div style="font-weight:600;margin-bottom:.3rem">Sharing a Table</div>
+  <div style="font-size:.85rem;color:var(--md-default-fg-color--light);line-height:1.5">All the ways to share a table: drag-and-drop, self-contained HTML, static hosting, and more.</div>
 </a>
 
 <a href="extension/" style="display:block;padding:1.2rem 1.4rem;border:1.5px solid var(--md-default-fg-color--lightest);border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s">
