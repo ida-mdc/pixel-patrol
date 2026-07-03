@@ -54,6 +54,23 @@ def test_discover_metadata_and_channel(tmp_path):
     assert meta["imported_path"] == str(manifest)
 
 
+def test_combine_channels_yields_one_multifile_image_per_row(tmp_path):
+    from pixel_patrol_base.core.contracts import MultiFileImage
+    manifest = _write_manifest(tmp_path)   # 2 rows x URL_OrigDNA + URL_OrigMito
+    records = list(ManifestSource(combine_channels=True, fetch_sizes=False)
+                   .discover([str(manifest)], accepted_extensions="all"))
+
+    assert len(records) == 2   # one image per row, not per column
+    image, meta = records[0]
+    assert isinstance(image, MultiFileImage)
+    assert image.paths == ("s3://bucket/p/r01c01-ch1.tiff", "s3://bucket/p/r01c01-ch2.tiff")
+    assert image.axis == "C"
+    assert image.names == ("OrigDNA", "OrigMito")
+    assert meta["n_channels"] == 2
+    assert meta["Metadata_Well"] == "A01"
+    assert "channel" not in meta   # channels are the C dimension now
+
+
 def test_discover_filters_by_extension(tmp_path):
     df = pl.DataFrame({
         "URL_A": ["s3://b/x.tiff"],

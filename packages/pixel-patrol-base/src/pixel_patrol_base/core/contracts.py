@@ -38,6 +38,21 @@ class FileInfo:
     n_images:  int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …)
 
 
+@dataclass(frozen=True)
+class MultiFileImage:
+    """One logical image whose planes live in separate files.
+
+    A source yields this in place of a single path when several files should be
+    loaded and stacked into one image - e.g. one file per channel (Cell Painting),
+    Z-slice, or timepoint. A multi-file-aware loader loads each member, squeezes it
+    to its spatial plane, stacks them along `axis`, and labels them with `names`
+    (e.g. channel names). The pipeline treats it as an opaque task input.
+    """
+    paths: Tuple[str, ...]        # member files, in stack order
+    axis:  str = "C"              # new dimension to stack along (C / Z / T / …)
+    names: Tuple[str, ...] = ()   # optional per-member labels (e.g. channel names)
+
+
 class PixelPatrolLoader(Protocol):
     NAME: str
     SUPPORTED_EXTENSIONS: Set[str]

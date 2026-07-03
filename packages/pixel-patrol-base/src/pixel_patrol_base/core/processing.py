@@ -55,7 +55,7 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
-from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolSource
+from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, MultiFileImage, PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolSource
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.uri import is_remote_uri
 from pixel_patrol_base.core.record import Record, record_from
@@ -111,15 +111,23 @@ _WORKER_THREAD_ENV = {
 
 class _IndexedPath(NamedTuple):
     file_index: int
-    file_path: str
+    file_path: Any   # str path or MultiFileImage (one image from several files)
 
 
-def _loader_path(file_path: str) -> Union[str, Path]:
+def _stored_path(file_path):
+    """The task-stored form of a discovered path: MultiFileImage is kept as-is,
+    everything else is stringified (its report metadata comes from file_meta)."""
+    return file_path if isinstance(file_path, MultiFileImage) else str(file_path)
+
+
+def _loader_path(file_path):
     """Reconstruct a discovered path for handing to the loader.
 
-    Remote URIs are kept as strings - Path() would collapse "s3://b/k" to
-    "s3:/b/k". Local paths become Path objects so loaders keep the usual API.
+    MultiFileImage is passed through untouched; remote URIs stay strings (Path()
+    would collapse "s3://b/k" to "s3:/b/k"); local paths become Path objects.
     """
+    if isinstance(file_path, MultiFileImage):
+        return file_path
     return file_path if is_remote_uri(file_path) else Path(file_path)
 
 
@@ -369,7 +377,7 @@ def _plan_tasks(
         if io_bound or small_file:
             file_index = len(files_meta)
             files_meta.append(file_meta)
-            batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
+            batch_files.append(_IndexedPath(file_index=file_index, file_path=_stored_path(file_path)))
             batch_bytes += size_bytes
             if _should_flush():
                 if pending := _flush_batch():
@@ -416,7 +424,7 @@ def _plan_tasks(
                     yield MemoryChunkTask(file_index=file_index, file_path=str(file_path), spec=spec, n_memory_chunks=n)
                 continue
 
-        batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
+        batch_files.append(_IndexedPath(file_index=file_index, file_path=_stored_path(file_path)))
         batch_bytes += file_meta.get("size_bytes", 0)
         if _should_flush():
             if pending := _flush_batch():

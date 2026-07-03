@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Un
 import fsspec
 import polars as pl
 
+from pixel_patrol_base.core.contracts import MultiFileImage
 from pixel_patrol_base.core.uri import is_remote_uri
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ class ManifestSource:
 
     def __init__(self, url_column_prefix: str = _URL_COLUMN_PREFIX, max_rows: Optional[int] = None,
                  fetch_sizes: bool = True, size_workers: int = 64,
-                 path_metadata: Optional[Callable[[str], Dict[str, Any]]] = None):
+                 path_metadata: Optional[Callable[[str], Dict[str, Any]]] = None,
+                 combine_channels: bool = False):
         self._url_prefix = url_column_prefix
         self._max_rows = max_rows          # process only the first N manifest rows (None = all)
         self._fetch_sizes = fetch_sizes      # stat each image URL for its byte size (one HEAD per image)
@@ -49,6 +51,9 @@ class ManifestSource:
         # each) does not serialize the whole run on the client thread.
         self._size_workers = max(1, size_workers)
         self._path_metadata = path_metadata  # manifest_path -> extra metadata columns (e.g. site from path)
+        # combine_channels: yield one multi-channel image per row (all URL_* columns
+        # stacked on C) instead of one separate image per column.
+        self._combine_channels = combine_channels
         self._fs_cache: Dict[str, Any] = {}
 
     def can_handle(self, base: str) -> bool:
@@ -96,6 +101,10 @@ class ManifestSource:
         metadata_columns = [c for c in df.columns if c.startswith(_METADATA_COLUMN_PREFIX)]
         path_meta = self._path_metadata(manifest_path) if self._path_metadata else {}
 
+        if self._combine_channels:
+            yield from self._combined_images(df, url_columns, metadata_columns, path_meta, manifest_path, extensions)
+            return
+
         # Flatten the manifest into (url, channel, row_metadata) images.
         images: List[Tuple[str, str, Dict[str, Any]]] = []
         for row in df.iter_rows(named=True):
@@ -117,6 +126,39 @@ class ManifestSource:
             stats = pool.map(self._stat, (url for url, _, _ in images))
             for (url, channel, row_metadata), (size, mtime) in zip(images, stats):
                 yield url, _image_meta(url, channel, manifest_path, row_metadata, size, mtime)
+
+    def _combined_images(self, df, url_columns, metadata_columns, path_meta, manifest_path, extensions):
+        """Yield one multi-channel MultiFileImage per row (URL_* columns stacked on C)."""
+        fields: List[Tuple[MultiFileImage, Dict[str, Any]]] = []
+        for row in df.iter_rows(named=True):
+            row_metadata = {**path_meta, **{c: row[c] for c in metadata_columns}}
+            members = [
+                (column[len(self._url_prefix):], row[column])
+                for column in url_columns
+                if row[column] and (extensions is None or _suffix(row[column]) in extensions)
+            ]
+            if not members:
+                continue
+            image = MultiFileImage(
+                paths=tuple(url for _, url in members),
+                axis="C",
+                names=tuple(name for name, _ in members),
+            )
+            fields.append((image, row_metadata))
+
+        if not self._fetch_sizes:
+            for image, row_metadata in fields:
+                yield image, _field_meta(image, manifest_path, row_metadata)
+            return
+
+        # One field's size is the sum of its members; fetch all members concurrently.
+        all_urls = [p for image, _ in fields for p in image.paths]
+        with ThreadPoolExecutor(max_workers=self._size_workers) as pool:
+            stat_by_url = dict(zip(all_urls, pool.map(self._stat, all_urls)))
+        for image, row_metadata in fields:
+            size = sum(stat_by_url[p][0] for p in image.paths)
+            mtime = next((stat_by_url[p][1] for p in image.paths if stat_by_url[p][1]), None)
+            yield image, _field_meta(image, manifest_path, row_metadata, size, mtime)
 
     def _stat(self, url: str) -> Tuple[int, Optional[datetime]]:
         """Return (size_bytes, modification_date) for a URL via fsspec, or (0, None)."""
@@ -192,6 +234,34 @@ def _image_meta(url: str, channel: str, manifest_path: str, row_metadata: Dict[s
         "imported_path":     manifest_path,
         "common_base":       manifest_path,
         "channel":           channel,
+    }
+    meta.update(row_metadata)
+    return meta
+
+
+def _field_meta(image: MultiFileImage, manifest_path: str, row_metadata: Dict[str, Any],
+                size_bytes: int = 0, modification_date: Optional[datetime] = None) -> Dict[str, Any]:
+    """File-metadata record for a combined multi-channel field image.
+
+    The field is represented by its first member's path; channels become the C
+    dimension (channel_names come from the loaded record), so there is no per-row
+    'channel'. size_bytes is the sum over member files.
+    """
+    ref = image.paths[0]
+    name = ref.rsplit("/", 1)[-1]
+    parent = ref.rsplit("/", 1)[0] if "/" in ref else ""
+    meta: Dict[str, Any] = {
+        "path":              ref,
+        "name":              name,
+        "type":              "file",
+        "parent":            parent,
+        "depth":             0,
+        "size_bytes":        size_bytes,
+        "file_extension":    name.rsplit(".", 1)[-1].lower() if "." in name else "",
+        "modification_date": modification_date,
+        "imported_path":     manifest_path,
+        "common_base":       manifest_path,
+        "n_channels":        len(image.paths),
     }
     meta.update(row_metadata)
     return meta

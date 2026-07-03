@@ -37,6 +37,10 @@ DATASET_ROOT = "cellpainting-gallery/cpg0036-EU-OS-bioactives"   # S3 key (no sc
 SITES = ["FMP", "IMTM", "MEDINA", "USC"]
 MAX_MANIFESTS = None          # cap number of manifests (plates); None = every plate
 SAMPLE_ROWS_PER_MANIFEST = 2  # rows (fields) per manifest; None = all rows
+# Combine the per-channel files of each field into one multi-channel (C,Y,X) image
+# so the report has one row per field with per-channel breakdown, instead of a
+# separate image per channel. False = one image per channel file.
+COMBINE_CHANNELS = True
 # fetch_sizes adds file size_bytes to the report via one S3 HEAD per image.
 # ManifestSource fetches them concurrently (see SIZE_WORKERS), so it is no longer a
 # throughput bottleneck; set False only if you want to skip the HEADs entirely.
@@ -140,6 +144,7 @@ def main():
         path_metadata=site_from_path,   # site/batch from the S3 path -> Metadata_*
         fetch_sizes=FETCH_SIZES,
         size_workers=SIZE_WORKERS,      # concurrent HEADs so fetch_sizes is not a bottleneck
+        combine_channels=COMBINE_CHANNELS,  # one multi-channel image per field
     )
 
     # Creating a Client makes Pixel Patrol reuse this cluster (SLURM or local)

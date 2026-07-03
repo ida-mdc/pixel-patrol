@@ -14,7 +14,7 @@ import tifffile
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
 
-from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.contracts import FileInfo, MultiFileImage
 from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA,
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
@@ -157,8 +157,10 @@ class BioIoLoader:
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
 
-    def read_header(self, file_path: Path) -> FileInfo:
+    def read_header(self, file_path) -> FileInfo:
         """Read file header; return shape/dtype/dim_order of the first scene plus total scene count."""
+        if isinstance(file_path, MultiFileImage):
+            return self._read_multifile_header(file_path)
         img = _load_bioio_image(file_path)
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
@@ -170,12 +172,41 @@ class BioIoLoader:
         dtype = np.dtype(meta.get("dtype", "float32"))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
 
-    def load(self, file_path: Path) -> Record:
+    def load(self, file_path) -> Record:
         """Load a single-image (or first-scene) file; return a Record."""
+        if isinstance(file_path, MultiFileImage):
+            return self._load_multifile(file_path)
         img = _load_bioio_image(file_path)
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
         return self._build_record(img)
+
+    def _load_multifile(self, spec: MultiFileImage) -> Record:
+        """Load each member file, squeeze it to its plane, and stack along spec.axis."""
+        planes = []
+        for p in spec.paths:
+            img = _load_bioio_image(p)
+            if img is None:
+                raise UnsupportedFileFormatError(self.NAME, path=str(p))
+            planes.append(self._build_record(img))
+        plane = planes[0]
+        data = da.stack([r.data for r in planes], axis=0)   # new leading axis
+        meta: Dict[str, Any] = {"dim_order": spec.axis + plane.dim_order}
+        if spec.names:
+            meta["channel_names"] = list(spec.names)
+        return record_from(data, meta, kind="intensity")
+
+    def _read_multifile_header(self, spec: MultiFileImage) -> FileInfo:
+        img = _load_bioio_image(spec.paths[0])
+        if img is None:
+            raise UnsupportedFileFormatError(self.NAME, path=str(spec.paths[0]))
+        meta = normalize_metadata(_extract_metadata(img))
+        plane_shape = tuple(int(x) for x in meta["shape"])
+        dtype = np.dtype(meta.get("dtype", "float32"))
+        return FileInfo(shape=(len(spec.paths),) + plane_shape,
+                        dtype=dtype,
+                        dim_order=(spec.axis,) + tuple(meta["dim_order"]),
+                        n_images=1)
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         """Yield (scene_name, Record) for scenes [start, stop) in a multi-scene file."""
