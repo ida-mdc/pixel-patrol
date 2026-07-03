@@ -27,6 +27,26 @@ from pixel_patrol_base.plugins.processors.raster_processor import (
 )
 
 
+def _illumination_cv(arr: np.ndarray, grid: int = 8) -> np.ndarray:
+    """Illumination non-uniformity over the last two (spatial) axes.
+
+    Reduce the plane to a coarse grid x grid of block-mean intensities and return
+    their coefficient of variation (std/mean): a low-frequency vignetting/gradient
+    cue that ignores fine texture. 0 = uniform; higher = stronger falloff. One
+    value per leading (non-spatial) dim.
+    """
+    a = arr.astype(np.float64, copy=False)
+    h, w = a.shape[-2], a.shape[-1]
+    bh, bw = h // grid, w // grid
+    if bh < 1 or bw < 1:
+        return np.full(a.shape[:-2], np.nan)
+    a = a[..., :bh * grid, :bw * grid]
+    a = a.reshape(*a.shape[:-2], grid, bh, grid, bw).mean(axis=(-3, -1))   # (..., grid, grid)
+    m = a.mean(axis=(-2, -1))
+    s = a.std(axis=(-2, -1))
+    return np.where(m != 0, s / m, np.nan)
+
+
 def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
     """NumPy backend: compute one image metric on an (..., H, W) array.
 
@@ -42,6 +62,7 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
             case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
             case "texture_heterogeneity": return float(np.nanmean(texture_heterogeneity(arr, _XY_AXES, ctx.cache)))
             case "laplacian_variance": return float(np.nanmean(laplacian_variance(arr)))
+            case "illumination_cv":    return float(np.nanmean(_illumination_cv(arr)))
             case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
             case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
             case _:                    return None
@@ -93,6 +114,8 @@ class QualityMetricsProcessor(RasterImageProcessor):
                          description="Local texture heterogeneity of the image."),
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Variance of the Laplacian; a focus/sharpness measure (higher = sharper)."),
+        RasterMetricSpec(name="illumination_cv", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Illumination non-uniformity: coefficient of variation of a coarse grid of block-mean intensities (0 = uniform; higher = vignetting/gradient)."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
