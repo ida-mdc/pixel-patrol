@@ -52,6 +52,9 @@ pixel-patrol = "pixel_patrol_base.cli:cli"
 [project.entry-points."pixel_patrol.processor_plugins"]
 pixel_patrol_base_processing_builtins = "pixel_patrol_base.plugin_registry:register_processor_plugins"
 
+[project.entry-points."pixel_patrol.source_plugins"]
+pixel_patrol_base_source_builtins = "pixel_patrol_base.plugin_registry:register_source_plugins"
+
 [project.entry-points."pixel_patrol.viewer_extensions"]
 pixel_patrol_base_viewer = "pixel_patrol_base.viewer_extensions:get_viewer_extension_dir"
 

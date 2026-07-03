@@ -76,6 +76,67 @@ class PixelPatrolLoader(Protocol):
         ...
 
 
+class PixelPatrolSource(Protocol):
+    """Discovers input files and their filesystem-level metadata.
+
+    A source owns the "where" of a run: given base locations it yields one
+    (file_path, file_metadata) tuple per matching file, which _plan_tasks then
+    turns into processing tasks. The built-in LocalFilesystemSource walks the
+    local filesystem; other sources (e.g. an S3 manifest reader) plug in via the
+    "pixel_patrol.source_plugins" entry point and yield the same tuple shape.
+
+    A source is orthogonal to the loader: the source decides where files are and
+    their filesystem metadata; the loader decides how to read their pixels.
+
+    IO_BOUND (optional, default False) signals that loading is dominated by
+    network/IO waits rather than CPU, so the pipeline should use a threaded
+    cluster instead of a process pool. Remote sources should set it True.
+    """
+    NAME: str
+    IO_BOUND: bool = False
+
+    def can_handle(self, base: str) -> bool:
+        """True if this source recognizes the base (e.g. by URI scheme).
+
+        Used to auto-route a run to the right source when none is named
+        explicitly. Sources should match narrowly so they do not shadow one
+        another (the local source claims non-URI paths; a remote source claims
+        its own scheme).
+        """
+        ...
+
+    def resolve_bases(self, new_bases: List[str], existing_bases: List[str], base_dir: Optional[Path]) -> List[Any]:
+        """Validate/normalize new input bases and merge them with the existing ones.
+
+        Called by Project.add_paths so the source - not the core - owns what makes
+        a valid input and how bases are normalized. Invalid bases are dropped
+        (with a warning). Returns the full base list to store on the project.
+
+        Each source enforces its own rules: the local source requires an existing
+        directory within base_dir and de-duplicates sub/superpaths; a manifest
+        source requires a readable .csv; etc. base_dir is the project's (local)
+        output directory, provided for sources that resolve inputs relative to it.
+        """
+        ...
+
+    def discover(
+        self,
+        bases:               List[Path],
+        accepted_extensions: Set[str] | str,
+        folder_extensions:   Optional[Set[str]] = None,
+        base_dir:            Optional[Path] = None,
+    ) -> Iterator[Tuple[Path, Dict[str, Any]]]:
+        """Yield (file_path, file_metadata) for every matching file under bases.
+
+        file_metadata must carry the standard columns the pipeline expects:
+        path, name, type, parent, depth, size_bytes, file_extension,
+        modification_date, imported_path, common_base (and imported_path_short
+        when more than one base is given). A source that cannot cheaply provide a
+        field (e.g. size_bytes for a remote object) may set it to 0.
+        """
+        ...
+
+
 class PixelPatrolProcessor(Protocol):
     NAME: str
     CHUNK_KIND: ChunkKind

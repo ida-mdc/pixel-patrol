@@ -77,10 +77,19 @@ class ProjectMetadata:
     def populate_from_project(self, project: "Project") -> "ProjectMetadata":  # type: ignore[name-defined]
         """Fill project_name, base_dir and paths from a live Project instance."""
         from pathlib import Path
+        from pixel_patrol_base.core.uri import is_remote_uri
         self.project_name = project.name
         self.base_dir = str(project.base_dir) if project.base_dir else None
-        if project.base_dir:
-            self.paths = [str(Path(p).relative_to(project.base_dir)) for p in project.paths]
-        else:
-            self.paths = [str(p) for p in project.paths]
+
+        def _stored(p) -> str:
+            # Remote URIs and paths outside base_dir are stored absolute; local
+            # paths under base_dir are stored relative to it.
+            if project.base_dir and not is_remote_uri(str(p)):
+                try:
+                    return str(Path(p).relative_to(project.base_dir))
+                except ValueError:
+                    pass
+            return str(p)
+
+        self.paths = [_stored(p) for p in project.paths]
         return self

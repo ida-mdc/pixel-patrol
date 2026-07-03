@@ -38,6 +38,7 @@ import threading
 import time
 import warnings
 from contextlib import contextmanager
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
@@ -54,9 +55,9 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
-from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.core.file_system import _discover_files
+from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolSource
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.uri import is_remote_uri
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
 
@@ -111,6 +112,15 @@ _WORKER_THREAD_ENV = {
 class _IndexedPath(NamedTuple):
     file_index: int
     file_path: str
+
+
+def _loader_path(file_path: str) -> Union[str, Path]:
+    """Reconstruct a discovered path for handing to the loader.
+
+    Remote URIs are kept as strings - Path() would collapse "s3://b/k" to
+    "s3:/b/k". Local paths become Path objects so loaders keep the usual API.
+    """
+    return file_path if is_remote_uri(file_path) else Path(file_path)
 
 
 @dataclass(frozen=True)
@@ -313,10 +323,15 @@ def _plan_tasks(
     config:      ProcessingConfig,
     loader:      Any,
     files_meta:  List[dict],
+    io_bound:    bool = False,
 ) -> Iterator[Task]:
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
 
     Routing (evaluated in order):
+      io_bound      → batch as a plain file (no read_header); the header read is a
+                      remote open, so it must happen in a worker, not serially in
+                      the planner. Container splitting is skipped (each file is
+                      loaded whole), which suits single-image remote images.
       n_images > 1  → flush pending batch; yield ContainerTasks.
       uncompressed size > budget → flush pending batch; try spatial chunking;
                                    if unsplittable, fall through to batch.
@@ -350,7 +365,8 @@ def _plan_tasks(
         size_bytes: int = file_meta.get("size_bytes", 0)
         ext: str = file_meta.get("file_extension", "")
 
-        if 0 < size_bytes < _small_file_threshold and ext not in _container_exts and ext not in _folder_exts:
+        small_file = 0 < size_bytes < _small_file_threshold and ext not in _container_exts and ext not in _folder_exts
+        if io_bound or small_file:
             file_index = len(files_meta)
             files_meta.append(file_meta)
             batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
@@ -592,7 +608,7 @@ def _execute_batch_task(
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
         _t = time.perf_counter()
-        record = loader.load(Path(idxed_path.file_path))
+        record = loader.load(_loader_path(idxed_path.file_path))
         load_s = time.perf_counter() - _t
         if record is None:
             logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
@@ -614,7 +630,7 @@ def _execute_memory_chunk_task(
 ) -> List[MemoryChunkResult]:
     """Load the sub-region defined by task.spec and process it."""
     _t = time.perf_counter()
-    record = loader.load(Path(task.file_path))
+    record = loader.load(_loader_path(task.file_path))
     load_s = time.perf_counter() - _t
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
@@ -638,7 +654,7 @@ def _execute_container_task(
     """Load and process a batch of sub-images from a container file."""
     results: List[MemoryChunkResult] = []
     start, stop = task.image_slice
-    for child_id, record in loader.load_range(Path(task.file_path), start, stop):
+    for child_id, record in loader.load_range(_loader_path(task.file_path), start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
                            child_id, task.file_path)
@@ -983,13 +999,6 @@ def _coordinate_pipeline(
     _pause_handler = _PauseCounter()
     logging.getLogger("distributed.worker.memory").addHandler(_pause_handler)
 
-    # Scatter the loader and processors to all workers once so they are not
-    # re-serialised with every task submission.  broadcast=True sends the data
-    # to every worker process upfront; Dask resolves each Future to the actual
-    # object on the worker side when the task runs.
-    # Note: client.scatter(list) scatters each element individually, so we wrap
-    # processors in a single-element list and unpack with [0] to scatter the
-    # whole list as one object.
     logger.info(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
         n_workers_live, max_pending, config.rows_per_part,
@@ -1000,9 +1009,11 @@ def _coordinate_pipeline(
             logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
                         addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
 
-    loader_ref     = client.scatter(loader,        broadcast=True)
-    processors_ref = client.scatter([processors],  broadcast=True)[0]
-
+    # Pass the loader and processors directly to each task rather than scattering
+    # them. They are small, and scattered (broadcast) data is not recomputable: on
+    # a churny cluster a dying worker can lose it and orphan every dependent task,
+    # silently skipping those images. Direct args keep each task self-contained and
+    # rerunnable, so a lost worker just reruns its tasks elsewhere.
     _executor_for: Dict[type, Any] = {
         BatchTask:       _execute_batch_task,
         MemoryChunkTask: _execute_memory_chunk_task,
@@ -1011,7 +1022,7 @@ def _coordinate_pipeline(
 
     def _submit(t: Task) -> Any:
         nonlocal n_tasks_submitted
-        f = client.submit(_executor_for[type(t)], t, loader_ref, processors_ref, config, pure=False)
+        f = client.submit(_executor_for[type(t)], t, loader, processors, config, pure=False)
         future_to_task[f] = t
         n_tasks_submitted += 1
         key = type(t).__name__
@@ -1332,60 +1343,85 @@ def save_parquet_from_parts(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @contextmanager
+def _process_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool], None, None]:
+    """config.max_workers single-thread worker processes.
+
+    Worker count is capped by available RAM. Processes (not threads) let both
+    pure-Python processing and image decode run in parallel past the GIL - which
+    is why remote (I/O-bound) sources also use processes: a threaded cluster
+    would serialize on the GIL during decode. Remote runs stay robust by planning
+    one image per task (see build_records_df), so a transient worker loss costs a
+    single retried image rather than a whole batch.
+    """
+    n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
+    worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
+    n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
+    n_workers = min(n_workers_cpu, n_workers_ram)
+    if n_workers < n_workers_cpu:
+        logger.info(
+            "n_workers capped to %d by available RAM (%.1f GB); requested %d. "
+            "Reduce --mb-per-task for more workers.",
+            n_workers, psutil.virtual_memory().available / 2**30, n_workers_cpu,
+        )
+    logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
+    # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
+    # print tracebacks when the user presses Ctrl+C.  The parent restores its
+    # own handler immediately after the cluster is started.
+    # signal.signal() only works in the main thread (e.g. not from Dash callbacks).
+    _in_main = threading.current_thread() is threading.main_thread()
+    if _in_main:
+        _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    with dask.config.set({"distributed.nanny.pre-spawn-environ": _WORKER_THREAD_ENV}):
+        cluster = LocalCluster(
+            n_workers=n_workers,
+            threads_per_worker=1,
+            processes=True,
+        )
+    if _in_main:
+        signal.signal(signal.SIGINT, _old_sigint)
+    client = Client(cluster)
+    client.run(_silence_numcodecs_warning)
+    try:
+        yield client, False
+    finally:
+        client.close()
+        cluster.close()
+
+
+@contextmanager
 def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool], None, None]:
     """Yield (client, is_distributed) where is_distributed=True for pre-existing clusters.
 
     Reuses an existing client if one is connected; otherwise spins up a temporary
-    LocalCluster with config.max_workers workers and shuts it down on context exit.
+    process-based LocalCluster and shuts it down on context exit.
     """
     try:
         client = get_client()
         logger.debug("_get_or_create_client: reusing existing client %s", client.scheduler_info()["address"])
         yield client, True
+        return
     except ValueError:
-        n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
-        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
-        n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
-        n_workers = min(n_workers_cpu, n_workers_ram)
-        if n_workers < n_workers_cpu:
-            logger.info(
-                "n_workers capped to %d by available RAM (%.1f GB); requested %d. "
-                "Reduce --mb-per-task for more workers.",
-                n_workers, psutil.virtual_memory().available / 2**30, n_workers_cpu,
-            )
-        logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
-        # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
-        # print tracebacks when the user presses Ctrl+C.  The parent restores its
-        # own handler immediately after the cluster is started.
-        # signal.signal() only works in the main thread (e.g. not from Dash callbacks).
-        _in_main = threading.current_thread() is threading.main_thread()
-        if _in_main:
-            _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        with dask.config.set({"distributed.nanny.pre-spawn-environ": _WORKER_THREAD_ENV}):
-            cluster = LocalCluster(
-                n_workers=n_workers,
-                threads_per_worker=1,
-                processes=True,
-            )
-        if _in_main:
-            signal.signal(signal.SIGINT, _old_sigint)
-        client = Client(cluster)
-        client.run(_silence_numcodecs_warning)
-        try:
-            yield client, False
-        finally:
-            client.close()
-            cluster.close()
+        pass
+
+    with _process_client(config) as (client, is_distributed):
+        yield client, is_distributed
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Entry point
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _default_source() -> PixelPatrolSource:
+    """The built-in local-filesystem source, used when no source is supplied."""
+    from pixel_patrol_base.plugins.sources.local_filesystem_source import LocalFilesystemSource
+    return LocalFilesystemSource()
+
+
 def _collect_file_metadata_only(
     bases:       List[Path],
     config:      ProcessingConfig,
     on_progress: Optional[Callable[[int, int], None]],
+    source:      PixelPatrolSource,
     base_dir:    Optional[Path] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """No-loader mode: discover files and return their filesystem metadata only.
@@ -1398,7 +1434,7 @@ def _collect_file_metadata_only(
     pbar = tqdm(unit=" files", unit_scale=False, desc="Scanning",
                 disable=on_progress is not None, dynamic_ncols=True,
                 bar_format="{desc}: {n_fmt}{unit} [{elapsed}, {rate_fmt}]")
-    for _, file_meta in _discover_files(bases, config.selected_file_extensions, base_dir=base_dir):
+    for _, file_meta in source.discover(bases, config.selected_file_extensions, base_dir=base_dir):
         rows.append({"obs_level": 0, **file_meta})
         pbar.update(1)
         if on_progress:
@@ -1431,10 +1467,12 @@ def build_records_df(
     parts_dir:    Optional[Path] = None,
     on_progress:  Optional[Callable[[int, int], None]] = None,
     base_dir:     Optional[Path] = None,
+    source:       Optional[PixelPatrolSource] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Scan files, distribute processing across Dask workers, return (records_df, stats).
 
     When loader is None only filesystem metadata is collected.
+    When source is None the built-in local-filesystem source is used.
 
     _discover_files, _plan_tasks, and the submit side of _coordinate_pipeline
     run concurrently via a streaming generator pipeline - workers receive their
@@ -1457,6 +1495,7 @@ def build_records_df(
     stats_dict always contains wall_s, n_files, n_tasks, n_workers, load_cpu_s, proc_* keys.
     """
     cfg = config or ProcessingConfig()
+    source = source or _default_source()
 
     _ss = cfg.slice_size or {}
     if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 for v in _ss.values()):
@@ -1468,16 +1507,23 @@ def build_records_df(
         return None, {}
 
     if loader is None:
-        return _collect_file_metadata_only(bases, cfg, on_progress, base_dir=base_dir)
+        return _collect_file_metadata_only(bases, cfg, on_progress, source, base_dir=base_dir)
+
+    io_bound = getattr(source, "IO_BOUND", False)
+    # For I/O-bound (remote) sources, plan one image per task: it spreads the
+    # concurrent network reads across workers and keeps a transient worker loss
+    # cheap (one retried image, not a whole lost batch).
+    plan_cfg = dataclasses.replace(cfg, max_images_per_task=1) if io_bound else cfg
 
     with _get_or_create_client(cfg) as (client, is_distributed):
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
-            _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir),
-            config=cfg,
+            source.discover(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir),
+            config=plan_cfg,
             loader=loader,
             files_meta=files_meta,
+            io_bound=io_bound,
         )
         return _coordinate_pipeline(
             client=client,

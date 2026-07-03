@@ -5,10 +5,10 @@ from typing import Dict, List, Union, Iterable, Optional, Set, Callable
 import polars as pl
 
 from pixel_patrol_base.core import processing, validation
-from pixel_patrol_base.core.contracts import PixelPatrolLoader
+from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolSource
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins
-from pixel_patrol_base.utils.path_utils import process_new_paths_for_redundancy, resolve_parquet_output_path
+from pixel_patrol_base.plugin_registry import discover_loader, discover_processor_plugins, select_source
+from pixel_patrol_base.utils.path_utils import resolve_parquet_output_path
 from pixel_patrol_base.io.parquet_io import save_parquet
 
 
@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 class Project:
 
-    def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None, output_path: Optional[Union[str, Path]]=None):
+    def __init__(self, name: str, base_dir: Union[str, Path], loader: Optional[str]=None, output_path: Optional[Union[str, Path]]=None,
+                 source: Optional[PixelPatrolSource]=None):
 
         validation.validate_project_name(name)
         self.name: str = name
@@ -28,6 +29,8 @@ class Project:
         self.output_path: Path = resolve_parquet_output_path(output_path)
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
+        # Optional explicit source; when None the source is auto-selected from the paths.
+        self.source: Optional[PixelPatrolSource] = source
         self.paths: List[Path] = [self.base_dir]
         self.records_df: Optional[pl.DataFrame] = None
 
@@ -52,67 +55,23 @@ class Project:
     def add_paths(self, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> "Project":
         logger.debug(f"Project Core: Attempting to add paths to project '{self.name}'.")
 
-        paths_to_add_raw = validation.validate_paths_type(paths)
+        new_bases = [str(p) for p in validation.validate_paths_type(paths)]
+        if not new_bases:
+            return self
 
-        validated_paths_to_process = []
-        for p_input in paths_to_add_raw:
-            validated_path = validation.resolve_and_validate_project_path(p_input, self.base_dir)
-            if validated_path:
-                validated_paths_to_process.append(validated_path)
+        # Validation and normalization of inputs belong to the source, not here:
+        # drop the base_dir placeholder once explicit paths are added, pick the
+        # source that handles these bases, and let it resolve them.
+        existing = [] if self.paths == [self.base_dir] else [str(p) for p in self.paths]
+        source = self.source or select_source([*existing, *new_bases])
+        resolved = source.resolve_bases(new_bases, existing, self.base_dir)
 
-        if not validated_paths_to_process:
+        if not resolved:
             logger.info(f"Project Core: No valid or non-redundant paths provided to add to project '{self.name}'. No change.")
             return self
 
-        initial_paths_set = set(self.paths)
-        temp_final_paths_set = set(self.paths).copy()  # Start with current paths
-        if len(self.paths) == 1 and self.paths[0] == self.base_dir:
-            logger.debug(
-                "Project Core: Explicit paths being added, removing base directory from initial paths set for redundancy check.")
-            temp_final_paths_set.clear()
-
-        updated_paths_set = process_new_paths_for_redundancy(
-            validated_paths_to_process,
-            temp_final_paths_set  # Use the potentially modified set
-        )
-
-        self.paths = sorted(list(updated_paths_set))
-
-        if set(self.paths) != initial_paths_set:
-            logger.debug(f"Project Core: Paths updated for project '{self.name}'. Total paths count: {len(self.paths)}.")
-        else:
-            logger.debug(
-                f"Project Core: No change to project paths for '{self.name}'. Total paths count: {len(self.paths)}.")
-
+        self.paths = sorted(resolved, key=str)
         logger.debug(f"Project Core: Current project paths: {self.paths}")
-        return self
-
-
-    def delete_path(self, path: Union[str, Path]) -> "Project":
-        logger.debug(f"Project Core: Attempting to delete path '{path}' from project '{self.name}'.")
-
-        resolved_p_to_delete = validation.resolve_and_validate_project_path(path, self.base_dir)
-
-        if resolved_p_to_delete is None:
-            logger.error(f"Project Core: Invalid or inaccessible path '{path}' provided for deletion. Cannot proceed.")
-            raise ValueError(f"Cannot delete path: '{path}' is invalid, inaccessible, or outside the project base.")
-
-        if len(self.paths) == 1 and self.paths[0] == resolved_p_to_delete:
-            self.paths = [self.base_dir]
-            logger.info(
-                f"Project Core: Last specific path '{resolved_p_to_delete}' deleted; re-added base directory '{self.base_dir}'.")
-            return self
-
-        initial_len = len(self.paths)
-        self.paths = [p for p in self.paths if p != resolved_p_to_delete]
-
-        if len(self.paths) < initial_len:
-            logger.debug(f"Project Core: Successfully deleted path '{resolved_p_to_delete}' from project '{self.name}'.")
-
-        else:
-            logger.warning(
-                f"Project Core: Path '{resolved_p_to_delete}' was not found in project '{self.name}' paths. No change.")
-
         return self
 
 
@@ -169,6 +128,7 @@ class Project:
             config=config,
             parts_dir=parts_dir,
             on_progress=progress_callback,
+            source=self.source or select_source(self.paths),
         )
 
         self._save_result(stats, parts_dir, config)

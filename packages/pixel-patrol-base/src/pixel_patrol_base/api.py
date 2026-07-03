@@ -5,6 +5,7 @@ from typing import Union, Iterable, List, Optional, Callable, Set, Dict
 import polars as pl
 
 from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.contracts import PixelPatrolSource
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.io.parquet_io import load_parquet
@@ -17,19 +18,15 @@ logger = logging.getLogger(__name__)
 def create_project(name: str,
                    base_dir: Union[str, Path],
                    loader: Optional[str] = None,
-                   output_path: Optional[Union[str, Path]] = None
+                   output_path: Optional[Union[str, Path]] = None,
+                   source: Optional["PixelPatrolSource"] = None,
                    ) -> Project:
     logger.debug(f"API Call: Creating new project '{name}' with base directory '{base_dir}'.")
-    return Project(name, base_dir, loader, output_path)
+    return Project(name, base_dir, loader, output_path, source=source)
 
 def add_paths(project: Project, paths: Union[str, Path, Iterable[Union[str, Path]]]) -> Project:
     logger.debug(f"API Call: Adding paths to project '{project.name}'.")
     return project.add_paths(paths)
-
-def delete_path(project: Project, path: str) -> Project:
-    logger.debug(f"API Call: deleting paths from project '{project.name}'.")
-    return project.delete_path(path)
-
 
 def process_files(
         project: Project,
