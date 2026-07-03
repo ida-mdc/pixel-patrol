@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 import bioio_imageio
 import bioio_ome_tiff
 import bioio_tifffile
+import fsspec
 import numpy as np
 import dask.array as da
 import polars as pl
@@ -19,6 +20,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import record_from, Record
+from pixel_patrol_base.core.uri import is_remote_uri
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -81,34 +83,58 @@ def normalize_metadata(metadata):
 
 
 _TIFF_EXTENSIONS = {".tif", ".tiff"}
+# Cloud object stores are read anonymously (public buckets); http(s) take no anon flag.
+_ANON_SCHEMES = ("s3://", "gs://", "gcs://", "az://", "abfs://")
 
 
-def _is_ome_tiff(file_path: Path) -> bool:
+def _is_ome_tiff(file_path) -> bool:
+    """Whether a TIFF is an OME-TIFF. Reads the header over fsspec for remote URIs
+    so remote OME-TIFFs are detected (and routed to the OME reader) too."""
     try:
+        if is_remote_uri(str(file_path)):
+            src = str(file_path)
+            fs_kwargs = {"anon": True} if src.startswith(_ANON_SCHEMES) else {}
+            with fsspec.open(src, **fs_kwargs) as handle, tifffile.TiffFile(handle) as tif:
+                return tif.is_ome
         with tifffile.TiffFile(file_path) as tif:
             return tif.is_ome
     except Exception:
         return False
 
 
-def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
+def _open_target(file_path) -> Tuple[Any, Dict[str, Any]]:
+    """Return (source, extra BioImage kwargs) for a local or remote path.
+
+    Remote URIs are passed to bioio as strings with fsspec kwargs (anonymous for
+    public cloud buckets), so the file is streamed via fsspec. Local paths become
+    Path objects with no extra kwargs - exactly as before.
+    """
+    if is_remote_uri(str(file_path)):
+        source = str(file_path)
+        fs_kwargs = {"anon": True} if source.startswith(_ANON_SCHEMES) else {}
+        return source, {"fs_kwargs": fs_kwargs}
+    return Path(file_path), {}
+
+
+def _load_bioio_image(file_path) -> Optional[BioImage]:
     """
     Try BioImage, then fall back to imageio reader; return None if both fail.
+    Handles local paths and remote object-store URIs (s3://, gs://, https://, ...).
     """
+    source, open_kwargs = _open_target(file_path)
     try:
-        file_path = Path(file_path)
-        if file_path.suffix.lower() in _TIFF_EXTENSIONS:
-            reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
-            return BioImage(file_path, reader=reader)
-        return BioImage(file_path)
+        if str(source).lower().endswith(tuple(_TIFF_EXTENSIONS)):
+            reader = bioio_ome_tiff.Reader if _is_ome_tiff(source) else bioio_tifffile.Reader
+            return BioImage(source, reader=reader, **open_kwargs)
+        return BioImage(source, **open_kwargs)
     except UnsupportedFileFormatError:
         try:
-            return BioImage(file_path, reader=bioio_imageio.Reader)
+            return BioImage(source, reader=bioio_imageio.Reader, **open_kwargs)
         except Exception as e:
-            logger.warning(f"Could not load '{file_path}' with BioImage (imageio fallback): {e}")
+            logger.warning(f"Could not load '{source}' with BioImage (imageio fallback): {e}")
             return None
     except Exception as e:
-        logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
+        logger.warning(f"Could not load '{source}' with BioImage: {e}")
         return None
 
 class BioIoLoader:
