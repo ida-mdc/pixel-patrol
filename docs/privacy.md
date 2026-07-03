@@ -10,7 +10,7 @@ PixelPatrol is developed by Helmholtz Imaging at the Max-Delbrueck-Centrum fuer 
 
 PixelPatrol processes your data files entirely in your browser. Nothing you load into the viewer is uploaded to any server - your files never leave your device.
 
-## Sharing table files
+## Sharing PixelPatrol results
 
 A PixelPatrol table is a parquet file that contains metadata extracted from your images - including all fields your processing pipeline recorded. Anyone you share the table file with will have access to all of that information.
 
