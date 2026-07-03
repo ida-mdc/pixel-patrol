@@ -98,7 +98,7 @@ api.view(project)
 
 ---
 
-## Sharing a table
+## Sharing PixelPatrol results
 
 Send the `.parquet` file and open it in the [hosted viewer](https://pixelpatrol.app/viewer/) - no installation needed. Or build a self-contained static viewer:
 

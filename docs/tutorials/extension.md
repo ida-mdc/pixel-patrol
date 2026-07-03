@@ -414,7 +414,7 @@ uv run python create_and_show_report.py
 <div class="wc-shots two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">📦 Pip package</div>
-    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any table opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
+    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any interactive report opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
   </div>
   <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
     <div style="font-weight:700;margin-bottom:0.35rem">🌐 GitHub Pages</div>

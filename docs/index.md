@@ -65,9 +65,9 @@ pixel-patrol view results.parquet
 
 This starts a local server and opens the viewer in your browser. The viewer shows you plots for exploring your data and lets you filter, group, and compare conditions interactively.
 
-### Sharing a table
+### Sharing PixelPatrol results
 
-The easiest way to share a table is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
+The easiest way to share PixelPatrol results is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side.
 
 !!! warning
     The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
