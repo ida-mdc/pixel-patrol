@@ -137,6 +137,23 @@ def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
     return urls
 
 
+def _resolve_manifest_plugins(ext_dir: Path) -> None:
+    """Bake an explicit ``plugins`` list into a copied extension's manifest.
+
+    The client reads ``manifest.plugins`` directly and cannot resolve
+    ``auto_detect`` over static HTTP (no directory listing). The dev server and
+    single-file build resolve it server-side; for the site folder we resolve it
+    here so the widgets are actually discovered.
+    """
+    manifest_path = ext_dir / "extension.json"
+    if not manifest_path.is_file():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["plugins"] = resolve_extension_plugins(ext_dir, manifest)
+    manifest.pop("auto_detect", None)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
 def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     out_dir = Path(out_dir).resolve()
     dist_dir = find_viewer_dist()
@@ -180,6 +197,7 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
         dst_name = f"{idx:02d}-{_safe_name(ext_dir.name)}"
         dst_dir = ext_root / dst_name
         shutil.copytree(ext_dir, dst_dir)
+        _resolve_manifest_plugins(dst_dir)
         urls.append(f"./extensions/{dst_name}/extension.json")
 
     (viewer_dir / "pp_extension_urls.json").write_text(
