@@ -6,11 +6,11 @@ Builds the schema + plugin catalog (see
 things into ``docs/``:
 
   * ``assets/schema.json`` - the full catalog, a linkable machine-readable asset.
-  * ``assets/schema.html`` - a standalone interactive report map: producers (base
+  * ``assets/schema.html`` - a standalone interactive table map: producers (base
     processing, loaders, processors) -> columns -> widgets. Linked from the docs,
     not embedded.
   * the generated columns table inside ``schema.md`` (between marker comments),
-    listing every report column and where it comes from.
+    listing every table column and where it comes from.
 
 Run from the repo root (or anywhere - paths are resolved relative to this file)::
 
@@ -43,7 +43,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pixel Patrol - Report Map</title>
+<title>PixelPatrol - Report Map</title>
 <style>
   :root { --bg:#fff; --fg:#1b1b1f; --muted:#6a6a73; --line:#e3e3e8; --chip:#eef1f6;
           --accent:#4051b5; --panel:#f7f8fb; --edge:#c8c8c8;
@@ -143,7 +143,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <header>
     <button class="reset" id="reset">Clear selection</button>
     <h1>Report Map</h1>
-    <p>Pixel Patrol creates a report - a <code>.parquet</code> file (a table). <b>File data</b> columns are always created. Pixel Patrol plugins: <b>Loaders</b> create columns with image metadata and feed the image data to the <b>Processors</b>, which compute metrics and add metric columns to the table. <b>Widgets</b> offer different visualizations of the table and its columns. Click a node for details; hover to trace its links.</p>
+    <p>PixelPatrol creates a <code>.parquet</code> table. <b>File data</b> columns are always created. PixelPatrol plugins: <b>Loaders</b> create columns with image metadata and feed the image data to the <b>Processors</b>, which compute metrics and add metric columns to the table. <b>Widgets</b> offer different visualizations of the table and its columns. Click a node for details; hover to trace its links.</p>
     <div class="legend">
       <span><i class="dot" style="background:var(--c-image)"></i> Loader columns</span>
       <span><i class="dot" style="background:var(--c-metric)"></i> Processor metrics</span>
@@ -159,7 +159,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
       <div id="graph">
         <div class="col" id="col-loaders"><div class="colhead">Loaders<small>read images &amp; extract image metadata</small></div></div>
         <div class="col" id="col-mid"><div class="colhead">Processors<small>compute metrics</small></div></div>
-        <div class="col" id="col-right"><div class="colhead">Widgets<small>shown in the report</small></div></div>
+        <div class="col" id="col-right"><div class="colhead">Widgets<small>shown in the interactive report</small></div></div>
       </div>
     </div>
     <aside id="details">
@@ -226,7 +226,7 @@ byNode['file'] = {kind:'producer', label:'File data', sub:'file-system scan',
 byNode['derived'] = {kind:'producer', label:'Derived metadata', sub:'computed from image data',
   desc:'The pipeline computes these from the image data: ndim from dim_order, num_pixels from shape, and <axis>_size columns from the actual array shape per dimension. Loaders do not need to provide these.'};
 byNode['agg']  = {kind:'producer', label:'Aggregation', sub:'adds per-dimension rows',
-  desc:'Pixel Patrol offers per-dimension slice statistics in the report. Aggregation of those statistics creates multiple rows per image - one per dimension slice (Z, T, C, ...) - and adds obs_level and dim_* coordinate columns to identify each slice.'};
+  desc:'PixelPatrol offers per-dimension slice statistics in the table. Aggregation of those statistics creates multiple rows per image - one per dimension slice (Z, T, C, ...) - and adds obs_level and dim_* coordinate columns to identify each slice.'};
 if (rasterSchema) byNode['schema:'+rasterSchema.id] = {kind:'schema', label:rasterSchema.label, data:rasterSchema};
 for (const l of CAT.loaders) byNode['loader:'+l.name] = {kind:'loader', label:l.name, data:l};
 for (const p of CAT.processors) byNode['processor:'+p.name] = {kind:'processor', label:p.name, data:p};
@@ -487,7 +487,7 @@ def _cell(text: str) -> str:
 
 
 def render_columns_table(catalog: dict) -> str:
-    """Markdown table of every report column and where it comes from."""
+    """Markdown table of every table column and where it comes from."""
     rows = [
         "| Column | Type | Description | Source | Created by | Package |",
         "| --- | --- | --- | --- | --- | --- |",

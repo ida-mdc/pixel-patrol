@@ -15,6 +15,6 @@ Phone: +49 178 1449289
 
 ## Liability
 
-Pixel Patrol is provided free of charge. The MDC does not guarantee the accuracy of the metrics or of the graphical representation of the data processed and is not liable for any errors of the software. Use of the service and any subsequent use of the generated representations is at your own risk.
+PixelPatrol is provided free of charge. The MDC does not guarantee the accuracy of the metrics or of the graphical representation of the data processed and is not liable for any errors of the software. Use of the service and any subsequent use of the generated representations is at your own risk.
 
 By using the service, you agree to indemnify and hold the MDC harmless from and against any third-party claims that may arise as a result of your use of it.

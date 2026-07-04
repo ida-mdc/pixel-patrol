@@ -1,4 +1,4 @@
-"""Configuration for Pixel Patrol processing runs."""
+"""Configuration for PixelPatrol processing runs."""
 
 from __future__ import annotations
 

@@ -503,9 +503,10 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 }
 .ri-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 .ri-main { margin-bottom: 4px; }
-.ri-head { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.ri-head { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+@media (max-width: 600px) { .ri-head { flex: 0 0 100%; } }
 .ri-name { font-weight: 600; font-size: 13px; color: #212529; white-space: nowrap; }
-.ri-desc { color: #6c757d; }
+.ri-desc { flex: 0 0 100%; color: #6c757d; white-space: pre-line; }
 .ri-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .ri-chip {
   background: #e9ecef; color: #495057;
@@ -513,5 +514,6 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   font-size: 11px; white-space: nowrap;
 }
 .ri-sub { color: #6c757d; font-size: 11px; flex-wrap: wrap; }
+.ri-paths { flex: 0 0 100%; word-break: break-all; }
 .ri-label { color: #495057; font-weight: 500; }
 .ri-sep { color: #ced4da; }

@@ -1,9 +1,9 @@
 """
-Local HTTP server for the Pixel Patrol processing launch page.
+Local HTTP server for the PixelPatrol processing launch page.
 
 Serves a small static JS/HTML frontend (``launch_assets/``) that configures
-and monitors a Pixel Patrol processing run, then hands off to the existing
-JS report viewer (``viewer_server.serve_viewer``) once a parquet file has
+and monitors a PixelPatrol processing run, then hands off to the existing
+viewer (``viewer_server.serve_viewer``) once a parquet file has
 been produced.
 
 Mirrors the architecture of ``viewer_server.py``: a plain
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 ASSETS_DIR = (Path(__file__).parent / "launch_assets").resolve()
 
-# ~/.pixel-patrol is created by the Pixel Patrol launcher (deploy/launcher);
+# ~/.pixel-patrol is created by the PixelPatrol launcher (deploy/launcher);
 # its presence as our venv root is how we detect a launcher-managed install.
 _LAUNCHER_HOME = Path.home() / ".pixel-patrol"
 _LAUNCHER_VENV = _LAUNCHER_HOME / "venv"
@@ -245,7 +245,7 @@ def _update_pixel_patrol() -> Dict[str, Any]:
 
 
 def _list_directory(path: Path) -> Dict[str, Any]:
-    """List subdirectories and .parquet files in path, for the report file picker."""
+    """List subdirectories and .parquet files in path, for the table file picker."""
     entries = []
     for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         if child.is_dir():
@@ -523,7 +523,7 @@ class _LaunchHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/update":
             if not _is_managed_install():
                 self._send_json(
-                    {"error": "Update is only available for installations managed by the Pixel Patrol launcher."},
+                    {"error": "Update is only available for installations managed by the PixelPatrol launcher."},
                     status=400,
                 )
             else:

@@ -1,17 +1,17 @@
-# Report Schema
+# Table Schema
 
-Every Pixel Patrol report is a single `.parquet` file. Its columns are assembled
+Every PixelPatrol table is a single `.parquet` file. Its columns are assembled
 from the registered **loaders** (image metadata), **processors** (metrics), and a
 set of pipeline-generated columns; the **viewer widgets** then consume those
-columns to draw the report.
+columns to draw the interactive report.
 
-The same per-column descriptions below are embedded into each report's parquet
+The same per-column descriptions below are embedded into each table's parquet
 field metadata, so produced files are self-describing.
 
 Two companion resources are generated directly from the installed plugins, so
 they always match the build:
 
-- **[Interactive report map](assets/schema.html)** — follow any *producer → column
+- **[Interactive table map](assets/schema.html)** — follow any *producer → column
   → widget* path. Click a node for its description and connections; hover to trace
   its links.
 - **[Full catalog as JSON](assets/schema.json)** — the machine-readable schema and
@@ -23,9 +23,9 @@ they always match the build:
   pixel-patrol schema --print      # print to stdout (e.g. for piping)
   ```
 
-## All report columns
+## All table columns
 
-Every column that can appear in a report, with the source that produces it. The
+Every column that can appear in a table, with the source that produces it. The
 table is generated from the installed plugins.
 
 <!-- BEGIN GENERATED COLUMNS (docs/gen_schema_docs.py) -->

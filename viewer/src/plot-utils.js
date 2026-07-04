@@ -97,7 +97,7 @@ const CHART_CONFIG = {
 const MINI_CONFIG = {
   responsive: true,
   displayModeBar: false,
-  staticPlot: false,
+  staticPlot: true,
 };
 
 /**
@@ -168,9 +168,10 @@ export function appendMiniPlot(container, traces, layout = {}) {
     ...LAYOUT, ...MINI_LAYOUT, ...layout,
     margin: { ...MINI_LAYOUT.margin, ...layout.margin },
     xaxis:  { automargin: true, ...layout.xaxis },
-    yaxis:  { automargin: true, ...layout.yaxis },
+    yaxis:  { automargin: true, nticks: 3, ...layout.yaxis },
   };
   Plotly.newPlot(div, traces, merged, MINI_CONFIG);
+  requestAnimationFrame(() => Plotly.Plots.resize(div));
   return div;
 }
 

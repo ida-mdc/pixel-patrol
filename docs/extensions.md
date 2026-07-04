@@ -1,6 +1,6 @@
 # Extensions
 
-Pixel Patrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
+PixelPatrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
 The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - "Pixel HAI Watch", which reads `.parquet` tables as if they were tiny snapshots from a deep-sea shark camera. It implements:
 
@@ -16,7 +16,7 @@ Loader, processor, and viewer-widget contracts are defined as [`typing.Protocol`
 
 ## How extensions are discovered
 
-Pixel Patrol uses Python entry points. When your package is installed in the same environment, its loaders, processors, and viewer plugins are discovered automatically at runtime.
+PixelPatrol uses Python entry points. When your package is installed in the same environment, its loaders, processors, and viewer plugins are discovered automatically at runtime.
 
 Register them in your `pyproject.toml`:
 
@@ -53,7 +53,7 @@ def get_viewer_extension_dir():
 
 ## Loader
 
-If Pixel Patrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
+If PixelPatrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
 
 `dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` — the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
 
@@ -63,7 +63,7 @@ See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 ## Processor
 
-If you want to compute a metric on images - any images, regardless of who loaded them - write a processor extension. A processor receives loaded records and returns derived values that get merged into the report as new columns, by implementing the `PixelPatrolProcessor` protocol: `NAME`, `CHUNK_KIND`, `INPUT`, `OUTPUT`, `OUTPUT_SCHEMA`, `run_chunk`, and `get_aggregation` - every member is required.
+If you want to compute a metric on images - any images, regardless of who loaded them - write a processor extension. A processor receives loaded records and returns derived values that get merged into the table as new columns, by implementing the `PixelPatrolProcessor` protocol: `NAME`, `CHUNK_KIND`, `INPUT`, `OUTPUT`, `OUTPUT_SCHEMA`, `run_chunk`, and `get_aggregation` - every member is required.
 
 See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example, including the complete protocol table.
 
@@ -71,15 +71,25 @@ See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 ## Viewer plugin
 
-If you want to visualize report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest:
+If you want to visualize interactive report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest, and the `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing it.
+
+**Option A — explicit list** (recommended for published extensions): list every plugin file by name. Clear and predictable.
 
 ```json
 {
-  "plugins": ["my_widget.js"]
+  "name": "My Extension",
+  "plugins": ["./plugin_foo.js", "./plugin_bar.js"]
 }
 ```
 
-The `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing `extension.json`.
+**Option B — auto-detect** (convenient during development): set `"auto_detect": true` and every file matching `plugin_*.js` in the directory is loaded automatically, sorted alphabetically. No list to maintain.
+
+```json
+{
+  "name": "My Extension",
+  "auto_detect": true
+}
+```
 
 Each plugin's `render(container, ctx)` method receives a `ctx` object - the render context - which gives it everything it needs to query data and respond to the viewer's current state:
 

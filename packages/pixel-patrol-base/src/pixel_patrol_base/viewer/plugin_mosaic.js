@@ -35,7 +35,7 @@ export default {
     return schema.blobCols.includes('thumbnail') && hasMetric;
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
       const defaultSort = sortableMetrics.includes('mean_intensity') ? 'mean_intensity' : (sortableMetrics[0] ?? null);

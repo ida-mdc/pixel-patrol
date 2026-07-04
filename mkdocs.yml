@@ -1,5 +1,5 @@
 site_name: Pixel Patrol Documentation
-site_url: https://ida-mdc.github.io/pixel-patrol/docs/
+site_url: https://pixelpatrol.app/docs/
 repo_url: https://github.com/ida-mdc/pixel-patrol
 repo_name: ida-mdc/pixel-patrol
 docs_dir: docs
@@ -48,15 +48,15 @@ nav:
     - Report Viewer: viewer.md
     - CLI Reference: cli.md
     - Python API: api.md
-    - Report Schema: schema.md
+    - Table Schema: schema.md
     - Extensions: extensions.md
     - Contributing: contributing.md
   - Tutorials:
     - tutorials/index.md
     - Installation: tutorials/installation.md
     - Processing: tutorials/processing.md
-    - Exploring the Report: tutorials/report.md
-    - Sharing a Report: tutorials/sharing.md
+    - Exploring the Interactive Report: tutorials/interactive_report.md
+    - Sharing a Table: tutorials/sharing.md
     - Create an Extension: tutorials/extension.md
 
 markdown_extensions:

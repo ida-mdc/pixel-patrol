@@ -1,7 +1,7 @@
 """
 Minimal extension example.
 
-Shows how a Pixel Patrol extension adds a custom loader and processor (Python)
+Shows how a PixelPatrol extension adds a custom loader and processor (Python)
 and viewer plugins (JavaScript) to the browser-based viewer.
 
 The "Pixel HAI Watch" dataset is a handful of tiny `.parquet` tables, each
@@ -12,7 +12,7 @@ Steps
 -----
 1. Generate the tiny dataset (skipped if it already exists).
 2. Process the parquet "dive patches" with the custom loader and processor.
-   The processor adds ``glow_count`` and other columns to the report.
+   The processor adds ``glow_count`` and other columns to the table.
 3. Serve the parquet with the viewer. The server auto-discovers viewer
    extensions from installed packages (``pixel_patrol.viewer_extensions``
    entry-point group) and loads the JS plugins bundled with this package.
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     )
     project = add_paths(project, ["azores_log", "kermadec_log"])
     # `description` is shown right below the title in the viewer and stored
-    # in the report's own metadata - the natural home for a project blurb
+    # in the parquet metadata - the natural home for a project blurb
     # (as opposed to per-file metadata, which SharkCamLoader reads instead).
     project = process_files(project, description=DESCRIPTION)
 

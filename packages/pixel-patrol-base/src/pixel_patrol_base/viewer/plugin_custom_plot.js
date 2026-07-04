@@ -552,7 +552,7 @@ export default {
     return schema.isLongFormat;
   },
 
-  async condensedSummary(ctx) {
+  async condensedMessage(ctx) {
     try {
       const cols = ctx.schema.allCols ?? [];
       const has  = c => cols.includes(c);

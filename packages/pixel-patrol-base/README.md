@@ -2,7 +2,7 @@
 
 The Core Engine and Framework for the PixelPatrol Ecosystem.
 
-This package is the essential, non-optional foundation of PixelPatrol. It provides the command-line interface (CLI), the interactive report structure, and the plugin system that allows other packages (like pixel-patrol-loader-bio or pixel-patrol-image) to integrate seamlessly.
+This package is the essential, non-optional foundation of PixelPatrol. It provides the API, CLI, PixelPatrol processing, and the plugin system that allows other packages (like pixel-patrol-loader-bio or pixel-patrol-image) to integrate seamlessly.
 
 It also includes the Processing Framework: It defines the official system for reading files, processing data, and generating the final feature sets.
 It includes more universal plug-ins such as basic file-system statistics, as well as plug-ins that don't require additional library installation such as thumbnail generation and standard statistical analysis.

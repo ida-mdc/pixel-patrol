@@ -348,7 +348,7 @@ function orderActivePlugins(activePlugins) {
  * Summary widgets stay pinned on top as full-width expanded cards. Every other
  * widget becomes a square, clickable tile showing a short title, one simplified
  * "hero" plot (plugin.condensedPlot) and a one-line plain-language message
- * (plugin.condensedSummary). Clicking a tile expands it *in place*: the tile
+ * (plugin.condensedMessage). Clicking a tile expands it *in place*: the tile
  * grows into a full-width card with the widget's normal render() (all controls)
  * and a × to collapse back to the preview. Several tiles can be open at once and
  * the open set is persisted in state.openedWidgets (and the URL), so a filter
@@ -387,7 +387,7 @@ async function renderCondensedGallery(container, activePlugins, ctx, collapseAll
   }
 
   // Pre-create the cells in order so tiles keep their grouped ordering, then
-  // fill them in parallel: each tile's condensedSummary/condensedPlot queries are
+  // fill them in parallel: each tile's condensedMessage/condensedPlot queries are
   // independent, so DuckDB can pipeline them instead of running one tile at a time.
   const cells = tilePlugs.map(() => {
     const cell = document.createElement('div');
@@ -421,8 +421,8 @@ const GROUP_GLYPH = {
  */
 async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
   let summary = null;
-  if (plugin.condensedSummary) {
-    try { summary = await plugin.condensedSummary(ctx); } catch { /* best-effort */ }
+  if (plugin.condensedMessage) {
+    try { summary = await plugin.condensedMessage(ctx); } catch { /* best-effort */ }
   }
   const { text, warning } = summary ? normalizeSummary(summary) : { text: '', warning: false };
 
@@ -535,7 +535,7 @@ async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
   else await ensureHero();
 }
 
-/** Normalize a plugin's condensedSummary() return value to {text, warning}. */
+/** Normalize a plugin's condensedMessage() return value to {text, warning}. */
 function normalizeSummary(summary) {
   if (typeof summary === 'string') return { text: summary, warning: false };
   return { text: summary.text, warning: !!summary.warning };

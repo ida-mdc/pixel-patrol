@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pixel_patrol_base.viewer_extensions import get_viewer_extension_dir
-from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist
+from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist, resolve_extension_plugins
 
 
 # ---------------------------------------------------------------------------
@@ -38,19 +38,44 @@ class TestGetViewerExtensionDir:
         result = get_viewer_extension_dir()
         assert (result / "extension.json").exists()
 
-    def test_extension_json_lists_plugins(self):
+    def test_extension_json_resolves_plugins(self):
         ext_dir = get_viewer_extension_dir()
         data = json.loads((ext_dir / "extension.json").read_text())
-        assert "plugins" in data
-        assert len(data["plugins"]) > 0
+        plugins = resolve_extension_plugins(ext_dir, data)
+        assert len(plugins) > 0
 
-    def test_all_declared_plugins_exist(self):
+    def test_all_resolved_plugins_exist(self):
         ext_dir = get_viewer_extension_dir()
         data = json.loads((ext_dir / "extension.json").read_text())
-        for rel_path in data["plugins"]:
-            # Paths are relative, starting with "./"
+        for rel_path in resolve_extension_plugins(ext_dir, data):
             plugin_file = ext_dir / rel_path.lstrip("./")
-            assert plugin_file.exists(), f"Declared plugin missing: {rel_path}"
+            assert plugin_file.exists(), f"Plugin file missing: {rel_path}"
+
+
+# ---------------------------------------------------------------------------
+# resolve_extension_plugins
+# ---------------------------------------------------------------------------
+
+class TestResolveExtensionPlugins:
+    def test_explicit_list_returned_as_is(self, tmp_path):
+        manifest = {"plugins": ["./plugin_foo.js", "./plugin_bar.js"]}
+        assert resolve_extension_plugins(tmp_path, manifest) == ["./plugin_foo.js", "./plugin_bar.js"]
+
+    def test_auto_detect_finds_plugin_js_files_sorted(self, tmp_path):
+        for name in ["plugin_zzz.js", "plugin_aaa.js", "plugin_mmm.js"]:
+            (tmp_path / name).write_text("// x")
+        assert resolve_extension_plugins(tmp_path, {"auto_detect": True}) == [
+            "./plugin_aaa.js", "./plugin_mmm.js", "./plugin_zzz.js"
+        ]
+
+    def test_auto_detect_ignores_non_plugin_files(self, tmp_path):
+        (tmp_path / "plugin_ok.js").write_text("// ok")
+        (tmp_path / "helper.js").write_text("// helper")
+        (tmp_path / "extension.json").write_text("{}")
+        assert resolve_extension_plugins(tmp_path, {"auto_detect": True}) == ["./plugin_ok.js"]
+
+    def test_no_plugins_key_returns_empty_list(self, tmp_path):
+        assert resolve_extension_plugins(tmp_path, {"name": "Some Extension"}) == []
 
 
 # ---------------------------------------------------------------------------
