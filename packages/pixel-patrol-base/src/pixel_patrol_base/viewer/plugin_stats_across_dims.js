@@ -292,14 +292,14 @@ async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref)
   return false;
 }
 
-function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedSummary, metricPref = [], shortLabel, inputMetrics) {
+function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedMessage, metricPref = [], shortLabel, inputMetrics) {
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
       return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
     },
-    ...(condensedSummary ? { condensedSummary } : {}),
+    ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {
       return acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref);
     },

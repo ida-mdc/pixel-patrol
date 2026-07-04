@@ -3,7 +3,7 @@
 !!! tip "Used the launcher instead?"
     Double-click it, a browser tab opens, and you can set up your project and start processing from there - no terminal needed. The rest of this page is for the CLI workflow.
 
-`pixel-patrol process` is the first step in the Pixel Patrol workflow. It scans your images and produces a `.parquet` report file containing everything Pixel Patrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
+`pixel-patrol process` is the first step in the PixelPatrol workflow. It scans your images and produces a `.parquet` table containing everything PixelPatrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
 
 Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just *what* to run, but *why* each flag is there.
 
@@ -34,7 +34,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       <button class="wiz-copy-btn" id="proc-copy-btn" onclick="procWiz.copy()">Copy</button>
     </div>
     <pre class="wiz-code-pre" id="proc-cmd">pixel-patrol process &lt;path/to/images/&gt; \
-  -o report.parquet</pre>
+  -o results.parquet</pre>
     <div class="wiz-callout wiz-hidden" id="proc-api-slurm-warning" style="margin:0 20px 16px">
       ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI launcher
       around <code>dask_jobqueue.SLURMCluster</code>. Switch to the <strong>CLI</strong> tab above for a ready-to-run
@@ -48,12 +48,12 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-q">📁 Where are your images?</div>
     <div class="wiz-step-hint">
       This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
-      Pixel Patrol will scan it recursively, so you don't need to list subdirectories separately.
+      PixelPatrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
       No images of your own yet? The repo ships a small example dataset at
       <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/datasets/WHOI_processed_color"><code>examples/datasets/WHOI_processed_color/</code></a> (40 plankton images, four tampered
       variants of the same originals, ~1.3 MB total) - point <code>BASE_DIRECTORY</code> there and
-      follow along. It's the very dataset behind the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/?data=../example.parquet" target="_blank">example report</a>
+      follow along. It's the very dataset behind the <a href="https://pixelpatrol.app/viewer/?data=../example.parquet" target="_blank">example interactive report</a>
       used in the next tutorial.
     </div>
     <input class="wiz-input" type="text" id="pwi-base_dir"
@@ -65,8 +65,8 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-loader">
     <div class="wiz-step-q">🔬 What format are your images?</div>
     <div class="wiz-step-hint">
-      Pixel Patrol uses <strong>loaders</strong> to open image files and extract their content. This sets the <code>--loader</code> flag
-      and determines what ends up in your report: without a loader you only get basic file system info (names, sizes, extensions);
+      PixelPatrol uses <strong>loaders</strong> to open image files and extract their content. This sets the <code>--loader</code> flag
+      and determines what ends up in your table: without a loader you only get basic file system info (names, sizes, extensions);
       with one you also get image dimensions, pixel type, acquisition metadata, and the pixel data needed for statistics and thumbnails.
       Choose the one that matches your file format.
     </div>
@@ -134,7 +134,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-hint">
       Use this if your images are organized into subfolders - one per condition, batch, or timepoint.
       Specifying subfolders does two things: it <strong>limits processing to only those folders</strong> (others are ignored),
-      and it sets each one as a <strong>labeled group</strong> in the report, shown in different colors for easy comparison.
+      and it sets each one as a <strong>labeled group</strong> in the interactive report, shown in different colors for easy comparison.
       This grouping is the default - you can always regroup interactively in the viewer later.
       If you skip this, all images under the base folder are processed as one group.
     </div>
@@ -167,22 +167,22 @@ Answer the questions below and we'll walk you through each decision together, bu
 
   <!-- Q4: Output path -->
   <div class="wiz-step wiz-hidden" id="pws-output">
-    <div class="wiz-step-q">💾 Where should the output report be saved?</div>
+    <div class="wiz-step-q">💾 Where should the output parquet (PixelPatrol table) be saved?</div>
     <div class="wiz-step-hint">
       A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
-      who can open it in the <a href="https://ida-mdc.github.io/pixel-patrol/viewer/" target="_blank">online viewer</a> without installing anything.
+      who can open it in the <a href="https://pixelpatrol.app/viewer/" target="_blank">online viewer</a> without installing anything.
     </div>
     <input class="wiz-input" type="text" id="pwi-output"
-           value="report.parquet"
-           oninput="procWiz.set('output', this.value || 'report.parquet')">
+           value="results.parquet"
+           oninput="procWiz.set('output', this.value || 'results.parquet')">
   </div>
 
   <!-- Q5: Project name -->
   <div class="wiz-step wiz-hidden" id="pws-name">
     <div class="wiz-step-q">🏷️ Give your project a name <span class="wiz-optional">(optional)</span></div>
     <div class="wiz-step-hint">
-      Sets <code>--name</code>. Shown in the viewer header and embedded in the report file.
+      Sets <code>--name</code>. Shown in the viewer header and embedded in the parquet metadata.
       If left empty, the name defaults to the base directory folder name.
     </div>
     <input class="wiz-input" type="text" id="pwi-name"
@@ -194,7 +194,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-description">
     <div class="wiz-step-q">📝 Add a description <span class="wiz-optional">(optional)</span></div>
     <div class="wiz-step-hint">
-      Sets <code>--description</code>. Free-form text shown below the title in the viewer and embedded in the report.
+      Sets <code>--description</code>. Free-form text shown below the title in the viewer and embedded in the parquet metadata.
       Useful for recording what the dataset is, who processed it, or any caveats.
     </div>
     <input class="wiz-input" type="text" id="pwi-description"
@@ -206,7 +206,7 @@ Answer the questions below and we'll walk you through each decision together, bu
   <div class="wiz-step wiz-hidden" id="pws-cluster">
     <div class="wiz-step-q">🖥️ Are you running on an HPC cluster?</div>
     <div class="wiz-step-hint">
-      Pixel Patrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
+      PixelPatrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
       On a local machine it auto-detects a sensible number of workers based on your CPUs and RAM - no configuration needed.
       On a cluster you can harness many more resources, which makes a real difference for large datasets
       with thousands of images or very large volumes.
@@ -304,7 +304,7 @@ Answer the questions below and we'll walk you through each decision together, bu
 
   <!-- Done message -->
   <div class="wiz-done-msg" id="proc-done">
-    <span id="proc-done-text">✓ Your command is ready above. Once it finishes, open the report with <code>pixel-patrol view report.parquet</code>.</span>
+    <span id="proc-done-text">✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.</span>
   </div>
 
   <!-- Advanced toggle -->
@@ -327,7 +327,7 @@ Answer the questions below and we'll walk you through each decision together, bu
         <span class="wiz-optional"> (optional)</span>
       </div>
       <div class="wiz-adv-field-hint">
-        Controls the per-dimension granularity of statistics in the report.
+        Controls the per-dimension granularity of statistics in the table.
         By default, non-spatial dimensions (Z, T, C, S) each step by 1 - one row of stats per slice.
         Set a higher step (e.g. <code>Z=5</code>) for coarser, smaller output, or <code>-1</code> to collapse a
         dimension entirely. Only relevant if you have multidimensional data and care about per-slice statistics.
@@ -460,7 +460,7 @@ const procWiz = {
     file_exts:           '',
     cond_choice:         null,
     conditions:          [],
-    output:              'report.parquet',
+    output:              'results.parquet',
     name:                '',
     description:         '',
     cluster:             null,
@@ -613,7 +613,7 @@ const procWiz = {
   rebuild() {
     const s = this.state;
     const base    = s.base_dir && s.base_dir.trim() ? s.base_dir.trim() : '<path/to/images/>';
-    const out     = s.output || 'report.parquet';
+    const out     = s.output || 'results.parquet';
     const isSlurm = s.cluster === 'yes' && s.slurm === 'yes';
     const hasDask = s.cluster === 'yes' && s.slurm === 'no';
 
@@ -629,7 +629,7 @@ const procWiz = {
     if (doneText) {
       doneText.innerHTML = (s.output_mode === 'api')
         ? '✓ Your script is ready above - save it (e.g. <code>run_processing.py</code>) and run it with <code>python run_processing.py</code>. It already opens the viewer at the end via <code>api.view(project)</code>.'
-        : '✓ Your command is ready above. Once it finishes, open the report with <code>pixel-patrol view report.parquet</code>.';
+        : '✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.';
     }
   },
 
@@ -791,8 +791,8 @@ document.addEventListener('DOMContentLoaded', function() {
 ---
 
 !!! tip "Next step"
-    Once processing finishes, open your report with:
+    Once processing finishes, open your interactive report with:
     ```bash
-    pixel-patrol view report.parquet
+    pixel-patrol view results.parquet
     ```
-    Or drag the `.parquet` file into the [online viewer](https://ida-mdc.github.io/pixel-patrol/viewer/) - no install needed on the recipient's side.
+    Or drag the `.parquet` file into the [online viewer](https://pixelpatrol.app/viewer/) - no install needed on the recipient's side.

@@ -1,6 +1,6 @@
 # Processing
 
-Processing is the step where Pixel Patrol scans your images and produces a `.parquet` report file. The [Quickstart](index.md) covers the basic command; this page goes deeper into project configuration, loaders, conditions, and performance tuning.
+Processing is the step where PixelPatrol scans your images and produces a `.parquet` table. The [Quickstart](index.md) covers the basic command; this page goes deeper into project configuration, loaders, conditions, and performance tuning.
 
 ---
 
@@ -12,7 +12,7 @@ A project requires a **base directory** and an **output path**. A **loader** is 
 
 The base directory is the root folder that contains your images. By default, all supported files within it - including those in subdirectories - are scanned and processed together.
 
-If you specify paths with `-p`, only those directories are processed. Paths can be anywhere within the base directory - immediate subdirectories or deeper - and each one becomes an initial grouping condition in the report. You can always regroup interactively in the viewer.
+If you specify paths with `-p`, only those directories are processed. Paths can be anywhere within the base directory - immediate subdirectories or deeper - and each one becomes an initial grouping condition in the interactive report. You can always regroup interactively in the viewer.
 
 ```
 my-dataset/
@@ -24,7 +24,7 @@ my-dataset/
 ```
 
 ```bash
-pixel-patrol process my-dataset/ -o report.parquet --loader bioio \
+pixel-patrol process my-dataset/ -o results.parquet --loader bioio \
   -p control -p treated
 ```
 
@@ -57,7 +57,7 @@ Additional loaders are available in the [GitHub repository](https://github.com/i
 By default, the loader processes all file extensions it supports. Restrict to specific types with `-e`:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --loader bioio -e tif -e nd2 -e czi
+pixel-patrol process my-data/ -o results.parquet --loader bioio -e tif -e nd2 -e czi
 ```
 
 ---
@@ -69,13 +69,13 @@ Processors compute information from the loaded image data and add one or more co
 To run only specific processors:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --processors-include raster-basic --processors-include thumbnail
+pixel-patrol process my-data/ -o results.parquet --processors-include raster-basic --processors-include thumbnail
 ```
 
 To skip specific processors:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --processors-exclude raster-quality
+pixel-patrol process my-data/ -o results.parquet --processors-exclude raster-quality
 ```
 
 !!! note
@@ -103,12 +103,12 @@ Processors fall into two categories that determine what data they receive:
 
 ### `--slice-size`
 
-Controls the per-dimension granularity of statistics in the output report. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices into one. This is independent of memory budget or file size - it affects what the report shows, not how the data is loaded.
+Controls the per-dimension granularity of statistics in the output table. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices into one. This is independent of memory budget or file size - it affects what is saved to the table, not how the data is loaded.
 
 By default X and Y are full-extent (one complete 2D plane) and all other dimensions (Z, T, C, S) step by 1. Override to produce coarser statistics:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --slice-size Z=5 --slice-size Y=512
+pixel-patrol process my-data/ -o results.parquet --slice-size Z=5 --slice-size Y=512
 ```
 
 Use `-1` to keep a dimension at full extent.
@@ -117,7 +117,7 @@ Use `-1` to keep a dimension at full extent.
 
 ## The parquet file
 
-The output `.parquet` file is the report. Its columns come from three sources: the file system (always), the loader (if specified), and each processor.
+The output `.parquet` file is the PixelPatrol table. Its columns come from three sources: the file system (always), the loader (if specified), and each processor.
 
 ### Row structure
 
@@ -165,18 +165,18 @@ Key columns that are always present:
 
 **Processor columns** are listed in the [Processors](#processors) section above.
 
-### Paths in the report
+### Paths in the table
 
-All path columns (`path`, `parent`, `imported_path`) are stored **relative to the base directory**, so the report does not contain absolute filesystem paths. A file at `/data/images/condition_a/img01.tif` processed with base directory `/data/images/` is stored as `condition_a/img01.tif`.
+All path columns (`path`, `parent`, `imported_path`) are stored **relative to the base directory**, so the table does not contain absolute filesystem paths. A file at `/data/images/condition_a/img01.tif` processed with base directory `/data/images/` is stored as `condition_a/img01.tif`.
 
 ### Project metadata
 
 Project metadata (name, description, version, processing stats, base directory, paths) is embedded in the parquet file's own metadata fields, not as data columns. It is accessible via `api.load()` and shown in the viewer footer.
 
-To omit the base directory and paths from the metadata (for example when sharing a report without revealing local filesystem paths):
+To omit the base directory from the parquet metadata (for example when sharing a table without revealing local filesystem paths):
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --omit-base-dir
+pixel-patrol process my-data/ -o results.parquet --omit-base-dir
 ```
 
 ```python
@@ -187,20 +187,20 @@ api.process_files(project, omit_base_dir=True)
 
 ## Parallelism
 
-Processing runs in parallel using Dask workers. On a local machine (laptop or workstation), Pixel Patrol auto-detects an appropriate number of worker processes based on available CPUs and RAM. On an HPC cluster you connect to an existing Dask scheduler instead and workers are whatever the cluster provides.
+Processing runs in parallel using Dask workers. On a local machine (laptop or workstation), PixelPatrol auto-detects an appropriate number of worker processes based on available CPUs and RAM. On an HPC cluster you connect to an existing Dask scheduler instead and workers are whatever the cluster provides.
 
 ```bash
 # Override the default worker count:
-pixel-patrol process my-data/ -o report.parquet --max-workers 8
+pixel-patrol process my-data/ -o results.parquet --max-workers 8
 
 # Disable parallelism (single process, useful for debugging):
-pixel-patrol process my-data/ -o report.parquet --max-workers 1
+pixel-patrol process my-data/ -o results.parquet --max-workers 1
 ```
 
 ### Connecting to an external Dask cluster
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --scheduler tcp://hostname:8786
+pixel-patrol process my-data/ -o results.parquet --scheduler tcp://hostname:8786
 ```
 
 From the Python API:
@@ -222,7 +222,7 @@ The `pixel-patrol-slurm` package provides a single command that launches a Dask 
 pixel-patrol-slurm \
   --jobs 8 --cores 4 --memory 16GB \
   --partition gpu --walltime 02:00:00 \
-  -- my-data/ -o report.parquet --loader bioio
+  -- my-data/ -o results.parquet --loader bioio
 ```
 
 Everything before `--` controls the SLURM cluster (number of jobs, cores per job, memory, partition, walltime). Everything after `--` is forwarded verbatim to `pixel-patrol process`; the `--scheduler` argument is injected automatically.
@@ -231,7 +231,7 @@ Everything before `--` controls the SLURM cluster (number of jobs, cores per job
 
 ## Task sizing
 
-Pixel Patrol groups work into Dask tasks. Three kinds of task exist, each with its own sizing logic:
+PixelPatrol groups work into Dask tasks. Three kinds of task exist, each with its own sizing logic:
 
 - **Batch tasks** - many small files are grouped into one task to reduce scheduling overhead.
 - **Memory chunk tasks** - a single large file (whose uncompressed size exceeds `mb_per_task`) is split into spatial sub-regions, each processed as a separate task. Results are assembled before writing.
@@ -249,7 +249,7 @@ The memory/work budget per task in MB (default: 512). It controls batch sizes fo
 Maximum number of files (or sub-images) per task (default: 200).
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --mb-per-task 256 --max-images-per-task 50
+pixel-patrol process my-data/ -o results.parquet --mb-per-task 256 --max-images-per-task 50
 ```
 
 
@@ -266,7 +266,7 @@ Number of rows buffered in memory before being flushed to a temporary file on di
 Controls how records are grouped in the final parquet file (default: 2048). Smaller values speed up thumbnail loading in the viewer:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --parquet-row-group-size 512
+pixel-patrol process my-data/ -o results.parquet --parquet-row-group-size 512
 ```
 
 ### `--log-file`
@@ -274,17 +274,17 @@ pixel-patrol process my-data/ -o report.parquet --parquet-row-group-size 512
 Write a debug log alongside the output parquet for troubleshooting:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet --log-file
+pixel-patrol process my-data/ -o results.parquet --log-file
 ```
 
 ---
 
-## Report metadata
+## Parquet metadata
 
 Embed project metadata into the parquet file - some fields are shown in the viewer header, all are accessible via `api.load()`:
 
 ```bash
-pixel-patrol process my-data/ -o report.parquet \
+pixel-patrol process my-data/ -o results.parquet \
   --name "Experiment 42" \
   --description "Treated vs control, 3 replicates" \
   --flavor "fluorescence"

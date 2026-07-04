@@ -54,7 +54,7 @@ def process_files(
         log_file: bool = False,
 ) -> Project:
     """
-    Process files in the project and write the .parquet report.
+    Process files in the project and write the .parquet table.
 
     Args:
         project:                    The project to process.
@@ -72,7 +72,7 @@ def process_files(
                                     and sub-image batching for container files.
         max_images_per_task:        Max files per batch task or sub-images per container task
                                     (default: 200).
-        slice_size:                 Per-dimension granularity of statistics in the output report.
+        slice_size:                 Per-dimension granularity of statistics in the output table.
                                     {"Z": 1} produces one set of statistics per Z slice;
                                     {"Z": 5} groups every 5 slices. By default X and Y are
                                     full extent and all other dims step by 1. None = default.
@@ -80,9 +80,9 @@ def process_files(
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
                                     Smaller values speed up thumbnail sampling in the viewer.
         flavor:                     Label shown next to the title in the viewer.
-        description:                Free-form description shown below the title in the viewer and embedded in the report metadata.
-        omit_base_dir:              If True, the base directory and paths are not stored in the
-                                    parquet metadata. Useful when sharing reports without revealing
+        description:                Free-form description shown below the title in the viewer and embedded in the parquet metadata.
+        omit_base_dir:              If True, the base directory is not stored in the parquet
+                                    metadata. Useful when sharing tables without revealing
                                     local filesystem paths (default: False).
         log_file:                   Write a DEBUG-level log file alongside the output parquet.
                                     INFO and WARNING still appear in the terminal as usual.
@@ -130,7 +130,7 @@ def view(
         palette: Optional[str] = None,
 ) -> None:
     """
-    Open a parquet file in the Pixel Patrol viewer backed by a local Python server.
+    Open a parquet file in the PixelPatrol viewer backed by a local Python server.
 
     Args:
         source:               A processed Project or path to a .parquet file.

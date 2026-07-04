@@ -1,6 +1,6 @@
 # Contributing
 
-Pixel Patrol is an open project and we welcome contributions of all kinds - bug reports, feature suggestions, documentation improvements, new loaders or processors, and viewer plugins. If you want to get involved, [open an issue](https://github.com/ida-mdc/pixel-patrol/issues) or reach out at [support@helmholtz-imaging.de](mailto:support@helmholtz-imaging.de).
+PixelPatrol is an open project and we welcome contributions of all kinds - bug reports, feature suggestions, documentation improvements, new loaders or processors, and viewer plugins. If you want to get involved, [open an issue](https://github.com/ida-mdc/pixel-patrol/issues) or reach out at [support@helmholtz-imaging.de](mailto:support@helmholtz-imaging.de).
 
 Fork the repository on GitHub and open a pull request with your changes.
 

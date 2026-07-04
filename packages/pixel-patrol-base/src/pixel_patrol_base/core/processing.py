@@ -1,4 +1,4 @@
-"""Pixel Patrol processing pipeline - Dask-distributed.
+"""PixelPatrol processing pipeline - Dask-distributed.
 
 Each file yields one record (one logical image → one set of obs rows).
 Container files (LMDB, multi-series OME-TIFF) yield one record per sub-image.
@@ -1462,7 +1462,7 @@ def build_records_df(
     if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 for v in _ss.values()):
         logger.error(
             "slice_size sets both X and Y to 1 with no other dim larger than 1 — "
-            "Pixel Patrol does not support slicing all dims to 1. "
+            "PixelPatrol does not support slicing all dims to 1. "
             "Please set at least one dim to a value larger than 1."
         )
         return None, {}

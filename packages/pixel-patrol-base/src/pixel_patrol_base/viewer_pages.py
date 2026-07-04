@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist
+from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist, resolve_extension_plugins
 
 
 def _safe_name(name: str) -> str:
@@ -123,7 +123,7 @@ def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
         if not manifest_path.is_file():
             continue
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        plugins = manifest.get("plugins", [])
+        plugins = resolve_extension_plugins(ext_dir, manifest)
         inline_plugins: list[str] = []
         for rel in plugins:
             plugin_path = (ext_dir / rel).resolve()

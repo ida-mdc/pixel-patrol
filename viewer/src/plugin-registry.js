@@ -18,7 +18,7 @@
  *     label:    string   - card header title
  *     requires(schema) → bool        - return false to hide when columns absent
  *     async render(container, ctx) → void  - draw into the provided DOM element
- *     async condensedSummary(ctx) → string | {text, warning} | null  - OPTIONAL.
+ *     async condensedMessage(ctx) → string | {text, warning} | null  - OPTIONAL.
  *       Only called when the user has enabled "Condensed mode" in the sidebar
  *       (ctx.state.condensedMode). Returns one short, plain-language, data-aware
  *       sentence describing what this widget found (may include <strong> for

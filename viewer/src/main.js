@@ -253,7 +253,7 @@ async function openFiles(files) {
 
 /**
  * Return a user-friendly hint when a parquet load error looks like a format
- * incompatibility (old report generated with an earlier Pixel Patrol version).
+ * incompatibility (old report generated with an earlier PixelPatrol version).
  */
 function loadErrorHint(err) {
   if (err?.isOldFormat) {
@@ -265,7 +265,7 @@ function loadErrorHint(err) {
   }
   const isFormatError = /tprotocolexception|invalid data|parquetexception|not a parquet|magic number|invalid parquet|thrift|footer|corrupt/i.test(msg);
   if (isFormatError) {
-    return 'This file may have been created with an older version of Pixel Patrol. '
+    return 'This file may have been created with an older version of PixelPatrol. '
       + 'Please re-run <code>pixel-patrol process</code> to regenerate the report.';
   }
   return null;
@@ -559,17 +559,16 @@ function populateReportFooter(meta) {
 
   if (nameHtml || descHtml || chips.length) {
     html += '<div class="ri-row ri-main">';
-    if (nameHtml || descHtml) html += `<div class="ri-head">${nameHtml}${descHtml}</div>`;
-    if (chips.length) {
-      html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
-    }
+    if (nameHtml) html += `<div class="ri-head">${nameHtml}</div>`;
+    if (chips.length) html += `<div class="ri-chips">${chips.map(c => `<span class="ri-chip">${c}</span>`).join('')}</div>`;
+    if (descHtml) html += descHtml;
     html += '</div>';
   }
 
   // ── second row: paths, workers, memory ──
   const subs = [];
   const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
-  if (nonTrivialPaths.length) subs.push(`<span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}`);
+  if (nonTrivialPaths.length) subs.push(`<span class="ri-paths"><span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
 

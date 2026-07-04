@@ -4,17 +4,17 @@
 
 ## Who we are
 
-Pixel Patrol is developed by Helmholtz Imaging at the Max-Delbrueck-Centrum fuer Molekulare Medizin in der Helmholtz-Gemeinschaft (MDC), Berlin. Contact: ella.bahry@mdc-berlin.de
+PixelPatrol is developed by Helmholtz Imaging at the Max-Delbrueck-Centrum fuer Molekulare Medizin in der Helmholtz-Gemeinschaft (MDC), Berlin. Contact: ella.bahry@mdc-berlin.de
 
 ## Your data in the viewer
 
-Pixel Patrol processes your data files entirely in your browser. Nothing you load into the viewer is uploaded to any server - your files never leave your device.
+PixelPatrol processes your data files entirely in your browser. Nothing you load into the viewer is uploaded to any server - your files never leave your device.
 
-## Sharing report files
+## Sharing PixelPatrol results
 
-A Pixel Patrol report is a parquet file that contains metadata extracted from your images - including all fields your processing pipeline recorded. Anyone you share the report file with will have access to all of that information.
+A PixelPatrol table is a parquet file that contains metadata extracted from your images - including all fields your processing pipeline recorded. Anyone you share the table file with will have access to all of that information.
 
-If your dataset contains sensitive information - such as patient data, proprietary annotations, or details that should not be made public - treat the report file with the same care as the original data. Do not share it with people who should not have access to the underlying metadata.
+If your dataset contains sensitive information - such as patient data, proprietary annotations, or details that should not be made public - treat the table file with the same care as the original data. Do not share it with people who should not have access to the underlying metadata.
 
 ## GitHub Pages
 

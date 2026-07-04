@@ -1,6 +1,6 @@
-# Pixel Patrol Viewer
+# PixelPatrol Viewer
 
-A single-page web app that visualises Pixel Patrol `.parquet` files.  
+A single-page web app that visualises PixelPatrol `.parquet` files.  
 Built with [Vite](https://vitejs.dev/), [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview), [Plotly](https://plotly.com/javascript/), and vanilla JS - no framework.
 
 ---
@@ -56,7 +56,7 @@ Starts a local HTTP server and opens the viewer. SQL runs server-side via native
 Example:
 
 ```
-https://ida-mdc.github.io/pixel-patrol/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
+https://pixelpatrol.app/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
 ```
 
 ---
