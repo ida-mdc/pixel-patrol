@@ -63,7 +63,7 @@ def test_processor_schemata():
         print("    [Error] No records processed!")
         return
 
-    assert project.records_df.height >= 1  # long-format: one global row + per-slice rows
+    assert project.records_df.height >= 1  # one global row + per-slice rows
 
     # Load from saved parquet to verify round-trip
     parquet_files = list(project.output_path.parent.glob("*.parquet"))

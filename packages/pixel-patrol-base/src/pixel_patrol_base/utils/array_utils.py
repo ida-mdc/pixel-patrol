@@ -35,7 +35,7 @@ def calculate_sliced_stats(
 ) -> List[Dict[str, Any]]:
     """
     Calculates statistics on a Dask array using an efficient `apply_gufunc` approach.
-    Returns long-format rows: each row has ``obs_level`` (0 = global, n = per-slice
+    Returns rows: each row has ``obs_level`` (0 = global, n = per-slice
     leaf) and ``dim_<letter>`` keys for fixed dimensions.
     """
 
@@ -93,7 +93,7 @@ def _format_and_aggregate_results(
     metric_names: List[str],
     agg_fns: Dict[str, Callable]
 ) -> List[Dict[str, Any]]:
-    """Build long-format rows from per-slice results and their aggregations.
+    """Build rows from per-slice results and their aggregations.
 
     Each row has ``obs_level`` (number of fixed dimensions) and ``dim_<letter>``
     keys for every fixed dimension.  obs_level=0 is the global row, obs_level equal

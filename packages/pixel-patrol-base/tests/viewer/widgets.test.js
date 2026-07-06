@@ -29,7 +29,7 @@ const pluginGroup = plugin => {
 function schema(over = {}) {
   return {
     metricCols: [], dimCols: [], groupCols: [], dimensionInfo: {},
-    allCols: [], blobCols: [], isLongFormat: false,
+    allCols: [], blobCols: [],
     ...over,
   };
 }
@@ -84,14 +84,14 @@ const ENABLING_SCHEMA = {
   'histogram':                 { blobCols: ['histogram_counts'] },
   'mosaic':                    { blobCols: ['thumbnail'], metricCols: ['mean_intensity'], allCols: ['mean_intensity'] },
   'sunburst':                  { allCols: ['path', 'size_bytes'] },
-  'image-table':               { isLongFormat: true },
-  'custom-plot':               { isLongFormat: true },
+  'image-table':               { allCols: ['size_bytes'] },
+  'custom-plot':               { allCols: ['size_bytes'] },
   'dim-size':                  { allCols: ['size_X', 'size_Y'] },
   'metadata':                  { allCols: ['dtype'] },
-  'violin-basic':              { isLongFormat: true, metricCols: ['mean_intensity'] },
-  'violin-quality':            { isLongFormat: true, metricCols: ['laplacian_variance'] },
-  'stats-across-dims-basic':   { isLongFormat: true, metricCols: ['mean_intensity'] },
-  'stats-across-dims-quality': { isLongFormat: true, metricCols: ['laplacian_variance'] },
+  'violin-basic':              { metricCols: ['mean_intensity'] },
+  'violin-quality':            { metricCols: ['laplacian_variance'] },
+  'stats-across-dims-basic':   { metricCols: ['mean_intensity'] },
+  'stats-across-dims-quality': { metricCols: ['laplacian_variance'] },
 };
 
 describe('widget requires()', () => {
@@ -117,6 +117,6 @@ describe('widget requires()', () => {
 
   it('violin-quality stays hidden when only basic metrics exist', () => {
     const quality = widgets.find(w => w.plugin.id === 'violin-quality').plugin;
-    expect(quality.requires(schema({ isLongFormat: true, metricCols: ['mean_intensity'] }))).toBe(false);
+    expect(quality.requires(schema({ metricCols: ['mean_intensity'] }))).toBe(false);
   });
 });

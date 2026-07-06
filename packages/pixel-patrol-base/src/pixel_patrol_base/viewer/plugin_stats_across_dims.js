@@ -36,10 +36,8 @@ const SPATIAL_LETTERS = new Set(['x', 'y']);
 
 async function renderAcrossDims(container, ctx, filterMetric) {
   const renderStartMs = performance.now();
-  if (!ctx.schema.isLongFormat) {
-    container.innerHTML = '<div class="no-data">This widget requires long-format data.</div>';
-    return;
-  }
+  const { q, groupCol: gcFn } = ctx.sql;
+  const { append: appendPlot, niceName, escapeHtml, LAYOUT } = ctx.plot;
 
   const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric).sort();
   const activeDims = ctx.state.dimensions ?? {};
@@ -297,7 +295,7 @@ function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedMessage, m
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
-      return !!schema.isLongFormat && schema.metricCols.some(filterMetric);
+      return schema.metricCols.some(filterMetric);
     },
     ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {

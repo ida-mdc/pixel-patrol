@@ -2,22 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { detectSchema, pickDefaultGroupCol } from '../schema.js';
 
 // Helper: build a column descriptor array from {name: type} pairs.
-// detectSchema only accepts long-format schemas, so every fixture below spells
-// out the `obs_level` column it requires (see the gate test for the wide-format
-// rejection path).
+// detectSchema requires an `obs_level` column, so every fixture below spells it
+// out (see the gate test for the rejection path).
 function cols(obj) {
   return Object.entries(obj).map(([name, type]) => ({ name, type }));
 }
 
 describe('detectSchema', () => {
-  it('rejects wide-format schemas that lack an obs_level column', () => {
+  it('rejects schemas without the required obs_level column', () => {
     expect(() => detectSchema([{ name: 'mean_intensity', type: 'Float64' }]))
       .toThrow(/obs_level/);
   });
 
-  it('marks schemas with an obs_level column as long-format', () => {
-    expect(detectSchema(cols({ obs_level: 'Int64', mean_intensity: 'Float64' })).isLongFormat).toBe(true);
-  });
 
   it('classifies numeric columns as metricCols', () => {
     const { metricCols } = detectSchema(cols({
@@ -44,7 +40,7 @@ describe('detectSchema', () => {
     expect(metricCols).toContain('mean_intensity');
   });
 
-  it('routes long-format dim_* columns into dimCols, out of metric/allCols', () => {
+  it('routes dim_* columns into dimCols, out of metric/allCols', () => {
     const { dimCols, metricCols, allCols } = detectSchema(cols({
       obs_level: 'Int64',
       mean_intensity: 'Float64',

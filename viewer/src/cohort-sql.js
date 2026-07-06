@@ -7,7 +7,7 @@ import { buildWhere, andWhere, q } from './sql.js';
 import { FILE_ROW_NUMBER } from './constants.js';
 
 export function resolveCohortJoinColumn(schema) {
-  if (!schema?.isLongFormat) return null;
+  if (!schema) return null;
   const joinCol = (schema.rowIdColumn && schema.rowIdColumn !== FILE_ROW_NUMBER)
     ? schema.rowIdColumn
     : (schema.allCols.includes('path') ? 'path' : null);
@@ -15,7 +15,7 @@ export function resolveCohortJoinColumn(schema) {
 }
 
 export function buildDimCohortCondition(schema, dimensions) {
-  if (!schema?.isLongFormat) return '';
+  if (!schema) return '';
   const selected = Object.entries(dimensions ?? {})
     .map(([letter, idxRaw]) => [letter, Number(idxRaw)])
     .filter(([, idx]) => Number.isFinite(idx));

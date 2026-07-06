@@ -33,7 +33,7 @@ export default {
         'path and child_id only for large ones (≥10k images).',
 
   requires(schema) {
-    return schema.isLongFormat;
+    return schema.allCols.length > 0;
   },
 
   async condensedMessage(ctx) {
