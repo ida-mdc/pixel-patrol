@@ -1,7 +1,7 @@
 /**
  * Map Points plugin - shows locations on an interactive MapLibre map.
  *
- * Reads `latitude` and `longitude` from `pp_data`, filters out nulls.
+ * Reads `latitude`, `longitude`, and `footprint` (GeoJSON string) from `pp_data`.
  */
 
 export default {
@@ -11,7 +11,7 @@ export default {
   scope: 'image',
 
   requires(schema) {
-    const cols = ['latitude', 'longitude'];
+    const cols = ['latitude', 'longitude', 'footprint'];
     return cols.every(c => schema.allCols.includes(c));
   },
 
@@ -22,7 +22,8 @@ export default {
       SELECT 
         "latitude"  AS lat,
         "longitude" AS lon,
-        "name" AS name
+        "name" AS name,
+        "footprint" as footprint
       FROM pp_data
       ${andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
     `);
@@ -55,8 +56,50 @@ export default {
 
     // Once map loads, add data & markers
     map.on('load', () => {
+      const bounds = new maplibregl.LngLatBounds();
+
+      const footprintFeatures = rows
+          .filter(r => r.footprint != null)
+          .map(r => {
+            const geometry = JSON.parse(r.footprint);
+            // Extend bounds with all polygon corners
+            geometry.coordinates[0].forEach(([lon, lat]) => bounds.extend([lon, lat]));
+            return {
+              type: 'Feature',
+              geometry,
+              properties: { name: r.name },
+            };
+          });
+
+        map.addSource('footprints', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: footprintFeatures },
+        });
+
+        // Fill — add before points so circles render on top
+        map.addLayer({
+          id:     'footprints-fill',
+          type:   'fill',
+          source: 'footprints',
+          paint: {
+            'fill-color':   '#4a90d9',
+            'fill-opacity': 0.15,
+          },
+        });
+
+        // Outline
+        map.addLayer({
+          id:     'footprints-outline',
+          type:   'line',
+          source: 'footprints',
+          paint: {
+            'line-color': '#4a90d9',
+            'line-width': 1.5,
+          },
+        });
+
       // Add GeoJSON source
-      const features = rows.map(r => ({
+      const pointFeatures = rows.map(r => ({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -71,49 +114,60 @@ export default {
 
       map.addSource('points', {
         type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features,
-        },
+        data: { type: 'FeatureCollection', features: pointFeatures },
       });
 
       // Add circle layer for points
       map.addLayer({
-        id: 'points-layer',
-        type: 'circle',
+        id:     'points-layer',
+        type:   'circle',
         source: 'points',
         paint: {
           'circle-radius': 6,
           'circle-color': [
-            'match',
-            ['get', 'site'],
+            'match', ['get', 'site'],
             ...Object.entries(ctx.colorMap)
               .flatMap(([site, color]) => [site, color])
-              .concat(['#888']), // default
+              .concat(['#888']),
           ],
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 1,
         },
       });
 
-      // Add hover interaction (tooltip)
+
+      // Hover tooltip (points)
       const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
 
       map.on('mouseenter', 'points-layer', e => {
         map.getCanvas().style.cursor = 'pointer';
-        const { name, lat, lon } = e.features[0].properties;
+        const { name } = e.features[0].properties;
         popup.setLngLat(e.features[0].geometry.coordinates)
              .setText(`${name}`)
              .addTo(map);
       });
-
       map.on('mouseleave', 'points-layer', () => {
         map.getCanvas().style.cursor = '';
         popup.remove();
       });
 
+
+      // Hover tooltip (footprints)
+      map.on('mouseenter', 'footprints-fill', e => {
+        map.getCanvas().style.cursor = 'pointer';
+        const { name } = e.features[0].properties;
+        // Use mouse position rather than geometry center for polygons
+        popup.setLngLat(e.lngLat)
+             .setText(name)
+             .addTo(map);
+      });
+
+      map.on('mouseleave', 'footprints-fill', () => {
+        map.getCanvas().style.cursor = '';
+        popup.remove();
+      });
+
       // Zoom to extent (simple fitBounds via bounds)
-      const bounds = new maplibregl.LngLatBounds();
       features.forEach(f => bounds.extend(f.geometry.coordinates));
       map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
     });
