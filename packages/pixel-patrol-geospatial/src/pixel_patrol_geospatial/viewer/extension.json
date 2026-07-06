@@ -1,0 +1,6 @@
+{
+  "name": "Geospatial Extension",
+  "plugins": [
+    "./plugin_map_viewer.js"
+  ]
+}

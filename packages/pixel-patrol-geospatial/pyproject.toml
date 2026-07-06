@@ -18,5 +18,8 @@ packages = ["src/pixel_patrol_geospatial"]
 [project.entry-points."pixel_patrol.loader_plugins"]
 my_extension_loaders = "pixel_patrol_geospatial.plugin_registry:register_loader_plugins"
 
+[project.entry-points."pixel_patrol.viewer_extensions"]
+my_extension_viewer = "pixel_patrol_geospatial.plugin_registry:get_viewer_extension_dir"
+
 [tool.uv.sources]
 pixel-patrol-base = { path = "../../packages/pixel-patrol-base", editable = true }
