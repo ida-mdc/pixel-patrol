@@ -281,7 +281,9 @@ export async function renderDistribution(container, ctx, spec) {
 
   // Raw violins draw one point per row (all points or outliers); wire them so a
   // click opens the point inspector. Box mode has no per-row points to click.
-  if (mode === 'violin') registerPointPlot(plotDiv, ctx, numCol);
+  // Violins draw their own outlier points; box mode gets an outlier overlay
+  // (buildCategoryTraces) - both carry customdata, so both are click-to-inspect.
+  if (mode === 'violin' || mode === 'box') registerPointPlot(plotDiv, ctx, numCol);
 
   // Significance only makes sense with one violin/box per X category: either
   // category mode, or a single color series. Keyed on raw category values;
@@ -340,7 +342,41 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
   const traces = present.map(g => boxOrBarTrace(ctx, byCat.get(g), {
     name: catLabelFn(g), x: catLabelFn(g), color: ctx.color.group(g), mode,
   }));
+
+  // Box mode has no raw points, so overlay each group's most extreme values as
+  // clickable dots - the distribution's outliers stay inspectable and linkable
+  // even when the full point cloud is too large to draw.
+  if (mode === 'box') {
+    try {
+      const outs = await fetchCategoryOutliers(ctx, { numCol, table, where, catSql });
+      const byC = new Map(present.map(g => [g, []]));
+      for (const r of outs) byC.get(String(r.__cat__))?.push(r);
+      for (const g of present) {
+        const pts = byC.get(g);
+        if (!pts?.length) continue;
+        traces.push({
+          type: 'scatter', mode: 'markers', name: catLabelFn(g), x: pts.map(() => catLabelFn(g)),
+          y: pts.map(p => Number(p.val)), customdata: pts.map(p => p.frn),
+          marker: { size: 5, color: ctx.color.group(g), line: { width: 0.5, color: 'rgba(120,120,120,0.6)' } },
+          opacity: 0.85, showlegend: false, hovertemplate: '<b>Value:</b> %{y}<extra></extra>',
+        });
+      }
+    } catch { /* the overlay is best-effort; the box plot stands on its own */ }
+  }
   return { traces, categories: present.map(catLabelFn), categoryValues: present };
+}
+
+const OUTLIER_N = 10;  // most extreme values per group overlaid in box mode
+/** Top-N and bottom-N rows per category, for the box-mode clickable outlier overlay. */
+async function fetchCategoryOutliers(ctx, { numCol, table, where, catSql, n = OUTLIER_N }) {
+  const { q, andWhere } = ctx.sql;
+  return ctx.queryRows(`
+    SELECT __cat__, val, frn FROM (
+      SELECT ${catSql} AS __cat__, ${q(numCol)} AS val, ${q(FILE_ROW_NUMBER)} AS frn,
+             row_number() OVER (PARTITION BY ${catSql} ORDER BY ${q(numCol)} ASC)  AS rlo,
+             row_number() OVER (PARTITION BY ${catSql} ORDER BY ${q(numCol)} DESC) AS rhi
+      FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}
+    ) WHERE rlo <= ${n} OR rhi <= ${n}`);
 }
 
 // One trace per color series; each spans the X categories.
