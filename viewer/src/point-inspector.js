@@ -244,32 +244,59 @@ function headerThumb(thumbBytes) {
   return cv;
 }
 
-// One card per metric: its value and where the image sits in its group. The
-// clicked metric is outlined.
-function metricsElement(refs, clickedMetric) {
-  const keys = Object.keys(refs);
-  const wrap = document.createElement('div');
-  if (!keys.length) return wrap;
-  wrap.insertAdjacentHTML('beforeend', heading('Metrics · where this image sits in its group'));
-  const list = document.createElement('div');
-  list.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+// Group metric keys by producing processor, in first-appearance order, with the
+// unknown-producer group ('') last. Returns [[producer, keys], ...].
+export function groupMetricsByProducer(keys, producerByCol = {}) {
+  const groups = new Map();
   for (const k of keys) {
-    const lab = niceName(k), r = refs[k], p = Math.max(0, Math.min(1, r.pct)) * 100, hit = k === clickedMetric;
-    const rowEl = document.createElement('div');
-    rowEl.style.cssText = 'padding:8px 10px;border-radius:10px;'
-      + `border:1px solid ${hit ? accent() : 'rgba(128,128,128,0.22)'};`
-      + `background:${hit ? `color-mix(in srgb, ${accent()} 10%, transparent)` : 'transparent'}`;
-    rowEl.innerHTML =
-      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">'
-      + `<span style="font-size:12px">${escapeHtml(lab)}</span>`
-      + `<span style="font:600 13px ui-monospace,monospace;font-variant-numeric:tabular-nums">${escapeHtml(fmt(r.val))}</span></div>`
-      + `<div title="${p < 50 ? 'below' : 'above'} the group median" style="position:relative;height:4px;border-radius:2px;background:rgba(128,128,128,0.25);margin-top:8px">`
-      + `<span style="position:absolute;top:-2px;left:50%;width:2px;height:8px;background:${MUTED};transform:translateX(-50%)"></span>`
-      + `<i style="position:absolute;top:-3px;left:${p.toFixed(0)}%;width:9px;height:9px;border-radius:50%;background:${accent()};transform:translateX(-50%);box-shadow:0 0 0 2px var(--card-bg,#fff)"></i></div>`
-      + `<div style="display:flex;justify-content:space-between;font:9px ui-monospace,monospace;color:${MUTED};margin-top:5px;font-variant-numeric:tabular-nums"><span>${escapeHtml(fmt(r.min))}</span><span>${escapeHtml(fmt(r.max))}</span></div>`;
-    list.appendChild(rowEl);
+    const g = producerByCol[k] || '';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(k);
   }
-  wrap.appendChild(list);
+  const ordered = [...groups.entries()].filter(([g]) => g !== '');
+  if (groups.has('')) ordered.push(['', groups.get('')]);
+  return ordered;
+}
+
+function metricGroupLabel(name) {
+  const el = document.createElement('div');
+  el.textContent = name === '' ? 'Other' : niceName(name.replace(/-/g, ' '));
+  el.style.cssText = `font:600 10px ui-monospace,monospace;letter-spacing:.06em;color:${MUTED};margin:2px 0 7px`;
+  return el;
+}
+
+function metricCard(k, r, clickedMetric) {
+  const p = Math.max(0, Math.min(1, r.pct)) * 100, hit = k === clickedMetric;
+  const el = document.createElement('div');
+  el.style.cssText = 'padding:8px 10px;border-radius:10px;'
+    + `border:1px solid ${hit ? accent() : 'rgba(128,128,128,0.22)'};`
+    + `background:${hit ? `color-mix(in srgb, ${accent()} 10%, transparent)` : 'transparent'}`;
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">'
+    + `<span style="font-size:12px">${escapeHtml(niceName(k))}</span>`
+    + `<span style="font:600 13px ui-monospace,monospace;font-variant-numeric:tabular-nums">${escapeHtml(fmt(r.val))}</span></div>`
+    + `<div title="${p < 50 ? 'below' : 'above'} the group median" style="position:relative;height:4px;border-radius:2px;background:rgba(128,128,128,0.25);margin-top:8px">`
+    + `<span style="position:absolute;top:-2px;left:50%;width:2px;height:8px;background:${MUTED};transform:translateX(-50%)"></span>`
+    + `<i style="position:absolute;top:-3px;left:${p.toFixed(0)}%;width:9px;height:9px;border-radius:50%;background:${accent()};transform:translateX(-50%);box-shadow:0 0 0 2px var(--card-bg,#fff)"></i></div>`
+    + `<div style="display:flex;justify-content:space-between;font:9px ui-monospace,monospace;color:${MUTED};margin-top:5px;font-variant-numeric:tabular-nums"><span>${escapeHtml(fmt(r.min))}</span><span>${escapeHtml(fmt(r.max))}</span></div>`;
+  return el;
+}
+
+// Metric cards showing where the image sits in its group, grouped by producing
+// processor when that info is available. The clicked metric is outlined.
+function metricsElement(refs, clickedMetric, producerByCol = {}) {
+  const wrap = document.createElement('div');
+  const grouped = groupMetricsByProducer(Object.keys(refs), producerByCol);
+  if (!grouped.length) return wrap;
+  wrap.insertAdjacentHTML('beforeend', heading('Metrics · where this image sits in its group'));
+  const labelled = grouped.length > 1;
+  for (const [producer, keys] of grouped) {
+    if (labelled) wrap.appendChild(metricGroupLabel(producer));
+    const list = document.createElement('div');
+    list.style.cssText = `display:grid;grid-template-columns:1fr 1fr;gap:8px${labelled ? ';margin-bottom:12px' : ''}`;
+    for (const k of keys) list.appendChild(metricCard(k, refs[k], clickedMetric));
+    wrap.appendChild(list);
+  }
   return wrap;
 }
 
@@ -342,6 +369,6 @@ export async function openInspector(fileRowNumber, ctx, opts = {}) {
 
   bodyEl.textContent = '';
   bodyEl.insertAdjacentHTML('beforeend', acquisitionSection(row, ctx));
-  bodyEl.appendChild(metricsElement(refs, clickedMetric));
+  bodyEl.appendChild(metricsElement(refs, clickedMetric, ctx.schema?.producerByCol));
   bodyEl.insertAdjacentHTML('beforeend', histogramsSection(ctx, row, whole.values[0], wmin, wmax, channels));
 }

@@ -40,16 +40,11 @@ export const MAX_VIOLIN_POINTS = 5_000;
 // dimension-size, and custom-plot widgets render distributions identically.
 export const VIOLIN_ALL_POINTS_BELOW = 500;
 
-// Columns holding real timestamps - plotted on a date axis, never as categories,
-// and never summarised with approx_quantile (use a sampled raw violin instead).
 // Populated from the detected schema via setDateCols() - see renderer.js buildCtx.
-export const DATE_COLS = new Set();
 export function setDateCols(cols) {
   DATE_COLS.clear();
   for (const c of cols) DATE_COLS.add(c);
 }
-const DATE_FMT = "'%Y-%m-%d %H:%M:%S'";
-
 
 export const CONSTANTS = {
   COUNT_Y, NULL_LABEL, MAX_CAT, MAX_HUE, MAX_SAMPLE, MAX_VIOLIN_POINTS,

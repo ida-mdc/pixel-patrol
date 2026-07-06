@@ -100,6 +100,7 @@ async function boot() {
       reportMeta = parseServerMeta(window.__PP_META ?? null);
       reportMeta.projectName ??= projectName;
       reportMeta.description ??= description;
+      schema.producerByCol = reportMeta.columnProducers || {};
 
       hideFileOpenControls();
       document.getElementById('current-filename').textContent =

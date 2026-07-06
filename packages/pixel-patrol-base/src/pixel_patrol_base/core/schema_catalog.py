@@ -613,3 +613,13 @@ def column_descriptions() -> Dict[str, str]:
             if desc:
                 out[name] = desc
     return out
+
+
+def column_producers() -> Dict[str, str]:
+    """Flat ``column -> producing processor NAME`` map, from the catalog's column provenance."""
+    out: Dict[str, str] = {}
+    for col in build_catalog(include_widgets=False)["columns"]:
+        producer = col.get("producer", "")
+        if producer.startswith("processor:"):
+            out[col["name"]] = producer.split(":", 1)[1]
+    return out

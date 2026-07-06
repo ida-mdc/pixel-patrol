@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { acquisitionCols, metaValue } from '../point-inspector.js';
+import { acquisitionCols, metaValue, groupMetricsByProducer } from '../point-inspector.js';
 
 // A schema shaped like the sample dive-log extension: canonical metadata +
 // its own metadata column (depth_zone) + a built-in and an extension metric.
@@ -57,6 +57,27 @@ describe('acquisitionCols', () => {
 
   it('drops columns with no value on this image (size_Z is null)', () => {
     expect(cols).not.toContain('size_Z');
+  });
+});
+
+describe('groupMetricsByProducer', () => {
+  const producerByCol = {
+    mean_intensity: 'raster-basic', std_intensity: 'raster-basic',
+    laplacian_variance: 'raster-quality', glow_count: 'glow-by-depth',
+  };
+
+  it('groups by producer in first-appearance order, unknown producer last', () => {
+    const keys = ['mean_intensity', 'laplacian_variance', 'std_intensity', 'unlabeled', 'glow_count'];
+    expect(groupMetricsByProducer(keys, producerByCol)).toEqual([
+      ['raster-basic', ['mean_intensity', 'std_intensity']],
+      ['raster-quality', ['laplacian_variance']],
+      ['glow-by-depth', ['glow_count']],
+      ['', ['unlabeled']],
+    ]);
+  });
+
+  it('falls back to a single unlabeled group when no producer info is available', () => {
+    expect(groupMetricsByProducer(['a', 'b'], {})).toEqual([['', ['a', 'b']]]);
   });
 });
 
