@@ -296,12 +296,12 @@ async function bucketByDateFmt(ctx, fmt) {
 }
 
 // (category, group) → a numeric field from long-format rows, 0 when absent.
-function pick(rows, catOf, valueKey) {
+export function pick(rows, catOf, valueKey) {
   const m = new Map(rows.map(r => [`${catOf(r)}\x00${r.__group__}`, Number(r[valueKey] ?? 0)]));
   return (cat, g) => m.get(`${cat}\x00${g}`) ?? 0;
 }
 
-function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
+export function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
   const legend = showLegend && ctx.groups.length > 1;
   ctx.plot.append(container, ctx.plot.groupedBarTraces(categories, getValue), {
     margin:     FILE_STATS_MARGIN,
