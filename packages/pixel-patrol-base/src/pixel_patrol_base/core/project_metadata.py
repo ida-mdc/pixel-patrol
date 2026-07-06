@@ -26,6 +26,7 @@ class ProjectMetadata:
     description: str = ""   # free-form, e.g. "Authors: Annona Buddha and Banana Java"
     version: str = field(default_factory=_get_package_version)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    loader: Optional[str] = None            # NAME of the loader plugin used
     base_dir: Optional[str] = None          # stored for future project reconstruction
     paths: List[str] = field(default_factory=list)  # stored for future project reconstruction
     processing_stats: dict = field(default_factory=dict)  # timing/throughput from build_records_df
@@ -41,6 +42,7 @@ class ProjectMetadata:
             "pp_created_at":       self.created_at,
             "pp_processing_stats": json.dumps(self.processing_stats),
             "pp_paths":            json.dumps(self.paths),
+            "pp_loader":           self.loader or "",
         }
         if not self.omit_base_dir:
             meta["pp_base_dir"] = self.base_dir or ""
@@ -69,6 +71,7 @@ class ProjectMetadata:
             description=meta.get("pp_description", ""),
             version=meta.get("pp_version", ""),
             created_at=meta.get("pp_created_at", ""),
+            loader=meta.get("pp_loader") or None,
             base_dir=raw_base if raw_base else None,
             paths=paths,
             processing_stats=processing_stats,
@@ -78,6 +81,7 @@ class ProjectMetadata:
         """Fill project_name, base_dir and paths from a live Project instance."""
         from pathlib import Path
         self.project_name = project.name
+        self.loader = project.loader.NAME if project.loader else None
         self.base_dir = str(project.base_dir) if project.base_dir else None
         if project.base_dir:
             rel = [str(Path(p).relative_to(project.base_dir)) for p in project.paths]
