@@ -42,7 +42,8 @@ export default {
     // Initialize map (lightweight dark style)
     const map = new maplibregl.Map({
       container: container,
-      style: 'https://demotiles.maplibre.org/style.json',
+      // map licence: CC BY 4.0 (https://sgx.geodatenzentrum.de/web_public/gdz/lizenz/deu/Nutzungsbedingungen_basemapworld.pdf)
+      style: 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json',
       center: [0, 0],
       zoom: 2,
       attributionControl: true,
