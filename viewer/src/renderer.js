@@ -11,6 +11,7 @@ import { writeUrlParams } from './url-params.js';
 import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
+import { openInspector } from './point-inspector.js';
 
 /**
  * Build a plugin context object.
@@ -46,7 +47,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
   const legend = legendWithGrouping(LEGEND, state, '');
   const groupLabels = buildGroupLabels(groups);
 
-  return {
+  const ctx = {
     schema,
     state,
     colorMap,
@@ -198,6 +199,10 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
     /** Data utilities shared across plugins. */
     data: { extractBinary },
   };
+
+  // Open the single-file point inspector for a row; plots and the mosaic call this.
+  ctx.openInspector = (fileRowNumber, opts) => openInspector(fileRowNumber, ctx, opts);
+  return ctx;
 }
 
 /**
