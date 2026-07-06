@@ -47,7 +47,6 @@ const INFRA_COLS = new Set(['obs_level']);
  *   dimCols: string[],
  *   groupCols: string[],
  *   dimensionInfo: Object.<string, number[]>,
- *   defaultGroupCol: string|null,
  *   allCols: string[],
  *   blobCols: string[],
  *   allTable: string,
