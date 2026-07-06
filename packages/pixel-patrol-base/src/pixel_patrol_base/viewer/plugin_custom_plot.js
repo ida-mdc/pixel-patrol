@@ -486,7 +486,7 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
     '  label: ' + JSON.stringify(TITLE) + ',',
     '  group: \'Custom\',',
     '  scope: ' + JSON.stringify(splitDims.length ? 'slice' : 'image') + ',',
-    '  requires: s => s.isLongFormat && ' + JSON.stringify(requiredCols) + '.every(c => s.allCols.includes(c)),',
+    '  requires: s => ' + JSON.stringify(requiredCols) + '.every(c => s.allCols.includes(c)),',
     '  async render(container, ctx) {',
     '    try {',
     '      const { q, andWhere } = ctx.sql;',
@@ -549,7 +549,7 @@ export default {
          '**＋ Add plot** adds an independent plot below.',
 
   requires(schema) {
-    return schema.isLongFormat;
+    return schema.allCols.length > 0;
   },
 
   async condensedMessage(ctx) {
