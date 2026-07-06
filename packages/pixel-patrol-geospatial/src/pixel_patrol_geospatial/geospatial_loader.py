@@ -24,25 +24,34 @@ class GeospatialLoader:
         "crs_epsg": Optional[rasterio.crs.CRS],
         "latitude": Optional[float],
         "longitude": Optional[float],
+         "dim_order": str,
+        "dim_names": list,
+        "n_images": int,
+        "num_pixels": int,
+        "shape": list,
+        "ndim": int,
+        "channel_names": list,  # could be list[str]
+        "dtype": str,
     }
     OUTPUT_SCHEMA_PATTERNS: List[tuple]    = []
 
     def is_folder_supported(self, path: Path) -> bool:
         return False
 
+    def __get_shape_dtype_dim_order(self, ds: rasterio.io.DatasetReader) -> Tuple:
+        # ds.shape is just (height, width), but doesn't include the band count
+        shape = (ds.count,) + ds.shape
+        dim_order = ("C", "Y", "X")
+        if len(set(ds.dtypes)) > 1:
+            error_msg = f"Different data types in one image is not supported! Consider creating several images per band! Found dtypes {set(ds.dtypes)}."
+            raise NotImplementedError(error_msg)
+        dtype = set(ds.dtypes).pop()
+        return shape, dtype, dim_order
+
     def read_header(self, file_path: Path) -> FileInfo:
         with rasterio.open(file_path) as ds:
-            # ds.shape is just (height, width), but doesn't include the band count
-            shape = ds.shape if ds.count == 1 else (ds.count,) + ds.shape
-
-            dim_order = ("Y", "X") if ds.count == 1 else ("C", "Y", "X")
-            if len(set(ds.dtypes)) > 1:
-                error_msg = f"Different data types in one image is not supported! Consider creating several images per band! Found dtypes {set(ds.dtypes)}."
-                raise NotImplementedError(error_msg)
-            dtype = set(ds.dtypes).pop()
-        logger.info(f"{shape=} {dtype=} {dim_order=}")
+            shape, dtype, dim_order = self.__get_shape_dtype_dim_order(ds)
         fi = FileInfo(shape=shape, dtype=dtype, dim_order=dim_order)
-        logger.info(fi)
         return fi
 
     def load(self, file_path: Path) -> Record:
@@ -59,10 +68,20 @@ class GeospatialLoader:
                 metadata["crs_str"] = None
                 metadata["latitude"] = None
                 metadata["longitude"] = None
+            shape, dtype, dim_order = self.__get_shape_dtype_dim_order(img)
+            dim_order = "".join(dim_order)
+            metadata["dim_order"] = dim_order
+            metadata["shape"] = shape
+            metadata["dtype"] = dtype
+            metadata["dim_names"] = ["band", "height", "width"]
+            metadata["n_images"] = 1
+            metadata["num_pixels"] = np.prod(img.shape) * img.count
+            metadata["ndim"] = len(shape)
 
             pixels = img.read()
-            pixels = np.nan_to_num(pixels)
         return record_from(pixels, metadata, kind="intensity")
+
+
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         raise NotImplementedError("container format not support for geospatial")
