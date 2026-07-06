@@ -101,6 +101,21 @@ def test_load_parquet_preserves_metadata_fields(tmp_path: Path):
     assert loaded_meta.created_at != ""
 
 
+def test_load_parquet_preserves_loader(tmp_path: Path):
+    """loader field survives round-trip, and None is preserved when unset."""
+    df = pl.DataFrame({"x": [1]})
+
+    dest_with = tmp_path / "with_loader.parquet"
+    save_parquet(df, dest_with, ProjectMetadata(project_name="p", loader="bioio"))
+    _, meta_with = load_parquet(dest_with)
+    assert meta_with.loader == "bioio"
+
+    dest_without = tmp_path / "without_loader.parquet"
+    save_parquet(df, dest_without, ProjectMetadata(project_name="p"))
+    _, meta_without = load_parquet(dest_without)
+    assert meta_without.loader is None
+
+
 def test_load_parquet_nonexistent_file(tmp_path: Path):
     """load_parquet raises FileNotFoundError for missing files."""
     with pytest.raises(FileNotFoundError):
