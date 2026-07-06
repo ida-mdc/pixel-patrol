@@ -26,7 +26,7 @@ class ProjectMetadata:
     description: str = ""   # free-form, e.g. "Authors: Annona Buddha and Banana Java"
     version: str = field(default_factory=_get_package_version)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    loader: Optional[str] = None            # NAME of the loader plugin used; lets the viewer re-open source images
+    loader: Optional[str] = None            # NAME of the loader plugin used
     base_dir: Optional[str] = None          # stored for future project reconstruction
     paths: List[str] = field(default_factory=list)  # stored for future project reconstruction
     processing_stats: dict = field(default_factory=dict)  # timing/throughput from build_records_df
