@@ -11,7 +11,7 @@
 // the schema catalog. Best-effort: errors for a single plugin are reported on
 // stderr and that plugin is skipped, so one bad module can't break the export.
 
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -31,7 +31,12 @@ async function loadExtension(dir) {
   const manifestPath = path.join(dir, 'extension.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const widgets = [];
-  for (const rel of manifest.plugins ?? []) {
+  let pluginList = manifest.plugins;
+  if (!pluginList && manifest.auto_detect) {
+    const files = await readdir(dir);
+    pluginList = files.filter(f => /^plugin_.*\.js$/.test(f));
+  }
+  for (const rel of pluginList ?? []) {
     const modPath = path.resolve(dir, rel);
     try {
       const mod = await import(pathToFileURL(modPath).href);
