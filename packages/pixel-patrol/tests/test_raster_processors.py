@@ -126,10 +126,43 @@ def test_nonspatial_origin(proc):
 def test_histogram_uint8_bins(hist_proc):
     data = np.array([[0, 128, 255], [50, 100, 200]], dtype=np.uint8)
     row = _chunk(hist_proc, data, "YX")
-    assert len(row["histogram_counts"]) == HISTOGRAM_BINS
-    assert int(row["histogram_counts"].sum()) == 6
+    counts = row["histogram_counts"]
+    assert len(counts) == HISTOGRAM_BINS
+    assert int(counts.sum()) == 6
+    # Integer span (255) < bin count, so the range widens to exactly HISTOGRAM_BINS:
+    # bins are one intensity level wide and each value lands in its own bin (no comb).
     assert row["histogram_min"] == 0.0
-    assert row["histogram_max"] == 255.0
+    assert row["histogram_max"] == float(HISTOGRAM_BINS)
+    for v in (0, 50, 100, 128, 200, 255):
+        assert counts[v] == 1
+
+
+def test_histogram_uint8_narrow_span_anchors_to_dtype(hist_proc):
+    # Narrow uint8 span (10..20) widens to the dtype range [0, 256), not [10, 266) -
+    # bin edges stay inside the data type, and each value still lands in its own bin.
+    data = np.array([[10, 15, 20], [12, 18, 11]], dtype=np.uint8)
+    row = _chunk(hist_proc, data, "YX")
+    assert row["histogram_min"] == 0.0
+    assert row["histogram_max"] == float(HISTOGRAM_BINS)
+    for v in (10, 11, 12, 15, 18, 20):
+        assert row["histogram_counts"][v] == 1
+
+
+def test_histogram_uint16_narrow_span_stays_tight(hist_proc):
+    # A narrow span in a wide dtype widens by exactly HISTOGRAM_BINS from s_min and
+    # stays well inside the dtype, so it is not forced back to 0.
+    data = np.array([[100, 110, 120], [105, 115, 101]], dtype=np.uint16)
+    row = _chunk(hist_proc, data, "YX")
+    assert row["histogram_min"] == 100.0
+    assert row["histogram_max"] == 100.0 + HISTOGRAM_BINS
+
+
+def test_histogram_int_wide_span_keeps_true_range(hist_proc):
+    # Integer span ≥ bin count: bins are already ≥ 1 wide, so the true range is kept.
+    data = np.arange(HISTOGRAM_BINS * 4, dtype=np.uint16).reshape(2, -1)
+    row = _chunk(hist_proc, data, "YX")
+    assert row["histogram_min"] == 0.0
+    assert row["histogram_max"] == float(HISTOGRAM_BINS * 4 - 1)
 
 
 def test_histogram_nan_count(hist_proc):
