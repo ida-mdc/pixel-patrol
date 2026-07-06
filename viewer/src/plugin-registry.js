@@ -58,12 +58,42 @@ const BUILTIN_PLUGINS = [];
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
-const _plugins   = [...BUILTIN_PLUGINS];
-const _listeners = new Set();
+const _plugins    = [...BUILTIN_PLUGINS];
+const _inspectors = [];
+const _listeners  = new Set();
 
 export const registry = {
   /** Current list of registered plugins (built-ins + runtime additions). */
   get plugins() { return _plugins; },
+
+  /**
+   * Point-inspector contributors: extra sections shown in the point-detail
+   * drawer when a plot point is clicked. Same spirit as widget plugins, but
+   * they receive one clicked row instead of the whole dataset.
+   *
+   * Contributor contract:
+   *   {
+   *     id:     string                          - unique identifier
+   *     label:  string                          - section header (optional)
+   *     requires?(row, ctx) → bool              - return false to skip this row
+   *     render(container, row, ctx) → void|Promise - draw into the given element
+   *   }
+   */
+  get inspectors() { return _inspectors; },
+
+  /**
+   * Register a point-inspector contributor (replacing any with the same id).
+   * Exposed to extensions as window.PixelPatrol.registerInspector.
+   */
+  registerInspector(contributor) {
+    if (!contributor || typeof contributor.id !== 'string' || typeof contributor.render !== 'function') {
+      console.warn('[PixelPatrol] registerInspector: needs id (string) and render (function):', contributor);
+      return false;
+    }
+    const idx = _inspectors.findIndex(c => c.id === contributor.id);
+    if (idx >= 0) _inspectors[idx] = contributor; else _inspectors.push(contributor);
+    return true;
+  },
 
   /**
    * Register a plugin object directly.
