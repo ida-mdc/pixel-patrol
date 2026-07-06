@@ -1,52 +1,152 @@
 /**
- * Widget: NoData Value Frequency
+ * Widget: NoData / non-finite pixel statistics
  *
- * Bar plot showing how many images use each distinct no-data value.
- * Assumes `nodata_value` holds a single Optional[int|float] per image.
+ * 1. Bar plot of how many images use each distinct no-data value.
+ * 2. Histogram of the % of nodata pixels per image (nodata_count / num_pixels).
+ * 3. Histogram of non-finite pixel count for float images
+ *    (num_pixels - finite_pixel_count), with a summary line.
  */
-import { pick, renderGroupedBars } from '../../extension/1/plugin_file_stats.js';
+import {
+  pick,
+  renderGroupedBars,
+  buildBinCaseSQL,
+} from '../../extension/1/plugin_file_stats.js';
 
 export default {
   id: 'nodata-value-count',
   label: 'NoData',
   group: 'no-data',
   scope: 'image',
-  info: 'Counts how many images use each distinct no-data value.',
+  info: 'NoData value frequency, nodata-pixel percentage, and non-finite pixels (float images).',
   requires(schema) {
     return schema.allCols.includes('nodata_value');
   },
 
   async render(container, ctx) {
-    const { andWhere, groupCol: gcFn } = ctx.sql;
-    const gcExpr = gcFn();
+    try {
+      await renderNodataValueBar(container, ctx);
+      await renderNodataPercentHist(container, ctx);
+      await renderNonFiniteHist(container, ctx);
 
-    // Aggregate: one row per (nodata_value, group) with its image count.
-    const rows = await ctx.queryRows(`
-      SELECT COALESCE(CAST("nodata_value" AS VARCHAR), 'not set') AS nodata_value,
-             ${gcExpr} AS __group__, COUNT(*) AS count
-      FROM pp_data ${ctx.where}
-      GROUP BY 1, 2 ORDER BY 1, 2
-    `);
-    if (!rows.length) {
-      container.innerHTML = '<div class="no-data">No no-data values available.</div>';
-      return;
+      if (!container.firstChild) {
+        container.innerHTML = '<div class="no-data">No no-data statistics available.</div>';
+      }
+    } catch {
+      container.innerHTML = '<div class="no-data">Failed to load data.</div>';
     }
-
-    // Distinct category labels, numerically sorted (string sort would misorder 2 vs 10).
-    const cats = [...new Set(rows.map(r => String(r.nodata_value)))]
-      .sort((a, b) => {
-        if (a === 'not set') return 1;
-        if (b === 'not set') return -1;
-        return Number(a) - Number(b);
-      });
-
-    renderGroupedBars(container, {
-      categories: cats,
-      getValue:   pick(rows, r => r.nodata_value, 'count'),
-      title:      'Image Count by NoData Value',
-      xLabel:     'NoData value',
-      yLabel:     'Image count',
-    }, ctx);
   },
 };
 
+// --- Section 1: distinct no-data values -------------------------------------
+async function renderNodataValueBar(container, ctx) {
+  const { groupCol: gcFn } = ctx.sql;
+  const gcExpr = gcFn();
+
+  const rows = await ctx.queryRows(`
+    SELECT COALESCE(CAST("nodata_value" AS VARCHAR), 'not set') AS nodata_value,
+           ${gcExpr} AS __group__, COUNT(*) AS count
+    FROM pp_data ${ctx.where}
+    GROUP BY 1, 2 ORDER BY 1, 2
+  `);
+  if (!rows.length) return;
+
+  const cats = [...new Set(rows.map(r => String(r.nodata_value)))]
+    .sort((a, b) => {
+      if (a === 'not set') return 1;
+      if (b === 'not set') return -1;
+      return Number(a) - Number(b);
+    });
+
+  renderGroupedBars(container, {
+    categories: cats,
+    getValue:   pick(rows, r => r.nodata_value, 'count'),
+    title:      'Image Count by NoData Value',
+    xLabel:     'NoData value',
+    yLabel:     'Image count',
+  }, ctx);
+}
+
+// --- Section 2: % nodata pixels per image ----------------------------------
+async function renderNodataPercentHist(container, ctx) {
+  if (!ctx.schema.allCols.includes('num_pixels') ||
+      !ctx.schema.allCols.includes('nodata_count')) return;
+
+  const { andWhere, groupCol: gcFn } = ctx.sql;
+  const gcExpr  = gcFn();
+  const pctExpr = '("nodata_count" * 100.0 / "num_pixels")';
+
+  // Fixed 0–100% bins in 10-point steps. breaks = interior edges, one fewer than labels.
+  const breaks = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+  const labels = ['0–10%','10–20%','20–30%','30–40%','40–50%',
+                  '50–60%','60–70%','70–80%','80–90%','90–100%'];
+  const ZERO_LABEL = 'None (0%)';
+  const binCase = buildBinCaseSQL(pctExpr, breaks, labels);
+
+  const rows = await ctx.queryRows(`
+    SELECT CASE WHEN "nodata_count" = 0 THEN '${ZERO_LABEL}' ELSE ${binCase} END AS bin,
+           ${gcExpr} AS __group__, COUNT(*) AS count
+    FROM pp_data ${andWhere(ctx.where, '"num_pixels" > 0 AND "nodata_count" IS NOT NULL')}
+    GROUP BY 1, 2
+  `);
+  if (!rows.length) return;
+
+  renderGroupedBars(container, {
+    categories: [ZERO_LABEL, ...labels],
+    getValue:   pick(rows, r => r.bin, 'count'),
+    title:      'NoData Pixel Percentage per Image',
+    xLabel:     '% nodata pixels',
+    yLabel:     'Image count',
+  }, ctx);
+}
+
+// --- Section 3: non-finite pixel count for float images --------------------
+async function renderNonFiniteHist(container, ctx) {
+  if (!ctx.schema.allCols.includes('finite_pixel_count') ||
+      !ctx.schema.allCols.includes('num_pixels') ||
+      !ctx.schema.allCols.includes('dtype')) return;
+
+  const { andWhere, groupCol: gcFn } = ctx.sql;
+  const gcExpr    = gcFn();
+  const floatPred = `"dtype" LIKE 'float%' AND "finite_pixel_count" IS NOT NULL AND "num_pixels" > 0`;
+  const pctExpr   = '(("num_pixels" - "finite_pixel_count") * 100.0 / "num_pixels")';
+
+  // Summary line: how many images are float.
+  const [meta] = await ctx.queryRows(`
+    SELECT COUNT(*) FILTER (WHERE "dtype" LIKE 'float%') AS n_float,
+           COUNT(*) AS n_total
+    FROM pp_data ${ctx.where}
+  `);
+  const nFloat = Number(meta?.n_float ?? 0);
+  const nTotal = Number(meta?.n_total ?? 0);
+
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:13px;color:#495057;margin:8px 0';
+  note.textContent = `${nFloat} of ${nTotal} (all) images are float and are expressed here.`;
+  container.appendChild(note);
+  if (!nFloat) return;
+
+  // Fixed 0–100% bins, plus an exact-zero bucket.
+  const breaks = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+  const labels = ['0–10%','10–20%','20–30%','30–40%','40–50%',
+                  '50–60%','60–70%','70–80%','80–90%','90–100%'];
+
+  const ZERO_LABEL = 'None (0%)';
+  const binCase = buildBinCaseSQL(pctExpr, breaks, labels);
+
+  const rows = await ctx.queryRows(`
+    SELECT CASE WHEN ("num_pixels" - "finite_pixel_count") = 0 THEN '${ZERO_LABEL}'
+                ELSE ${binCase} END AS bin,
+           ${gcExpr} AS __group__, COUNT(*) AS count
+    FROM pp_data ${andWhere(ctx.where, floatPred)}
+    GROUP BY 1, 2
+  `);
+  if (!rows.length) return;
+
+  renderGroupedBars(container, {
+    categories: [ZERO_LABEL, ...labels],
+    getValue:   pick(rows, r => r.bin, 'count'),
+    title:      'Non-Finite Pixel Percentage per Float Image',
+    xLabel:     '% non-finite pixels',
+    yLabel:     'Image count',
+  }, ctx);
+}

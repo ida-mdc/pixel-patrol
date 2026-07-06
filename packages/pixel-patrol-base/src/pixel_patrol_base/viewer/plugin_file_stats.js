@@ -233,7 +233,7 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
   const { breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
   if (!breaks.length) return;
   const rows = await ctx.queryRows(`
-    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
+    SELECT ${buildBinCaseSQL('"size_bytes"', breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
     GROUP BY 1, 2
   `);
@@ -316,7 +316,7 @@ export function renderGroupedBars(container, { categories, getValue, title, xLab
   }, 'margin-bottom:24px');
 }
 
-function computeSizeBins(minS, maxS, nUniq, fmt) {
+export function computeSizeBins(minS, maxS, nUniq, fmt) {
   const effectiveBins = Math.min(SIZE_NUM_BINS, nUniq);
   if (effectiveBins <= 1 || maxS <= minS) return { breaks: [], labels: [], useLog: false };
   const minPositive = minS > 0 ? minS : 1;
@@ -339,10 +339,9 @@ function computeSizeBins(minS, maxS, nUniq, fmt) {
   return { breaks, labels, useLog };
 }
 
-function buildSizeCaseSQL(breaks, labels) {
+export function buildBinCaseSQL(expr, breaks, labels) {
   let sql = `CASE`;
-  for (let i = 0; i < breaks.length; i++) sql += ` WHEN "size_bytes" < ${breaks[i]} THEN '${labels[i]}'`;
+  for (let i = 0; i < breaks.length; i++) sql += ` WHEN ${expr} < ${breaks[i]} THEN '${labels[i]}'`;
   sql += ` ELSE '${labels[labels.length - 1]}' END`;
   return sql;
 }
-
