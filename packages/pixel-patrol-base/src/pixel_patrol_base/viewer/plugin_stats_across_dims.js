@@ -295,7 +295,7 @@ function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedMessage, m
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
-      return schema.metricCols.some(filterMetric);
+      return !!schema.hasDimSlices && schema.metricCols.some(filterMetric);
     },
     ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {
