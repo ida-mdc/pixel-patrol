@@ -149,6 +149,9 @@ export async function finishLoad(conn, parquetPath = null) {
   const schema = detectSchema(columns);
   schema.rowIdColumn = pickRowIdColumnFromSchema(schema.allCols);
 
+  const sliceCheck = await conn.query(`SELECT (MAX(obs_level) > 0) AS v FROM pp_all`);
+  schema.hasDimSlices = !!sliceCheck.toArray()[0].v;
+
   // Populate dimensionInfo by querying distinct values from pp_all.
   if (schema.dimCols.length > 0) {
     for (const dimCol of schema.dimCols) {
