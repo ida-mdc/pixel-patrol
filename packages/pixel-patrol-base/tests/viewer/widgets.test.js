@@ -90,8 +90,8 @@ const ENABLING_SCHEMA = {
   'metadata':                  { allCols: ['dtype'] },
   'violin-basic':              { metricCols: ['mean_intensity'] },
   'violin-quality':            { metricCols: ['laplacian_variance'] },
-  'stats-across-dims-basic':   { metricCols: ['mean_intensity'] },
-  'stats-across-dims-quality': { metricCols: ['laplacian_variance'] },
+  'stats-across-dims-basic':   { metricCols: ['mean_intensity'], hasDimSlices: true },
+  'stats-across-dims-quality': { metricCols: ['laplacian_variance'], hasDimSlices: true },
 };
 
 describe('widget requires()', () => {
