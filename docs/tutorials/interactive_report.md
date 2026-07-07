@@ -352,11 +352,11 @@ NaN pixels are excluded from all calculations.
 </div>
 <div class="wc-body">
 
-<p>The mean pixel intensity histogram per group - a more in-depth look at whether your pixel intensity distribution looks the way you'd expect. Toggle between a normalized <strong>0-255</strong> view and the <strong>native range</strong> of your data.</p>
+<p>The mean pixel intensity histogram per group - a more in-depth look at whether your pixel intensity distribution looks the way you'd expect. If the dataset has both integer and float images, each type gets its own plot. For integer images, toggle between actual pixel values and a dtype-normalized range to compare across bit depths.</p>
 
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Each image gets a 256-bin histogram of its pixel values, normalized to sum to 1. Per-group, histograms are averaged using pixel-count weighting - larger images contribute proportionally more.</div>
+<div>Each image gets a 256-bin histogram of its pixel values, normalized to area 1. Per-group, the normalized histograms are averaged equally across images (image size does not affect the result). The bin range uses the actual pixel value range of each image, not a fixed 0-255 range.</div>
 </details>
 
 <div class="wc-shots">
