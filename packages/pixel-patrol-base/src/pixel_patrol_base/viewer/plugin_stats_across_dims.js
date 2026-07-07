@@ -231,7 +231,6 @@ async function acrossDimsCondensedSummary(ctx) {
 // metric, along the first non-spatial dimension that has data. Mirrors the
 // non-spatial query path in renderAcrossDims, kept minimal for the tile preview.
 async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref) {
-  if (!ctx.schema.isLongFormat) return false;
   const { q, groupCol: gcFn } = ctx.sql;
   const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric);
   const metric  = metricPref.find(m => metrics.includes(m)) ?? metrics[0];
@@ -295,7 +294,7 @@ function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedMessage, m
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
-      return schema.metricCols.some(filterMetric);
+      return !!schema.hasDimSlices && schema.metricCols.some(filterMetric);
     },
     ...(condensedMessage ? { condensedMessage } : {}),
     async condensedPlot(container, ctx) {
