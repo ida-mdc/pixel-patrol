@@ -22,7 +22,7 @@ dependencies = [
 package = true
 
 [tool.setuptools]
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+license-files = ["LICENSE"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_tensorboard"]

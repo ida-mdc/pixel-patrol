@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 package = true
 
 [tool.setuptools]
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
+license-files = ["LICENSE"]
 
 [dependency-groups]
 dev = [

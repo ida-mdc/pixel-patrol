@@ -105,5 +105,23 @@ See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-pa
 
 ---
 
+## Licensing
+
+Use a permissive open-source license for your extension - MIT, BSD-2-Clause, BSD-3-Clause, and Apache-2.0 all work well. Add a `LICENSE` file to your package and declare it in your `pyproject.toml`:
+
+```toml
+[project]
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+```
+
+Avoid copyleft licenses (GPL, AGPL): they would require anyone who combines your extension with pixel-patrol to release their own code under the same terms, which is usually not what extension authors or users want.
+
+The direct dependencies of `pixel-patrol-base` are all permissively licensed (MIT, BSD, Apache-2.0), so depending on it is safe. If your extension adds new dependencies of its own, check that their licenses are permissive too - `pip-licenses` (installable via pip) lists the licenses of everything in your environment.
+
+---
+
 !!! tip
     See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) in the repository for step-by-step instructions, the full protocol tables, and the complete viewer plugin / `ctx` API.
