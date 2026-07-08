@@ -1,5 +1,6 @@
 import importlib
 import logging
+from pathlib import Path
 from typing import Type, Union, List
 
 from pixel_patrol_base.core.contracts import PixelPatrolLoader, PixelPatrolProcessor, PixelPatrolWidget
@@ -28,7 +29,8 @@ _CACHED_LOADER_PLUGINS: list[PixelPatrolLoader] | None = None
 _CACHED_PROCESSOR_PLUGINS: list[PixelPatrolProcessor] | None = None
 _CACHED_WIDGET_PLUGINS: list[PixelPatrolWidget] | None = None
 
-def discover_loader(loader_id: str) -> PixelPatrolLoader:
+def discover_all_loader_plugins() -> list[PixelPatrolLoader]:
+    """Return all installed loader plugin instances."""
     global _CACHED_LOADER_PLUGINS
     if _CACHED_LOADER_PLUGINS is None:
         plugin_classes = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
@@ -37,7 +39,36 @@ def discover_loader(loader_id: str) -> PixelPatrolLoader:
             "Discovered loader plugins: %s",
             ", ".join([plugin.NAME for plugin in _CACHED_LOADER_PLUGINS]),
         )
-    plugins = _CACHED_LOADER_PLUGINS
+    return list(_CACHED_LOADER_PLUGINS)
+
+
+def detect_loaders_for_file(path: Path) -> list[PixelPatrolLoader]:
+    """Return all installed loaders that claim support for this file's extension.
+
+    Handles compound extensions (e.g. ``.ome.zarr``, ``.ome.tif``).
+    Loaders matched by a longer (more specific) extension are returned first.
+    """
+    # Build candidates longest-first: for 'img.ome.zarr' → ['ome.zarr', 'zarr']
+    suffixes = path.suffixes
+    ext_candidates: set[str] = set()
+    for i in range(len(suffixes)):
+        ext_candidates.add("".join(suffixes[i:]).lstrip(".").lower())
+
+    def _best_match_len(loader: PixelPatrolLoader) -> int:
+        return max(
+            (len(ext) for ext in loader.SUPPORTED_EXTENSIONS if ext in ext_candidates),
+            default=0,
+        )
+
+    matching = [
+        loader for loader in discover_all_loader_plugins()
+        if ext_candidates & loader.SUPPORTED_EXTENSIONS
+    ]
+    return sorted(matching, key=_best_match_len, reverse=True)
+
+
+def discover_loader(loader_id: str) -> PixelPatrolLoader:
+    plugins = discover_all_loader_plugins()
     for loader_plugin in plugins:
         if loader_plugin.NAME == loader_id:
             # loader_plugin is already an instantiated loader; just return it.

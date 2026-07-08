@@ -19,6 +19,9 @@ dependencies = [
     "dask>=2025.5.1",
     "tqdm>=4.67.1",
     "yaspin>=3.4.0",
+    "pywebview>=5.0",
+    "pyside6>=6.0",
+    "qtpy>=2.0",
 ]
 
 [tool.uv]
