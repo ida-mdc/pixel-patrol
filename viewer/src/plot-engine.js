@@ -20,6 +20,12 @@
 import { statTable } from './plot-utils.js';
 export { statTable };
 
+// Both are bundled into the app chunk (not package plugins), so these sibling
+// imports resolve in offline mode too - see the module comment above.
+import { FILE_ROW_NUMBER, DATE_COLS, DATE_FMT } from './constants.js';
+import { registerPointPlot } from './point-selection.js';
+export { DATE_COLS };
+
 // ── Constants ───────────────────────────────────────────────────────────────
 export const COUNT_Y     = '(count)';
 export const NULL_LABEL  = '(missing)';
@@ -33,11 +39,6 @@ export const MAX_VIOLIN_POINTS = 5_000;
 // datapoint than a sparse shape. Default for all category violins so the violin,
 // dimension-size, and custom-plot widgets render distributions identically.
 export const VIOLIN_ALL_POINTS_BELOW = 500;
-
-// Columns holding real timestamps - plotted on a date axis, never as categories,
-// and never summarised with approx_quantile (use a sampled raw violin instead).
-export const DATE_COLS = new Set(['modification_date']);
-const DATE_FMT = "'%Y-%m-%d %H:%M:%S'";
 
 export const CONSTANTS = {
   COUNT_Y, NULL_LABEL, MAX_CAT, MAX_HUE, MAX_SAMPLE, MAX_VIOLIN_POINTS,
@@ -278,6 +279,12 @@ export async function renderDistribution(container, ctx, spec) {
   if (title && layoutOverride.title) finalLayout.title = { text: title, ...layoutOverride.title };
   const plotDiv = ctx.plot.append(container, traces, finalLayout, divStyle);
 
+  // Raw violins draw one point per row (all points or outliers); wire them so a
+  // click opens the point inspector. Box mode has no per-row points to click.
+  // Violins draw their own outlier points; box mode gets an outlier overlay
+  // (buildCategoryTraces) - both carry customdata, so both are click-to-inspect.
+  if (mode === 'violin' || mode === 'box') registerPointPlot(plotDiv, ctx, numCol);
+
   // Significance only makes sense with one violin/box per X category: either
   // category mode, or a single color series. Keyed on raw category values;
   // brackets are positioned by category index, which matches the rendered axis
@@ -306,19 +313,22 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
 
   if (mode === 'violin') {
     const rows = await ctx.queryRows(`
-      SELECT ${catSql} AS __cat__, ${q(numCol)} AS val
+      SELECT ${catSql} AS __cat__, ${q(numCol)} AS val, ${q(FILE_ROW_NUMBER)} AS frn
       FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}
     `);
     const byG = new Map(present.map(g => [g, []]));
-    for (const r of rows) byG.get(String(r.__cat__))?.push(Number(r.val));
+    for (const r of rows) byG.get(String(r.__cat__))?.push(r);
     const traces = present.map(g => {
-      const y = byG.get(g);
+      const grp = byG.get(g);
+      const y = grp.map(r => Number(r.val));
       // Small samples read better as every (jittered) point than as a sparse violin.
       const allPoints = allPointsBelow > 0 && y.length < allPointsBelow;
       return {
         // spanmode 'soft' (default) gives smooth tapering tails; 'hard' clips the
         // density flat at the data min/max, which reads as an ugly "cropped" violin.
         type: 'violin', name: catLabelFn(g), x: y.map(() => catLabelFn(g)), y,
+        // customdata aligns with y so a clicked point maps back to its source row.
+        customdata: grp.map(r => r.frn),
         box: { visible: true }, meanline: { visible: true },
         points: allPoints ? 'all' : 'outliers', ...(allPoints ? { pointpos: 0, jitter: 0.3 } : {}),
         spanmode: 'soft', opacity: 0.9, marker: { color: ctx.color.group(g) },
@@ -332,7 +342,41 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
   const traces = present.map(g => boxOrBarTrace(ctx, byCat.get(g), {
     name: catLabelFn(g), x: catLabelFn(g), color: ctx.color.group(g), mode,
   }));
+
+  // Box mode has no raw points, so overlay each group's most extreme values as
+  // clickable dots - the distribution's outliers stay inspectable and linkable
+  // even when the full point cloud is too large to draw.
+  if (mode === 'box') {
+    try {
+      const outs = await fetchCategoryOutliers(ctx, { numCol, table, where, catSql });
+      const byC = new Map(present.map(g => [g, []]));
+      for (const r of outs) byC.get(String(r.__cat__))?.push(r);
+      for (const g of present) {
+        const pts = byC.get(g);
+        if (!pts?.length) continue;
+        traces.push({
+          type: 'scatter', mode: 'markers', name: catLabelFn(g), x: pts.map(() => catLabelFn(g)),
+          y: pts.map(p => Number(p.val)), customdata: pts.map(p => p.frn),
+          marker: { size: 5, color: ctx.color.group(g), line: { width: 0.5, color: 'rgba(120,120,120,0.6)' } },
+          opacity: 0.85, showlegend: false, hovertemplate: '<b>Value:</b> %{y}<extra></extra>',
+        });
+      }
+    } catch { /* the overlay is best-effort; the box plot stands on its own */ }
+  }
   return { traces, categories: present.map(catLabelFn), categoryValues: present };
+}
+
+const OUTLIER_N = 10;  // most extreme values per group overlaid in box mode
+/** Top-N and bottom-N rows per category, for the box-mode clickable outlier overlay. */
+async function fetchCategoryOutliers(ctx, { numCol, table, where, catSql, n = OUTLIER_N }) {
+  const { q, andWhere } = ctx.sql;
+  return ctx.queryRows(`
+    SELECT __cat__, val, frn FROM (
+      SELECT ${catSql} AS __cat__, ${q(numCol)} AS val, ${q(FILE_ROW_NUMBER)} AS frn,
+             row_number() OVER (PARTITION BY ${catSql} ORDER BY ${q(numCol)} ASC)  AS rlo,
+             row_number() OVER (PARTITION BY ${catSql} ORDER BY ${q(numCol)} DESC) AS rhi
+      FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}
+    ) WHERE rlo <= ${n} OR rhi <= ${n}`);
 }
 
 // One trace per color series; each spans the X categories.
@@ -342,7 +386,7 @@ async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, stat
   if (mode === 'violin') {
     // Raw rows (no statRows needed - also covers date columns, which skip stats).
     // Dates are reservoir-sampled to keep the payload bounded.
-    const inner = `SELECT ${catSql} AS cat, ${selectExpr(q, numCol, 'val')}, ${series.sql}
+    const inner = `SELECT ${catSql} AS cat, ${selectExpr(q, numCol, 'val')}, ${q(FILE_ROW_NUMBER)} AS frn, ${series.sql}
       FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}`;
     const rows = await ctx.queryRows(
       isDate ? `SELECT * FROM (${inner}) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)` : inner);
@@ -353,6 +397,7 @@ async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, stat
       return {
         type: 'violin', name: labelFn(g),
         x: gr.map(r => String(r.cat)), y: gr.map(r => valueOf(numCol, r.val)),
+        customdata: gr.map(r => r.frn),  // aligns with y for click-to-inspect
         box: { visible: true }, meanline: { visible: true }, points: 'outliers',
         spanmode: 'soft', marker: { color: colorFn(g) },  // smooth tails, not clipped flat
       };
@@ -425,28 +470,30 @@ export async function renderScatter(container, ctx, spec) {
     const wh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL AND ${q(colorBy)} IS NOT NULL`);
     const rows = await ctx.queryRows(`
       SELECT * FROM (
-        SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${q(colorBy)} AS c
+        SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${q(colorBy)} AS c, ${q(FILE_ROW_NUMBER)} AS frn
         FROM ${table} ${wh}
       ) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)
     `);
     if (isStale()) return false;
     const sampled = rows.length >= MAX_SAMPLE;
-    ctx.plot.append(container, [{
+    const div = ctx.plot.append(container, [{
       type: 'scatter', mode: 'markers',
       x: rows.map(r => valueOf(x, r.x)), y: rows.map(r => valueOf(y, r.y)),
+      customdata: rows.map(r => r.frn),
       marker: { color: rows.map(r => Number(r.c)), colorscale: colorScale, showscale: true,
         colorbar: { title: { text: niceName(colorBy) } }, size: 5, opacity: 0.7 },
     }], {
-      title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
+      title: { text: `${niceName(x)} vs ${niceName(y)}` + scatterHint(sampled) },
       xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), showlegend: false,
     });
+    registerPointPlot(div, ctx);
     return true;
   }
 
   const wh = andWhere(where, `${q(x)} IS NOT NULL AND ${q(y)} IS NOT NULL`);
   const rows = await ctx.queryRows(`
     SELECT * FROM (
-      SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${series.sql}
+      SELECT ${selectExpr(q, x, 'x')}, ${selectExpr(q, y, 'y')}, ${q(FILE_ROW_NUMBER)} AS frn, ${series.sql}
       FROM ${table} ${wh}
     ) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)
   `);
@@ -458,14 +505,24 @@ export async function renderScatter(container, ctx, spec) {
     return {
       type: 'scatter', mode: 'markers', name: labelFn(g),
       x: gr.map(r => valueOf(x, r.x)), y: gr.map(r => valueOf(y, r.y)),
+      customdata: gr.map(r => r.frn),
       marker: { color: colorFn(g), size: 5, opacity: 0.7 },
     };
   }).filter(t => t.x.length);
-  ctx.plot.append(container, traces, {
-    title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
+  const div = ctx.plot.append(container, traces, {
+    title: { text: `${niceName(x)} vs ${niceName(y)}` + scatterHint(sampled) },
     xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), ...legendCfg(ctx, groups.length),
   });
+  registerPointPlot(div, ctx);
   return true;
+}
+
+/** Sub-title line under a scatter title: sampling note plus the click-for-details hint. */
+function scatterHint(sampled) {
+  const parts = [];
+  if (sampled) parts.push('up to 5,000 points shown');
+  parts.push('click a point for details');
+  return `<br><sup>${parts.join(' · ')}</sup>`;
 }
 
 export async function renderCountBar(container, ctx, spec) {

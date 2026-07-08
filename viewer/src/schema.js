@@ -6,10 +6,18 @@ export const BLOB_COLS = new Set([
   'thumbnail', 'histogram_counts',
 ]);
 
+// Numeric columns never shown to users: row ids, aggregation bookkeeping, and
+// internal histogram / thumbnail bounds. Shared with the point inspector.
+export const NON_USER_FACING_NUMERIC_COLS = new Set([
+  'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images',
+  'histogram_min', 'histogram_max',
+  'thumbnail_norm_min', 'thumbnail_norm_max',
+]);
+
+// Not plottable metrics: the non-user-facing columns, plus derived descriptors.
 export const SKIP_METRIC_COLS = new Set([
-  'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
-  'size_bytes',
-  'histogram_min', 'histogram_max',  // range scalars, not user-facing metrics
+  ...NON_USER_FACING_NUMERIC_COLS,
+  'ndim', 'num_pixels', 'size_bytes',
 ]);
 
 // Per-axis pixel-extent columns (size_X, size_Y, size_Z, …). Matched by shape
