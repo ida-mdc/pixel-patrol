@@ -17,7 +17,7 @@ from pixel_patrol_base.core.record import Record, record_from
 class MockEntry:
     shape:     Tuple[int, ...]
     dtype:     Any
-    dim_order: Tuple[str, ...]
+    dim_order: str
     n_images:  int  = 1
     fail:      bool = False
 
@@ -45,7 +45,7 @@ class MockLoader:
         if e is None or e.fail:
             raise FileNotFoundError(file_path)
         arr = np.zeros(e.shape, dtype=e.dtype)
-        meta = {"shape": list(arr.shape), "ndim": arr.ndim, "dim_order": "".join(e.dim_order)}
+        meta = {"shape": list(arr.shape), "ndim": arr.ndim, "dim_order": e.dim_order}
         return record_from(arr, meta, kind="intensity")
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
@@ -53,7 +53,7 @@ class MockLoader:
         if e is None or e.fail:
             raise FileNotFoundError(file_path)
         arr = np.zeros(e.shape, dtype=e.dtype)
-        meta = {"shape": list(arr.shape), "ndim": arr.ndim, "dim_order": "".join(e.dim_order)}
+        meta = {"shape": list(arr.shape), "ndim": arr.ndim, "dim_order": e.dim_order}
         for i in range(start, stop):
             yield str(i), record_from(arr, meta, kind="intensity")
 

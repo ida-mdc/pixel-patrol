@@ -140,9 +140,8 @@ class BioIoLoader:
         meta = _extract_metadata(img)
         meta = normalize_metadata(meta)
         shape = tuple(int(x) for x in meta["shape"])
-        dim_order = tuple(meta["dim_order"])
         dtype = np.dtype(meta.get("dtype", "float32"))
-        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
+        return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
 
     def load(self, file_path: Path) -> Record:
         """Load a single-image (or first-scene) file; return a Record."""

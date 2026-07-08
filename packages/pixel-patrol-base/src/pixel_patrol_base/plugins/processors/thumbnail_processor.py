@@ -164,16 +164,15 @@ class ThumbnailProcessor:
         return lambda rows, g_dims: _assemble(rows).get(name)
 
     def run_chunk(self, record: Record) -> Dict:
-        dim_order_out = list(record.dim_order)
+        dim_order_out = record.dim_order
         if "Y" not in dim_order_out or "X" not in dim_order_out:
             return {}
 
         chunk: np.ndarray = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
         color_dim = _get_color_dim(record.capabilities)
-        dim_str = "".join(dim_order_out)
 
-        y_ax = dim_str.index("Y")
-        x_ax = dim_str.index("X")
+        y_ax = dim_order_out.index("Y")
+        x_ax = dim_order_out.index("X")
         h, w = chunk.shape[y_ax], chunk.shape[x_ax]
         if h > _PATCH_MAX or w > _PATCH_MAX:
             scale = min(_PATCH_MAX / h, _PATCH_MAX / w)
@@ -188,7 +187,7 @@ class ThumbnailProcessor:
             arr = da.where(da.isnull(arr), 0.0, arr)
 
         keep_dims = {"X", "Y", color_dim} if color_dim else {"X", "Y", "S"}
-        arr, reduced_order = _reduce_to_spatial(arr, dim_str, keep_dims=keep_dims)
+        arr, reduced_order = _reduce_to_spatial(arr, dim_order_out, keep_dims=keep_dims)
         if arr.size == 0:
             return {}
 

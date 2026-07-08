@@ -41,14 +41,14 @@ def _run(pairs: List[Tuple[str, int]], loader: MockLoader,
 # ── _plan_container_tasks unit tests ─────────────────────────────────────────
 
 def test_container_tasks_all_fit_in_one_task():
-    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=5)
+    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order="YX", n_images=5)
     tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 1
     assert tasks[0].image_slice == (0, 5)
 
 
 def test_container_tasks_splits_evenly():
-    info = FileInfo(shape=(40, 40), dtype=np.float32, dim_order=("Y", "X"), n_images=20)
+    info = FileInfo(shape=(40, 40), dtype=np.float32, dim_order="YX", n_images=20)
     tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 2
     assert tasks[0].image_slice == (0, 16)
@@ -56,28 +56,28 @@ def test_container_tasks_splits_evenly():
 
 
 def test_container_tasks_one_per_image_when_large():
-    info = FileInfo(shape=(128, 128), dtype=np.float32, dim_order=("Y", "X"), n_images=100)
+    info = FileInfo(shape=(128, 128), dtype=np.float32, dim_order="YX", n_images=100)
     tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 1000)
     assert len(tasks) == 100
     assert [t.image_slice[0] for t in tasks] == list(range(100))
 
 
 def test_container_tasks_image_exceeds_budget():
-    info = FileInfo(shape=(512, 512), dtype=np.float32, dim_order=("Y", "X"), n_images=1)
+    info = FileInfo(shape=(512, 512), dtype=np.float32, dim_order="YX", n_images=1)
     tasks = _plan_container_tasks(0, "/f.lmdb", info, 10, 1000)
     assert len(tasks) == 1
     assert tasks[0].image_slice == (0, 1)
 
 
 def test_container_tasks_file_index_and_path():
-    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=3)
+    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order="YX", n_images=3)
     tasks = _plan_container_tasks(42, "/custom/path.lmdb", info, 102400, 1000)
     assert all(t.file_index == 42 for t in tasks)
     assert all(t.file_path == "/custom/path.lmdb" for t in tasks)
 
 
 def test_container_tasks_capped_by_max_images_per_task():
-    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order=("Y", "X"), n_images=100)
+    info = FileInfo(shape=(10, 10), dtype=np.float32, dim_order="YX", n_images=100)
     tasks = _plan_container_tasks(0, "/f.lmdb", info, 102400, 10)
     assert len(tasks) == 10
     assert tasks[0].image_slice == (0, 10)
@@ -88,9 +88,9 @@ def test_container_tasks_capped_by_max_images_per_task():
 
 def test_small_files_batched_into_one_task():
     loader = MockLoader({
-        "/a.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/b.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/c.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
+        "/a.npy": MockEntry((64, 64), np.float32, "YX"),
+        "/b.npy": MockEntry((64, 64), np.float32, "YX"),
+        "/c.npy": MockEntry((64, 64), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, fi = _run([("/a.npy", 10240), ("/b.npy", 10240), ("/c.npy", 10240)], loader, config)
@@ -102,9 +102,9 @@ def test_small_files_batched_into_one_task():
 
 def test_batch_flushes_when_on_disk_budget_reached():
     loader = MockLoader({
-        "/a.npy": MockEntry((80, 80), np.float32, ("Y", "X")),
-        "/b.npy": MockEntry((80, 80), np.float32, ("Y", "X")),
-        "/c.npy": MockEntry((80, 80), np.float32, ("Y", "X")),
+        "/a.npy": MockEntry((80, 80), np.float32, "YX"),
+        "/b.npy": MockEntry((80, 80), np.float32, "YX"),
+        "/c.npy": MockEntry((80, 80), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=50 / 1024)
     tasks, _ = _run([("/a.npy", 25600), ("/b.npy", 25600), ("/c.npy", 25600)], loader, config)
@@ -116,8 +116,8 @@ def test_batch_flushes_when_on_disk_budget_reached():
 
 def test_files_meta_assigned_sequentially():
     loader = MockLoader({
-        "/x.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/y.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
+        "/x.npy": MockEntry((64, 64), np.float32, "YX"),
+        "/y.npy": MockEntry((64, 64), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, fi = _run([("/x.npy", 5000), ("/y.npy", 5000)], loader, config)
@@ -128,7 +128,7 @@ def test_files_meta_assigned_sequentially():
 
 
 def test_header_failure_skips_file():
-    loader = MockLoader({"/mystery.npy": MockEntry((64, 64), np.float32, ("Y", "X"), fail=True)})
+    loader = MockLoader({"/mystery.npy": MockEntry((64, 64), np.float32, "YX", fail=True)})
     config = ProcessingConfig(mb_per_task=0.1)
     with capture_warnings() as warnings:
         # 20 KB > fast-path threshold (budget/8 = 12.8 KB) so read_header is called
@@ -139,7 +139,7 @@ def test_header_failure_skips_file():
 
 
 def test_header_failure_large_file_skipped():
-    loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, ("Y", "X"), fail=True)})
+    loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, "YX", fail=True)})
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/big.npy", 1024 * 1024)], loader, config)
     assert len(tasks) == 0
@@ -149,7 +149,7 @@ def test_header_failure_large_file_skipped():
 # ── _plan_tasks: MemoryChunkTask routing ─────────────────────────────────────
 
 def test_large_single_image_yields_chunk_tasks():
-    loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, ("Y", "X"))})
+    loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, "YX")})
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/big.npy", 512 * 512 * 4)], loader, config)
     assert all(isinstance(t, MemoryChunkTask) for t in tasks)
@@ -160,8 +160,8 @@ def test_large_single_image_yields_chunk_tasks():
 
 def test_large_file_flushes_pending_batch_first():
     loader = MockLoader({
-        "/small.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/big.npy":   MockEntry((512, 512), np.float32, ("Y", "X")),
+        "/small.npy": MockEntry((64, 64), np.float32, "YX"),
+        "/big.npy":   MockEntry((512, 512), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, _ = _run([("/small.npy", 16384), ("/big.npy", 512 * 512 * 4)], loader, config)
@@ -171,7 +171,7 @@ def test_large_file_flushes_pending_batch_first():
 
 
 def test_unsplittable_large_file_falls_to_batch():
-    loader = MockLoader({"/pinned.npy": MockEntry((512, 512), np.float32, ("Y", "X"))})
+    loader = MockLoader({"/pinned.npy": MockEntry((512, 512), np.float32, "YX")})
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": -1, "X": -1})
     tasks, _ = _run([("/pinned.npy", 512 * 512 * 4)], loader, config)
     assert len(tasks) == 1
@@ -181,7 +181,7 @@ def test_unsplittable_large_file_falls_to_batch():
 def test_non_divisible_dim_splits_at_block_boundaries():
     # Y=100 is not divisible by leaf=32, but the algorithm still splits at multiples of 32;
     # the last chunk (96:100) is simply smaller. No warning expected.
-    loader = MockLoader({"/weird.npy": MockEntry((100, 512), np.float32, ("Y", "X"))})
+    loader = MockLoader({"/weird.npy": MockEntry((100, 512), np.float32, "YX")})
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 32})
     tasks, _ = _run([("/weird.npy", 100 * 512 * 4)], loader, config)
     assert all(isinstance(t, MemoryChunkTask) for t in tasks)
@@ -191,9 +191,9 @@ def test_non_divisible_dim_splits_at_block_boundaries():
 
 def test_chunk_tasks_followed_by_more_batching():
     loader = MockLoader({
-        "/big.npy":    MockEntry((512, 512), np.float32, ("Y", "X")),
-        "/small1.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/small2.npy": MockEntry((64, 64), np.float32, ("Y", "X")),
+        "/big.npy":    MockEntry((512, 512), np.float32, "YX"),
+        "/small1.npy": MockEntry((64, 64), np.float32, "YX"),
+        "/small2.npy": MockEntry((64, 64), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, _ = _run([
@@ -211,7 +211,7 @@ def test_chunk_tasks_followed_by_more_batching():
 # ── _plan_tasks: ContainerTask routing ────────────────────────────────────────
 
 def test_container_file_all_images_one_task():
-    loader = MockLoader({"/c.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=5)})
+    loader = MockLoader({"/c.lmdb": MockEntry((10, 10), np.float32, "YX", n_images=5)})
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, fi = _run([("/c.lmdb", 5000)], loader, config)
     assert len(tasks) == 1
@@ -221,7 +221,7 @@ def test_container_file_all_images_one_task():
 
 
 def test_container_file_split_into_multiple_tasks():
-    loader = MockLoader({"/c.lmdb": MockEntry((40, 40), np.float32, ("Y", "X"), n_images=20)})
+    loader = MockLoader({"/c.lmdb": MockEntry((40, 40), np.float32, "YX", n_images=20)})
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, _ = _run([("/c.lmdb", 20 * 40 * 40 * 4)], loader, config)
     assert len(tasks) == 2
@@ -232,7 +232,7 @@ def test_container_file_split_into_multiple_tasks():
 
 
 def test_container_file_one_task_per_image_when_large():
-    loader = MockLoader({"/c.lmdb": MockEntry((200, 200), np.float32, ("Y", "X"), n_images=10)})
+    loader = MockLoader({"/c.lmdb": MockEntry((200, 200), np.float32, "YX", n_images=10)})
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, _ = _run([("/c.lmdb", 10 * 200 * 200 * 4)], loader, config)
     assert len(tasks) == 10
@@ -243,8 +243,8 @@ def test_container_file_one_task_per_image_when_large():
 
 def test_container_flushes_pending_batch_before_sub_image_tasks():
     loader = MockLoader({
-        "/small.npy":     MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/container.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=5),
+        "/small.npy":     MockEntry((64, 64), np.float32, "YX"),
+        "/container.lmdb": MockEntry((10, 10), np.float32, "YX", n_images=5),
     })
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, _ = _run([("/small.npy", 10240), ("/container.lmdb", 5000)], loader, config)
@@ -254,7 +254,7 @@ def test_container_flushes_pending_batch_before_sub_image_tasks():
 
 
 def test_container_header_failure_skips_file():
-    loader = MockLoader({"/c.lmdb": MockEntry((64, 64), np.float32, ("Y", "X"), fail=True)})
+    loader = MockLoader({"/c.lmdb": MockEntry((64, 64), np.float32, "YX", fail=True)})
     config = ProcessingConfig(mb_per_task=0.1)
     tasks, fi = _run([("/c.lmdb", 5000)], loader, config)
     assert len(tasks) == 0
@@ -265,10 +265,10 @@ def test_container_header_failure_skips_file():
 
 def test_mixed_small_large_container_ordering():
     loader = MockLoader({
-        "/small.npy":      MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/big.npy":        MockEntry((512, 512), np.float32, ("Y", "X")),
-        "/container.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=4),
-        "/final.npy":      MockEntry((64, 64), np.float32, ("Y", "X")),
+        "/small.npy":      MockEntry((64, 64), np.float32, "YX"),
+        "/big.npy":        MockEntry((512, 512), np.float32, "YX"),
+        "/container.lmdb": MockEntry((10, 10), np.float32, "YX", n_images=4),
+        "/final.npy":      MockEntry((64, 64), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([
@@ -297,9 +297,9 @@ def test_mixed_small_large_container_ordering():
 
 def test_all_task_types_have_correct_file_indices():
     loader = MockLoader({
-        "/f0.npy":  MockEntry((64, 64), np.float32, ("Y", "X")),
-        "/f1.lmdb": MockEntry((10, 10), np.float32, ("Y", "X"), n_images=3),
-        "/f2.npy":  MockEntry((512, 512), np.float32, ("Y", "X")),
+        "/f0.npy":  MockEntry((64, 64), np.float32, "YX"),
+        "/f1.lmdb": MockEntry((10, 10), np.float32, "YX", n_images=3),
+        "/f2.npy":  MockEntry((512, 512), np.float32, "YX"),
     })
     config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
     tasks, fi = _run([("/f0.npy", 16384), ("/f1.lmdb", 3000), ("/f2.npy", 512 * 512 * 4)], loader, config)
