@@ -29,7 +29,6 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
-        self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
@@ -161,7 +160,7 @@ class Project:
         parts_dir = self.output_path.parent / f"_parts_{self.output_path.stem}"
         processing.cleanup_chunks_dir(parts_dir)  # clear any stale parts from a previous run
 
-        self.records_df, stats = processing.build_records_df(
+        records_df, stats = processing.build_records_df(
             bases=self.paths,
             base_dir=self.base_dir,
             loader=self.loader,
@@ -171,20 +170,19 @@ class Project:
             on_progress=progress_callback,
         )
 
-        self._save_result(stats, parts_dir, config)
+        self._save_result(records_df, stats, parts_dir, config)
         return self
 
 
     def _save_result(
             self,
-            stats:     dict,
-            parts_dir: Path,
-            config:    ProcessingConfig,
+            records_df: Optional[pl.DataFrame],
+            stats:      dict,
+            parts_dir:  Path,
+            config:     ProcessingConfig,
     ) -> None:
-        """Store stats, then write the final parquet via the appropriate path.
+        """Write the final parquet via the appropriate path.
 
-        Two save paths exist because build_records_df may spill to parts on disk
-        (large datasets) or keep everything in memory (small datasets):
           - records_df is None  → parts on disk → save_parquet_from_parts (streaming)
           - records_df is set   → in-memory     → save_parquet
         """
@@ -196,10 +194,10 @@ class Project:
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
 
-        if self.records_df is None:
+        if records_df is None:
             parts_on_disk = sorted(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else []
             if not parts_on_disk:
-                logger.warning("Project Core: No files found/processed. records_df will be None.")
+                logger.warning("Project Core: No files found/processed.")
                 return
             logger.info("Project Core: streaming %d parts → '%s'", len(parts_on_disk), self.output_path)
             try:
@@ -212,13 +210,12 @@ class Project:
                 logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
             return
 
-        if self.records_df.is_empty():
-            logger.warning("Project Core: No files found/processed. records_df will be None.")
-            self.records_df = None
+        if records_df.is_empty():
+            logger.warning("Project Core: No files found/processed.")
             return
 
         try:
-            save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
+            save_parquet(records_df, self.output_path, self.metadata, **rgs_kwargs)
             processing.cleanup_chunks_dir(parts_dir)
             logger.info("Output → '%s'", self.output_path)
         except Exception as e:
@@ -235,10 +232,6 @@ class Project:
     def get_paths(self) -> List[Path]:
         """Get the list of directory paths added to the project."""
         return self.paths
-
-    def get_records_df(self) -> Optional[pl.DataFrame]:
-        """Get the single DataFrame containing processed data."""
-        return self.records_df
 
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
