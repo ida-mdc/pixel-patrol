@@ -112,9 +112,6 @@ Use a permissive open-source license for your extension - MIT, BSD-2-Clause, BSD
 ```toml
 [project]
 license = { file = "LICENSE" }
-
-[tool.setuptools]
-license-files = ["LICENSE"]
 ```
 
 Avoid copyleft licenses (GPL, AGPL): they would require anyone who combines your extension with pixel-patrol to release their own code under the same terms, which is usually not what extension authors or users want.
