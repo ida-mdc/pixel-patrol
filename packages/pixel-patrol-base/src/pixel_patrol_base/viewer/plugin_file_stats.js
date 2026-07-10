@@ -233,7 +233,7 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
   const { breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
   if (!breaks.length) return;
   const rows = await ctx.queryRows(`
-    SELECT ${buildBinCaseSQL('"size_bytes"', breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
+    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
     GROUP BY 1, 2
   `);
@@ -296,12 +296,12 @@ async function bucketByDateFmt(ctx, fmt) {
 }
 
 // (category, group) → a numeric field from long-format rows, 0 when absent.
-export function pick(rows, catOf, valueKey) {
+function pick(rows, catOf, valueKey) {
   const m = new Map(rows.map(r => [`${catOf(r)}\x00${r.__group__}`, Number(r[valueKey] ?? 0)]));
   return (cat, g) => m.get(`${cat}\x00${g}`) ?? 0;
 }
 
-export function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
+function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
   const legend = showLegend && ctx.groups.length > 1;
   ctx.plot.append(container, ctx.plot.groupedBarTraces(categories, getValue), {
     margin:     FILE_STATS_MARGIN,
@@ -316,7 +316,7 @@ export function renderGroupedBars(container, { categories, getValue, title, xLab
   }, 'margin-bottom:24px');
 }
 
-export function computeSizeBins(minS, maxS, nUniq, fmt) {
+function computeSizeBins(minS, maxS, nUniq, fmt) {
   const effectiveBins = Math.min(SIZE_NUM_BINS, nUniq);
   if (effectiveBins <= 1 || maxS <= minS) return { breaks: [], labels: [], useLog: false };
   const minPositive = minS > 0 ? minS : 1;
@@ -339,9 +339,9 @@ export function computeSizeBins(minS, maxS, nUniq, fmt) {
   return { breaks, labels, useLog };
 }
 
-export function buildBinCaseSQL(expr, breaks, labels) {
+function buildSizeCaseSQL(breaks, labels) {
   let sql = `CASE`;
-  for (let i = 0; i < breaks.length; i++) sql += ` WHEN ${expr} < ${breaks[i]} THEN '${labels[i]}'`;
+  for (let i = 0; i < breaks.length; i++) sql += ` WHEN "size_bytes" < ${breaks[i]} THEN '${labels[i]}'`;
   sql += ` ELSE '${labels[labels.length - 1]}' END`;
   return sql;
 }

@@ -6,12 +6,6 @@
  * 3. Histogram of non-finite pixel count for float images
  *    (num_pixels - finite_pixel_count), with a summary line.
  */
-import {
-  pick,
-  renderGroupedBars,
-  buildBinCaseSQL,
-} from '../../extension/1/plugin_file_stats.js';
-
 export default {
   id: 'nodata-value-count',
   label: 'NoData',
@@ -149,4 +143,35 @@ async function renderNonFiniteHist(container, ctx) {
     xLabel:     '% non-finite pixels',
     yLabel:     'Image count',
   }, ctx);
+}
+
+// --- local helpers (kept self-contained rather than importing from the base
+//     package's plugin_file_stats.js, whose relative extension path is not
+//     stable across extension install order) --------------------------------
+
+// (category, group) → a numeric field from long-format rows, 0 when absent.
+function pick(rows, catOf, valueKey) {
+  const m = new Map(rows.map(r => [`${catOf(r)}\x00${r.__group__}`, Number(r[valueKey] ?? 0)]));
+  return (cat, g) => m.get(`${cat}\x00${g}`) ?? 0;
+}
+
+function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
+  const legend = showLegend && ctx.groups.length > 1;
+  ctx.plot.append(container, ctx.plot.groupedBarTraces(categories, getValue), {
+    title:      { text: title },
+    barmode:    'stack',
+    bargap:     ctx.plot.bargap(categories.length),
+    xaxis:      { title: xLabel, type: 'category' },
+    yaxis:      { title: yLabel },
+    height:     400,
+    showlegend: legend,
+    ...(legend ? { legend: ctx.plot.plotlyLegendConfig } : {}),
+  }, 'margin-bottom:24px');
+}
+
+function buildBinCaseSQL(expr, breaks, labels) {
+  let sql = `CASE`;
+  for (let i = 0; i < breaks.length; i++) sql += ` WHEN ${expr} < ${breaks[i]} THEN '${labels[i]}'`;
+  sql += ` ELSE '${labels[labels.length - 1]}' END`;
+  return sql;
 }
