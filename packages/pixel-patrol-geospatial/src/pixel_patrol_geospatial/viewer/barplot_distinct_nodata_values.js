@@ -16,6 +16,24 @@ export default {
     return schema.allCols.includes('nodata_value');
   },
 
+  async condensedPlot(container, ctx) {
+    const { groupCol: gcFn } = ctx.sql;
+    const rows = await ctx.queryRows(`
+      SELECT COALESCE(CAST("nodata_value" AS VARCHAR), 'not set') AS nodata_value,
+             ${gcFn()} AS __group__, COUNT(*) AS count
+      FROM pp_data ${ctx.where}
+      GROUP BY 1, 2
+    `);
+    if (!rows.length) return false;
+    const cats = [...new Set(rows.map(r => String(r.nodata_value)))];
+    ctx.plot.appendMini(
+      container,
+      ctx.plot.groupedBarTraces(cats, pick(rows, r => r.nodata_value, 'count'), { mini: true }),
+      { xaxis: { type: 'category' }, yaxis: { showticklabels: false } },
+    );
+    return true;
+  },
+
   async render(container, ctx) {
     try {
       await renderNodataValueBar(container, ctx);
