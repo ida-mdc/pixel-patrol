@@ -2,7 +2,7 @@
 
 PixelPatrol is designed to be extended. You can add custom loaders, processors, and viewer widgets as standalone Python packages - no fork required.
 
-The [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) directory in the repository is a complete, working template - "Pixel HAI Watch", which reads `.parquet` tables as if they were tiny snapshots from a deep-sea shark camera. It implements:
+[`pixel-patrol-example-extension`](https://github.com/ida-mdc/pixel-patrol-example-extension) is a complete, working template - "Pixel HAI Watch", which reads `.parquet` tables as if they were tiny snapshots from a deep-sea shark camera. It implements:
 
 - A custom **loader** (reads `.parquet` tables as pixel grids, with fake image metadata - which ocean depth zone the snapshot was taken in)
 - A custom **processor** (counts the bioluminescent "glows" in each patch)
@@ -57,7 +57,7 @@ If PixelPatrol can't read your file format - or doesn't read it (and its metadat
 
 `dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` — the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
 
-See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example, including the complete protocol table.
+See [`pixel-patrol-example-extension`](https://github.com/ida-mdc/pixel-patrol-example-extension) for a full working example, including the complete protocol table.
 
 ---
 
@@ -65,7 +65,7 @@ See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree
 
 If you want to compute a metric on images - any images, regardless of who loaded them - write a processor extension. A processor receives loaded records and returns derived values that get merged into the table as new columns, by implementing the `PixelPatrolProcessor` protocol: `NAME`, `CHUNK_KIND`, `INPUT`, `OUTPUT`, `OUTPUT_SCHEMA`, `run_chunk`, and `get_aggregation` - every member is required.
 
-See [`examples/minimal-extension/`](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension) for a full working example, including the complete protocol table.
+See [`pixel-patrol-example-extension`](https://github.com/ida-mdc/pixel-patrol-example-extension) for a full working example, including the complete protocol table.
 
 ---
 
@@ -101,9 +101,9 @@ Each plugin's `render(container, ctx)` method receives a `ctx` object - the rend
 - `ctx.groups` - distinct values of the active group column
 - `ctx.totalRows` / `ctx.filteredCount` - row counts
 
-See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) for the full `ctx` reference and worked examples.
+See the [`pixel-patrol-example-extension` README](https://github.com/ida-mdc/pixel-patrol-example-extension/blob/main/README.md) for the full `ctx` reference and worked examples.
 
 ---
 
 !!! tip
-    See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-patrol/blob/main/examples/minimal-extension/README.md) in the repository for step-by-step instructions, the full protocol tables, and the complete viewer plugin / `ctx` API.
+    See the [`pixel-patrol-example-extension` README](https://github.com/ida-mdc/pixel-patrol-example-extension/blob/main/README.md) for step-by-step instructions, the full protocol tables, and the complete viewer plugin / `ctx` API.
