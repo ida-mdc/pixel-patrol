@@ -34,7 +34,7 @@ class SharkCamLoader:
 
     def read_header(self, file_path: Path) -> FileInfo:
         meta = pq.ParquetFile(file_path).metadata
-        return FileInfo(shape=(meta.num_rows, meta.num_columns), dtype=np.uint8, dim_order=("Y", "X"))
+        return FileInfo(shape=(meta.num_rows, meta.num_columns), dtype=np.uint8, dim_order="YX")
 
     def load(self, file_path: Path) -> Record:
         table = pq.read_table(file_path)

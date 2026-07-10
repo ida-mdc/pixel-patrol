@@ -17,7 +17,7 @@ class _AnyFileLoader:
     SUPPORTED_EXTENSIONS: Set[str] = {".jpg", ".png", ".tif", ".npy"}
 
     def read_header(self, file_path: Path) -> FileInfo:
-        return FileInfo(shape=(10, 10), dtype=np.dtype("uint8"), dim_order=("Y", "X"), n_images=1)
+        return FileInfo(shape=(10, 10), dtype=np.dtype("uint8"), dim_order="YX", n_images=1)
 
     def load(self, file_path: Path) -> Record:
         arr = np.zeros((10, 10), dtype=np.uint8)

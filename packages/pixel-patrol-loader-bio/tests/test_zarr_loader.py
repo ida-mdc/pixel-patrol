@@ -56,7 +56,7 @@ def test_read_header(zarr_folder: Path, loader):
     info = loader.read_header(zarr_folder)
     assert info.shape == (2, 10, 10)
     assert info.n_images == 1
-    assert tuple(info.dim_order) == ("C", "Y", "X")
+    assert info.dim_order == "CYX"
 
 
 def test_is_folder_supported(zarr_folder: Path, loader):

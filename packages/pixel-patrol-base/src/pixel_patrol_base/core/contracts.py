@@ -34,7 +34,7 @@ class FileInfo:
     """
     shape:     Tuple[int, ...]
     dtype:     Any                # numpy dtype or compatible
-    dim_order: Tuple[str, ...]    # e.g. ('Z', 'Y', 'X')
+    dim_order: str                # e.g. 'ZYX', specifying 'X' and 'Y' is important for many processors
     n_images:  int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …)
 
 

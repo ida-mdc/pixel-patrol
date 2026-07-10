@@ -195,9 +195,8 @@ class ZarrLoader:
             raise RuntimeError(f"Cannot read Zarr array at: {file_path}")
         meta = _extract_zarr_metadata(arr, file_path)
         shape = tuple(int(x) for x in arr.shape)
-        dim_order = tuple(meta["dim_order"])
         dtype = np.dtype(str(arr.dtype))
-        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
+        return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=1)
 
     def load(self, file_path: Path) -> Record:
         arr = _load_zarr_array(file_path)
