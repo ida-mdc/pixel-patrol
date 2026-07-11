@@ -565,16 +565,32 @@ function populateReportFooter(meta) {
     html += '</div>';
   }
 
-  // ── second row: paths, workers, memory ──
-  const subs = [];
+  // ── second row: paths (own line - can be long/wrap on its own) ──
   const nonTrivialPaths = (meta.paths || []).filter(p => p && p !== '.');
-  if (nonTrivialPaths.length) subs.push(`<span class="ri-paths"><span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}</span>`);
+  if (nonTrivialPaths.length) {
+    html += `<div class="ri-row ri-sub"><span class="ri-paths"><span class="ri-label">Paths:</span> ${nonTrivialPaths.map(_esc).join(', ')}</span></div>`;
+  }
+
+  // ── third row: loader, workers, memory ──
+  const subs = [];
   if (meta.loader)          subs.push(`<span class="ri-loader"><span class="ri-label">Loader:</span> ${_esc(meta.loader)}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
 
   if (subs.length) {
     html += `<div class="ri-row ri-sub">${subs.join('<span class="ri-sep"> · </span>')}</div>`;
+  }
+
+  // ── third row: what's in this file (embedded verbatim at process time) ──
+  const privacyLines = meta.privacySummary || [];
+  if (privacyLines.length) {
+    const items = privacyLines.map(l => `<li>${_esc(l.replace(/^-\s*/, ''))}</li>`).join('');
+    html += `<div class="ri-row ri-privacy">
+      <details class="ri-privacy-details" open>
+        <summary>What's in this file</summary>
+        <ul>${items}</ul>
+      </details>
+    </div>`;
   }
 
   if (html) {

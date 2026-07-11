@@ -200,6 +200,11 @@ class Project:
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
 
+        # Computed once, embedded in the parquet footer and printed below.
+        self.metadata.privacy_summary = _privacy_disclosure_lines(
+            self.loader, processors, config.metadata.omit_base_dir
+        )
+
         saved = False
 
         if self.records_df is None:
@@ -230,7 +235,7 @@ class Project:
                 logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
         if saved:
-            _log_privacy_disclosure(self.loader, processors, config.metadata.omit_base_dir)
+            _log_privacy_disclosure(self.metadata.privacy_summary)
             logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
 
 
@@ -280,15 +285,19 @@ def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool) -> 
     return lines
 
 
-def _log_privacy_disclosure(loader, processors: list, omit_base_dir: bool) -> None:
+def _log_privacy_disclosure(lines: List[str]) -> None:
     """Print a hard-to-miss "what's in this file" banner, once, after the parquet
     is actually written - i.e. the last thing on screen, not buried under the
     progress bar and pipeline noise that precedes it.
+
+    Takes the already-computed lines (same ones embedded in the parquet footer
+    as pp_privacy_summary) rather than recomputing them, so the CLI banner and
+    the viewer's report footer can never say different things.
     """
     banner = "=" * 70
     logger.info(_output_log_style(banner, fg="yellow", bold=True))
     logger.info(_output_log_style("WHAT'S IN THIS FILE (read before sharing):", fg="yellow", bold=True))
-    for line in _privacy_disclosure_lines(loader, processors, omit_base_dir):
+    for line in lines:
         logger.info(line)
     logger.info("Details: https://pixelpatrol.app/docs/privacy/")
     logger.info(_output_log_style(banner, fg="yellow", bold=True))
