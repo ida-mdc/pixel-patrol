@@ -45,6 +45,7 @@ import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
 function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows) {
   const legend = legendWithGrouping(LEGEND, state, '');
   const groupLabels = buildGroupLabels(groups);
+  plotEngine.setDateCols(schema.dateCols ?? []);
 
   return {
     schema,

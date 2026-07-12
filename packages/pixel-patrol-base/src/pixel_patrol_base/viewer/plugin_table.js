@@ -18,6 +18,14 @@ function orderBy(col, dir) {
   return `ORDER BY "${col.replaceAll('"', '""')}" ${dir} ${dir === 'ASC' ? 'NULLS FIRST' : 'NULLS LAST'}`;
 }
 
+// Date/timestamp columns are formatted to readable strings in SQL, so cell
+// values arrive already-formatted rather than as raw epoch numbers.
+function selectList(q, cols, dateCols) {
+  return cols.map(c => dateCols.has(c)
+    ? `STRFTIME(${q(c)}, '%Y-%m-%d %H:%M:%S') AS ${q(c)}`
+    : q(c)).join(', ');
+}
+
 export default {
   id: 'image-table',
   // One row per image showing every column except the binary / per-row ones it
@@ -51,6 +59,7 @@ export default {
     try {
       const { q } = ctx.sql;
       const available = ctx.schema.allCols.filter(c => !SKIP_COLS.has(c));
+      const dateCols  = new Set(ctx.schema.dateCols ?? []);
       const front     = PRIORITY_COLS.filter(c => available.includes(c));
       const rest      = available.filter(c => !front.includes(c)).sort();
       const cols      = [...front, ...rest].slice(0, 3);
@@ -60,7 +69,7 @@ export default {
       // Pull more rows than visibly fit so the table fills the tile's height;
       // the plot area clips the overflow, reading as a cropped peek.
       const rows = await ctx.queryRows(`
-        SELECT ${cols.map(c => q(c)).join(', ')} FROM pp_data ${ctx.where}
+        SELECT ${selectList(q, cols, dateCols)} FROM pp_data ${ctx.where}
         ${orderBy(sortCol, 'ASC')}
         LIMIT 12
       `);
@@ -87,6 +96,7 @@ export default {
 
   async render(container, ctx) {
     const available   = ctx.schema.allCols.filter(c => !SKIP_COLS.has(c));
+    const dateCols    = new Set(ctx.schema.dateCols ?? []);
     const front       = PRIORITY_COLS.filter(c => available.includes(c));
     const rest        = available.filter(c => !front.includes(c)).sort();
     const displayCols = [...front, ...rest];
@@ -118,7 +128,7 @@ export default {
     async function doRender() {
       container.innerHTML = '<div class="no-data">Loading…</div>';
       try {
-        const { total, rows, isSearching } = await fetchPage(ctx, { displayCols, searchCols, total0, view });
+        const { total, rows, isSearching } = await fetchPage(ctx, { displayCols, searchCols, total0, view, dateCols });
         const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
         if (view.page >= totalPages) view.page = totalPages - 1;
 
@@ -154,7 +164,7 @@ export default {
 };
 
 // The page of rows plus its total, applying the current sort and search.
-async function fetchPage(ctx, { displayCols, searchCols, total0, view }) {
+async function fetchPage(ctx, { displayCols, searchCols, total0, view, dateCols }) {
   const { q, andWhere } = ctx.sql;
   const isSearching = Boolean(view.search.trim() && searchCols.length);
   const likes = isSearching
@@ -167,7 +177,7 @@ async function fetchPage(ctx, { displayCols, searchCols, total0, view }) {
       ? ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${wh}`).then(r => Number(r[0]?.n ?? 0))
       : Promise.resolve(total0),
     ctx.queryRows(`
-      SELECT ${displayCols.map(c => q(c)).join(', ')} FROM pp_data ${wh}
+      SELECT ${selectList(q, displayCols, dateCols)} FROM pp_data ${wh}
       ${orderBy(view.sortCol, view.sortDir)}
       LIMIT ${PAGE_SIZE} OFFSET ${view.page * PAGE_SIZE}
     `),

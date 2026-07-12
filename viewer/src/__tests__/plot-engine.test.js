@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { choosePlotKind, sortCats, COUNT_Y, NULL_LABEL } from '../plot-engine.js';
+import { choosePlotKind, sortCats, COUNT_Y, NULL_LABEL, niceDateAxis, setDateCols, DATE_COLS } from '../plot-engine.js';
 
 // choosePlotKind is query-free apart from two injected cardinality probes, so we
 // drive it with fakes. `card` maps column → distinct-count for both probes.
@@ -94,5 +94,50 @@ describe('sortCats', () => {
   });
   it('leaves a list without a missing bucket sorted', () => {
     expect(sortCats(['c', 'a', 'b'])).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('niceDateAxis', () => {
+  it('pins a floor dtick and pads the range for a near-zero-variance span', () => {
+    const t = Date.parse('2026-01-01T00:00:00Z');
+    const axis = niceDateAxis([t, t + 1], 'Modified');
+    expect(axis.type).toBe('date');
+    expect(axis.dtick).toBe(1000);
+    expect(axis.range[0]).toBeLessThan(t);
+    expect(axis.range[1]).toBeGreaterThan(t + 1);
+  });
+
+  it('picks a dtick step covering the actual span with no range override', () => {
+    const min = Date.parse('2026-01-01T00:00:00Z');
+    const max = min + 3_600_000; // 1 hour apart
+    const axis = niceDateAxis([min, max], 'Modified');
+    expect(axis.dtick).toBeGreaterThanOrEqual((max - min) / 6);
+    expect(axis.range).toBeUndefined();
+  });
+
+  it('falls back to auto dtick when the span exceeds the ladder', () => {
+    const min = Date.parse('1900-01-01T00:00:00Z');
+    const max = Date.parse('2026-01-01T00:00:00Z');
+    const axis = niceDateAxis([min, max], 'Modified');
+    expect(axis.dtick).toBeUndefined();
+    expect(axis.type).toBe('date');
+  });
+
+  it('handles no valid values without throwing', () => {
+    const axis = niceDateAxis([], 'Modified');
+    expect(axis.type).toBe('date');
+    expect(axis.dtick).toBeUndefined();
+  });
+});
+
+describe('setDateCols', () => {
+  it('replaces the DATE_COLS set contents', () => {
+    setDateCols(['acquisition_date']);
+    expect(DATE_COLS.has('acquisition_date')).toBe(true);
+    expect(DATE_COLS.has('modification_date')).toBe(false);
+
+    setDateCols(['modification_date']);
+    expect(DATE_COLS.has('modification_date')).toBe(true);
+    expect(DATE_COLS.has('acquisition_date')).toBe(false);
   });
 });

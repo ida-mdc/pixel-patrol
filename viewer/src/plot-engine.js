@@ -36,7 +36,12 @@ export const VIOLIN_ALL_POINTS_BELOW = 500;
 
 // Columns holding real timestamps - plotted on a date axis, never as categories,
 // and never summarised with approx_quantile (use a sampled raw violin instead).
-export const DATE_COLS = new Set(['modification_date']);
+// Populated from the detected schema via setDateCols() - see renderer.js buildCtx.
+export const DATE_COLS = new Set();
+export function setDateCols(cols) {
+  DATE_COLS.clear();
+  for (const c of cols) DATE_COLS.add(c);
+}
 const DATE_FMT = "'%Y-%m-%d %H:%M:%S'";
 
 export const CONSTANTS = {
@@ -50,8 +55,40 @@ function selectExpr(q, col, alias) {
     ? `STRFTIME(${q(col)}, ${DATE_FMT}) AS ${alias}`
     : `${q(col)} AS ${alias}`;
 }
-function axisCfg(col, title) {
-  return DATE_COLS.has(col) ? { title, type: 'date' } : { title };
+const DATE_TICK_FMT = '%Y-%m-%d %H:%M:%S';
+
+// Plotly's date axis auto-picks a dtick from the data span; for a near-zero
+// span (e.g. a freshly-generated dataset where every file shares one mtime)
+// that lands sub-second and renders as "13:40:20.0001" - not a date. Force a
+// dtick from this ladder instead, floored at 1 second, so the axis always
+// reads as calendar time. Values beyond the ladder fall back to Plotly's auto
+// dtick (safe - the failure mode only happens for very small spans). Tick text
+// always uses DATE_TICK_FMT - the same format used everywhere else in the
+// report (table cells, hover, exported plugin code) - so dates read the same way
+// throughout, never an abbreviated variant.
+const DATE_DTICK_LADDER = [
+  1000, 5000, 15000, 30000,
+  60_000, 300_000, 900_000, 1_800_000,
+  3_600_000, 10_800_000, 21_600_000, 43_200_000,
+  86_400_000, 604_800_000,
+  2_629_800_000, 7_889_400_000, 15_778_800_000,
+  31_557_600_000, 94_672_800_000, 157_788_000_000,
+];
+// Target ~6 ticks across the span; pick the smallest ladder step at or above that.
+export function niceDateAxis(values, title) {
+  const times = (values ?? []).map(v => new Date(v).getTime()).filter(Number.isFinite);
+  if (!times.length) return { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
+  const min = Math.min(...times), max = Math.max(...times);
+  const span = max - min;
+  const target = Math.max(span / 6, 1);
+  const dtick = DATE_DTICK_LADDER.find(d => d >= target);
+  if (!dtick) return { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
+  // Below one dtick step, autorange can collapse to a sub-ms window with no tick inside it.
+  const range = span < dtick ? [min - dtick * 3, max + dtick * 3] : undefined;
+  return { title, type: 'date', dtick, tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT, ...(range ? { range } : {}) };
+}
+function axisCfg(col, title, values) {
+  return DATE_COLS.has(col) ? niceDateAxis(values, title) : { title };
 }
 function valueOf(col, v) {
   return DATE_COLS.has(col) ? v : Number(v);
@@ -248,7 +285,7 @@ export async function renderDistribution(container, ctx, spec) {
   if (!traces.length || isStale()) return false;
 
   const layout = {
-    yaxis: axisCfg(numCol, yLabel),
+    yaxis: axisCfg(numCol, yLabel, traces.flatMap(t => t.y ?? [])),
     xaxis: { title: catLabel, type: 'category', ...(categories ? { categoryarray: categories } : {}) },
     // Each violin/box owns its own x category; default 'overlay' keeps them
     // centred. 'group' would reserve an empty sub-slot per trace per category.
@@ -438,7 +475,7 @@ export async function renderScatter(container, ctx, spec) {
         colorbar: { title: { text: niceName(colorBy) } }, size: 5, opacity: 0.7 },
     }], {
       title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
-      xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), showlegend: false,
+      xaxis: axisCfg(x, niceName(x), rows.map(r => r.x)), yaxis: axisCfg(y, niceName(y), rows.map(r => r.y)), showlegend: false,
     });
     return true;
   }
@@ -463,7 +500,7 @@ export async function renderScatter(container, ctx, spec) {
   }).filter(t => t.x.length);
   ctx.plot.append(container, traces, {
     title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
-    xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), ...legendCfg(ctx, groups.length),
+    xaxis: axisCfg(x, niceName(x), rows.map(r => r.x)), yaxis: axisCfg(y, niceName(y), rows.map(r => r.y)), ...legendCfg(ctx, groups.length),
   });
   return true;
 }
