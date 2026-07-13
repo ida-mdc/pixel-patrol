@@ -3,7 +3,8 @@ name = "pixel-patrol"
 version = "0.8.0"
 description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
 ]
@@ -20,14 +21,11 @@ Homepage = "https://ida-mdc.github.io/pixel-patrol/"
 Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.uv]
 package = true
-
-[tool.setuptools]
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 
 [dependency-groups]
 dev = [
