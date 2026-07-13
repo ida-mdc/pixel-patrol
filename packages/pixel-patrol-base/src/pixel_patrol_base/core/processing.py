@@ -118,7 +118,7 @@ class MemoryChunkSpec:
     """Describes one sub-region (memory chunk) of a large file."""
     slices:      Tuple[slice, ...]  # applied as arr[spec.slices]
     origin:      Tuple[int, ...]    # global start coordinate of this sub-region
-    dim_order:   Tuple[str, ...]
+    dim_order:   str
     image_shape: Tuple[int, ...]    # shape of the full source image
 
 
@@ -164,7 +164,7 @@ class MemoryChunkResult:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _resolve_leaf_block_shape(
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     user_spec: Optional[Dict[str, int]],
 ) -> Dict[str, int]:
     """Return the effective per-dim block size for every dim in dim_order.
@@ -416,7 +416,7 @@ def _plan_tasks(
 
 def _stamp_coordinates_to_row(
     row:       dict,
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     origin:    Tuple[int, ...],
     shape:     Tuple[int, ...],
 ) -> dict:
@@ -431,7 +431,7 @@ def _stamp_coordinates_to_row(
 
 def _iter_leaf_blocks(
     arr:              np.ndarray,
-    dim_order:        Tuple[str, ...],
+    dim_order:        str,
     leaf_block_shape: Optional[Dict[str, int]],
     mem_origin:       Tuple[int, ...],
 ) -> Iterator[Tuple[np.ndarray, Tuple[int, ...]]]:
@@ -487,7 +487,7 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
 
 
 def _check_all_leaf_dims_size_1(
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     config:    ProcessingConfig,
     file_path: str,
 ) -> bool:
@@ -912,24 +912,24 @@ class _ResultsWriter:
         """Flush remaining buffer and signal what to do next.
 
         Returns:
-          - None          if parts were written to disk (caller must call
+          - None          if parts were written to disk during the run (caller must call
                           save_parquet_from_parts to stream-merge them).
-          - pl.DataFrame  if everything is in-memory (parts_dir=None path),
+          - pl.DataFrame  if everything fits in memory (no mid-run spills),
                           with _post_process already applied.
           - empty DF      if nothing was processed at all.
 
-        The previous collect()-all-parts path is intentionally removed: for
-        datasets large enough to spill to parts, loading all parts into a single
-        DataFrame causes OOM.  See save_parquet_from_parts for the streaming path.
+        Returns None if data was spilled to parts during the run (caller streams from disk).
+        Returns a DataFrame if everything fit in memory.
+        Returns an empty DataFrame if nothing was processed.
         """
-        self.flush()
         if not self._part_paths and not self._buffer:
             logger.warning("Finalize: no parts and no buffer - returning empty DataFrame")
             return pl.DataFrame()
         if self._part_paths:
-            # Data is on disk - do not collect; caller streams from parts_dir.
+            # Already spilling to disk -- flush remaining buffer as a final part.
+            self.flush()
             return None
-        # In-memory path (parts_dir=None, small dataset).
+        # In-memory path: no parts were written, concat buffer directly.
         t0 = time.monotonic()
         combined = pl.concat(self._buffer, how="diagonal_relaxed")
         logger.debug("Finalize: concat done in %.1fs - %d rows, post-processing ...", time.monotonic() - t0, len(combined))

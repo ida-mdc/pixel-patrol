@@ -14,6 +14,7 @@ packages/pixel-patrol/tests/benchmarks/results/
 packages/*/dist/
 viewer/node_modules
 viewer/dist
+packages/*/node_modules/
 packages/pixel-patrol-base/src/pixel_patrol_base/viewer_dist/
 
 

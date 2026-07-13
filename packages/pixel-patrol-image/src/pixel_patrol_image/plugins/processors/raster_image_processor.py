@@ -61,7 +61,7 @@ class RasterImageProcessor:
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
-        dim_order_out = list(record.dim_order)
+        dim_order_out = record.dim_order
         y_ax = dim_order_out.index("Y")
         x_ax = dim_order_out.index("X")
         if y_ax != len(dim_order_out) - 2 or x_ax != len(dim_order_out) - 1:

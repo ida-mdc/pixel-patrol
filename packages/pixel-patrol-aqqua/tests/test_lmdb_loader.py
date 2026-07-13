@@ -56,12 +56,12 @@ def test_read_header_dtype(rgb_lmdb: Path) -> None:
 
 def test_read_header_dim_order_rgb(rgb_lmdb: Path) -> None:
     info = LmdbLoader.read_header(rgb_lmdb)
-    assert "".join(info.dim_order) == "YXS"
+    assert info.dim_order == "YXS"
 
 
 def test_read_header_grayscale_dim_order(grayscale_lmdb: Path) -> None:
     info = LmdbLoader.read_header(grayscale_lmdb)
-    assert "".join(info.dim_order) == "YX"
+    assert info.dim_order == "YX"
 
 
 # ---------------------------------------------------------------------------

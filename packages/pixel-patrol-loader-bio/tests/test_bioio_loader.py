@@ -48,7 +48,7 @@ def test_read_header(tmp_path: Path, loader):
     info = loader.read_header(tmp_path / "cyx.tif")
     assert info.shape == (2, 8, 8)
     assert info.n_images >= 1
-    assert tuple(info.dim_order) == ("C", "Y", "X")
+    assert info.dim_order == "CYX"
 
 
 def test_load_unsupported_raises(tmp_path: Path, loader):
