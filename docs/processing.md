@@ -171,7 +171,7 @@ All path columns (`path`, `parent`, `imported_path`) are stored **relative to th
 
 ### Project metadata
 
-Project metadata (name, description, version, processing stats, base directory, paths) is embedded in the parquet file's own metadata fields, not as data columns. It is accessible via `api.load()` and shown in the viewer footer.
+Project metadata (name, description, version, processing stats, base directory, paths) is embedded in the parquet file's own metadata fields, not as data columns. It is accessible via `api.load()` and shown in the viewer footer. See the [privacy policy](privacy.md) for what a table contains before sharing it.
 
 To omit the base directory from the parquet metadata (for example when sharing a table without revealing local filesystem paths):
 

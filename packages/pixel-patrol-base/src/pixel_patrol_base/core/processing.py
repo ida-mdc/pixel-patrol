@@ -118,7 +118,7 @@ class MemoryChunkSpec:
     """Describes one sub-region (memory chunk) of a large file."""
     slices:      Tuple[slice, ...]  # applied as arr[spec.slices]
     origin:      Tuple[int, ...]    # global start coordinate of this sub-region
-    dim_order:   Tuple[str, ...]
+    dim_order:   str
     image_shape: Tuple[int, ...]    # shape of the full source image
 
 
@@ -164,7 +164,7 @@ class MemoryChunkResult:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _resolve_leaf_block_shape(
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     user_spec: Optional[Dict[str, int]],
 ) -> Dict[str, int]:
     """Return the effective per-dim block size for every dim in dim_order.
@@ -416,7 +416,7 @@ def _plan_tasks(
 
 def _stamp_coordinates_to_row(
     row:       dict,
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     origin:    Tuple[int, ...],
     shape:     Tuple[int, ...],
 ) -> dict:
@@ -431,7 +431,7 @@ def _stamp_coordinates_to_row(
 
 def _iter_leaf_blocks(
     arr:              np.ndarray,
-    dim_order:        Tuple[str, ...],
+    dim_order:        str,
     leaf_block_shape: Optional[Dict[str, int]],
     mem_origin:       Tuple[int, ...],
 ) -> Iterator[Tuple[np.ndarray, Tuple[int, ...]]]:
@@ -487,7 +487,7 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
 
 
 def _check_all_leaf_dims_size_1(
-    dim_order: Tuple[str, ...],
+    dim_order: str,
     config:    ProcessingConfig,
     file_path: str,
 ) -> bool:

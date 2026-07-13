@@ -1,6 +1,6 @@
 # Sharing a Table
 
-A PixelPatrol table is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around).
+A PixelPatrol table is a single `.parquet` file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around). Before sharing a table with anyone, check the [privacy policy](../privacy.md) for what's actually in it.
 
 ---
 
