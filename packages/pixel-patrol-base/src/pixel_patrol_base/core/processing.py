@@ -466,8 +466,9 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     """Collect image-level metadata from a fully-loaded (un-chunked) record.
 
     Starts with all loader-provided fields in record.meta, drops PP-internal
-    per-chunk fields (shape, num_pixels) and dim_* coordinate keys, then
-    adds/overrides the canonical image-level fields:
+    per-chunk fields (shape, num_pixels) and dim_<axis> coordinate keys (e.g.
+    dim_z, dim_c - exactly "dim_" + one char), then adds/overrides the
+    canonical image-level fields:
     dim_order, dtype, ndim, size_* (full image extent per dim (e.g. size_S=3, size_Y=512))
     Any additional loader-provided fields in record.meta are included as-is. 
     Image metadata is available at all obs_levels.
@@ -476,7 +477,7 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     """
     meta: Dict[str, Any] = {
         k: v for k, v in record.meta.items()
-        if not k.startswith("dim_") and k not in _IMAGE_META_SKIP
+        if not (k.startswith("dim_") and len(k) == len("dim_") + 1) and k not in _IMAGE_META_SKIP
     }
     meta["dim_order"] = record.dim_order                  # already a clean string
     meta["dtype"]     = str(np.dtype(record.data.dtype))  # canonical form, e.g. "uint16"
@@ -816,7 +817,7 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
         df = df.with_columns(casts)
 
     # Column reorder
-    dim_cols    = sorted(c for c in df.columns if c.startswith("dim_"))
+    dim_cols    = sorted(c for c in df.columns if c.startswith("dim_") and len(c) == len("dim_") + 1)
     blob_cols   = [c for c in df.columns if _is_blob_dtype(df.schema[c])]
     skip        = {"obs_level"} | set(dim_cols) | set(blob_cols)
     scalar_cols = [c for c in df.columns if c not in skip]
@@ -1274,7 +1275,7 @@ def save_parquet_from_parts(
         unified = unified.with_columns(casts)
 
     # ── Step 4: column reorder (same logic as _post_process) ──
-    dim_cols    = sorted(c for c in unified.columns if c.startswith("dim_"))
+    dim_cols    = sorted(c for c in unified.columns if c.startswith("dim_") and len(c) == len("dim_") + 1)
     blob_cols   = [c for c in unified.columns if _is_blob_dtype(unified.schema[c])]
     skip_set    = {"obs_level"} | set(dim_cols) | set(blob_cols)
     scalar_cols = [c for c in unified.columns if c not in skip_set]
