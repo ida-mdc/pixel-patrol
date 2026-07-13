@@ -246,7 +246,7 @@ or path needed when calling `create_project(..., loader="shark-cam")` or
 
 ### Licensing
 
-Use a permissive license - MIT works well and matches the rest of the pixel-patrol ecosystem. Add a `LICENSE` file and declare it in `pyproject.toml`:
+For easy redistribution, use a permissive license - it also matches the rest of the pixel-patrol ecosystem. Add a `LICENSE` file and declare it in `pyproject.toml`:
 
 ```toml
 [project]

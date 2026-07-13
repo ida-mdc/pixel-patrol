@@ -107,7 +107,7 @@ See [`examples/minimal-extension/README.md`](https://github.com/ida-mdc/pixel-pa
 
 ## Licensing
 
-Use a permissive open-source license for your extension - MIT, BSD-2-Clause, BSD-3-Clause, and Apache-2.0 all work well. Add a `LICENSE` file to your package and declare it in your `pyproject.toml`:
+For easy redistribution, use a permissive open-source license for your extension - options like MIT, BSD-2-Clause, BSD-3-Clause, and Apache-2.0 all work well. Add a `LICENSE` file to your package and declare it in your `pyproject.toml`:
 
 ```toml
 [project]
