@@ -187,6 +187,32 @@ def test_full_save_load_cycle_with_float_columns(tmp_path: Path):
         )
 
 
+def test_reattach_parquet_metadata_preserves_field_descriptions(tmp_path: Path):
+    """reattach_parquet_metadata restores per-field descriptions stripped by DuckDB COPY TO."""
+    import duckdb
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from pixel_patrol_base.io.parquet_io import reattach_parquet_metadata
+
+    schema = pa.schema([
+        pa.field("x", pa.int32(), metadata={b"description": b"the x column"}),
+        pa.field("y", pa.float64(), metadata={b"description": b"the y column"}),
+    ])
+    src = tmp_path / "src.parquet"
+    dst = tmp_path / "dst.parquet"
+    pq.write_table(pa.table({"x": [1], "y": [1.0]}, schema=schema), src)
+
+    duckdb.connect().execute(f"COPY (SELECT * FROM '{src}') TO '{dst}' (FORMAT parquet)")
+
+    assert all(f.metadata is None for f in pq.read_schema(dst))
+
+    reattach_parquet_metadata(dst, src)
+
+    result = pq.read_schema(dst)
+    assert result.field("x").metadata == {b"description": b"the x column"}
+    assert result.field("y").metadata == {b"description": b"the y column"}
+
+
 def test_full_save_load_cycle_with_list_columns(tmp_path: Path):
     """List columns survive save/load."""
     df = pl.DataFrame({

@@ -626,7 +626,7 @@ NaN pixels are excluded from all calculations.
 | Find saturated images | `max_intensity` | `ge` | `254` |
 | Exclude a format | `file_extension` | `not_contains` | `.tif` |
 
-**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset.
+**Saving filtered subsets:** **Save as CSV** gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. **Save as Parquet** creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset. See the [privacy policy](../privacy.md) for what's included before sharing it.
 
 ---
 
