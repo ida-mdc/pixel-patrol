@@ -57,35 +57,22 @@ function selectExpr(q, col, alias) {
 }
 const DATE_TICK_FMT = '%Y-%m-%d %H:%M:%S';
 
-// Plotly's date axis auto-picks a dtick from the data span; for a near-zero
-// span (e.g. a freshly-generated dataset where every file shares one mtime)
-// that lands sub-second and renders as "13:40:20.0001" - not a date. Force a
-// dtick from this ladder instead, floored at 1 second, so the axis always
-// reads as calendar time. Values beyond the ladder fall back to Plotly's auto
-// dtick (safe - the failure mode only happens for very small spans). Tick text
-// always uses DATE_TICK_FMT - the same format used everywhere else in the
-// report (table cells, hover, exported plugin code) - so dates read the same way
-// throughout, never an abbreviated variant.
-const DATE_DTICK_LADDER = [
-  1000, 5000, 15000, 30000,
-  60_000, 300_000, 900_000, 1_800_000,
-  3_600_000, 10_800_000, 21_600_000, 43_200_000,
-  86_400_000, 604_800_000,
-  2_629_800_000, 7_889_400_000, 15_778_800_000,
-  31_557_600_000, 94_672_800_000, 157_788_000_000,
-];
-// Target ~6 ticks across the span; pick the smallest ladder step at or above that.
+// Plotly's date-axis auto-dtick is correct except for a near-zero span: below
+// ~4s it drops sub-second (dtick 0.2 -> "13:40:20.0001") and no longer reads as
+// a date. Below the floor we pin a 1-second dtick, padding the range when the
+// span is under one tick so a tick lands in view; above it we defer to Plotly.
+// tickformat is always DATE_TICK_FMT to match dates elsewhere in the report.
+const DATE_FLOOR_DTICK = 1000; // 1 second - never tick finer than this
+const DATE_FLOOR_SPAN = 4000;  // below this, Plotly's auto dtick goes sub-second
 export function niceDateAxis(values, title) {
+  const base = { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
   const times = (values ?? []).map(v => new Date(v).getTime()).filter(Number.isFinite);
-  if (!times.length) return { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
+  if (!times.length) return base;
   const min = Math.min(...times), max = Math.max(...times);
   const span = max - min;
-  const target = Math.max(span / 6, 1);
-  const dtick = DATE_DTICK_LADDER.find(d => d >= target);
-  if (!dtick) return { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
-  // Below one dtick step, autorange can collapse to a sub-ms window with no tick inside it.
-  const range = span < dtick ? [min - dtick * 3, max + dtick * 3] : undefined;
-  return { title, type: 'date', dtick, tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT, ...(range ? { range } : {}) };
+  if (span >= DATE_FLOOR_SPAN) return base;
+  const range = span < DATE_FLOOR_DTICK ? [min - DATE_FLOOR_DTICK * 3, max + DATE_FLOOR_DTICK * 3] : undefined;
+  return { ...base, dtick: DATE_FLOOR_DTICK, ...(range ? { range } : {}) };
 }
 function axisCfg(col, title, values) {
   return DATE_COLS.has(col) ? niceDateAxis(values, title) : { title };

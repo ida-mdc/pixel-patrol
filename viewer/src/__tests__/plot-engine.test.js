@@ -107,20 +107,27 @@ describe('niceDateAxis', () => {
     expect(axis.range[1]).toBeGreaterThan(t + 1);
   });
 
-  it('picks a dtick step covering the actual span with no range override', () => {
+  it('still floors the dtick to 1s for a small-but-nonzero span', () => {
+    const min = Date.parse('2026-01-01T00:00:00Z');
+    const max = min + 2000; // 2 seconds apart - Plotly would go sub-second here
+    const axis = niceDateAxis([min, max], 'Modified');
+    expect(axis.dtick).toBe(1000);
+    expect(axis.range).toBeUndefined(); // span exceeds one tick, no padding needed
+  });
+
+  it('defers to Plotly (no dtick) once the span clears the sub-second floor', () => {
     const min = Date.parse('2026-01-01T00:00:00Z');
     const max = min + 3_600_000; // 1 hour apart
     const axis = niceDateAxis([min, max], 'Modified');
-    expect(axis.dtick).toBeGreaterThanOrEqual((max - min) / 6);
+    expect(axis.dtick).toBeUndefined();
     expect(axis.range).toBeUndefined();
+    expect(axis.type).toBe('date');
   });
 
-  it('falls back to auto dtick when the span exceeds the ladder', () => {
-    const min = Date.parse('1900-01-01T00:00:00Z');
-    const max = Date.parse('2026-01-01T00:00:00Z');
-    const axis = niceDateAxis([min, max], 'Modified');
-    expect(axis.dtick).toBeUndefined();
-    expect(axis.type).toBe('date');
+  it('floors just below the span threshold and defers at it', () => {
+    const t = Date.parse('2026-01-01T00:00:00Z');
+    expect(niceDateAxis([t, t + 3999], 'Modified').dtick).toBe(1000);
+    expect(niceDateAxis([t, t + 4000], 'Modified').dtick).toBeUndefined();
   });
 
   it('handles no valid values without throwing', () => {
