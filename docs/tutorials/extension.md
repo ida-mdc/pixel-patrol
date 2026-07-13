@@ -10,7 +10,7 @@ PixelPatrol is built to be extended - without forking it. An **extension** is a 
 
 All three are optional, and one package can mix and match freely. The contracts for each (`PixelPatrolLoader`, `PixelPatrolProcessor`, the plugin object shape) are defined as [`typing.Protocol`](https://docs.python.org/3/library/typing.html#typing.Protocol)s in `pixel_patrol_base.core.contracts`, not base classes - your classes just need to match the expected shape (the right `NAME`, methods, attributes, ...), with no import or inheritance from `pixel_patrol_base` required. That's what keeps extensions standalone, decoupled packages.
 
-This page walks through all three pieces using **[Pixel HAI Watch](https://github.com/ida-mdc/pixel-patrol/tree/main/examples/minimal-extension)** - a complete, working, slightly playful example bundled with PixelPatrol. Its twist: there are no real images. `.parquet` *tables* are read as if they were tiny snapshots from a deep-sea shark camera - each table's numeric columns become a pixel grid, and a key/value pair tucked into the file's metadata stands in for the kind of instrument metadata real loaders extract (channel names, pixel sizes, acquisition stamps, ...). Every snippet below is taken directly from it - open `examples/minimal-extension/` alongside this page and follow along.
+This page walks through all three pieces using **[Pixel HAI Watch](https://github.com/ida-mdc/pixel-patrol-example-extension)** - a complete, working, slightly playful standalone example. Its twist: there are no real images. `.parquet` *tables* are read as if they were tiny snapshots from a deep-sea shark camera - each table's numeric columns become a pixel grid, and a key/value pair tucked into the file's metadata stands in for the kind of instrument metadata real loaders extract (channel names, pixel sizes, acquisition stamps, ...). Every snippet below is taken directly from it - clone [pixel-patrol-example-extension](https://github.com/ida-mdc/pixel-patrol-example-extension) alongside this page and follow along.
 
 ---
 
@@ -423,7 +423,7 @@ uv run python create_and_show_report.py
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">🌱</span><div><strong>Ready to grow your own?</strong> Copy <code>examples/minimal-extension/</code>, decide which piece(s) you actually need (see the questions at the top of this page), update the <code>pyproject.toml</code> metadata, and replace the example identifiers with your own - one piece at a time. The protocols will tell you exactly what's still missing as you go, and nothing stops you from running an unfinished extension while you build it out.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">🌱</span><div><strong>Ready to grow your own?</strong> Clone <a href="https://github.com/ida-mdc/pixel-patrol-example-extension">pixel-patrol-example-extension</a>, decide which piece(s) you actually need (see the questions at the top of this page), update the <code>pyproject.toml</code> metadata, and replace the example identifiers with your own - one piece at a time. The protocols will tell you exactly what's still missing as you go, and nothing stops you from running an unfinished extension while you build it out.</div></div>
 </div>
 
 </div>
