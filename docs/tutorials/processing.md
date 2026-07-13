@@ -172,6 +172,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
       who can open it in the <a href="https://pixelpatrol.app/viewer/" target="_blank">online viewer</a> without installing anything.
+      See the <a href="../privacy.md">privacy policy</a> for what's included before sharing it.
     </div>
     <input class="wiz-input" type="text" id="pwi-output"
            value="results.parquet"

@@ -218,6 +218,8 @@ function _parseRawMeta(raw) {
   try { paths = JSON.parse(raw.pp_paths || '[]'); } catch {}
   let processingStats = {};
   try { processingStats = JSON.parse(raw.pp_processing_stats || '{}'); } catch {}
+  let privacySummary = [];
+  try { privacySummary = JSON.parse(raw.pp_privacy_summary || '[]'); } catch {}
   return {
     projectName:     raw.pp_project_name || null,
     description:     raw.pp_description  || null,
@@ -228,12 +230,13 @@ function _parseRawMeta(raw) {
     baseDir:         raw.pp_base_dir     || null,
     paths,
     processingStats,
+    privacySummary,
   };
 }
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
-           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {} };
+           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [] };
 }
 
 async function filterGroupColsByCardinality(conn, cols) {

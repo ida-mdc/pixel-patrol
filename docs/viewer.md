@@ -29,7 +29,7 @@ Build a self-contained viewer file and open it alongside your parquet:
 pixel-patrol build-viewer-html -o viewer.html
 ```
 
-Open `viewer.html` in any browser and load your parquet from there. To share with someone, send them both files.
+Open `viewer.html` in any browser and load your parquet from there. To share with someone, send them both files. See the [privacy policy](privacy.md) for what's included in the parquet file before sharing it.
 
 **Hosted on a static server:**
 
