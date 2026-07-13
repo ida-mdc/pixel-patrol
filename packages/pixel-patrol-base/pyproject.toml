@@ -3,7 +3,8 @@ name = "pixel-patrol-base"
 version = "0.8.0"
 description = "Image prevalidation tool"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
 ]
@@ -36,7 +37,6 @@ build-backend = "hatchling.build"
 package = true
 
 [tool.setuptools]
-license-files = ["LICENSE"]
 include-package-data = true
 
 [tool.setuptools.package-data]

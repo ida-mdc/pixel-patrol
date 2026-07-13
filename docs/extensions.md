@@ -111,7 +111,8 @@ For easy redistribution, use a permissive open-source license for your extension
 
 ```toml
 [project]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 ```
 
 Avoid copyleft licenses (GPL, AGPL): they would require anyone who combines your extension with pixel-patrol to release their own code under the same terms, which is usually not what extension authors or users want.
