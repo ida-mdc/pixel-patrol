@@ -2,8 +2,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Union, Iterable, List, Optional, Callable, Set, Dict
-import polars as pl
-
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
@@ -88,7 +86,7 @@ def process_files(
                                     INFO and WARNING still appear in the terminal as usual.
 
     Returns:
-        The project with processed records_df.
+        The project (use api.load(output_path) to access the results as a DataFrame).
     """
     if log_file:
         _setup_file_logging(project)
@@ -224,9 +222,6 @@ def get_base_dir(project: Project) -> Optional[Path]:
 
 def get_paths(project: Project) -> List[Path]:
     return project.get_paths()
-
-def get_records_df(project: Project) -> Optional[pl.DataFrame]:
-    return project.get_records_df()
 
 
 def _setup_file_logging(project: Project) -> None:

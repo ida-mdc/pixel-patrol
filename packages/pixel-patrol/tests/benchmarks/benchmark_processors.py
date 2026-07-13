@@ -201,9 +201,11 @@ def run_processor_cycle(
         # Get results
         n_records = 0
         n_columns = 0
-        if project.records_df is not None and not project.records_df.is_empty():
-            n_records = project.records_df.height
-            n_columns = len(project.records_df.columns)
+        if project.output_path and project.output_path.exists():
+            import polars as pl
+            _df = pl.scan_parquet(project.output_path).head(0).collect()
+            n_columns = len(_df.columns)
+            n_records = pl.scan_parquet(project.output_path).select(pl.len()).collect().item()
 
         # Get processor times
         processor_times = stats_registry.get_times()
