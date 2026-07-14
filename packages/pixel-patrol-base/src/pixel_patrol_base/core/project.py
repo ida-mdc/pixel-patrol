@@ -1,7 +1,9 @@
 import logging
+import sys
 from pathlib import Path
 import dataclasses
 from typing import Dict, List, Union, Iterable, Optional, Set, Callable
+import click
 import polars as pl
 
 from pixel_patrol_base.core import processing, validation
@@ -13,6 +15,7 @@ from pixel_patrol_base.io.parquet_io import save_parquet
 
 
 logger = logging.getLogger(__name__)
+
 
 class Project:
 
@@ -29,7 +32,6 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
-        self.records_df: Optional[pl.DataFrame] = None
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
@@ -161,7 +163,7 @@ class Project:
         parts_dir = self.output_path.parent / f"_parts_{self.output_path.stem}"
         processing.cleanup_chunks_dir(parts_dir)  # clear any stale parts from a previous run
 
-        self.records_df, stats = processing.build_records_df(
+        records_df, stats = processing.build_records_df(
             bases=self.paths,
             base_dir=self.base_dir,
             loader=self.loader,
@@ -171,20 +173,20 @@ class Project:
             on_progress=progress_callback,
         )
 
-        self._save_result(stats, parts_dir, config)
+        self._save_result(records_df, stats, parts_dir, config, processors)
         return self
 
 
     def _save_result(
             self,
-            stats:     dict,
-            parts_dir: Path,
-            config:    ProcessingConfig,
+            records_df: Optional[pl.DataFrame],
+            stats:      dict,
+            parts_dir:  Path,
+            config:     ProcessingConfig,
+            processors: list,
     ) -> None:
-        """Store stats, then write the final parquet via the appropriate path.
+        """Write the final parquet via the appropriate path.
 
-        Two save paths exist because build_records_df may spill to parts on disk
-        (large datasets) or keep everything in memory (small datasets):
           - records_df is None  → parts on disk → save_parquet_from_parts (streaming)
           - records_df is set   → in-memory     → save_parquet
         """
@@ -196,10 +198,17 @@ class Project:
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
 
-        if self.records_df is None:
+        # Computed once, embedded in the parquet footer and printed below.
+        self.metadata.privacy_summary = _privacy_disclosure_lines(
+            self.loader, processors, config.metadata.omit_base_dir
+        )
+
+        saved = False
+
+        if records_df is None:
             parts_on_disk = sorted(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else []
             if not parts_on_disk:
-                logger.warning("Project Core: No files found/processed. records_df will be None.")
+                logger.warning("Project Core: No files found/processed.")
                 return
             logger.info("Project Core: streaming %d parts → '%s'", len(parts_on_disk), self.output_path)
             try:
@@ -207,22 +216,24 @@ class Project:
                     parts_on_disk, self.output_path, self.metadata, **rgs_kwargs
                 )
                 processing.cleanup_chunks_dir(parts_dir)
-                logger.info("Output → '%s'", self.output_path)
+                saved = True
             except Exception as e:
                 logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
-            return
 
-        if self.records_df.is_empty():
-            logger.warning("Project Core: No files found/processed. records_df will be None.")
-            self.records_df = None
-            return
+        elif records_df.is_empty():
+            logger.warning("Project Core: No files found/processed.")
 
-        try:
-            save_parquet(self.records_df, self.output_path, self.metadata, **rgs_kwargs)
-            processing.cleanup_chunks_dir(parts_dir)
-            logger.info("Output → '%s'", self.output_path)
-        except Exception as e:
-            logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
+        else:
+            try:
+                save_parquet(records_df, self.output_path, self.metadata, **rgs_kwargs)
+                processing.cleanup_chunks_dir(parts_dir)
+                saved = True
+            except Exception as e:
+                logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
+
+        if saved:
+            _log_privacy_disclosure(self.metadata.privacy_summary)
+            logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
 
 
     def get_name(self) -> str:
@@ -236,15 +247,53 @@ class Project:
         """Get the list of directory paths added to the project."""
         return self.paths
 
-    def get_records_df(self) -> Optional[pl.DataFrame]:
-        """Get the single DataFrame containing processed data."""
-        return self.records_df
-
     def get_loader(self) -> PixelPatrolLoader:
         return self.loader
 
     def get_output_path(self) -> Path:
         return self.output_path
+
+
+def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool) -> List[str]:
+    """Human-readable summary of what this run stores in the parquet, so users know
+    what they're sharing before they hand the file to someone else.
+    """
+    lines = [
+        "- base directory: "
+        + ("omitted (--omit-base-dir)" if omit_base_dir
+           else "included in file metadata (pass --omit-base-dir to exclude)"),
+        "- file paths relative to base directory",
+    ]
+
+    if loader is not None:
+        lines.append(f"- image metadata from the '{loader.NAME}' loader: can include any metadata field the loader extracted")
+
+    proc_names = [p.NAME for p in processors]
+    if "thumbnail" in proc_names:
+        lines.append("- small image thumbnails")
+    stat_procs = [n for n in proc_names if n != "thumbnail"]
+    if stat_procs:
+        lines.append(f"- derived image data statistics from: {', '.join(stat_procs)}")
+
+    return lines
+
+
+def _log_privacy_disclosure(lines: List[str]) -> None:
+    """Print a hard-to-miss "what's in this file" banner, once, after the parquet
+    is actually written - i.e. the last thing on screen, not buried under the
+    progress bar and pipeline noise that precedes it.
+
+    Takes the already-computed lines (same ones embedded in the parquet footer
+    as pp_privacy_summary) rather than recomputing them, so the CLI banner and
+    the viewer's report footer can never say different things.
+    """
+    banner = "=" * 70
+    logger.info(_output_log_style(banner, fg="yellow", bold=True))
+    logger.info(_output_log_style("WHAT'S IN THIS FILE (read before sharing):", fg="yellow", bold=True))
+    for line in lines:
+        logger.info(line)
+    logger.info("Details: https://pixelpatrol.app/docs/privacy/")
+    logger.info(_output_log_style(banner, fg="yellow", bold=True))
 
 
 def _log_processing_summary(project_name: str, stats: dict) -> None:
@@ -314,3 +363,9 @@ def _resolve_extensions(
 
     logger.error(f"Project Core: Invalid type for selected_file_extensions: {type(proposed)}")
     raise TypeError("selected_file_extensions must be 'all' or a Set[str].")
+
+
+def _output_log_style(text: str, **kwargs) -> str:
+    """click.style, but only when stderr is a real terminal - avoids leaking raw
+    ANSI escapes into piped output or log files."""
+    return click.style(text, **kwargs) if sys.stderr.isatty() else text

@@ -181,9 +181,8 @@ class LmdbLoader:
                 array = _uncompress_blosc2(cursor.value())
             meta = _extract_metadata(array)
             shape = tuple(int(x) for x in meta["shape"])
-            dim_order = tuple(meta["dim_order"])
             dtype = np.dtype(str(meta["dtype"]))
-            return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
+            return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
         finally:
             env.close()
 

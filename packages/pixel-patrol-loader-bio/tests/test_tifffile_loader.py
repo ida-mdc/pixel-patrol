@@ -44,7 +44,7 @@ def test_read_header(tmp_path: Path, loader):
     info = loader.read_header(path)
     assert info.shape == (3, 24, 32)
     assert info.n_images == 1
-    assert tuple(info.dim_order) == ("C", "Y", "X")
+    assert info.dim_order == "CYX"
 
 
 def test_read_header_multi_series(tmp_path: Path, loader):

@@ -24,18 +24,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, List, Tuple
 
-import polars as pl
-
 # Identifier/label used by the catalog to group loaders sharing this schema.
 RASTER_IMAGE_SCHEMA_ID = "raster-image"
 RASTER_IMAGE_SCHEMA_LABEL = "Raster Image Loaders"
 
 # (column, dtype, description, required) - columns the loader contract covers.
 # required=True: loader must provide; required=False: loader may provide if available.
-# ndim, num_pixels and size_* are NOT here - the pipeline derives them from shape/dim_order.
+# ndim, num_pixels, shape and size_* are NOT here - the pipeline derives them from the array.
 _RASTER_IMAGE_LOADER_COLUMNS: List[Tuple[str, Any, str, bool]] = [
     ("dim_order",     str,      "Axis order of the image, e.g. 'TCZYX'.",                        True),
-    ("shape",         pl.Array, "Size of the image along each axis, in dim_order.",               True),
     ("dtype",         str,      "Pixel data type of the source image (e.g. 'uint8', 'float32').", True),
     ("n_images",      int,      "Number of sub-images in the source (>1 for container formats).", False),
     ("dim_names",     list,     "Human-readable names of the image axes.",                        False),

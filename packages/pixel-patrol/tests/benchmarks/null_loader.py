@@ -50,7 +50,7 @@ class _LazyZeros:
 class NullLoader:
     """Zero-filling loader for benchmarks - ignores file content, returns zeros.
 
-    entries: maps path string → (shape, dtype, dim_order tuple, n_images).
+    entries: maps path string → (shape, dtype, dim_order string, n_images).
     lazy_threshold_mb: shapes whose uncompressed size exceeds this use _LazyZeros
                        so workers don't allocate the full array.
     Picklable: entries contains only plain Python types and numpy dtypes.
@@ -59,7 +59,7 @@ class NullLoader:
 
     def __init__(
         self,
-        entries: Dict[str, Tuple[tuple, Any, tuple, int]],
+        entries: Dict[str, Tuple[tuple, Any, str, int]],
         lazy_threshold_mb: float = 64.0,
     ) -> None:
         self._entries = entries
@@ -76,14 +76,14 @@ class NullLoader:
             _LazyZeros(shape, dtype) if size > self._lazy_bytes
             else np.zeros(shape, dtype=dtype)
         )
-        meta = {"shape": list(shape), "ndim": len(shape), "dim_order": "".join(dim_order)}
+        meta = {"shape": list(shape), "ndim": len(shape), "dim_order": dim_order}
         return record_from(data, meta, kind="intensity")
 
     def load_range(
         self, file_path: Path, start: int, stop: int
     ) -> Iterator[Tuple[str, Record]]:
         shape, dtype, dim_order, _ = self._entries[str(file_path)]
-        meta = {"shape": list(shape), "ndim": len(shape), "dim_order": "".join(dim_order)}
+        meta = {"shape": list(shape), "ndim": len(shape), "dim_order": dim_order}
         arr = np.zeros(shape, dtype=dtype)
         for i in range(start, stop):
             yield str(i), record_from(arr.copy(), meta, kind="intensity")

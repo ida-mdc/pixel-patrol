@@ -46,10 +46,6 @@ def main():
     # Tip: run with --log-file from the CLI to write a debug log alongside the parquet:
     #   pixel-patrol process datasets/bioio --output out/quickstart_extended.parquet --log-file
 
-    # get the results dataframe
-    records_df = api.get_records_df(project)
-    print(records_df.head())
-
     # --- View with filters and grouping ---
     api.view(
         project,

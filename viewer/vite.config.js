@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { cpSync, rmSync, readFileSync } from 'fs';
+import { cpSync, rmSync, readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
 // After a production build, sync the output into the Python package so that
@@ -26,6 +26,39 @@ function stripMissingSourcemaps() {
         }
       }
       return null;
+    },
+  };
+}
+
+function emitJsLicenses() {
+  return {
+    name: 'emit-js-licenses',
+    generateBundle() {
+      const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
+      const arrowNotice = read(resolve(__dirname, 'node_modules/apache-arrow/NOTICE.txt'));
+      const chromaLicense = read(resolve(__dirname, 'node_modules/chroma-js/LICENSE'));
+      this.emitFile({
+        type: 'asset',
+        fileName: 'LICENSES.txt',
+        source: [
+          'Third-party JavaScript licenses',
+          '================================',
+          '',
+          'The viewer bundle includes the following third-party libraries.',
+          '',
+          '--------------------------------------------------------------------------------',
+          '',
+          'apache-arrow  (Apache-2.0)',
+          '',
+          arrowNotice,
+          '',
+          '--------------------------------------------------------------------------------',
+          '',
+          'chroma-js  (BSD-3-Clause AND Apache-2.0)',
+          '',
+          chromaLicense,
+        ].join('\n'),
+      });
     },
   };
 }
@@ -71,7 +104,7 @@ export default defineConfig({
     exclude: ['@duckdb/duckdb-wasm'],
   },
 
-  plugins: [stripMissingSourcemaps(), syncToPythonPackage()],
+  plugins: [stripMissingSourcemaps(), emitJsLicenses(), syncToPythonPackage()],
 
   build: {
     target: 'es2022',

@@ -3,7 +3,8 @@ name = "pixel-patrol-aqqua"
 version = "0.8.0"
 description = "PixelPatrol add-on package for Aqqua"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
 ]
@@ -25,9 +26,6 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 package = true
-
-[tool.setuptools]
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_aqqua"]

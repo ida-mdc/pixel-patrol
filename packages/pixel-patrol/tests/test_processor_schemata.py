@@ -58,17 +58,15 @@ def test_processor_schemata():
     )
     project.process_records(processing_config=processing_config)
 
-    df = project.records_df
-    if df is None or df.is_empty():
-        print("    [Error] No records processed!")
-        return
-
-    assert project.records_df.height >= 1  # one global row + per-slice rows
-
-    # Load from saved parquet to verify round-trip
     parquet_files = list(project.output_path.parent.glob("*.parquet"))
     assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
     records_df, metadata = api.load(parquet_files[0])
+
+    if records_df is None or records_df.is_empty():
+        print("    [Error] No records processed!")
+        return
+
+    assert records_df.height >= 1  # one global row + per-slice rows
 
     processors = discover_processor_plugins()
     df_columns = set(records_df.columns)

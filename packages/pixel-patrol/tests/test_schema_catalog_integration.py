@@ -30,7 +30,7 @@ def test_raster_loader_schema_is_shared_across_packages():
     assert "raster-image" in schemas
     raster = schemas["raster-image"]
     names = {c["name"] for c in raster["columns"]}
-    assert {"dim_order", "shape", "dtype", "channel_names"} <= names
+    assert {"dim_order", "dtype", "channel_names"} <= names
     # the schema lists exactly the loaders that declare it
     common_loaders = {l["name"] for l in _raster_loaders(cat)}
     assert set(raster["loaders"]) == common_loaders
@@ -100,12 +100,11 @@ def test_metric_widgets_connect_only_to_their_metric_family():
     assert sources("custom-plot") >= {"processor:raster-basic"} | quality
 
 
-def test_render_json_schema_includes_loader_string_and_array_columns():
-    # dim_order (str), dtype (str), shape (Array) are loader columns whose dtype strings
-    # go through _scalar_name before storage. This test guards against those being
-    # silently dropped from the JSON Schema output due to a dtype key mismatch.
+def test_render_json_schema_includes_loader_string_columns():
+    # dim_order (str), dtype (str) are loader columns whose dtype strings go through
+    # _scalar_name before storage. This test guards against those being silently
+    # dropped from the JSON Schema output due to a dtype key mismatch.
     cat = schema_catalog.build_catalog(include_widgets=False)
     props = schema_catalog.render_json_schema(cat)["properties"]
     assert props["dim_order"]["type"] == "string", "dim_order must appear as string in row-schema"
     assert props["dtype"]["type"] == "string",     "dtype must appear as string in row-schema"
-    assert props["shape"]["type"] == "array",      "shape must appear as array in row-schema"

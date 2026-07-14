@@ -12,9 +12,15 @@ PixelPatrol processes your data files entirely in your browser. Nothing you load
 
 ## Sharing PixelPatrol results
 
-A PixelPatrol table is a parquet file that contains metadata extracted from your images - including all fields your processing pipeline recorded. Anyone you share the table file with will have access to all of that information.
+A PixelPatrol table is a parquet file that contains metadata extracted from your images - including all fields your processing pipeline recorded. Anyone you share the table file with will have access to all of that information:
 
-If your dataset contains sensitive information - such as patient data, proprietary annotations, or details that should not be made public - treat the table file with the same care as the original data. Do not share it with people who should not have access to the underlying metadata.
+- **The base directory** (the local filesystem path you processed) is stored in the parquet's project metadata by default. Use `--omit-base-dir` to exclude it when sharing.
+- **File and folder paths.** The `name`, `path`, and `parent` columns store your file and folder names (relative to the base directory), plus each file's modification date. If your files or folders are named after patients, samples, or people, that information is in the table.
+- **Loader-extracted image metadata.** Whichever loader you used (e.g. `bioio` or `tifffile`) contributes its own set of columns - dimensions, pixel size, channel names, and more. Some formats can embed arbitrary free-text fields (e.g. notes, operator or sample IDs) - check the columns if unsure.
+- **Thumbnails of your images.** If the `thumbnail` processor ran (it does by default), the table contains a small copy of every image.
+- **Derived statistics** (intensity, histograms, quality/compression metrics) describe your images numerically.
+
+If your dataset contains sensitive information - such as patient data, proprietary annotations, or details that should not be made public - treat the table file with the same care as the original data.
 
 ## GitHub Pages
 

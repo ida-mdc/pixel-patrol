@@ -72,10 +72,7 @@ def run_e2e_cycle(
 
     n_records = 0
     n_columns = 0
-    if project.records_df is not None and not project.records_df.is_empty():
-        n_records = project.records_df.height
-        n_columns = len(project.records_df.columns)
-    elif project.output_path and project.output_path.exists():
+    if project.output_path and project.output_path.exists():
         import polars as pl
         df = pl.scan_parquet(project.output_path).head(0).collect()
         n_columns = len(df.columns)

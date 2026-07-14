@@ -25,29 +25,19 @@ def cli(source: str, port: int) -> None:
     \b
       - A Parquet file (.parquet)
       - An Arrow/IPC file (.arrow or .ipc)
-      - A Pixel Patrol project export (.zip) - requires pixel-patrol-base
     """
     source_path = Path(source)
 
     click.echo(f"Loading data from {source_path} ...")
 
-    if source_path.suffix == ".zip":
-        try:
-            from pixel_patrol_base.api import import_project
-        except ImportError:
-            raise click.ClickException(
-                "Loading .zip projects requires pixel-patrol-base to be installed."
-            )
-        project = import_project(source_path)
-        df = project.records_df
-    elif source_path.suffix == ".parquet":
+    if source_path.suffix == ".parquet":
         df = pl.read_parquet(source_path)
     elif source_path.suffix in (".arrow", ".ipc"):
         df = pl.read_ipc(source_path)
     else:
         raise click.ClickException(
             f"Unsupported file type '{source_path.suffix}'. "
-            "Use .parquet, .arrow/.ipc, or a .zip project export."
+            "Use .parquet or .arrow/.ipc."
         )
 
     if df is None or df.is_empty():

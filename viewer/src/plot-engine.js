@@ -36,7 +36,12 @@ export const VIOLIN_ALL_POINTS_BELOW = 500;
 
 // Columns holding real timestamps - plotted on a date axis, never as categories,
 // and never summarised with approx_quantile (use a sampled raw violin instead).
-export const DATE_COLS = new Set(['modification_date']);
+// Populated from the detected schema via setDateCols() - see renderer.js buildCtx.
+export const DATE_COLS = new Set();
+export function setDateCols(cols) {
+  DATE_COLS.clear();
+  for (const c of cols) DATE_COLS.add(c);
+}
 const DATE_FMT = "'%Y-%m-%d %H:%M:%S'";
 
 export const CONSTANTS = {
@@ -50,8 +55,38 @@ function selectExpr(q, col, alias) {
     ? `STRFTIME(${q(col)}, ${DATE_FMT}) AS ${alias}`
     : `${q(col)} AS ${alias}`;
 }
-function axisCfg(col, title) {
-  return DATE_COLS.has(col) ? { title, type: 'date' } : { title };
+const DATE_TICK_FMT = '%Y-%m-%d %H:%M:%S';
+
+// Tick label format scales with zoom (dtick), so a wide axis reads as bare
+// dates and only grows a time-of-day component once ticks are close enough
+// for it to matter. hoverformat stays fixed to full precision - it's always
+// a single value, so there's no clutter risk there.
+const DATE_TICKFORMATSTOPS = [
+  { dtickrange: [null, 1000],        value: '%H:%M:%S.%L' },
+  { dtickrange: [1000, 60000],       value: '%H:%M:%S' },
+  { dtickrange: [60000, 3600000],    value: '%H:%M' },
+  { dtickrange: [3600000, 86400000], value: '%b %d, %H:%M' },
+  { dtickrange: [86400000, null],    value: '%Y-%m-%d' },
+];
+
+// Plotly's date-axis auto-dtick is correct except for a near-zero span: below
+// ~4s it drops sub-second (dtick 0.2 -> "13:40:20.0001") and no longer reads as
+// a date. Below the floor we pin a 1-second dtick, padding the range when the
+// span is under one tick so a tick lands in view; above it we defer to Plotly.
+const DATE_FLOOR_DTICK = 1000; // 1 second - never tick finer than this
+const DATE_FLOOR_SPAN = 4000;  // below this, Plotly's auto dtick goes sub-second
+export function niceDateAxis(values, title) {
+  const base = { title, type: 'date', tickformatstops: DATE_TICKFORMATSTOPS, hoverformat: DATE_TICK_FMT };
+  const times = (values ?? []).map(v => new Date(v).getTime()).filter(Number.isFinite);
+  if (!times.length) return base;
+  const min = Math.min(...times), max = Math.max(...times);
+  const span = max - min;
+  if (span >= DATE_FLOOR_SPAN) return base;
+  const range = span < DATE_FLOOR_DTICK ? [min - DATE_FLOOR_DTICK * 3, max + DATE_FLOOR_DTICK * 3] : undefined;
+  return { ...base, dtick: DATE_FLOOR_DTICK, ...(range ? { range } : {}) };
+}
+function axisCfg(col, title, values) {
+  return DATE_COLS.has(col) ? niceDateAxis(values, title) : { title };
 }
 function valueOf(col, v) {
   return DATE_COLS.has(col) ? v : Number(v);
@@ -248,7 +283,7 @@ export async function renderDistribution(container, ctx, spec) {
   if (!traces.length || isStale()) return false;
 
   const layout = {
-    yaxis: axisCfg(numCol, yLabel),
+    yaxis: axisCfg(numCol, yLabel, traces.flatMap(t => t.y ?? [])),
     xaxis: { title: catLabel, type: 'category', ...(categories ? { categoryarray: categories } : {}) },
     // Each violin/box owns its own x category; default 'overlay' keeps them
     // centred. 'group' would reserve an empty sub-slot per trace per category.
@@ -438,7 +473,7 @@ export async function renderScatter(container, ctx, spec) {
         colorbar: { title: { text: niceName(colorBy) } }, size: 5, opacity: 0.7 },
     }], {
       title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
-      xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), showlegend: false,
+      xaxis: axisCfg(x, niceName(x), rows.map(r => r.x)), yaxis: axisCfg(y, niceName(y), rows.map(r => r.y)), showlegend: false,
     });
     return true;
   }
@@ -463,7 +498,7 @@ export async function renderScatter(container, ctx, spec) {
   }).filter(t => t.x.length);
   ctx.plot.append(container, traces, {
     title: { text: `${niceName(x)} vs ${niceName(y)}` + (sampled ? '<br><sup>up to 5,000 points shown</sup>' : '') },
-    xaxis: axisCfg(x, niceName(x)), yaxis: axisCfg(y, niceName(y)), ...legendCfg(ctx, groups.length),
+    xaxis: axisCfg(x, niceName(x), rows.map(r => r.x)), yaxis: axisCfg(y, niceName(y), rows.map(r => r.y)), ...legendCfg(ctx, groups.length),
   });
   return true;
 }

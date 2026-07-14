@@ -11,7 +11,6 @@ def test_create_project_basic(mock_project_name: str, tmp_path: Path):
     assert project.name == mock_project_name
     assert project.base_dir == tmp_path.resolve() # Assert base_dir is set
     assert project.paths == [project.base_dir]
-    assert project.records_df is None
 
 def test_create_project_empty_name_not_allowed(tmp_path: Path): # Add tmp_path fixture
     with pytest.raises(ValueError, match="Project name cannot be empty or just whitespace."):
