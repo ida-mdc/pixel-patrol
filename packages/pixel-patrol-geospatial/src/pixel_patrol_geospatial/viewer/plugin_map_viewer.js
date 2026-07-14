@@ -2,62 +2,163 @@
  * Map Points plugin - shows locations on an interactive MapLibre map.
  *
  * Reads `latitude`, `longitude`, and `footprint` (GeoJSON string).
+ *
+ * The images' locations are shown as cluster badges: one circle per area
+ * with the summed number of images.
+ * Hovering a badge shows a popup with the
+ * image name(s) and, if a grouping is selected, a per-group tally.
+ *
+ * Note: MapLibre's clustering stores coordinates as 32-bit floats, so badge
+ * positions can be off by up to ~1 m.
  */
 
 const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js';
 // map licence: CC BY 4.0 (https://sgx.geodatenzentrum.de/web_public/gdz/lizenz/deu/Nutzungsbedingungen_basemapworld.pdf)
 const MAP_STYLE_URL = 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json';
+const MAX_POPUP_GROUPS = 3;  // for how many groups display the number of images when they overlap
 
-// Dynamic import of the same URL resolves from the module cache after the
+// Fetch and run the MapLibre library from the CDN (cached after the first
+// call). It registers itself as the global variable `maplibregl`.
 async function loadMaplibre() {
   await import(MAPLIBRE_SCRIPT_URL);
   return maplibregl;
 }
 
-function pointFeature(r) {
-  return {
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [Number(r.lon), Number(r.lat)] },
-    properties: { name: r.name, lat: r.lat, lon: r.lon, group: r.__group__ },
-  };
+// Group the query rows by coordinate and build one GeoJSON
+// feature (geometry + arbitrary `properties`) per distinct position.
+// The images' {name, group} list is stored as a JSON string because MapLibre
+// only preserves flat properties when it hands features back in hover events.
+function groupedPointFeatures(rows) {
+  const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
+  for (const row of rows) {
+    const key = `${row.lat},${row.lon}`;
+    if (!rowsPerCoord.has(key)) rowsPerCoord.set(key, []);
+    rowsPerCoord.get(key).push(row);
+  }
+
+  const features = [];
+  for (const rowsHere of rowsPerCoord.values()) {
+    const members = rowsHere.map(row => ({ name: row.name, group: row.__group__ }));
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
+      properties: { count: rowsHere.length, members: JSON.stringify(members) },
+    });
+  }
+  return features;
 }
 
-// Same group -> color mapping used by the bar/histogram widgets
-// (ctx.color.group), expressed as a MapLibre 'match' expression on the
-// feature's 'group' property so it follows the active group-by column.
-function groupColorMatch(ctx) {
-  return [
-    'match', ['get', 'group'],
-    ...ctx.groups.flatMap(g => [String(g), ctx.color.group(g)]),
-    '#888', // fallback for a group value not in ctx.groups (shouldn't normally happen)
+// The {name, group} members of every feature stacked at the hovered pixel.
+function membersOf(features) {
+  const members = [];
+  for (const feature of features) {
+    members.push(...JSON.parse(feature.properties.members));
+  }
+  return members;
+}
+
+function abbreviatedCount(valueExpr) {
+  // shorten numberss: 2000 → "2k", 2345 → "2.3k", 3200000 → "3.2M"
+  return ['case',
+    ['>=', valueExpr, 1e6], ['concat', ['/', ['round', ['/', valueExpr, 1e5]], 10], 'M'],
+    ['>=', valueExpr, 1e3], ['concat', ['/', ['round', ['/', valueExpr, 1e2]], 10], 'k'],
+    ['to-string', valueExpr],
   ];
 }
 
-// Popup text: name, plus group value if group is selected
-function popupHtml(ctx, { name, group }) {
-  const { escapeHtml } = ctx.plot;
-  const groupingLabel = ctx.plot.groupingLabel();
-  let html = escapeHtml(String(name ?? ''));
-  if (groupingLabel) html += `<br>${escapeHtml(groupingLabel)}: ${escapeHtml(ctx.groupLabel(group))}`;
+// Add the image positions to the map as cluster badges, aggregated by
+// on-screen proximity.
+function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
+  const features = groupedPointFeatures(rows);
+  if (bounds) {
+    for (const feature of features) bounds.extend(feature.geometry.coordinates);
+  }
+
+  map.addSource('points-clustered', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features },
+    cluster:          true,
+    clusterRadius:    20,  // merge features within 20 screen pixels
+    clusterMinPoints: 1,   // even a lone coordinate becomes a (1-member) cluster
+    clusterMaxZoom:   24,  // never un-cluster (features would lose cluster_id/total)
+    clusterProperties: { total: ['+', ['get', 'count']] },  // sum image counts, not feature counts
+  });
+
+  map.addLayer({
+    id:     'points-cluster',
+    type:   'circle',
+    source: 'points-clustered',
+    paint: {
+      'circle-radius':       radius + 6,
+      'circle-color':        '#4a90d9',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1,
+    },
+  });
+
+  if (showCount) {  // don't show numbers in condensed view
+    // Clustered features carry the summed 'total'; a feature the clustering
+    // left unwrapped only has its own 'count' — hence the coalesce.
+    const countExpr = ['coalesce', ['get', 'total'], ['get', 'count']];
+    map.addLayer({
+      id:     'points-cluster-count',
+      type:   'symbol',  // 'symbol' layers draw text (and/or icons)
+      source: 'points-clustered',
+      layout: { 'text-field': abbreviatedCount(countExpr), 'text-size': 12 },
+      paint:  { 'text-color': '#fff' },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hover popups
+// ---------------------------------------------------------------------------
+
+// Popup text for the images at one hovered spot. A single image shows its
+// name; several show a count plus a per-group tally capped at
+// MAX_POPUP_GROUPS entries. `members` is a list of {name, group} objects.
+function popupHtml(ctx, members, kindLabel) {
+  const escapeHtml = ctx.plot.escapeHtml;
+  const groupingLabel = ctx.plot.groupingLabel();  // '' when no grouping is selected
+
+  if (members.length === 1) {
+    let html = escapeHtml(String(members[0].name ?? ''));
+    if (groupingLabel) {
+      html += `<br><b>${escapeHtml(groupingLabel)}:</b> ${escapeHtml(ctx.groupLabel(members[0].group))}`;
+    }
+    return html;
+  }
+
+  let html = `${members.length} ${kindLabel}`;
+  if (groupingLabel) {
+    // Tally members per group, largest group first (≈ Counter.most_common).
+    const countPerGroup = new Map();
+    for (const member of members) {
+      countPerGroup.set(member.group, (countPerGroup.get(member.group) ?? 0) + 1);
+    }
+    const entries = [...countPerGroup.entries()];
+    entries.sort((entryA, entryB) => entryB[1] - entryA[1]);
+
+    const parts = entries.slice(0, MAX_POPUP_GROUPS)
+      .map(([group, count]) => `${count}× ${escapeHtml(ctx.groupLabel(group))}`);
+    const hidden = entries.length - parts.length;
+    if (hidden > 0) parts.push(`+${hidden} more`);
+    html += `<br><b>${escapeHtml(groupingLabel)}:</b> ${parts.join(', ')}`;
+  }
   return html;
 }
 
-// Adds a GeoJSON point source + circle layer, extending `bounds` (if given)
-// with every point's coordinates.
-function addPointsLayer(map, rows, { radius, color, bounds }) {
-  const features = rows.map(pointFeature);
-  if (bounds) features.forEach(f => bounds.extend(f.geometry.coordinates));
-  map.addSource('points', { type: 'geojson', data: { type: 'FeatureCollection', features } });
-  map.addLayer({
-    id:     'points-layer',
-    type:   'circle',
-    source: 'points',
-    paint: {
-      'circle-radius':       radius,
-      'circle-color':        color,
-      'circle-stroke-color': '#fff',
-      'circle-stroke-width': radius > 4 ? 1 : 0.5,
-    },
+function addHoverPopup(map, popup, layerId, anchor, htmlForEvent) {
+  map.on('mouseenter', layerId, async (event) => {
+    map.getCanvas().style.cursor = 'pointer';
+    const lngLat = anchor === 'mouse' ? event.lngLat : event.features[0].geometry.coordinates;
+    popup.setLngLat(lngLat);
+    popup.setHTML(await htmlForEvent(event));
+    popup.addTo(map);
+  });
+  map.on('mouseleave', layerId, () => {
+    map.getCanvas().style.cursor = '';
+    popup.remove();
   });
 }
 
@@ -73,25 +174,20 @@ export default {
   },
 
   async condensedPlot(container, ctx) {
-    const { andWhere, groupCol: gcFn } = ctx.sql;
-
-    // Points only (no footprints/names), capped at 100 rows — a full render
-    // could be backed by 100k+ images and a real MapLibre instance isn't cheap.
     const rows = await ctx.queryRows(`
       SELECT
         "latitude" AS lat,
         "longitude" AS lon,
-        ${gcFn()} AS __group__
+        ${ctx.sql.groupCol()} AS __group__
       FROM pp_data
-      ${andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
+      ${ctx.sql.andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
       ORDER BY random()
       LIMIT 100
     `);
-    if (!rows.length) return false;
+    if (!rows.length) return false;  // placeholder icon will be displayed
 
     container.style.height = '100%';
     container.style.width = '100%';
-
 
     const maplibregl = await loadMaplibre();
     const map = new maplibregl.Map({
@@ -100,12 +196,13 @@ export default {
       center: [0, 0],
       zoom: 1,
       attributionControl: false,
-      interactive: false,
+      interactive: false,  // so that map can be clicked to open the condensed view
     });
 
+    // add points when map has loaded
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds();
-      addPointsLayer(map, rows, { radius: 3, color: groupColorMatch(ctx), bounds });
+      addPointsLayers(map, rows, { radius: 3, bounds });
       map.fitBounds(bounds, { padding: 20, maxZoom: 8, animate: false });
     });
 
@@ -113,17 +210,15 @@ export default {
   },
 
   async render(container, ctx) {
-    const { andWhere, groupCol: gcFn } = ctx.sql;
-
     const rows = await ctx.queryRows(`
       SELECT
         "latitude"  AS lat,
         "longitude" AS lon,
         "name" AS name,
         "footprint" as footprint,
-        ${gcFn()} AS __group__
+        ${ctx.sql.groupCol()} AS __group__
       FROM pp_data
-      ${andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
+      ${ctx.sql.andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
     `);
 
     if (!rows.length) {
@@ -131,6 +226,8 @@ export default {
       return;
     }
 
+    // The card body has no fixed size of its own — without an explicit
+    // height the map would collapse to 0 pixels.
     container.style.height = '600px';
     container.style.minHeight = '200px';
     container.style.width = '100%';
@@ -146,27 +243,34 @@ export default {
       attributionControl: true,
       pitch: 0,
     });
-
+    map.addControl(new maplibregl.ScaleControl());
     map.addControl(new maplibregl.NavigationControl());
 
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds();
 
-      const footprintFeatures = rows
-        .filter(r => r.footprint != null)
-        .map(r => {
-          const geometry = JSON.parse(r.footprint);
-          // Extend bounds with all polygon corners
-          geometry.coordinates[0].forEach(([lon, lat]) => bounds.extend([lon, lat]));
-          return { type: 'Feature', geometry, properties: { name: r.name, group: r.__group__ } };
+      // One polygon feature per image that has a footprint; grow `bounds`
+      // by every polygon corner.
+      const footprintFeatures = [];
+      for (const row of rows) {
+        if (row.footprint == null) continue;
+        const geometry = JSON.parse(row.footprint);
+        for (const [lon, lat] of geometry.coordinates[0]) {
+          bounds.extend([lon, lat]);
+        }
+        footprintFeatures.push({
+          type: 'Feature',
+          geometry,
+          properties: { name: row.name, group: row.__group__ },
         });
+      }
 
       map.addSource('footprints', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: footprintFeatures },
       });
 
-      // Fill — add before points so circles render on top
+      // add footprint filling and outline first
       map.addLayer({
         id:     'footprints-fill',
         type:   'fill',
@@ -179,37 +283,34 @@ export default {
         source: 'footprints',
         paint: { 'line-color': '#4a90d9', 'line-width': 1.5 },
       });
+      // on top, draw points
+      addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
 
-      addPointsLayer(map, rows, { radius: 6, color: groupColorMatch(ctx), bounds });
-
-      // Hover tooltip (points)
+      // One shared popup instance, moved and refilled on each hover.
       const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
-      map.on('mouseenter', 'points-layer', e => {
-        map.getCanvas().style.cursor = 'pointer';
-        const { name, group } = e.features[0].properties;
-        popup.setLngLat(e.features[0].geometry.coordinates).setHTML(popupHtml(ctx, { name, group })).addTo(map);
-      });
-      map.on('mouseleave', 'points-layer', () => {
-        map.getCanvas().style.cursor = '';
-        popup.remove();
+
+      // Cluster badges: a cluster feature only carries the aggregate total,
+      // so ask the source for the member features behind it.
+      addHoverPopup(map, popup, 'points-cluster', 'feature', async (event) => {
+        const clusterId = event.features[0].properties.cluster_id;
+        let members;
+        if (clusterId !== undefined) {
+          const leaves = await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0);
+          members = membersOf(leaves);
+        } else {
+          members = membersOf(event.features);  // feature the clustering left unwrapped
+        }
+        return popupHtml(ctx, members, 'points');
       });
 
-      // Hover tooltip (footprints)
-      map.on('mouseenter', 'footprints-fill', e => {
-        map.getCanvas().style.cursor = 'pointer';
-        const { name, group } = e.features[0].properties;
-        // Use mouse position rather than geometry center for polygons
-        popup.setLngLat(e.lngLat).setHTML(popupHtml(ctx, { name, group })).addTo(map);
-      });
-      map.on('mouseleave', 'footprints-fill', () => {
-        map.getCanvas().style.cursor = '';
-        popup.remove();
-      });
+      // Footprint polygons (anchor at the mouse, not the polygon center).
+      addHoverPopup(map, popup, 'footprints-fill', 'mouse',
+        (event) => popupHtml(ctx, event.features.map(f => f.properties), 'footprints'));
 
       map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
     });
 
-    // Optional: handle resize (if container changes)
+    // Redraw the map whenever the container is resized
     const observer = new ResizeObserver(() => {
       if (map) map.resize();
     });
