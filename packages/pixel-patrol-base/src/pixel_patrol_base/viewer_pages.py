@@ -75,9 +75,12 @@ def _inline_local_assets(html: str, dist_dir: Path, exclude_names: frozenset[str
     def inline_js_asset_urls(code: str) -> str:
         # Preserve import.meta.url behavior by replacing runtime-resolved asset
         # paths (worker/wasm/etc.) with direct data URLs before embedding.
+        # Rolldown (Vite 8's bundler) minifies these as template literals
+        # (backticks) rather than quotes, so all three forms must be covered.
         for rel, data_url in asset_data_url_map.items():
             code = code.replace(f'"{rel}"', f'"{data_url}"')
             code = code.replace(f"'{rel}'", f"'{data_url}'")
+            code = code.replace(f'`{rel}`', f'`{data_url}`')
         return code
 
     def repl_script(match: re.Match[str]) -> str:

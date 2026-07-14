@@ -40,11 +40,13 @@ def fake_dist(tmp_path: Path) -> Path:
     (dist / "index.html").write_text(INDEX_HTML, encoding="utf-8")
     (dist / "icon.png").write_bytes(b"icon")
     (dist / "logo.png").write_bytes(b"logo")
-    # App bundle references the DuckDB worker/wasm by their hashed names at runtime.
+    # App bundle references the DuckDB worker/wasm by their hashed names at
+    # runtime, as template literals - the form Rolldown (Vite 8's bundler)
+    # minifies these to.
     (assets / "index-ABC123.js").write_text(
         "console.log('app');\n"
-        'var w="./assets/duckdb-browser-mvp.worker-HASH.js";'
-        'var m="./assets/duckdb-mvp-HASH.wasm";',
+        "var w=`./assets/duckdb-browser-mvp.worker-HASH.js`;"
+        "var m=`./assets/duckdb-mvp-HASH.wasm`;",
         encoding="utf-8",
     )
     (assets / "index-DEF456.css").write_text("body{}", encoding="utf-8")
@@ -128,6 +130,12 @@ class TestOfflineBuild:
         out = build_single_file_viewer_html(tmp_path / "v.html", offline=True)
         html = out.read_text(encoding="utf-8")
         assert "console.log('app');" in html
+
+    def test_inlines_duckdb_wasm_referenced_as_template_literal(self, patched, tmp_path):
+        out = build_single_file_viewer_html(tmp_path / "v.html", offline=True)
+        html = out.read_text(encoding="utf-8")
+        assert "duckdb-mvp-HASH.wasm" not in html  # rewritten to a data URL
+        assert "data:application/wasm;base64," in html  # the actual bytes are embedded
 
     def test_no_cdn_app_bundle_or_duckdb_globals(self, patched, tmp_path):
         out = build_single_file_viewer_html(tmp_path / "v.html", offline=True)
