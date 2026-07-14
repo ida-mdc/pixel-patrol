@@ -40,6 +40,19 @@ describe('detectSchema', () => {
     expect(metricCols).toContain('mean_intensity');
   });
 
+  it('classifies date/timestamp columns into dateCols, excluding bare time', () => {
+    const { dateCols } = detectSchema(cols({
+      obs_level: 'Int64',
+      modification_date: 'Timestamp',
+      acquisition_date: 'Date32',
+      capture_time: 'Time64',
+      mean_intensity: 'Float64',
+    }));
+    expect(dateCols).toEqual(expect.arrayContaining(['modification_date', 'acquisition_date']));
+    expect(dateCols).not.toContain('capture_time');
+    expect(dateCols).not.toContain('mean_intensity');
+  });
+
   it('routes dim_* columns into dimCols, out of metric/allCols', () => {
     const { dimCols, metricCols, allCols } = detectSchema(cols({
       obs_level: 'Int64',

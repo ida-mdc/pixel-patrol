@@ -46,6 +46,7 @@ const INFRA_COLS = new Set(['obs_level']);
  *   metricCols: string[],
  *   dimCols: string[],
  *   groupCols: string[],
+ *   dateCols: string[],
  *   dimensionInfo: Object.<string, number[]>,
  *   allCols: string[],
  *   blobCols: string[],
@@ -56,6 +57,7 @@ export function detectSchema(columns) {
   const metricCols    = [];
   const dimCols       = [];   // per-dimension index columns: ['dim_t', 'dim_c', …]
   const groupCols     = [];
+  const dateCols      = [];
   const blobCols      = [];
   const allCols       = [];
 
@@ -74,6 +76,7 @@ export function detectSchema(columns) {
     if (INFRA_COLS.has(name)) continue;
 
     const isNumeric = /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
+    const isDate    = /^(date|timestamp)/i.test(type); // excludes bare TIME (time-of-day, not a date)
     const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
     const isDimCol  = DIM_COL_RE.test(name); // dim_t, dim_c, …
 
@@ -89,6 +92,10 @@ export function detectSchema(columns) {
 
     if (isNumeric && !isSkipped) {
       metricCols.push(name);
+    }
+
+    if (isDate && !isSkipped) {
+      dateCols.push(name);
     }
 
     if (!isSkipped) {
@@ -111,7 +118,7 @@ export function detectSchema(columns) {
 
   return {
     metricCols, dimCols,
-    groupCols, dimensionInfo, allCols, blobCols,
+    groupCols, dateCols, dimensionInfo, allCols, blobCols,
     allTable: 'pp_all',
   };
 }

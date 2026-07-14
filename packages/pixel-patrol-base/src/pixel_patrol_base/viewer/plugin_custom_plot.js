@@ -24,9 +24,6 @@ const NULL_LABEL = '(missing)';
 // marker.colorscale, no palette lookup needed.
 const CONTINUOUS_PALETTES = ['Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis', 'Turbo', 'Blues', 'YlOrRd'];
 
-// Columns holding real timestamps - shown as date axes, never as categories.
-const DATE_COLS = new Set(['modification_date']);
-
 const dateFmt = "'%Y-%m-%d %H:%M:%S'";
 
 // Build an id from column names + a suffix, for exported plugin filenames.
@@ -230,7 +227,7 @@ function dataSourceSnippet(splitDims) {
   ].join('\n');
 }
 
-function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuous, palette, noneColor, heatColor, heatInvert, splitDims }) {
+function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuous, palette, noneColor, heatColor, heatInvert, splitDims, dateCols }) {
   const qc   = c => '"' + String(c).replace(/"/g, '""') + '"';
   const nice = c => (c ?? '').replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
   const cid  = c => (c ?? '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
@@ -300,10 +297,12 @@ function generatePluginCode({ plotType, x, y, catCol, numCol, colorBy, continuou
   ].join('\n') : '';
 
   // Date columns are formatted to readable strings in SQL and plotted on a 'date' axis.
-  const sel     = (col, alias) => DATE_COLS.has(col) ? `STRFTIME(${qc(col)}, ${dateFmt}) AS ${alias}` : `${qc(col)} AS ${alias}`;
-  const valExpr = (col, v)     => DATE_COLS.has(col) ? v : `Number(${v})`;
-  const axisObj = (col, title) => DATE_COLS.has(col)
-    ? `{ title: ${JSON.stringify(title)}, type: 'date' }`
+  const sel     = (col, alias) => dateCols.has(col) ? `STRFTIME(${qc(col)}, ${dateFmt}) AS ${alias}` : `${qc(col)} AS ${alias}`;
+  const valExpr = (col, v)     => dateCols.has(col) ? v : `Number(${v})`;
+  // Pinned tickformat so a near-zero-variance date range still reads as a
+  // calendar date/time instead of Plotly auto-zooming into fractional seconds.
+  const axisObj = (col, title) => dateCols.has(col)
+    ? `{ title: ${JSON.stringify(title)}, type: 'date', tickformat: ${dateFmt}, hoverformat: ${dateFmt} }`
     : `{ title: ${JSON.stringify(title)} }`;
 
   // NULLs become their own "(missing)" category, sorted last.
@@ -573,9 +572,10 @@ export default {
     const { niceName } = ctx.plot;
 
     const available  = ctx.schema.allCols.filter(c => !EXCLUDED_SUBSTRINGS.some(s => c.includes(s))).sort();
+    const dateCols   = new Set(ctx.schema.dateCols ?? []);
     const numericSet = new Set([
       ...ctx.schema.metricCols,
-      ...available.filter(c => EXTRA_NUMERIC.has(c) || DATE_COLS.has(c)),
+      ...available.filter(c => EXTRA_NUMERIC.has(c) || dateCols.has(c)),
     ]);
 
     // Dims the user can toggle into "Slice by" controls per plot - excludes
@@ -688,7 +688,7 @@ export default {
 
       exportBtn.addEventListener('click', () => {
         if (!activeConfig) return;
-        const code = generatePluginCode(activeConfig);
+        const code = generatePluginCode({ ...activeConfig, dateCols });
         const name = 'plugin_' + activeConfig.id + '.js';
         const url  = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
         const a    = Object.assign(document.createElement('a'), { href: url, download: name });
@@ -755,7 +755,7 @@ export default {
         }
         // Scatter only: a numeric color-by column is shown with a continuous
         // colormap (one trace, per-point color) instead of discrete groups.
-        if (scatter && numericSet.has(c) && !DATE_COLS.has(c)) {
+        if (scatter && numericSet.has(c) && !dateCols.has(c)) {
           return { mode: c, note: null, continuous: true };
         }
         const [{ n }] = await cardinalityCheck(c);
