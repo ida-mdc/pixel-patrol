@@ -180,7 +180,7 @@ def _rewrite_local_refs_to_cdn(html: str, base_url: str) -> str:
         url = match.group("url")
         if re.match(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|//|#)", url):
             return match.group(0)
-        rel = url.lstrip("./").lstrip("/")
+        rel = url.removeprefix("./").lstrip("/")
         return f'{attr}="{base}{rel}"'
 
     return re.sub(r'(?P<attr>(?:src|href))="(?P<url>[^"]+)"', repl, html)
