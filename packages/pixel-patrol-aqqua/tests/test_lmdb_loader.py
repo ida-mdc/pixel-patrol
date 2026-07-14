@@ -144,6 +144,25 @@ def test_load_range_all_records_have_correct_shape(rgb_lmdb: Path, loader) -> No
 
 
 # ---------------------------------------------------------------------------
+# meta parquet sidecar
+# ---------------------------------------------------------------------------
+
+
+def test_load_range_merges_meta_parquet(rgb_lmdb_with_meta_parquet: Path, loader) -> None:
+    results = dict(loader.load_range(rgb_lmdb_with_meta_parquet, start=0, stop=2))
+    metas = {rec.meta.get("image-uuid"): rec.meta for rec in results.values()}
+    assert metas["uuid-0"]["image-region"] == "NECS"
+    assert metas["uuid-1"]["image-region"] == "NECS"
+
+
+def test_load_range_no_meta_parquet_found(rgb_lmdb: Path, loader) -> None:
+    # rgb_lmdb has no numeric-ID suffix, so no sidecar can be matched - metadata
+    # should still come through from the blosc2 array itself.
+    results = list(loader.load_range(rgb_lmdb, start=0, stop=2))
+    assert [rec.meta.get("image-uuid") for _, rec in results] == ["uuid-0", "uuid-1"]
+
+
+# ---------------------------------------------------------------------------
 # Loader class attributes (conformance)
 # ---------------------------------------------------------------------------
 
@@ -158,3 +177,7 @@ def test_supported_extensions_contains_lmdb() -> None:
 
 def test_folder_extensions_subset_of_supported() -> None:
     assert LmdbLoader.FOLDER_EXTENSIONS <= LmdbLoader.SUPPORTED_EXTENSIONS
+
+
+def test_container_extensions_subset_of_supported() -> None:
+    assert LmdbLoader.CONTAINER_EXTENSIONS <= LmdbLoader.SUPPORTED_EXTENSIONS
