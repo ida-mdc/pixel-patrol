@@ -135,6 +135,17 @@ describe('niceDateAxis', () => {
     expect(axis.type).toBe('date');
     expect(axis.dtick).toBeUndefined();
   });
+
+  it('scales tick labels by dtick instead of forcing one fixed format', () => {
+    const min = Date.parse('2026-01-01T00:00:00Z');
+    const max = min + 365 * 86_400_000; // a year apart - ticks should read as bare dates
+    const axis = niceDateAxis([min, max], 'Modified');
+    expect(axis.tickformat).toBeUndefined();
+    expect(axis.tickformatstops).toBeInstanceOf(Array);
+    expect(axis.tickformatstops.at(-1)).toMatchObject({ dtickrange: [86_400_000, null], value: '%Y-%m-%d' });
+    // hover always shows full precision - it's a single value, not a whole axis of them
+    expect(axis.hoverformat).toBe('%Y-%m-%d %H:%M:%S');
+  });
 });
 
 describe('setDateCols', () => {
