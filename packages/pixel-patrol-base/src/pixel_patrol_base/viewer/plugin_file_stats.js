@@ -223,7 +223,7 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
 // Otherwise a timeline, bucketed at whatever granularity (day/hour/minute/second)
 // actually shows spread - rolled up to months if there are too many distinct days,
 // or collapsed to a compact range if the spread is sub-second and no bucket would help.
-async function renderModificationDates(container, ctx, dateRange, invariants) {
+export async function renderModificationDates(container, ctx, dateRange, invariants) {
   const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw } = dateRange[0] ?? {};
   if (minFmt == null) return;
 
