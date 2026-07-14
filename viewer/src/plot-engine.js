@@ -57,15 +57,26 @@ function selectExpr(q, col, alias) {
 }
 const DATE_TICK_FMT = '%Y-%m-%d %H:%M:%S';
 
+// Tick label format scales with zoom (dtick), so a wide axis reads as bare
+// dates and only grows a time-of-day component once ticks are close enough
+// for it to matter. hoverformat stays fixed to full precision - it's always
+// a single value, so there's no clutter risk there.
+const DATE_TICKFORMATSTOPS = [
+  { dtickrange: [null, 1000],        value: '%H:%M:%S.%L' },
+  { dtickrange: [1000, 60000],       value: '%H:%M:%S' },
+  { dtickrange: [60000, 3600000],    value: '%H:%M' },
+  { dtickrange: [3600000, 86400000], value: '%b %d, %H:%M' },
+  { dtickrange: [86400000, null],    value: '%Y-%m-%d' },
+];
+
 // Plotly's date-axis auto-dtick is correct except for a near-zero span: below
 // ~4s it drops sub-second (dtick 0.2 -> "13:40:20.0001") and no longer reads as
 // a date. Below the floor we pin a 1-second dtick, padding the range when the
 // span is under one tick so a tick lands in view; above it we defer to Plotly.
-// tickformat is always DATE_TICK_FMT to match dates elsewhere in the report.
 const DATE_FLOOR_DTICK = 1000; // 1 second - never tick finer than this
 const DATE_FLOOR_SPAN = 4000;  // below this, Plotly's auto dtick goes sub-second
 export function niceDateAxis(values, title) {
-  const base = { title, type: 'date', tickformat: DATE_TICK_FMT, hoverformat: DATE_TICK_FMT };
+  const base = { title, type: 'date', tickformatstops: DATE_TICKFORMATSTOPS, hoverformat: DATE_TICK_FMT };
   const times = (values ?? []).map(v => new Date(v).getTime()).filter(Number.isFinite);
   if (!times.length) return base;
   const min = Math.min(...times), max = Math.max(...times);
