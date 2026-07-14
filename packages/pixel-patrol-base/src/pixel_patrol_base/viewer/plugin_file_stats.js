@@ -3,6 +3,11 @@ const SIZE_LOG_THRESHOLD = 30;
 const MAX_DAYS           = 20;
 const FILE_STATS_MARGIN  = { l: 50, r: 80, t: 50, b: 80 };
 
+const MS_SECOND = 1000;
+const MS_MINUTE = 60 * MS_SECOND;
+const MS_HOUR   = 60 * MS_MINUTE;
+const MS_DAY    = 24 * MS_HOUR;
+
 export default {
   id: 'file-stats',
   required_inputs: ['file_extension', 'size_bytes'],
@@ -118,13 +123,13 @@ export default {
   async render(container, ctx) {
     try {
       const invariants = [];
-      const [extRows, sizeRange, dateRows] = await fetchFileStats(ctx);
+      const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx);
 
       // Each section draws a chart when the property varies, or adds an
       // invariant row when it's shared by every file.
       renderExtensions(container, ctx, extRows, invariants);
       await renderSizeBins(container, ctx, sizeRange, invariants);
-      await renderModificationDates(container, ctx, dateRows, invariants);
+      await renderModificationDates(container, ctx, dateRange, invariants);
 
       if (invariants.length) ctx.plot.invariantTable(container, {
         title: 'Properties shared by all files that report it',
@@ -160,10 +165,12 @@ function fetchFileStats(ctx) {
     `),
     hasDate
       ? ctx.queryRows(`
-          SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '%Y-%m-%d') AS day,
-                 ${gcExpr} AS __group__, COUNT(*) AS count
+          SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
+                 STRFTIME(MAX(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS max_fmt,
+                 EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
+                   - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms,
+                 COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique
           FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
-          GROUP BY 1, 2 ORDER BY 1, 2
         `)
       : Promise.resolve([]),
   ]);
@@ -212,30 +219,55 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
   }, ctx);
 }
 
-// One distinct day → invariant row; otherwise a timeline, rolled up to months
-// once there are too many distinct days to read.
-async function renderModificationDates(container, ctx, dateRows, invariants) {
-  if (!dateRows.length) return;
-  const uniqueDays = [...new Set(dateRows.map(r => r.day))].sort();
-  if (uniqueDays.length === 1) {
-    invariants.push(['Modification Date (Day)', uniqueDays[0]]);
+// One exact timestamp shared by every file → invariant row with full precision.
+// Otherwise a timeline, bucketed at whatever granularity (day/hour/minute/second)
+// actually shows spread - rolled up to months if there are too many distinct days,
+// or collapsed to a compact range if the spread is sub-second and no bucket would help.
+async function renderModificationDates(container, ctx, dateRange, invariants) {
+  const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw } = dateRange[0] ?? {};
+  if (minFmt == null) return;
+
+  const nUnique = Number(nUniqueRaw);
+  if (nUnique <= 1) {
+    invariants.push(['Modification Date', minFmt]);
     return;
   }
-  let rows = dateRows, dateLabel = 'Date';
-  if (uniqueDays.length > MAX_DAYS) {
-    rows = await ctx.queryRows(`
-      SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '%Y-%m') AS day,
-             ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
-      FROM pp_data ${ctx.sql.andWhere(ctx.where, '"modification_date" IS NOT NULL')}
-      GROUP BY 1, 2 ORDER BY 1, 2
-    `);
-    dateLabel = 'Month';
+
+  const spanMs = Number(spanMsRaw);
+  if (spanMs < MS_SECOND) {
+    invariants.push(['Modification Date', minFmt === maxFmt
+      ? `${minFmt} (span < 1s)`
+      : `${minFmt} – ${maxFmt} (span < 1s)`]);
+    return;
   }
-  const cats = [...new Set(rows.map(r => String(r.day)))].sort();
+
+  const [fmt, dateLabel] = spanMs >= MS_DAY    ? ['%Y-%m-%d', 'Date']
+                         : spanMs >= MS_HOUR   ? ['%Y-%m-%d %H:00', 'Hour']
+                         : spanMs >= MS_MINUTE ? ['%Y-%m-%d %H:%M', 'Minute']
+                         :                       ['%Y-%m-%d %H:%M:%S', 'Second'];
+
+  let { rows, cats } = await bucketByDateFmt(ctx, fmt);
+  let finalLabel = dateLabel;
+  if (fmt === '%Y-%m-%d' && cats.length > MAX_DAYS) {
+    ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m'));
+    finalLabel = 'Month';
+  }
+
   renderGroupedBars(container, {
-    categories: cats, getValue: pick(rows, r => r.day, 'count'),
-    title: 'File Count by Modification Date', xLabel: dateLabel, yLabel: 'File count', showLegend: true,
+    categories: cats, getValue: pick(rows, r => r.bucket, 'count'),
+    title: 'File Count by Modification Date', xLabel: finalLabel, yLabel: 'File count', showLegend: true,
   }, ctx);
+}
+
+// Group modification_date into buckets of the given STRFTIME format.
+async function bucketByDateFmt(ctx, fmt) {
+  const rows = await ctx.queryRows(`
+    SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '${fmt}') AS bucket,
+           ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
+    FROM pp_data ${ctx.sql.andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+    GROUP BY 1, 2 ORDER BY 1, 2
+  `);
+  return { rows, cats: [...new Set(rows.map(r => String(r.bucket)))].sort() };
 }
 
 // (category, group) → a numeric field from long-format rows, 0 when absent.
