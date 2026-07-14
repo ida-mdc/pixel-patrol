@@ -58,3 +58,37 @@ def grayscale_lmdb(tmp_path: Path) -> Path:
     ]
     _write_lmdb(lmdb_path, images)
     return lmdb_path
+
+
+@pytest.fixture()
+def rgb_lmdb_with_meta_parquet(tmp_path: Path) -> Path:
+    """LMDB named with a numeric ID suffix, plus a matching '-meta-{ID}.parquet'
+    sidecar, mirroring the AqQua dataset naming convention:
+        *-images-{ID}.lmdb  +  *-meta-{ID}.parquet
+    Metadata columns and values mirror a real AqQua meta parquet (see
+    ankita-cpics-cpics-6mp-phytodive-data-meta-1125909056990340.parquet).
+    """
+    import polars as pl
+
+    lmdb_path = tmp_path / "sample-images-42.lmdb"
+    rng = np.random.default_rng(42)
+    images = [
+        (
+            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
+            {"image-uuid": "uuid-0"},
+        ),
+        (
+            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
+            {"image-uuid": "uuid-1"},
+        ),
+    ]
+    _write_lmdb(lmdb_path, images)
+
+    parquet_path = tmp_path / "sample-meta-42.parquet"
+    pl.DataFrame({
+        "image-uuid": ["uuid-0", "uuid-1"],
+        "image-region": ["NECS", "NECS"],
+        "image-altitude-meters": [0, 0],
+    }).write_parquet(parquet_path)
+
+    return lmdb_path

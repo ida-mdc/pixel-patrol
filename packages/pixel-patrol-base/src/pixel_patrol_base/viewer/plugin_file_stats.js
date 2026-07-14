@@ -94,9 +94,34 @@ export default {
       }});
     }
 
-    // Nothing varies: mirror the full widget, which only shows an invariant table.
+    // Nothing varies: mirror the full widget, which lists every invariant property.
     if (!drawers.length) {
-      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], [['File Extension', exts[0] ?? '—']]);
+      const invariants = [];
+      if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
+
+      const [sizeRange, dateRange] = await Promise.all([
+        ctx.queryRows(`
+          SELECT MIN("size_bytes") AS min_s, COUNT(DISTINCT "size_bytes") AS n_unique
+          FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+        `),
+        ctx.schema.allCols.includes('modification_date')
+          ? ctx.queryRows(`
+              SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
+                     COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique
+              FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+            `)
+          : Promise.resolve([]),
+      ]);
+
+      if (Number(sizeRange[0]?.n_unique ?? 0) <= 1) {
+        invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
+      }
+      if (dateRange[0]?.min_fmt != null && Number(dateRange[0].n_unique) <= 1) {
+        invariants.push(['Modification Date', dateRange[0].min_fmt]);
+      }
+
+      if (!invariants.length) return false;
+      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
       return true;
     }
 

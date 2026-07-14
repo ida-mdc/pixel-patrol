@@ -165,13 +165,11 @@ class LmdbLoader:
     FOLDER_EXTENSIONS:    Set[str] = {"lmdb"}
     CONTAINER_EXTENSIONS: Set[str] = {"lmdb", "mdb"}
 
-    @staticmethod
-    def is_folder_supported(path: Path) -> bool:
+    def is_folder_supported(self, path: Path) -> bool:
         """LMDB databases are directories, not single files."""
         return path.is_dir() and (path / "data.mdb").exists()
 
-    @staticmethod
-    def read_header(lmdb_path: Path) -> FileInfo:
+    def read_header(self, lmdb_path: Path) -> FileInfo:
         """Open the LMDB, count entries, and peek the first entry for shape/dtype."""
         env, db, txn = _open_lmdb_readonly(lmdb_path)
         try:
@@ -188,8 +186,7 @@ class LmdbLoader:
         finally:
             env.close()
 
-    @staticmethod
-    def load(lmdb_path: Path) -> Record:
+    def load(self, lmdb_path: Path) -> Record:
         """Load the first image from the LMDB as a Record."""
         env, db, txn = _open_lmdb_readonly(lmdb_path)
         try:
@@ -202,8 +199,7 @@ class LmdbLoader:
         meta = {**_extract_blosc2_user_meta(array), **_extract_array_meta(np_array)}
         return record_from(np_array, meta, kind="intensity")
 
-    @staticmethod
-    def load_range(lmdb_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+    def load_range(self, lmdb_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         """Yield (child_id, Record) for images [start, stop) from the LMDB."""
         parquet_meta = _load_meta_parquet(lmdb_path)
         env, db, txn = _open_lmdb_readonly(lmdb_path)
