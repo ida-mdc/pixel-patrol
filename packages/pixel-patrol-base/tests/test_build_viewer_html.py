@@ -11,11 +11,9 @@ import pytest
 
 from pixel_patrol_base import viewer_pages
 from pixel_patrol_base.viewer_pages import (
-    VIEWER_CDN_BASE,
     _DEFAULT_DUCKDB_WASM_VERSION,
     _duckdb_cdn_urls,
     _read_duckdb_wasm_version,
-    _rewrite_local_refs_to_cdn,
     build_single_file_viewer_html,
 )
 
@@ -89,21 +87,6 @@ class TestDuckdbCdnUrls:
         assert wasm.endswith("/duckdb-mvp.wasm")
 
 
-class TestRewriteLocalRefsToCdn:
-    def test_rewrites_relative_paths(self):
-        out = _rewrite_local_refs_to_cdn(INDEX_HTML, VIEWER_CDN_BASE)
-        base = VIEWER_CDN_BASE.rstrip("/") + "/"
-        assert f'{base}assets/index-ABC123.js' in out
-        assert f'{base}icon.png' in out
-        assert f'{base}logo.png' in out
-
-    def test_leaves_external_and_anchor_refs_untouched(self):
-        out = _rewrite_local_refs_to_cdn(INDEX_HTML, VIEWER_CDN_BASE)
-        assert 'href="https://cdn.jsdelivr.net/npm/bootstrap' in out
-        assert 'href="https://example.com/page"' in out
-        assert 'href="#anchor"' in out
-
-
 # ---------------------------------------------------------------------------
 # build_single_file_viewer_html
 # ---------------------------------------------------------------------------
@@ -138,29 +121,6 @@ class TestLightBuild:
         out = build_single_file_viewer_html(tmp_path / "v.html")
         html = out.read_text(encoding="utf-8")
         assert "cdn.jsdelivr.net/npm/bootstrap" in html
-
-
-class TestBaseUrlBuild:
-    """--base-url: reference the app bundle from a host instead of inlining."""
-
-    def test_references_app_bundle_from_base_url(self, patched, tmp_path):
-        out = build_single_file_viewer_html(tmp_path / "v.html", base_url=VIEWER_CDN_BASE)
-        html = out.read_text(encoding="utf-8")
-        assert f"{VIEWER_CDN_BASE.rstrip('/')}/assets/index-ABC123.js" in html
-        assert "console.log('app');" not in html  # not inlined
-
-    def test_still_uses_duckdb_cdn(self, patched, tmp_path):
-        out = build_single_file_viewer_html(tmp_path / "v.html", base_url="https://h/v/")
-        html = out.read_text(encoding="utf-8")
-        assert "window.__PP_DUCKDB_WORKER_URL =" in html
-
-    def test_offline_takes_precedence_over_base_url(self, patched, tmp_path):
-        out = build_single_file_viewer_html(
-            tmp_path / "v.html", offline=True, base_url=VIEWER_CDN_BASE
-        )
-        html = out.read_text(encoding="utf-8")
-        assert "ida-mdc.github.io" not in html
-        assert "console.log('app');" in html  # inlined, not referenced
 
 
 class TestOfflineBuild:

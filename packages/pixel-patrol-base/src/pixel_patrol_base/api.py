@@ -169,7 +169,6 @@ def view(
 def build_viewer(
     output: Union[str, Path],
     offline: bool = False,
-    base_url: Optional[str] = None,
 ) -> Path:
     """
     Build a static viewer from the installed web viewer bundle.
@@ -180,20 +179,16 @@ def build_viewer(
     installed version and needs a network connection only for DuckDB.
 
     Pass offline=True to inline all JS/CSS/WASM into a large self-contained file
-    that works with no network access. Pass base_url to instead reference the
-    app bundle from a host (e.g. the hosted viewer for a matching released
-    version) for a tiny file - the deployed bundle must be the exact same build.
+    that works with no network access.
 
     Otherwise OUTPUT is treated as a directory and a GitHub Pages-style site
     is written there (index.html + assets + extensions folders) - deploy to
     any static host and open with a ?data= URL pointing to your parquet.
-    (offline / base_url do not apply to the directory build.)
+    (offline does not apply to the directory build.)
 
     Args:
         output: Path to a .html file or a directory.
         offline: For single-file builds, inline all dependencies (incl. WASM).
-        base_url: For single-file builds, reference the app bundle from this
-            URL instead of inlining it. Ignored when offline=True.
 
     Returns:
         Path to the written file or directory.
@@ -202,15 +197,13 @@ def build_viewer(
         >>> from pixel_patrol_base import api
         >>> api.build_viewer("viewer.html")                 # light single file
         >>> api.build_viewer("viewer.html", offline=True)   # self-contained
-        >>> api.build_viewer("viewer.html",                 # tiny, hosted bundle
-        ...     base_url="https://ida-mdc.github.io/pixel-patrol/viewer/")
         # OR
         >>> api.build_viewer("gh-pages-out/")               # site folder
     """
 
     output = Path(output)
     if output.suffix.lower() in {".html", ".htm"}:
-        out = build_single_file_viewer_html(output, offline=offline, base_url=base_url)
+        out = build_single_file_viewer_html(output, offline=offline)
         logger.info("Single-file viewer written to: '%s'", out)
     else:
         out = build_github_pages_site(output)

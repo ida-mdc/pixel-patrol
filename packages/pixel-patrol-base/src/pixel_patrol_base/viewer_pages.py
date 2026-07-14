@@ -9,13 +9,6 @@ from pathlib import Path
 
 from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist, resolve_extension_plugins
 
-# Host that serves the deployed viewer bundle, and the single source for the
-# value suggested in the build-viewer-html --base-url help. That option references
-# the app's JS/CSS (and images) from a host instead of inlining them. Asset file
-# names are content-hashed, so the host must serve the exact same build (i.e. a
-# matching released version) or the references 404.
-VIEWER_CDN_BASE = "https://ida-mdc.github.io/pixel-patrol/viewer/"
-
 # Fallback used only if the build metadata is missing from the viewer bundle
 # (e.g. an older bundle built before pp_build_meta.json was emitted).
 _DEFAULT_DUCKDB_WASM_VERSION = "1.32.0"
@@ -167,25 +160,6 @@ def _duckdb_cdn_urls(dist_dir: Path) -> tuple[str, str]:
     )
 
 
-def _rewrite_local_refs_to_cdn(html: str, base_url: str) -> str:
-    """Point local src/href references at the deployed viewer host.
-
-    External URLs (http(s):, //, data:), in-page anchors (#) and other schemes
-    are left untouched - only bundle-relative paths are rewritten.
-    """
-    base = base_url.rstrip("/") + "/"
-
-    def repl(match: re.Match[str]) -> str:
-        attr = match.group("attr")
-        url = match.group("url")
-        if re.match(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|//|#)", url):
-            return match.group(0)
-        rel = url.removeprefix("./").lstrip("/")
-        return f'{attr}="{base}{rel}"'
-
-    return re.sub(r'(?P<attr>(?:src|href))="(?P<url>[^"]+)"', repl, html)
-
-
 def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
     urls: list[str] = []
     for ext_dir in extension_dirs:
@@ -282,7 +256,6 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
 def build_single_file_viewer_html(
     output_html: str | Path,
     offline: bool = False,
-    base_url: str | None = None,
 ) -> Path:
     """Write a single-file HTML viewer.
 
@@ -293,12 +266,6 @@ def build_single_file_viewer_html(
 
     offline=True: a fully self-contained file with all JS/CSS/WASM inlined as
     data URLs - works without any network access but is large (~50 MB+).
-
-    base_url set: reference the app bundle (JS/CSS/images) from base_url instead
-    of inlining it, producing a tiny file. The bundle at base_url must be the
-    exact same build (asset file names are content-hashed), e.g. the hosted
-    viewer for a matching released version, or your own deployment. Ignored when
-    offline=True.
     """
     output_html = Path(output_html).resolve()
     dist_dir = find_viewer_dist()
@@ -310,12 +277,8 @@ def build_single_file_viewer_html(
         # Everything inlined, including the DuckDB worker/wasm - no network.
         html = _inline_local_assets(html, dist_dir)
     else:
-        if base_url:
-            # App bundle served from a host; nothing local left to inline.
-            html = _rewrite_local_refs_to_cdn(html, base_url)
-        else:
-            # Inline the app bundle but keep DuckDB out of the file.
-            html = _inline_local_assets(html, dist_dir, exclude_names=_duckdb_asset_names(dist_dir))
+        # Inline the app bundle but keep DuckDB out of the file.
+        html = _inline_local_assets(html, dist_dir, exclude_names=_duckdb_asset_names(dist_dir))
         worker_url, wasm_url = _duckdb_cdn_urls(dist_dir)
         head_scripts.append(
             "<script>\n"

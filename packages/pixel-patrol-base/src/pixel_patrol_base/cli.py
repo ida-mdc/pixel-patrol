@@ -12,7 +12,6 @@ from pixel_patrol_base.api import (
 )
 
 from pixel_patrol_base.launch_server import serve_launch
-from pixel_patrol_base.viewer_pages import VIEWER_CDN_BASE
 
 
 @click.group()
@@ -235,23 +234,15 @@ def view(parquet_file, port, no_browser,
     help='For single-file (.html) output, inline EVERYTHING incl. DuckDB WASM '
          'for a fully self-contained (~50 MB+) file that needs no network. '
          'Default: inline the app bundle but load DuckDB WASM from a CDN (~7 MB).')
-@click.option(
-    "--base-url",
-    default=None,
-    help='For single-file (.html) output, reference the app bundle from this '
-         'URL instead of inlining it, for a tiny file. The host must serve the '
-         f'exact same build (e.g. {VIEWER_CDN_BASE} '
-         'for a matching released version). Ignored with --offline.')
-def build_viewer_html(output: Path, offline: bool, base_url: str | None):
+def build_viewer_html(output: Path, offline: bool):
     """
     Build static viewer output from the installed web viewer bundle.
 
     If OUTPUT ends in .html/.htm, writes a single HTML file (light by default;
-    pass --offline to inline all dependencies, or --base-url to reference the
-    app bundle from a host).
+    pass --offline to inline all dependencies).
     Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
-    api_build_viewer(output, offline=offline, base_url=base_url)
+    api_build_viewer(output, offline=offline)
 
 
 @cli.command()
