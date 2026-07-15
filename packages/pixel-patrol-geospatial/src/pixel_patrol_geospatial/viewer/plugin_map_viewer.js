@@ -24,6 +24,19 @@ async function loadMaplibre() {
   return maplibregl;
 }
 
+// needed for the static html snapshot. idle WebGL map returns
+// blank buffer, so redraw when the snapshot is generated.
+function captureableInSnapshot(map, container) {
+  const redraw = () => {
+    if (!document.contains(container)) {
+      window.removeEventListener('pp:before-snapshot', redraw);
+      return;
+    }
+    map.redraw();
+  };
+  window.addEventListener('pp:before-snapshot', redraw);
+}
+
 // Group the query rows by coordinate and build one GeoJSON
 // feature (geometry + arbitrary `properties`) per distinct position.
 // The images' {path, group} list is stored as a JSON string because MapLibre
@@ -221,7 +234,9 @@ export default {
       zoom: 1,
       attributionControl: false,
       interactive: false,  // so that map can be clicked to open the condensed view
+      preserveDrawingBuffer: true, // needed for the static html snapshot
     });
+    captureableInSnapshot(map, container);
 
     // add points when map has loaded
     map.on('load', () => {
@@ -266,7 +281,9 @@ export default {
       zoom: 2,
       attributionControl: true,
       pitch: 0,
+      preserveDrawingBuffer: true,  // needed for the static html snapshot
     });
+    captureableInSnapshot(map, container);
     map.addControl(new maplibregl.ScaleControl());
     map.addControl(new maplibregl.NavigationControl());
 
