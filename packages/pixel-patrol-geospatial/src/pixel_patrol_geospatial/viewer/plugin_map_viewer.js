@@ -6,7 +6,7 @@
  * The images' locations are shown as cluster badges: one circle per area
  * with the summed number of images.
  * Hovering a badge shows a popup with the
- * image name(s) and, if a grouping is selected, a per-group tally.
+ * image path(s) and, if a grouping is selected, a per-group tally.
  *
  * Note: MapLibre's clustering stores coordinates as 32-bit floats, so badge
  * positions can be off by up to ~1 m.
@@ -15,18 +15,18 @@
 const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js';
 // map licence: CC BY 4.0 (https://sgx.geodatenzentrum.de/web_public/gdz/lizenz/deu/Nutzungsbedingungen_basemapworld.pdf)
 const MAP_STYLE_URL = 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json';
+const MAX_POPUP_PATHS  = 5;  // up to this many overlapping images, list their paths; beyond it, a summary
 const MAX_POPUP_GROUPS = 3;  // for how many groups display the number of images when they overlap
 
-// Fetch and run the MapLibre library from the CDN (cached after the first
-// call). It registers itself as the global variable `maplibregl`.
 async function loadMaplibre() {
+  // cached, so condensedView and render don't load it twice
   await import(MAPLIBRE_SCRIPT_URL);
   return maplibregl;
 }
 
 // Group the query rows by coordinate and build one GeoJSON
 // feature (geometry + arbitrary `properties`) per distinct position.
-// The images' {name, group} list is stored as a JSON string because MapLibre
+// The images' {path, group} list is stored as a JSON string because MapLibre
 // only preserves flat properties when it hands features back in hover events.
 function groupedPointFeatures(rows) {
   const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
@@ -38,7 +38,7 @@ function groupedPointFeatures(rows) {
 
   const features = [];
   for (const rowsHere of rowsPerCoord.values()) {
-    const members = rowsHere.map(row => ({ name: row.name, group: row.__group__ }));
+    const members = rowsHere.map(row => ({ path: row.path, group: row.__group__ }));
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
@@ -48,7 +48,7 @@ function groupedPointFeatures(rows) {
   return features;
 }
 
-// The {name, group} members of every feature stacked at the hovered pixel.
+// The {path, group} members of every feature stacked at the hovered pixel.
 function membersOf(features) {
   const members = [];
   for (const feature of features) {
@@ -58,7 +58,7 @@ function membersOf(features) {
 }
 
 function abbreviatedCount(valueExpr) {
-  // shorten numberss: 2000 → "2k", 2345 → "2.3k", 3200000 → "3.2M"
+  // shorten numbers: 2000 → "2k", 2345 → "2.3k", 3200000 → "3.2M"
   return ['case',
     ['>=', valueExpr, 1e6], ['concat', ['/', ['round', ['/', valueExpr, 1e5]], 10], 'M'],
     ['>=', valueExpr, 1e3], ['concat', ['/', ['round', ['/', valueExpr, 1e2]], 10], 'k'],
@@ -114,21 +114,22 @@ function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
 // Hover popups
 // ---------------------------------------------------------------------------
 
-// Popup text for the images at one hovered spot. A single image shows its
-// name; several show a count plus a per-group tally capped at
-// MAX_POPUP_GROUPS entries. `members` is a list of {name, group} objects.
+// Popup text for the images at one hovered spot. `members` is a list of
+// {path, group} objects.
 function popupHtml(ctx, members, kindLabel) {
   const escapeHtml = ctx.plot.escapeHtml;
   const groupingLabel = ctx.plot.groupingLabel();  // '' when no grouping is selected
 
-  if (members.length === 1) {
-    let html = escapeHtml(String(members[0].name ?? ''));
-    if (groupingLabel) {
-      html += `<br><b>${escapeHtml(groupingLabel)}:</b> ${escapeHtml(ctx.groupLabel(members[0].group))}`;
-    }
-    return html;
+  // Few images: list their paths.
+  if (members.length <= MAX_POPUP_PATHS) {
+    return members.map((member) => {
+      let line = escapeHtml(String(member.path ?? ''));
+      if (groupingLabel) line += ` <i>(${escapeHtml(ctx.groupLabel(member.group))})</i>`;
+      return line;
+    }).join('<br>');
   }
 
+  // Many images: a count plus a per-group tally.
   let html = `${members.length} ${kindLabel}`;
   if (groupingLabel) {
     // Tally members per group, largest group first (≈ Counter.most_common).
@@ -148,18 +149,41 @@ function popupHtml(ctx, members, kindLabel) {
   return html;
 }
 
-function addHoverPopup(map, popup, layerId, anchor, htmlForEvent) {
-  map.on('mouseenter', layerId, async (event) => {
-    map.getCanvas().style.cursor = 'pointer';
-    const lngLat = anchor === 'mouse' ? event.lngLat : event.features[0].geometry.coordinates;
-    popup.setLngLat(lngLat);
-    popup.setHTML(await htmlForEvent(event));
-    popup.addTo(map);
-  });
-  map.on('mouseleave', layerId, () => {
+// one popup on hover for points and polygons. manually setting order, so that the info
+// of points is displayed instead of the polygon.
+function addHoverPopup(map, ctx) {
+  const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
+  const hoverLayers = ['points-cluster', 'footprints-fill'];  // priority order
+
+  const hide = () => {
     map.getCanvas().style.cursor = '';
     popup.remove();
+  };
+
+  map.on('mousemove', async (event) => {
+    const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
+    if (!hits.length) return hide();
+    map.getCanvas().style.cursor = 'pointer';
+
+    // A point badge (possibly a cluster) wins over the footprint beneath it.
+    const badge = hits.find(hit => hit.layer.id === 'points-cluster');
+    if (badge) {
+      const clusterId = badge.properties.cluster_id;
+      const members = clusterId !== undefined
+        ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+        : membersOf([badge]);  // feature the clustering left unwrapped
+      popup.setLngLat(badge.geometry.coordinates).setHTML(popupHtml(ctx, members, 'points')).addTo(map);
+      return;
+    }
+
+    // Otherwise the footprint polygon(s) under the cursor, anchored at the
+    // mouse (a polygon has no single meaningful anchor point).
+    const footprints = hits.map(hit => hit.properties);
+    popup.setLngLat(event.lngLat).setHTML(popupHtml(ctx, footprints, 'footprints')).addTo(map);
   });
+
+  // mousemove stops firing once the cursor leaves the canvas entirely.
+  map.on('mouseout', hide);
 }
 
 export default {
@@ -214,7 +238,7 @@ export default {
       SELECT
         "latitude"  AS lat,
         "longitude" AS lon,
-        "name" AS name,
+        "path" AS path,
         "footprint" as footprint,
         ${ctx.sql.groupCol()} AS __group__
       FROM pp_data
@@ -261,7 +285,7 @@ export default {
         footprintFeatures.push({
           type: 'Feature',
           geometry,
-          properties: { name: row.name, group: row.__group__ },
+          properties: { path: row.path, group: row.__group__ },
         });
       }
 
@@ -286,26 +310,7 @@ export default {
       // on top, draw points
       addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
 
-      // One shared popup instance, moved and refilled on each hover.
-      const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
-
-      // Cluster badges: a cluster feature only carries the aggregate total,
-      // so ask the source for the member features behind it.
-      addHoverPopup(map, popup, 'points-cluster', 'feature', async (event) => {
-        const clusterId = event.features[0].properties.cluster_id;
-        let members;
-        if (clusterId !== undefined) {
-          const leaves = await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0);
-          members = membersOf(leaves);
-        } else {
-          members = membersOf(event.features);  // feature the clustering left unwrapped
-        }
-        return popupHtml(ctx, members, 'points');
-      });
-
-      // Footprint polygons (anchor at the mouse, not the polygon center).
-      addHoverPopup(map, popup, 'footprints-fill', 'mouse',
-        (event) => popupHtml(ctx, event.features.map(f => f.properties), 'footprints'));
+      addHoverPopup(map, ctx);
 
       map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
     });
