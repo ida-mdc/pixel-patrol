@@ -18,12 +18,6 @@ export default {
   info: [
     'High-level **file statistics** for the dataset.',
     '',
-    '**Charts**',
-    '- File count by extension',
-    '- Total size by extension',
-    '- File count by size bin',
-    '- File modification timeline',
-    '',
     'If a property has **no variance** (e.g. all files share the same extension), it is summarized in the table instead of a chart.',
   ].join('\n'),
   label: 'File Statistics',
