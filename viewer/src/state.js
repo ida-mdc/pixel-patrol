@@ -18,6 +18,8 @@ export const state = {
   openedWidgets:    new Set(), // overview gallery: plugin IDs expanded in place
   /** When true, plugins render an optional friendly intro box before their content. */
   overviewMode:     true,
+  /** Default open/closed state for widget info panels; per-widget ⓘ button can still override. */
+  showInfo:          true,
   /** Offline snapshot bundle: sidebar is read-only and URL sync is disabled */
   sidebarLocked:    false,
 };
@@ -49,6 +51,7 @@ export function resetState(defaultGroupCol) {
   state.dimensions       = {};
   state.showSignificance = false;
   state.overviewMode     = true;
+  state.showInfo          = true;
   state.openedWidgets    = new Set();
   state.hiddenWidgets    = new Set();
   emit('query');
