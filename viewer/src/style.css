@@ -200,9 +200,11 @@ body { background: #f8f9fa; }
 .widget-info-btn {
   background: none; border: none; cursor: pointer; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  color: #6c757d; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  color: #6c757d; width: 20px; height: 20px; padding: 0; border-radius: 50%;
 }
 .widget-info-btn:hover { color: #0d6efd; background: #eef4ff; }
+.widget-info-btn[aria-pressed="true"] { background: #6c757d; color: #fff; }
+.widget-info-btn[aria-pressed="true"]:hover { background: #5c636a; color: #fff; }
 .widget-info-icon { font-size: 19px; line-height: 1; }
 .widget-info-panel {
   padding: 12px 16px; background: #f0f7ff;
@@ -445,6 +447,17 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   #row-count-badge { display: none !important; }
   .across-dims-wrap { max-width: 100% !important; }
 }
+
+/* ── Info panels master toggle ── */
+.info-toggle-btn {
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #6c757d; width: 26px; height: 26px; padding: 0; border-radius: 50%;
+  font-size: 24px; line-height: 1;
+}
+.info-toggle-btn:hover { color: #0d6efd; background: #eef4ff; }
+.info-toggle-btn[aria-pressed="true"] { background: #6c757d; color: #fff; }
+.info-toggle-btn[aria-pressed="true"]:hover { background: #5c636a; color: #fff; }
 
 /* ── Topbar icon + brand ── */
 .topbar-icon  { height: 28px; width: auto; }
