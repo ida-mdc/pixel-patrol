@@ -8,24 +8,20 @@ const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 const COL_BG    = ['#ffffff', '#f4f6f9'];
 const MIN_COL_PX = 180;  // min width per "Across 'X' slices" column in the grid
 
-const RAGGED_INFO = 'The dashed line (right-hand axis) shows the **% of images that still have a ' +
+const RAGGED_INFO = 'The dashed line shows the **% of images that still have a ' +
   'slice at this position**, per condition - useful for spotting datasets where images have ' +
   'different numbers of slices.';
 
 const BASIC_INFO = [
   'Shows how image statistics (e.g., mean, std, min, max) change **across different dimension slices**.',
-  '', 'Useful for identifying drift, artifacts, or unexpected variation within (e.g.) T/C/Z/S dimensions.',
-  '', 'You can select slices in the dropdowns to filter the tables.',
+  '', 'Useful for identifying drift, artifacts, or unexpected variation.',
   '', RAGGED_INFO,
 ].join('\n');
 
 const QUALITY_INFO = [
-  'Shows how **image quality metrics** change across (e.g. T, C, Z, S) slices.',
-  '', 'Use this view to detect:',
-  '- drift in focus or noise over time (T)',
-  '- channel-specific artifacts (C)',
-  '- depth-dependent quality changes (Z)',
-  '', RAGGED_INFO,
+  'Shows how **image quality metrics** change across different dimension slices.',
+  '', 'Useful to detect e.g. drift in focus or noise over time (T) and depth (Z) as well as channel (C) specific artifacts.',
+  '', 'The dashed line shows the **% of images that still have a slice at this position**, per condition.',
 ].join('\n');
 
 // X and Y are spatial tile coordinates. When querying non-spatial dims we
@@ -136,7 +132,7 @@ function appendRetentionLegend(container, ctx) {
   const dash = document.createElement('span');
   dash.style.cssText = 'display:flex;align-items:center;gap:5px;color:#6c757d';
   dash.innerHTML = '<span style="display:inline-block;width:16px;height:0;border-top:1px dashed #6c757d"></span>'
-    + '% of images with this slice (right axis)';
+    + '% of images with this slice';
   legend.appendChild(dash);
   container.appendChild(legend);
 }

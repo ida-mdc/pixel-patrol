@@ -235,6 +235,8 @@ const STAT_SELECT = (q, num) => `
  *                     metric means) - rendered in a column beside the plot, always
  *                     visible. Distinct from the widget-level ⓘ panel, which explains
  *                     the widget as a whole and can't say something different per plot.
+ *                     Pass a string, or an object to also show a ▲/▼ direction
+ *                     badge - see appendSideInfoRow in plot-utils.js.
  *
  * Returns true if anything was drawn, false otherwise.
  */

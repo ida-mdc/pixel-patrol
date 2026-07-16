@@ -226,6 +226,13 @@ body { background: #f8f9fa; }
 /* Same note, inline variant for row-header layouts (e.g. stats-across-dims). */
 .plot-side-info-inline { font-weight: 400; font-size: 12px; color: #495057; }
 
+/* Direction badge (▲/▼ + short hint per direction) - only shown for metrics with
+   a well-established, monotonic reading. Green = the "good" direction, red = the
+   direction that indicates a quality issue. */
+.plot-side-info-direction { font-weight: 600; font-size: 12px; margin-bottom: 3px; }
+.plot-side-info-good { color: #198754; }
+.plot-side-info-bad  { color: #dc3545; }
+
 .widget-card-body { padding: 16px; }
 
 /* ── Shared widget styles ── */
