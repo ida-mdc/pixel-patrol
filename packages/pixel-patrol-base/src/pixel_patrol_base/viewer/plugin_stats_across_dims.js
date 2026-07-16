@@ -1,10 +1,9 @@
+import { QUALITY_METRIC_INFO, describeQualityMetric } from './plugin_violin.js';
+
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
-const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
-  'blocking_index', 'ringing_index',
-]);
+const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 const COL_BG    = ['#ffffff', '#f4f6f9'];
 const MIN_COL_PX = 180;  // min width per "Across 'X' slices" column in the grid
@@ -170,7 +169,7 @@ function buildStatsLayout(ctx) {
 
 // Build the dimension × metric table of mini scatter plots; returns the plot count.
 function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMap, layout }, selected) {
-  const { niceName } = ctx.plot;
+  const { niceName, escapeHtml } = ctx.plot;
   tableHost.innerHTML = '';
   const metricsToRender = selected === '__all__' ? metrics : [selected];
   const plotJobs = [];
@@ -199,7 +198,9 @@ function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMa
     const titleCell = tbody.insertRow().insertCell();
     titleCell.colSpan = dimLettersVisible.length;
     titleCell.style.cssText = 'font-weight:500;font-size:0.95rem;color:#343a40;padding:5px 10px;border-top:1px solid #e9ecef;background:#f8f9fa';
-    titleCell.textContent = niceName(metric);
+    const metricInfo = ctx.state.showInfo ? describeQualityMetric(metric) : null;
+    titleCell.innerHTML = escapeHtml(niceName(metric))
+      + (metricInfo ? ` <span class="plot-side-info-inline">${escapeHtml(metricInfo.desc)}</span>` : '');
 
     const plotRow = tbody.insertRow();
     dimLettersVisible.forEach((letter, ci) => {
