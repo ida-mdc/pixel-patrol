@@ -8,7 +8,7 @@ import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { writeUrlParams } from './url-params.js';
-import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
 
@@ -307,12 +307,7 @@ async function renderPluginBody(plugin, body, ctx) {
  * rendered as a full, always-expanded card.
  */
 async function renderClassic(container, activePlugins, ctx) {
-  const grouped = new Map();
-  for (const plugin of activePlugins) {
-    const grp = pluginGroup(plugin);
-    if (!grouped.has(grp)) grouped.set(grp, []);
-    grouped.get(grp).push(plugin);
-  }
+  const grouped = groupPlugins(activePlugins);
   const orderedGroups = orderedGroupNames(activePlugins);
 
   for (const groupName of orderedGroups) {
@@ -332,12 +327,7 @@ async function renderClassic(container, activePlugins, ctx) {
 // Plugins ordered by their group's canonical order, so related tiles cluster
 // in the gallery even though the section headers are dropped.
 function orderActivePlugins(activePlugins) {
-  const grouped = new Map();
-  for (const p of activePlugins) {
-    const g = pluginGroup(p);
-    if (!grouped.has(g)) grouped.set(g, []);
-    grouped.get(g).push(p);
-  }
+  const grouped = groupPlugins(activePlugins);
   const ordered = [];
   for (const g of orderedGroupNames(activePlugins)) ordered.push(...grouped.get(g));
   return ordered;
