@@ -1,7 +1,7 @@
 import { state, setState, resetState, emit } from './state.js';
 import { BLOB_COLS } from './schema.js';
 import { getPaletteNames } from './colors.js';
-import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { formatFrozenSidebarHtml } from './export-snapshot.js';
 import { escapeHtml } from './plot-utils.js';
 
@@ -218,12 +218,7 @@ function buildWidgetToggles(plugins, schema) {
     return;
   }
 
-  const grouped = new Map();
-  for (const p of applicable) {
-    const grp = pluginGroup(p);
-    if (!grouped.has(grp)) grouped.set(grp, []);
-    grouped.get(grp).push(p);
-  }
+  const grouped = groupPlugins(applicable);
   const orderedGroups = orderedGroupNames(applicable);
 
   container.innerHTML = orderedGroups.map(g => {
