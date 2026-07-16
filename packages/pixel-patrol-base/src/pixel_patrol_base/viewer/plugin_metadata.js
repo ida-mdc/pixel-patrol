@@ -5,11 +5,6 @@ const META_COLS = [
 
 const DIST_COLS = ['dtype', 'dim_order'];
 
-const DTYPE_INCONSISTENCY_NOTE =
-  ' Mixed <code>dtype</code> is worth a particularly close look: a pixel value of 100 sits near the ' +
-  'bottom of the <code>uint16</code> range but the middle of the <code>uint8</code> range, so the ' +
-  'same number can mean very different things.';
-
 // Distinct categories of `col` plus a (cat, group) → count lookup. Shared by the
 // condensed tile preview and the full distribution bars so both render from one
 // query instead of each rebuilding the per-group counts.
@@ -56,12 +51,10 @@ function prependInconsistencyWarning(container, ctx, varied) {
   const { escapeHtml, humanList } = ctx.plot;
   const list = humanList(varied.map(({ col, cats }) =>
     `<code>${col}</code> (${cats.map(c => `<code>${escapeHtml(c)}</code>`).join(', ')})`));
-  const dtypeNote = varied.some(v => v.col === 'dtype') ? DTYPE_INCONSISTENCY_NOTE : '';
   ctx.plot.prependWarning(container, {
     level: 'red',
     html: `This report contains more than one value for ${list}. ` +
-      `That can point to inconsistent acquisition - different instruments, software, or settings - ` +
-      `and is worth checking before comparing groups.${dtypeNote}`,
+      `That can point to inconsistent acquisition - different instruments, software, or settings.`,
   });
 }
 
@@ -83,7 +76,7 @@ export default {
   multiPlot: true,
   label: 'Metadata',
   shortLabel: 'Image Metadata',
-  info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nAlso lists properties shared by all files, and available dimension ranges.',
+  info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nIf a property has **no variance** (e.g. every file has the same pixel dtype), it is summarized in a table instead of a chart.',
 
   requires(schema) {
     const hasDist = DIST_COLS.some(c => schema.allCols.includes(c));

@@ -4,34 +4,34 @@ const BASIC_METRIC_BASES = new Set([
 ]);
 
 // Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA.
-// One description per metric, reused both in the widget-level info panel's
-// bullet list below and as each metric's own per-plot side note. Exported so
-// plugin_stats_across_dims.js (the other quality-metric widget) can reuse it
-// instead of duplicating it.
+// One description per metric, used as each metric's own per-plot side note (and
+// by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
+// duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
+// reading is a well-established, monotonic one - see the research this was based
+// on before adding more: mscn_variance's distortion sensitivity isn't monotonic
+// (noise raises it, blur lowers it) and michelson_contrast here isn't even the
+// standard Michelson formula, so neither gets a direction claim.
 export const QUALITY_METRIC_INFO = {
   michelson_contrast: {
-    label: 'Michelson contrast',
     desc: 'Global contrast ratio; higher values indicate greater dynamic range.',
   },
   mscn_variance: {
-    label: 'MSCN variance',
     desc: 'Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
   },
   texture_heterogeneity: {
-    label: 'Texture heterogeneity',
     desc: 'Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
   },
   laplacian_variance: {
-    label: 'Laplacian variance',
     desc: 'Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
+    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
   },
   blocking_index: {
-    label: 'Blocking index',
     desc: 'Strength of blocky compression artifacts (e.g. JPEG blocking).',
+    hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
   },
   ringing_index: {
-    label: 'Ringing index',
     desc: 'Edge oscillation artifacts around sharp boundaries, often due to compression.',
+    hintUp: 'more ringing', hintDown: 'less ringing', goodDirection: 'down',
   },
 };
 
@@ -52,38 +52,34 @@ export function describeQualityMetric(col) {
   return null;
 }
 
+/** Build a renderDistribution `sideInfo` object for a quality metric column, or null. */
+function sideInfoFor(col) {
+  const info = describeQualityMetric(col);
+  return info && {
+    text: info.desc, hintUp: info.hintUp, hintDown: info.hintDown, goodDirection: info.goodDirection,
+  };
+}
+
 const SIGNIFICANCE_HELP = [
   '**Statistical Comparisons**',
   '',
-  'Pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
+  'If selected (side menu), pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
   '',
-  '**Significance levels:**',
-  '- `ns`: not significant (p ≥ 0.05)',
-  '- `*`: p < 0.05',
-  '- `**`: p < 0.01',
-  '- `***`: p < 0.001',
+  'Significance levels: `ns` not significant (p ≥ 0.05), `*` p < 0.05, `**` p < 0.01, `***` p < 0.001.',
 ].join('\n');
 
 // Mirrors plot-engine.js MAX_VIOLIN_POINTS - kept here only for the help text.
 const MAX_VIOLIN_POINTS = 5000;
 
 const DISTRIBUTION_HELP = `Plots with ${MAX_VIOLIN_POINTS.toLocaleString()} or fewer datapoints show the actual ` +
-  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, ' +
-  'mean) computed directly in the database for performance.';
+  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, mean).';
 
-const GRANULARITY_HELP = 'For datasets with multiple dimensions (channels, Z-planes, timepoints, ' +
-  'spatial tiles, …), use the **Slice by** toggles above to control what one datapoint represents - ' +
-  'shown by the **per image** / **per slice** badge in the card header. With nothing toggled, each ' +
-  'point is one whole-image aggregate (**per image**). Switching a toggle on stops that dimension ' +
-  'from being aggregated away, so each point becomes one (image × that dimension) combination instead ' +
-  '(**per slice**) - e.g. switching on "C" gives one point per C-slice per image. Switching on ' +
-  'more dimensions multiplies the number of points, so check the sample size shown in the plot ' +
-  'subtitle before trusting significance results.';
+const GRANULARITY_HELP = 'Use the **Slice by** toggles to control whether each datapoint is a whole-image ' +
+  'aggregate (**per image**) or one (image × dimension) combination (**per slice**) - shown by the badge in the ' +
+  'card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
 
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
-  '', 'You can choose which statistic to plot and filter by image dimensions.',
-  '', 'Each plot shows the distribution per group: median, quartiles, min/max, and mean.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
   '', SIGNIFICANCE_HELP,
@@ -91,11 +87,8 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Visualizes **image quality metrics** across groups.',
-  '', 'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
-  '', '**Metrics**',
-  ...Object.values(QUALITY_METRIC_INFO).map(m => `- **${m.label}** – ${m.desc}`),
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
@@ -219,7 +212,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
-        sideInfo: describeQualityMetric(metric)?.desc,
+        sideInfo: sideInfoFor(metric),
       });
     }
   }
