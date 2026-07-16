@@ -563,7 +563,7 @@ function createCard(label, info, scope) {
   if (info) {
     panel = document.createElement('div');
     panel.className = 'widget-info-panel';
-    panel.hidden = true;
+    panel.hidden = !state.showInfo;
     panel.innerHTML = renderInfoHtml(info);
 
     const btn = document.createElement('button');
@@ -571,8 +571,12 @@ function createCard(label, info, scope) {
     btn.className = 'widget-info-btn';
     btn.title = 'About this widget';
     btn.setAttribute('aria-label', 'About this widget');
+    btn.setAttribute('aria-pressed', String(!panel.hidden));
     btn.innerHTML = '<span class="widget-info-icon" aria-hidden="true">ⓘ</span>';
-    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    btn.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      btn.setAttribute('aria-pressed', String(!panel.hidden));
+    });
     titleWrap.appendChild(btn);
   }
 

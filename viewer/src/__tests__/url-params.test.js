@@ -99,10 +99,10 @@ describe('writeUrlParams', () => {
 
   it('omits filter params when filter is empty/missing', () => {
     writeUrlParams({ filter: { col: '', op: '', val: '' } });
-    const search = window.location.search;
-    expect(search).not.toContain('fc=');
-    expect(search).not.toContain('fo=');
-    expect(search).not.toContain('fv=');
+    const params = new URLSearchParams(window.location.search);
+    expect(params.has('fc')).toBe(false);
+    expect(params.has('fo')).toBe(false);
+    expect(params.has('fv')).toBe(false);
   });
 
   it('writes sig=1 when showSignificance is true', () => {

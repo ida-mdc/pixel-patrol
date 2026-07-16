@@ -25,21 +25,44 @@ let syncViewToggle = () => {};
 export function initStaticUi() {
   const viewBtnOverview = el('view-btn-overview');
   const viewBtnFull     = el('view-btn-full');
+  // Master info switch only makes sense in Full view - Overview shows tiles,
+  // not cards, so there are no info panels to toggle by default.
+  const infoBtn = el('info-toggle-btn');
   syncViewToggle = () => {
     viewBtnOverview?.setAttribute('aria-pressed', String(state.condensedMode));
     viewBtnFull?.setAttribute('aria-pressed',     String(!state.condensedMode));
+    if (infoBtn) {
+      infoBtn.hidden = state.condensedMode;
+      infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+    }
   };
   if (viewBtnOverview && viewBtnFull) {
     syncViewToggle();
     viewBtnOverview.onclick = () => { if (state.condensedMode) return; state.condensedMode = true;  syncViewToggle(); emit('render'); };
     viewBtnFull.onclick     = () => { if (!state.condensedMode) return; state.condensedMode = false; syncViewToggle(); emit('render'); };
   }
+
+  // Master switch for widget info panels' default open/closed state. Each
+  // card's own ⓘ button still lets a user override this per widget.
+  if (infoBtn) {
+    infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+    infoBtn.onclick = () => {
+      state.showInfo = !state.showInfo;
+      infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+      emit('render');
+    };
+  }
+
   initCollapseToggle('appearance-section-header', 'appearance-section');
   initHeaderPopover('export-menu-btn', 'export-menu-panel');
   initHeaderPopover('feedback-menu-btn', 'feedback-menu-panel');
 }
 
 export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
+  // View mode / info toggle may have been overridden by URL params after
+  // initStaticUi() ran with defaults - resync their DOM now.
+  syncViewToggle();
+
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
