@@ -2,7 +2,7 @@ import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPale
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
-import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
 import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
@@ -595,28 +595,8 @@ function createCard(label, info, scope) {
   return div;
 }
 
-/** Minimal markdown → HTML converter for info panel text. */
-function renderInfoHtml(text) {
-  let html = '';
-  for (const para of text.trim().split(/\n\n+/)) {
-    const lines = para.split('\n');
-    const bullets = lines.filter(l => /^\s*-\s/.test(l));
-    const prose   = lines.filter(l => !/^\s*-\s/.test(l));
-    if (prose.length)   html += `<p>${prose.map(mdInline).join('<br>')}</p>`;
-    if (bullets.length) html += `<ul>${bullets.map(l => `<li>${mdInline(l.replace(/^\s*-\s*/, ''))}</li>`).join('')}</ul>`;
-  }
-  return html;
-}
-
 function sortGroups(groups) {
   const allNumeric = groups.length > 0 && groups.every(g => g !== '' && !isNaN(Number(g)));
   if (allNumeric) return [...groups].sort((a, b) => Number(a) - Number(b));
   return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-}
-
-function mdInline(t) {
-  return t
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>');
 }
