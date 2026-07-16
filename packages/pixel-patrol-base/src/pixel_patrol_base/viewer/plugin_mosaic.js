@@ -24,8 +24,8 @@ export default {
   info: [
     'Displays a **thumbnail mosaic**, one thumbnail per file.',
     '',
-    '- Thumbnails are generated from the central slice in all non-XY dimensions.',
-    '- Sorting by a measurement (e.g. mean, min, max) can reveal visual trends.',
+    '- Thumbnails are generated from the central slice in all non-XY, non-RGB dimensions.',
+    '- Sorting by a numeric column can reveal visual trends.',
     '- Border colors indicate the group of each image.',
     '- **Hover** over an image to see its filename.',
   ].join('\n'),

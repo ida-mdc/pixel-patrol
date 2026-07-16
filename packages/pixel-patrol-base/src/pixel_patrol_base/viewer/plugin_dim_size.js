@@ -12,13 +12,13 @@ export default {
   multiPlot: true,
   label: 'Dimensionality',
   info: [
-    'Shows how **image dimensions** (X, Y, Z, T, …) vary across the dataset.',
+    'Shows how **image dimension sizes** (e.g. X, Y, Z, T, …) vary across the dataset.',
     '',
     'Includes an X/Y size scatter plot and per-dimension strip plots.',
     '',
-    '**Use this to identify**',
-    '- unexpected dimension sizes',
-    '- mismatched shapes between groupings',
+    'If a dimension has **no variance**, it is summarized in a table instead of a plot.',
+    '',
+    'Use this to identify **unexpected dimension sizes** and **mismatched shapes** within/between groupings.',
   ].join('\n'),
 
   requires(schema) {

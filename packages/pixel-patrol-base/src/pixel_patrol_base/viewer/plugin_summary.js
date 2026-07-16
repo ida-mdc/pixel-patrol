@@ -4,8 +4,8 @@ export default {
   inputs: ['path', 'n_images'],
   label: 'File Data Summary',
   group: 'Summary',
-  info: 'High-level overview of the dataset: total files, total size, file types present, ' +
-    'and (when grouped) a per-group breakdown.',
+  info: 'High-level overview of the dataset: total number of files and images, total size, ' +
+    'file extensions, and (when grouped) a per-group breakdown.',
 
   requires(schema) {
     return schema.allCols.includes('size_bytes') &&
