@@ -214,6 +214,18 @@ body { background: #f8f9fa; }
 .widget-info-panel ul   { margin: 0 0 4px; padding-left: 20px; }
 .widget-info-panel li   { margin-bottom: 2px; }
 .widget-info-panel code { background: #dceeff; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+
+/* ── Per-plot side info (short note beside one plot in a multi-plot widget) ── */
+.plot-side-info {
+  flex: 1 1 140px; max-width: 160px; align-self: center; color: #495057;
+  font-size: 12px; line-height: 1.4; padding-left: 4px;
+}
+.plot-side-info p  { margin: 0 0 4px; }
+.plot-side-info code { background: #eef1f4; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+/* Same note, inline variant for row-header layouts (e.g. stats-across-dims). */
+.plot-side-info-inline { font-weight: 400; font-size: 12px; color: #495057; }
+
 .widget-card-body { padding: 16px; }
 
 /* ── Shared widget styles ── */

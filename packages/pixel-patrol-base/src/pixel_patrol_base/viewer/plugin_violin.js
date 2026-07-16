@@ -3,17 +3,53 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
-const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
-  'blocking_index', 'ringing_index',
-]);
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA.
+// One description per metric, reused both in the widget-level info panel's
+// bullet list below and as each metric's own per-plot side note. Exported so
+// plugin_stats_across_dims.js (the other quality-metric widget) can reuse it
+// instead of duplicating it.
+export const QUALITY_METRIC_INFO = {
+  michelson_contrast: {
+    label: 'Michelson contrast',
+    desc: 'Global contrast ratio; higher values indicate greater dynamic range.',
+  },
+  mscn_variance: {
+    label: 'MSCN variance',
+    desc: 'Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
+  },
+  texture_heterogeneity: {
+    label: 'Texture heterogeneity',
+    desc: 'Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
+  },
+  laplacian_variance: {
+    label: 'Laplacian variance',
+    desc: 'Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
+  },
+  blocking_index: {
+    label: 'Blocking index',
+    desc: 'Strength of blocky compression artifacts (e.g. JPEG blocking).',
+  },
+  ringing_index: {
+    label: 'Ringing index',
+    desc: 'Edge oscillation artifacts around sharp boundaries, often due to compression.',
+  },
+};
+
+const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 function matchesBases(col, bases) {
   for (const base of bases) {
     if (col === base || col.startsWith(base + '_')) return true;
   }
   return false;
+}
+
+/** Look up a quality metric's shared metadata by column name, stripping any per-channel suffix. */
+export function describeQualityMetric(col) {
+  for (const [base, info] of Object.entries(QUALITY_METRIC_INFO)) {
+    if (col === base || col.startsWith(base + '_')) return info;
+  }
+  return null;
 }
 
 const SIGNIFICANCE_HELP = [
@@ -59,12 +95,7 @@ const QUALITY_INFO = [
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
   '', '**Metrics**',
-  '- **Michelson contrast** – Global contrast ratio; higher values indicate greater dynamic range.',
-  '- **MSCN variance** – Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
-  '- **Texture heterogeneity** – Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
-  '- **Laplacian variance** – Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
-  '- **Blocking index** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
-  '- **Ringing index** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
+  ...Object.values(QUALITY_METRIC_INFO).map(m => `- **${m.label}** – ${m.desc}`),
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
@@ -188,6 +219,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
+        sideInfo: describeQualityMetric(metric)?.desc,
       });
     }
   }
