@@ -12,6 +12,7 @@ import polars as pl
 import tifffile
 from bioio import BioImage
 from bioio_base.exceptions import UnsupportedFileFormatError
+import bioio_bioformats
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.loader_schema import (
@@ -95,21 +96,42 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
     """
     Try BioImage, then fall back to imageio reader; return None if both fail.
     """
-    try:
-        file_path = Path(file_path)
-        if file_path.suffix.lower() in _TIFF_EXTENSIONS:
+    file_path = Path(file_path)
+
+    def _try_bioio_tif_reader():
+        if file_path.suffix.lower() not in _TIFF_EXTENSIONS:
+            return None
+        try:
             reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
             return BioImage(file_path, reader=reader)
-        return BioImage(file_path)
-    except UnsupportedFileFormatError:
+        except UnsupportedFileFormatError:
+            return None
+
+    def _try_imageio_reader():
         try:
             return BioImage(file_path, reader=bioio_imageio.Reader)
         except Exception as e:
-            logger.warning(f"Could not load '{file_path}' with BioImage (imageio fallback): {e}")
             return None
+
+    def _try_bioformats_reader():
+        img = BioImage(file_path, reader=bioio_bioformats.Reader)
+        img.data  # force load to confirm the file is actually readable
+        return img
+
+    try:
+        img = _try_bioio_tif_reader()
+        if img is not None:
+            return img
+        img = _try_imageio_reader()
+        if img is not None:
+            return img
+        img = _try_bioformats_reader()
+        if img is not None:
+            return img
     except Exception as e:
         logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
         return None
+
 
 class BioIoLoader:
     """
@@ -120,7 +142,7 @@ class BioIoLoader:
     NAME = "bioio"
     DESCRIPTION = "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes)."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr", "ims"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
