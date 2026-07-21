@@ -1401,6 +1401,7 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
                 n_workers=n_workers,
                 threads_per_worker=1,
                 processes=True,
+                memory_limit=int(worker_mem_bytes),
             )
         if _in_main:
             signal.signal(signal.SIGINT, _old_sigint)
