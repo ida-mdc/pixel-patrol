@@ -204,21 +204,22 @@ def _split_into_ranges(
 
 def _compute_memory_chunk_specs(
     file_path:        Path,
-    info:             FileInfo,
+    dim_order:        str,
+    shape:            Tuple[int, ...],
+    dtype:            Any,
     mb_per_task:      float,
     leaf_block_shape: Optional[Dict[str, int]],
+    deferred_dims:    Optional[str] = None,
 ) -> Optional[List[MemoryChunkSpec]]:
-    """Return one MemoryChunkSpec per memory chunk for a file described by info.
+    """Return one MemoryChunkSpec per memory chunk for an image of the given shape/dtype/dim_order.
 
     Splits dims in three tiers (largest first within each):
       primary    - split first; dims with an explicit leaf block size, minus any loader-deferred dims
-      deferred   - split only if primary is not enough; loader hint via info.deferred_dims
+      deferred   - split only if primary is not enough; loader hint via deferred_dims
       last_resort - split only if unavoidable; full-extent dims (X/Y by default)
     Returns None when the file already fits within the budget.
     """
-    dim_order    = info.dim_order
-    shape        = info.shape
-    dtype_bytes  = np.dtype(info.dtype).itemsize
+    dtype_bytes  = np.dtype(dtype).itemsize
     budget_bytes = int(mb_per_task * 1024 * 1024)
 
     total_bytes = math.prod(shape) * dtype_bytes
@@ -236,7 +237,7 @@ def _compute_memory_chunk_specs(
     # independently). User override takes precedence: if the user explicitly set a block size
     # for a dim, it stays in the primary tier regardless of the loader hint.
     user_specified = set(leaf_block_shape or {})
-    loader_deferred = set(info.deferred_dims or "") - user_specified
+    loader_deferred = set(deferred_dims or "") - user_specified
 
     primary     = sorted([d for d in dim_order
                            if leaf_block_sizes[d] != -1 and d not in loader_deferred],
@@ -403,7 +404,8 @@ def _plan_tasks(
         if uncompressed > budget_bytes:
             if pending := _flush_batch():
                 yield pending
-            specs = _compute_memory_chunk_specs(file_path, info, config.mb_per_task, config.slice_size)
+            specs = _compute_memory_chunk_specs(file_path, info.dim_order, info.shape, info.dtype,
+                                                config.mb_per_task, config.slice_size, info.deferred_dims)
             if specs:
                 n = len(specs)
                 for spec in specs:
