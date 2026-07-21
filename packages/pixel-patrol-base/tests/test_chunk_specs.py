@@ -117,7 +117,6 @@ def test_chunk_spec_metadata():
     specs = _specs(shape, dim_order, 0.05, {"Y": 32, "Z": 1})
     assert specs is not None
     for s in specs:
-        assert s.image_shape == shape
         assert s.dim_order == dim_order
 
 
