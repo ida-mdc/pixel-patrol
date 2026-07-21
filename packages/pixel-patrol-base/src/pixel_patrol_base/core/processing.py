@@ -119,7 +119,6 @@ class MemoryChunkSpec:
     slices:      Tuple[slice, ...]  # applied as arr[spec.slices]
     origin:      Tuple[int, ...]    # global start coordinate of this sub-region
     dim_order:   str
-    image_shape: Tuple[int, ...]    # shape of the full source image
 
 
 @dataclass(frozen=True)
@@ -283,7 +282,7 @@ def _compute_memory_chunk_specs(
     for combo in itertools.product(*per_dim_ranges):
         slc    = tuple(slice(None) if s is None else slice(s, e) for s, e in combo)
         origin = tuple(0 if s is None else s for s, _ in combo)
-        specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order, image_shape=shape))
+        specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order))
 
     chunk_mb = math.prod(chunk_sizes.values()) * dtype_bytes / (1024 * 1024)
     logger.info(
@@ -652,8 +651,8 @@ def _execute_memory_chunk_task(
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
         return []
-    # record supplies image_meta from the full (unsliced) shape - record.data.shape here
-    # is the full image shape, same value as task.spec.image_shape.
+    # record supplies image_meta from the full (unsliced) shape - record.data.shape
+    # here is the full image shape, before task.spec.slices is applied.
     result = _run_record(record, record.data[task.spec.slices], task.spec.origin,
                          task.file_index, None, processors, config, task.file_path)
     result.timing["load"] = result.timing.get("load", 0.0) + load_s
