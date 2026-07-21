@@ -601,6 +601,7 @@ def _run_record(
     """
     image_meta = _extract_image_meta(record)
     mem_record = _build_record(record, data, origin)
+    mem_record.meta["full_shape"] = tuple(record.data.shape)  # lets processors locate their chunk in the whole image
     return _process_memory_chunk(mem_record, file_index, child_id, processors, config,
                                  file_path, image_meta=image_meta)
 
