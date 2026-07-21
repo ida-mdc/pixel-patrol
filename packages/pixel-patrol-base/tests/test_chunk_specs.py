@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 
-from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.processing import (
     _compute_memory_chunk_specs,
     _resolve_leaf_block_shape,
@@ -15,8 +14,7 @@ _DUMMY_PATH = Path("/mock/file")
 
 
 def _specs(shape, dim_order, mb_per_task, leaf_block_shape=None, dtype=np.float32):
-    info = FileInfo(shape=shape, dtype=dtype, dim_order=dim_order)
-    return _compute_memory_chunk_specs(_DUMMY_PATH, info, mb_per_task, leaf_block_shape)
+    return _compute_memory_chunk_specs(_DUMMY_PATH, dim_order, shape, dtype, mb_per_task, leaf_block_shape)
 
 
 # ── _resolve_leaf_block_shape ─────────────────────────────────────────────────

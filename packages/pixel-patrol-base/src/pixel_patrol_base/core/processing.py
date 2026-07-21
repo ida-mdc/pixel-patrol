@@ -204,21 +204,21 @@ def _split_into_ranges(
 
 def _compute_memory_chunk_specs(
     file_path:        Path,
-    info:             FileInfo,
+    dim_order:        str,
+    shape:            Tuple[int, ...],
+    dtype:            Any,
     mb_per_task:      float,
     leaf_block_shape: Optional[Dict[str, int]],
 ) -> Optional[List[MemoryChunkSpec]]:
-    """Return one MemoryChunkSpec per memory chunk for a file described by info.
+    """Return one MemoryChunkSpec per memory chunk for an image of the given shape/dtype/dim_order.
 
     Splits dims in two tiers - explicit-block-size dims first, then spatial defaults
     (X/Y) - so spatial dims are only touched as a last resort. Within each tier the
     required reduction is distributed geometrically across all dims in that tier,
     largest first, so no single dim absorbs all the splitting.
-    Returns None when the file already fits within the budget.
+    Returns None when the image already fits within the budget.
     """
-    dim_order    = info.dim_order
-    shape        = info.shape
-    dtype_bytes  = np.dtype(info.dtype).itemsize
+    dtype_bytes  = np.dtype(dtype).itemsize
     budget_bytes = int(mb_per_task * 1024 * 1024)
 
     total_bytes = math.prod(shape) * dtype_bytes
@@ -393,7 +393,8 @@ def _plan_tasks(
         if uncompressed > budget_bytes:
             if pending := _flush_batch():
                 yield pending
-            specs = _compute_memory_chunk_specs(file_path, info, config.mb_per_task, config.slice_size)
+            specs = _compute_memory_chunk_specs(file_path, info.dim_order, info.shape, info.dtype,
+                                                config.mb_per_task, config.slice_size)
             if specs:
                 n = len(specs)
                 for spec in specs:
