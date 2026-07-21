@@ -654,19 +654,33 @@ def _execute_container_task(
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
-) -> List[MemoryChunkResult]:
-    """Load and process a batch of sub-images from a container file."""
-    results: List[MemoryChunkResult] = []
+) -> List[List[MemoryChunkResult]]:
+    """Load and process a batch of sub-images from a container file.
+
+    One inner list per sub-image - length 1 normally, or one entry per memory
+    chunk if a sub-image turns out oversized.
+    """
+    results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
-    for child_id, record in loader.load_range(Path(task.file_path), start, stop):
+    file_path = Path(task.file_path)
+    for child_id, record in loader.load_range(file_path, start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
                            child_id, task.file_path)
             continue
         # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
-        result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
-                             task.file_index, child_id, processors, config, task.file_path)
-        results.append(result)
+        specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
+                                            record.data.dtype, config.mb_per_task, config.slice_size)
+        if specs:
+            results.append([
+                _run_record(record, record.data[spec.slices], spec.origin,
+                           task.file_index, child_id, processors, config, task.file_path)
+                for spec in specs
+            ])
+        else:
+            result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                                 task.file_index, child_id, processors, config, task.file_path)
+            results.append([result])
     return results
 
 
@@ -1095,7 +1109,7 @@ def _coordinate_pipeline(
             pbar.refresh()
 
         try:
-            results: List[MemoryChunkResult] = future.result()
+            results: Any = future.result()  # shape depends on task type - see _executor_for
         except Exception as exc:
             # Emit one user-visible warning per affected file path.
             if isinstance(task, BatchTask):
@@ -1119,6 +1133,9 @@ def _coordinate_pipeline(
                 _chunk_info[0] = f"{n_received}/{task.n_memory_chunks} ({Path(task.file_path).name})"
                 _update_pbar_postfix()
                 pbar.refresh()
+        elif isinstance(task, ContainerTask):
+            for chunk_group in results:
+                _handle_record(chunk_group, chunk_group[0].file_index, chunk_group[0].child_id)
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)

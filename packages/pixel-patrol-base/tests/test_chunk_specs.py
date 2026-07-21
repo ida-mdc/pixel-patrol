@@ -1,14 +1,22 @@
-"""Unit tests for _resolve_leaf_block_shape and _compute_memory_chunk_specs."""
+"""Unit tests for memory-chunking: _resolve_leaf_block_shape, _compute_memory_chunk_specs,
+and _execute_container_task's use of them to chunk an oversized container sub-image."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterator, List, Tuple
 
 import numpy as np
 
 from pixel_patrol_base.core.processing import (
+    ContainerTask,
+    MemoryChunkResult,
     _compute_memory_chunk_specs,
+    _execute_container_task,
     _resolve_leaf_block_shape,
 )
+from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.record import Record, record_from
+from _processing_mocks import MockMemoryProcessor
 
 _DUMMY_PATH = Path("/mock/file")
 
@@ -175,3 +183,76 @@ def test_exact_3d_z_and_y_both_split():
         (slice(2, 3), slice(0,   128), slice(None)),
         (slice(2, 3), slice(128, 256), slice(None)),
     }
+
+
+# ── _execute_container_task: chunking an oversized container sub-image ────────
+
+class _SumProcessor(MockMemoryProcessor):
+    """Sums real chunk pixel values, so splitting/reassembly can be checked for correctness."""
+
+    def __init__(self):
+        super().__init__("sum", {"pixel_sum": 0})
+
+    def run_chunk(self, record: Record) -> dict:
+        return {"pixel_sum": int(np.asarray(record.data).sum())}
+
+    def get_aggregation(self, name: str):
+        return lambda rows, g_dims: sum(r["pixel_sum"] for r in rows)
+
+
+class _FakeContainerLoader:
+    """Minimal loader yielding pre-built sub-image arrays for a ContainerTask."""
+
+    def __init__(self, arrays: List[np.ndarray], dim_order: str = "ZYX") -> None:
+        self._arrays = arrays
+        self._dim_order = dim_order
+
+    def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        for i in range(start, stop):
+            yield str(i), record_from(self._arrays[i], {"dim_order": self._dim_order}, kind="intensity")
+
+
+def _sums(chunk_group: List[MemoryChunkResult]) -> int:
+    return sum(cr.chunk_rows["sum"]["pixel_sum"] for cr in chunk_group)
+
+
+def test_small_sub_image_stays_a_single_chunk():
+    small = np.arange(2 * 4 * 4, dtype=np.uint8).reshape(2, 4, 4)
+    loader = _FakeContainerLoader([small])
+    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))  # budget = 100 bytes
+    task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
+
+    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+
+    assert len(results) == 1
+    assert len(results[0]) == 1
+    assert _sums(results[0]) == int(small.sum())
+
+
+def test_oversized_sub_image_is_chunked_and_reassembles_correctly():
+    big = np.arange(20 * 4 * 4, dtype=np.uint8).reshape(20, 4, 4)
+    loader = _FakeContainerLoader([big])
+    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))  # budget = 100 bytes; big = 320 bytes
+    task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
+
+    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+
+    assert len(results) == 1
+    assert len(results[0]) > 1  # actually split into multiple memory chunks
+    assert _sums(results[0]) == int(big.sum())  # no pixels lost or double-counted
+
+
+def test_mixed_batch_only_chunks_the_oversized_sub_image():
+    small = np.arange(2 * 4 * 4, dtype=np.uint8).reshape(2, 4, 4)
+    big   = np.arange(20 * 4 * 4, dtype=np.uint8).reshape(20, 4, 4)
+    loader = _FakeContainerLoader([small, big])
+    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))
+    task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 2))
+
+    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+
+    assert len(results) == 2
+    assert len(results[0]) == 1
+    assert len(results[1]) > 1
+    assert _sums(results[0]) == int(small.sum())
+    assert _sums(results[1]) == int(big.sum())
