@@ -51,6 +51,21 @@ def _run_chunk_with_origin(proc, data: np.ndarray, origin: list, dim_order: str)
     return row
 
 
+def _run_chunk_at(proc, data: np.ndarray, origin: list, full_shape: tuple, dim_order: str) -> dict:
+    """Run a chunk with real origin/full_shape metadata, as the pipeline provides it."""
+    dims = list(dim_order.upper())
+    meta = {"dim_order": dim_order.upper(), "full_shape": tuple(full_shape)}
+    for i, d in enumerate(dims):
+        meta[f"dim_{d.lower()}"] = origin[i]
+    record = record_from(data, meta)
+    row = proc.run_chunk(record)
+    if row and "__thumbnail_patch__" in row:
+        for i, d in enumerate(dims):
+            row[f"dim_{d.lower()}"] = origin[i]
+            row[f"size_{d}"] = data.shape[i]
+    return row
+
+
 def _thumbnail(proc, data, dim_order) -> bytes:
     return _run(proc, data, dim_order)["thumbnail"]
 
@@ -370,16 +385,37 @@ def test_nan_handling(proc):
 # ---------------------------------------------------------------------------
 
 def test_multi_z_chunks_assembled_via_aggregation(proc):
-    """Multiple Z slices (shape 1×Y×X each) assembled into one thumbnail."""
+    """Only the chunk owning the true global center (Z=1 of 3) contributes; others are skipped."""
     rows = []
     for z in range(3):
         data = np.full((1, 20, 20), z * 100, dtype=np.uint8)
-        rows.append(_run_chunk_with_origin(proc, data, [z, 0, 0], "ZYX"))
+        rows.append(_run_chunk_at(proc, data, [z, 0, 0], (3, 20, 20), "ZYX"))
+    assert "__thumbnail_patch__" not in rows[0]  # z=0: not the center
+    assert "__thumbnail_patch__" in rows[1]      # z=1: the center
+    assert "__thumbnail_patch__" not in rows[2]  # z=2: not the center
+
     result = _aggregate(proc, rows)
     assert "thumbnail" in result
     assert len(result["thumbnail"]) == SPRITE_SIZE * SPRITE_SIZE * 4
     arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
-    assert arr[:, :, 3].min() == 255  # full canvas covered - all patches placed
+    assert arr[:, :, 3].min() == 255                                # full canvas covered
+    assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, 0] == 255        # z=1 value (100) normalized to 255
+
+
+def test_multi_z_chunk_picks_correct_local_slice_within_a_bigger_chunk(proc):
+    """Full Z=6, split into [0,4) and [4,6): center index 3 lies in the first chunk."""
+    first  = np.zeros((4, 20, 20), dtype=np.uint8)
+    first[3] = 200  # global Z=3 (the true center), at local index 3
+    second = np.full((2, 20, 20), 50, dtype=np.uint8)
+
+    row_first  = _run_chunk_at(proc, first,  [0, 0, 0], (6, 20, 20), "ZYX")
+    row_second = _run_chunk_at(proc, second, [4, 0, 0], (6, 20, 20), "ZYX")
+    assert "__thumbnail_patch__" in row_first
+    assert "__thumbnail_patch__" not in row_second
+
+    result = _aggregate(proc, [row_first])
+    arr = np.frombuffer(result["thumbnail"], dtype=np.uint8).reshape(SPRITE_SIZE, SPRITE_SIZE, 4)
+    assert arr[SPRITE_SIZE // 2, SPRITE_SIZE // 2, 0] == 255
 
 
 def test_multi_xy_chunks_cover_full_canvas(proc):
