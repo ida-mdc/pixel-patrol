@@ -1037,6 +1037,8 @@ def _coordinate_pipeline(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
         n_workers_live, max_pending, config.rows_per_part,
     )
+    logger.info("If workers keep pausing/restarting on memory, raise --mb-per-task (currently %.0f).",
+                config.mb_per_task)
     if is_distributed:
         worker_info = client.scheduler_info().get("workers", {})
         for addr, w in worker_info.items():
