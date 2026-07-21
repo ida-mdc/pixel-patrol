@@ -64,10 +64,8 @@ def cli():
               help='Connect to an existing Dask scheduler instead of spawning a local one '
                    '(e.g. tcp://host:8786). Useful for HPC clusters.')
 @click.option('--mb-per-task', type=float, default=None, show_default=True,
-              help='Work budget per Dask task in MB (default: 512). Controls batch sizes for '
-                   'small files, spatial splitting for large files, and sub-image batching for '
-                   'container files. Decrease for large 3D volumes or containers with many images; '
-                   'increase for datasets with many small files.')
+              help='Work budget per Dask task in MB (default: 512); also sets worker memory limit. '
+                   'If workers keep pausing/restarting on memory, raise this.')
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,
