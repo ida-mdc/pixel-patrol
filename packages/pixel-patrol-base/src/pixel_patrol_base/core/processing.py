@@ -593,6 +593,28 @@ def _process_memory_chunk(
     )
 
 
+def _run_record(
+    record:     Record,
+    data:       Any,
+    origin:     Tuple[int, ...],
+    file_index: int,
+    child_id:   Optional[str],
+    processors: List[Any],
+    config:     ProcessingConfig,
+    file_path:  str,
+) -> MemoryChunkResult:
+    """Extract image metadata from record, build a memory-chunk from data/origin, and process it.
+
+    record supplies the (possibly full, unsliced) image metadata; data/origin describe
+    the specific chunk to build - which may be record.data itself (origin=0) or a
+    sub-region of it (data=record.data[slices], origin=slice start).
+    """
+    image_meta = _extract_image_meta(record)
+    mem_record = _build_record(record, data, origin)
+    return _process_memory_chunk(mem_record, file_index, child_id, processors, config,
+                                 file_path, image_meta=image_meta)
+
+
 def _execute_batch_task(
     task:       BatchTask,
     loader:     Any,
@@ -608,10 +630,8 @@ def _execute_batch_task(
         if record is None:
             logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
             continue
-        image_meta = _extract_image_meta(record)
-        mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        result = _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config,
-                                       idxed_path.file_path, image_meta=image_meta)
+        result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                             idxed_path.file_index, None, processors, config, idxed_path.file_path)
         result.timing["load"] = result.timing.get("load", 0.0) + load_s
         results.append(result)
     return results
@@ -630,12 +650,10 @@ def _execute_memory_chunk_task(
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
         return []
-    # Extract image_meta from the full record BEFORE slicing - record.data.shape
-    # here is the full image shape; task.spec.image_shape is the same value.
-    image_meta = _extract_image_meta(record)
-    mem_record = _build_record(record, record.data[task.spec.slices], task.spec.origin)
-    result = _process_memory_chunk(mem_record, task.file_index, None, processors, config,
-                                   task.file_path, image_meta=image_meta)
+    # record supplies image_meta from the full (unsliced) shape - record.data.shape here
+    # is the full image shape, same value as task.spec.image_shape.
+    result = _run_record(record, record.data[task.spec.slices], task.spec.origin,
+                         task.file_index, None, processors, config, task.file_path)
     result.timing["load"] = result.timing.get("load", 0.0) + load_s
     return [result]
 
@@ -655,10 +673,8 @@ def _execute_container_task(
                            child_id, task.file_path)
             continue
         # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
-        image_meta = _extract_image_meta(record)
-        mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        result = _process_memory_chunk(mem_record, task.file_index, child_id, processors, config,
-                                       task.file_path, image_meta=image_meta)
+        result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                             task.file_index, child_id, processors, config, task.file_path)
         results.append(result)
     return results
 
