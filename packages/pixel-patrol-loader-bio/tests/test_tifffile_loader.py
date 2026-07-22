@@ -59,6 +59,19 @@ def test_read_header_multi_series(tmp_path: Path, loader):
     assert info.n_images == 2
 
 
+def test_read_header_multi_series_varying_size_uses_largest(tmp_path: Path, loader):
+    path = tmp_path / "multi_varying.tif"
+    small = np.zeros((2, 4, 4), dtype=np.uint8)
+    big = np.zeros((2, 16, 16), dtype=np.uint8)
+    with tifffile.TiffWriter(path) as tw:
+        tw.write(small, metadata={"axes": "CYX"})
+        tw.write(big, metadata={"axes": "CYX"})
+
+    info = loader.read_header(path)
+    assert info.shape == (2, 16, 16)
+    assert info.n_images == 2
+
+
 def test_load_multi_series_load_range(tmp_path: Path, loader):
     path = tmp_path / "multi.tif"
     a = np.zeros((2, 4, 4), dtype=np.uint8)
