@@ -132,16 +132,25 @@ class BioIoLoader:
         return is_zarr_store(path)
 
     def read_header(self, file_path: Path) -> FileInfo:
-        """Read file header; return shape/dtype/dim_order of the first scene plus total scene count."""
+        """Read file header; return shape/dtype/dim_order of the largest of the first few scenes, plus total scene count."""
         img = _load_bioio_image(file_path)
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
-        n_images = len(img.scenes) if hasattr(img, "scenes") else 1
-        meta = _extract_metadata(img)
-        meta = normalize_metadata(meta)
-        shape = tuple(int(x) for x in meta["shape"])
-        dtype = np.dtype(meta.get("dtype", "float32"))
-        return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
+        scenes = list(img.scenes) if hasattr(img, "scenes") else [None]
+        n_images = len(scenes)
+        best_nbytes = -1
+        shape = dtype = dim_order = None
+        for scene in scenes[:min(3, n_images)]:
+            if scene is not None:
+                img.set_scene(scene)
+            meta = normalize_metadata(_extract_metadata(img))
+            candidate_shape = tuple(int(x) for x in meta["shape"])
+            candidate_dtype = np.dtype(meta.get("dtype", "float32"))
+            nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
+            if nbytes > best_nbytes:
+                best_nbytes = nbytes
+                shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
 
     def load(self, file_path: Path) -> Record:
         """Load a single-image (or first-scene) file; return a Record."""

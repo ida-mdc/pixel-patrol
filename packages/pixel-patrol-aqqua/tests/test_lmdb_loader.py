@@ -69,6 +69,11 @@ def test_read_header_grayscale_dim_order(grayscale_lmdb: Path, loader) -> None:
     assert info.dim_order == "YX"
 
 
+def test_read_header_shape_is_largest_sampled(varying_size_lmdb: Path, loader) -> None:
+    info = loader.read_header(varying_size_lmdb)
+    assert info.shape == (64, 64)
+
+
 # ---------------------------------------------------------------------------
 # load (first image only)
 # ---------------------------------------------------------------------------

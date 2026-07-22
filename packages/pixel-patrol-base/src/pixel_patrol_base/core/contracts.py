@@ -51,8 +51,8 @@ class PixelPatrolLoader(Protocol):
     def read_header(self, file_path: Path) -> FileInfo:
         """Read file header only; return shape/dtype/dim_order without loading pixels.
 
-        For container formats (n_images > 1), shape/dtype/dim_order describe a
-        representative sub-image (typically the first). n_images is the total count.
+        For container formats (n_images > 1), shape/dtype/dim_order describe the
+        largest of a small sample of sub-images. n_images is the total count.
         Must be picklable - no open file handles in instance state after return.
         """
         ...
