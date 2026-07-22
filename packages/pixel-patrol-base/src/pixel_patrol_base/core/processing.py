@@ -153,6 +153,30 @@ class ContainerTask:
     image_slice: Tuple[int, int]   # (start, stop) half-open
 
 
+def _task_image_count(task: Any) -> int:
+    """Number of images a task represents, for accurate error accounting on failure."""
+    if isinstance(task, BatchTask):
+        return len(task.files)
+    if isinstance(task, ContainerTask):
+        return task.image_slice[1] - task.image_slice[0]
+    return 1
+
+
+def _count_failed_images(task: Any, failed_chunked_files: Set[int]) -> int:
+    """How many newly-failed images this failed task should add to the error count.
+
+    A large image split into several MemoryChunkTasks must only count once even
+    if more than one of its chunks fails independently; failed_chunked_files
+    tracks which file_index has already been counted, and is updated in place.
+    """
+    if isinstance(task, MemoryChunkTask):
+        if task.file_index in failed_chunked_files:
+            return 0
+        failed_chunked_files.add(task.file_index)
+        return 1
+    return _task_image_count(task)
+
+
 Task = Union[BatchTask, MemoryChunkTask, ContainerTask]
 
 
@@ -1011,6 +1035,8 @@ def _coordinate_pipeline(
     task_type_counts:  Dict[str, int]   = {}
     all_timing:        Dict[str, float] = {}
     error_records     = 0
+    failed_chunked_files: Set[int] = set()  # file_index already counted, so a second
+                                             # failing chunk of the same image isn't double-counted
     t_pipeline_start  = time.monotonic()
 
     # Count memory-pressure pause events from Dask's distributed logger.
@@ -1121,10 +1147,9 @@ def _coordinate_pipeline(
             if isinstance(task, BatchTask):
                 for ip in task.files:
                     logger.warning("Skipping '%s' - worker error: %s", ip.file_path, exc)
-                    error_records += 1
             else:
                 logger.warning("Skipping '%s' - worker error: %s", task.file_path, exc)
-                error_records += 1
+            error_records += _count_failed_images(task, failed_chunked_files)
             continue
 
         before = completed_records
@@ -1142,6 +1167,9 @@ def _coordinate_pipeline(
         elif isinstance(task, ContainerTask):
             for chunk_group in results:
                 _handle_record(chunk_group, chunk_group[0].file_index, chunk_group[0].child_id)
+            n_missing = _task_image_count(task) - len(results)
+            if n_missing > 0:
+                error_records += n_missing
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
