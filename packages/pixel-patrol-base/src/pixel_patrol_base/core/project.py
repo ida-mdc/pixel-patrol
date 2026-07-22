@@ -329,7 +329,12 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
         return f"{m}m {sec:02d}s" if m < 60 else f"{m // 60}h {m % 60:02d}m"
 
     throughput = n_files / wall_s if wall_s > 0 else 0.0
-    logger.info("Done:       %d files in %s  ·  %.1f files/s", n_files, _fmt_s(wall_s), throughput)
+    n_images = stats.get("n_images_processed", 0) + stats.get("n_images_failed", 0)
+    if n_images > n_files:
+        logger.info("Done:       %d files x %d images in %s  ·  %.1f files/s",
+                    n_files, n_images, _fmt_s(wall_s), throughput)
+    else:
+        logger.info("Done:       %d files in %s  ·  %.1f files/s", n_files, _fmt_s(wall_s), throughput)
 
     total_cpu = load_s + sum(proc_s.values())
     logger.debug("processing stats: wall=%s cpu=%s tasks=%d workers=%d",
