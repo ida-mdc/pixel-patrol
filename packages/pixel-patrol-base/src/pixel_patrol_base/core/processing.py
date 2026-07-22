@@ -1167,11 +1167,14 @@ def _coordinate_pipeline(
     pbar.close()
     wall_s = time.perf_counter() - t_wall_start
     elapsed_total = time.monotonic() - t_pipeline_start
+    attempted = completed_records + error_records
     logger.info(
-        "Pipeline done: %d images, %d errors, %d parts, %.1fs total (%.1f img/s avg)",
-        completed_records, error_records, writer._part_counter,
+        "Pipeline done: %d/%d images processed, %d parts, %.1fs total (%.1f img/s avg)",
+        completed_records, attempted, writer._part_counter,
         elapsed_total, completed_records / elapsed_total if elapsed_total > 0 else 0,
     )
+    if error_records:
+        logger.warning("%d image(s) were not processed - see warnings above for affected files.", error_records)
 
     logging.getLogger("distributed.worker.memory").removeHandler(_pause_handler)
 
@@ -1191,6 +1194,8 @@ def _coordinate_pipeline(
 
     stats: Dict[str, Any] = {
         "wall_s":                    wall_s,
+        "n_images_processed":        completed_records,
+        "n_images_failed":           error_records,
         "n_files":                   len(files_meta),
         "n_tasks":                   n_tasks_submitted,
         "task_types":                task_type_counts,
