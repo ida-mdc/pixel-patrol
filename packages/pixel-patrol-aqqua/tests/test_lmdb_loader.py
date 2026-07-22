@@ -138,6 +138,11 @@ def test_load_range_partial(rgb_lmdb: Path, loader) -> None:
     assert len(results) == 1
 
 
+def test_load_range_mid_range_start_returns_correct_records(five_image_lmdb: Path, loader) -> None:
+    uuids = [rec.meta.get("image-uuid") for _, rec in loader.load_range(five_image_lmdb, start=3, stop=5)]
+    assert uuids == ["uuid-3", "uuid-4"]
+
+
 def test_load_range_meta_uuid_present(rgb_lmdb: Path, loader) -> None:
     uuids = [rec.meta.get("image-uuid") for _, rec in loader.load_range(rgb_lmdb, start=0, stop=2)]
     assert uuids == ["uuid-0", "uuid-1"]
