@@ -1107,17 +1107,12 @@ def _coordinate_pipeline(
     logger.debug("Pipeline: %d initial futures submitted", len(initial_futures))
 
     ac = as_completed(initial_futures)
-    all_submitted = False
     for future in ac:
         task = future_to_task.pop(future)
 
         next_task = next(task_iter, None)
         if next_task is not None:
             ac.add(_submit(next_task))
-        elif not all_submitted:
-            all_submitted = True
-            pbar.total = len(files_meta)
-            pbar.refresh()
 
         try:
             results: Any = future.result()  # shape depends on task type - see _executor_for
