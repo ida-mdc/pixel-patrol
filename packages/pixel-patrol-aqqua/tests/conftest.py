@@ -74,6 +74,19 @@ def varying_size_lmdb(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def five_image_lmdb(tmp_path: Path) -> Path:
+    """LMDB with five grayscale images, keyed uuid-0..uuid-4 in order."""
+    lmdb_path = tmp_path / "five.lmdb"
+    rng = np.random.default_rng(11)
+    images = [
+        (rng.integers(0, 255, (8, 8), dtype=np.uint8), {"image-uuid": f"uuid-{i}"})
+        for i in range(5)
+    ]
+    _write_lmdb(lmdb_path, images)
+    return lmdb_path
+
+
+@pytest.fixture()
 def rgb_lmdb_with_meta_parquet(tmp_path: Path) -> Path:
     """LMDB named with a numeric ID suffix, plus a matching '-meta-{ID}.parquet'
     sidecar, mirroring the AqQua dataset naming convention:
