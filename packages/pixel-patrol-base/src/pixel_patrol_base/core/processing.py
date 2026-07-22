@@ -1186,6 +1186,7 @@ def _coordinate_pipeline(
         "peak_worker_rss_mb":        round(peak_worker_rss_mb, 1),
         "n_memory_pressure_events":  _pause_handler.count,
         "load_cpu_s":                all_timing.get("load", 0.0),
+        "part_paths":                [str(p) for p in writer._part_paths],
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
     result_df = writer.finalize()
