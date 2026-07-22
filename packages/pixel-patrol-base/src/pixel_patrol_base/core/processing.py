@@ -88,9 +88,9 @@ _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
 
-# Per-worker RAM multiplier: ~5× covers decompression + processor peak overhead,
-# ÷0.60 keeps actual usage below Dask's 80% pause threshold.
-_WORKER_MEMORY_MULTIPLIER = 8
+# Worst-case on-disk-to-actual-memory expansion factor; sizes worker RAM and
+# gates the small-file fast path.
+_MAX_SIZE_EXPANSION_FACTOR = 8
 
 # OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
 # so they take effect before worker subprocesses initialize their thread pools.
@@ -328,7 +328,7 @@ def _plan_tasks(
     # can be orders of magnitude smaller than the uncompressed array - never skip
     # read_header for them or they'll be mis-classified as small files.
     _folder_exts: frozenset    = frozenset(getattr(loader, "FOLDER_EXTENSIONS", ()))
-    _small_file_threshold: int = budget_bytes // 8
+    _small_file_threshold: int = budget_bytes // _MAX_SIZE_EXPANSION_FACTOR
     _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
     batch_bytes: int = 0
@@ -1381,7 +1381,7 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         yield client, True
     except ValueError:
         n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
-        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
+        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _MAX_SIZE_EXPANSION_FACTOR
         n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
         n_workers = min(n_workers_cpu, n_workers_ram)
         if n_workers < n_workers_cpu:
