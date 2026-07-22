@@ -68,10 +68,16 @@ for _name in ("distributed", "distributed.worker", "distributed.scheduler",
 logger = logging.getLogger(__name__)
 
 
-def _silence_numcodecs_warning():
+def _silence_third_party_warnings():
     """Same showwarning patch as core/__init__.py, applied to each Dask worker process."""
     _sw = warnings.showwarning
-    warnings.showwarning = lambda m, c, f, l, *a, **kw: None if c is DeprecationWarning and "numcodecs" in str(f) else _sw(m, c, f, l, *a, **kw)
+    def _filtered(m, c, f, l, *a, **kw):
+        if c is DeprecationWarning and "numcodecs" in str(f):
+            return
+        if c is UserWarning and "Could not parse tiff pixel size" in str(m):
+            return
+        _sw(m, c, f, l, *a, **kw)
+    warnings.showwarning = _filtered
 
 
 # Fields that are PP-internal per-chunk values, not image-level metadata.
@@ -1429,7 +1435,7 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         if _in_main:
             signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
-        client.run(_silence_numcodecs_warning)
+        client.run(_silence_third_party_warnings)
         try:
             yield client, False
         finally:
