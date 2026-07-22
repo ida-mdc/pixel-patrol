@@ -194,6 +194,8 @@ class Project:
         if config.parquet_row_group_size is not None:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
 
+        expected_parts = [Path(p) for p in stats.pop("part_paths", [])]  # not persisted metadata
+
         if stats:
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
@@ -206,14 +208,23 @@ class Project:
         saved = False
 
         if records_df is None:
-            parts_on_disk = sorted(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else []
-            if not parts_on_disk:
+            parts_on_disk = set(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else set()
+            stale = parts_on_disk - set(expected_parts)
+            missing = set(expected_parts) - parts_on_disk
+            if stale:
+                logger.warning("Project Core: ignoring %d unexpected leftover part file(s) in '%s'",
+                               len(stale), parts_dir)
+            if missing:
+                logger.warning("Project Core: %d expected part file(s) are missing from '%s'; output may be incomplete",
+                               len(missing), parts_dir)
+            parts_to_save = sorted(p for p in expected_parts if p in parts_on_disk)
+            if not parts_to_save:
                 logger.warning("Project Core: No files found/processed.")
                 return
-            logger.info("Project Core: streaming %d parts → '%s'", len(parts_on_disk), self.output_path)
+            logger.info("Project Core: streaming %d parts → '%s'", len(parts_to_save), self.output_path)
             try:
                 processing.save_parquet_from_parts(
-                    parts_on_disk, self.output_path, self.metadata, **rgs_kwargs
+                    parts_to_save, self.output_path, self.metadata, **rgs_kwargs
                 )
                 processing.cleanup_chunks_dir(parts_dir)
                 saved = True
