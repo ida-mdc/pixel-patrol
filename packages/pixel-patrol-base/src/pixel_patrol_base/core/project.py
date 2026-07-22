@@ -245,6 +245,13 @@ class Project:
         if saved:
             _log_privacy_disclosure(self.metadata.privacy_summary)
             logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
+            n_failed = stats.get("n_images_failed", 0)
+            if n_failed:
+                logger.warning(_output_log_style(
+                    "%d image(s) failed and are missing from the table - see errors/warnings "
+                    "above; try raising --mb-per-task or lowering --max-workers.",
+                    fg="red", bold=True,
+                ), n_failed)
 
 
     def get_name(self) -> str:

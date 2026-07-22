@@ -69,3 +69,27 @@ def test_no_stale_no_warning(project: Project, tmp_path: Path, caplog):
 
     assert "leftover" not in caplog.text
     assert "missing" not in caplog.text
+
+
+def test_failed_images_warned_at_the_end(project: Project, tmp_path: Path, caplog):
+    parts_dir = tmp_path / "_parts_out"
+    parts_dir.mkdir()
+    _write_part(parts_dir / "part_0000.parquet", [1, 2])
+
+    stats = {"part_paths": [str(parts_dir / "part_0000.parquet")], "n_images_failed": 9}
+    with caplog.at_level(logging.WARNING):
+        project._save_result(None, stats, parts_dir, ProcessingConfig(), [])
+
+    assert "9 image(s) failed" in caplog.text
+
+
+def test_no_failed_images_no_warning(project: Project, tmp_path: Path, caplog):
+    parts_dir = tmp_path / "_parts_out"
+    parts_dir.mkdir()
+    _write_part(parts_dir / "part_0000.parquet", [1, 2])
+
+    stats = {"part_paths": [str(parts_dir / "part_0000.parquet")], "n_images_failed": 0}
+    with caplog.at_level(logging.WARNING):
+        project._save_result(None, stats, parts_dir, ProcessingConfig(), [])
+
+    assert "image(s) failed" not in caplog.text
