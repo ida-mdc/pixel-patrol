@@ -172,7 +172,7 @@ class TifffileLoader:
         return False
 
     def read_header(self, file_path: Path) -> FileInfo:
-        """Read file header; return shape/dtype/dim_order of the first series plus total series count."""
+        """Read file header; return shape/dtype/dim_order of the largest of the first few series, plus total series count."""
         try:
             tf = tifffile.TiffFile(file_path)
         except Exception as e:
@@ -181,11 +181,17 @@ class TifffileLoader:
             if not tf.series:
                 raise ValueError(f"No series found in TIFF file: {file_path}")
             n_images = len(tf.series)
-            meta = _extract_metadata(tf, tf.series[0], 0)
-            meta = _normalize_metadata(meta)
-            shape = tuple(int(x) for x in meta["shape"])
-            dtype = np.dtype(meta.get("dtype", "float32"))
-            return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
+            best_nbytes = -1
+            shape = dtype = dim_order = None
+            for i in range(min(3, n_images)):
+                meta = _normalize_metadata(_extract_metadata(tf, tf.series[i], i))
+                candidate_shape = tuple(int(x) for x in meta["shape"])
+                candidate_dtype = np.dtype(meta.get("dtype", "float32"))
+                nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
+                if nbytes > best_nbytes:
+                    best_nbytes = nbytes
+                    shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+            return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
         finally:
             tf.close()
 

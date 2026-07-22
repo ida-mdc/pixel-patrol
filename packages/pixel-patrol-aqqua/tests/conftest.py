@@ -61,6 +61,19 @@ def grayscale_lmdb(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def varying_size_lmdb(tmp_path: Path) -> Path:
+    """LMDB whose first image is smaller than its second."""
+    lmdb_path = tmp_path / "varying.lmdb"
+    rng = np.random.default_rng(3)
+    images = [
+        (rng.integers(0, 255, (16, 16), dtype=np.uint8), {"image-uuid": "small-0"}),
+        (rng.integers(0, 255, (64, 64), dtype=np.uint8), {"image-uuid": "big-1"}),
+    ]
+    _write_lmdb(lmdb_path, images)
+    return lmdb_path
+
+
+@pytest.fixture()
 def rgb_lmdb_with_meta_parquet(tmp_path: Path) -> Path:
     """LMDB named with a numeric ID suffix, plus a matching '-meta-{ID}.parquet'
     sidecar, mirroring the AqQua dataset naming convention:
