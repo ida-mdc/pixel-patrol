@@ -92,6 +92,9 @@ _LOG_EVERY = 200
 # gates the small-file fast path.
 _MAX_SIZE_EXPANSION_FACTOR = 8
 
+# Headroom left unused when packing workers into available RAM.
+_AVAILABLE_RAM_PACKING_FRACTION = 0.9
+
 # OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
 # so they take effect before worker subprocesses initialize their thread pools.
 # (LocalCluster env= arrives post-spawn and is too late for BLAS initialization.)
@@ -1394,7 +1397,8 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
     except ValueError:
         n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
         worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _MAX_SIZE_EXPANSION_FACTOR
-        n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
+        usable_ram = psutil.virtual_memory().available * _AVAILABLE_RAM_PACKING_FRACTION
+        n_workers_ram = max(1, int(usable_ram / worker_mem_bytes))
         n_workers = min(n_workers_cpu, n_workers_ram)
         if n_workers < n_workers_cpu:
             logger.info(
