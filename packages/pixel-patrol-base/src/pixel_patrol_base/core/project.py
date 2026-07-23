@@ -133,11 +133,7 @@ class Project:
         )
         self.metadata = config.metadata.populate_from_project(self)
 
-        processors = discover_processor_plugins()
-        if config.processors_included:
-            processors = [p for p in processors if p.NAME in config.processors_included]
-        elif config.processors_excluded:
-            processors = [p for p in processors if p.NAME not in config.processors_excluded]
+        processors = _filter_processors(discover_processor_plugins(), config)
 
         logger.info("Input:      %s", ", ".join(str(p) for p in self.paths))
         logger.info("Output:     %s", self.output_path)
@@ -342,6 +338,15 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
     for stage, cpu_s in ([("loading", load_s)] + list(proc_s.items())):
         logger.debug("  %-20s %s  (%.1f s/file)", stage, _fmt_s(cpu_s),
                      cpu_s / n_files if n_files else 0)
+
+
+def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
+    """Apply config.processors_included/excluded; included takes precedence over excluded."""
+    if config.processors_included:
+        return [p for p in processors if p.NAME in config.processors_included]
+    if config.processors_excluded:
+        return [p for p in processors if p.NAME not in config.processors_excluded]
+    return processors
 
 
 def _resolve_extensions(
