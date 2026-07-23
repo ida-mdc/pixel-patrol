@@ -656,19 +656,26 @@ def _execute_batch_task(
     processors: List[Any],
     config:     ProcessingConfig,
 ) -> List[MemoryChunkResult]:
-    """Process every file in the task as one complete memory chunk each."""
+    """Process every file in the task as one complete memory chunk each.
+
+    Each file is isolated in its own try/except so one bad file doesn't
+    discard the rest of the batch's already-processed results.
+    """
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
-        _t = time.perf_counter()
-        record = loader.load(Path(idxed_path.file_path))
-        load_s = time.perf_counter() - _t
-        if record is None:
-            logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
-            continue
-        result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
-                             idxed_path.file_index, None, processors, config, idxed_path.file_path)
-        result.timing["load"] = result.timing.get("load", 0.0) + load_s
-        results.append(result)
+        try:
+            _t = time.perf_counter()
+            record = loader.load(Path(idxed_path.file_path))
+            load_s = time.perf_counter() - _t
+            if record is None:
+                logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
+                continue
+            result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                                 idxed_path.file_index, None, processors, config, idxed_path.file_path)
+            result.timing["load"] = result.timing.get("load", 0.0) + load_s
+            results.append(result)
+        except Exception as exc:
+            logger.warning("worker: failed to process '%s': %s", idxed_path.file_path, exc)
     return results
 
 
@@ -702,7 +709,8 @@ def _execute_container_task(
     """Load and process a batch of sub-images from a container file.
 
     One inner list per sub-image - length 1 normally, or one entry per memory
-    chunk if a sub-image turns out oversized.
+    chunk if a sub-image turns out oversized. Each sub-image is isolated in
+    its own try/except so one bad sub-image doesn't discard its siblings.
     """
     results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
@@ -712,19 +720,23 @@ def _execute_container_task(
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
                            child_id, task.file_path)
             continue
-        # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
-        specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
-                                            record.data.dtype, config.mb_per_task, config.slice_size)
-        if specs:
-            results.append([
-                _run_record(record, record.data[spec.slices], spec.origin,
-                           task.file_index, child_id, processors, config, task.file_path)
-                for spec in specs
-            ])
-        else:
-            result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
-                                 task.file_index, child_id, processors, config, task.file_path)
-            results.append([result])
+        try:
+            # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
+            specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
+                                                record.data.dtype, config.mb_per_task, config.slice_size)
+            if specs:
+                results.append([
+                    _run_record(record, record.data[spec.slices], spec.origin,
+                               task.file_index, child_id, processors, config, task.file_path)
+                    for spec in specs
+                ])
+            else:
+                result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                                     task.file_index, child_id, processors, config, task.file_path)
+                results.append([result])
+        except Exception as exc:
+            logger.warning("worker: failed to process sub-image %s in %s: %s",
+                           child_id, task.file_path, exc)
     return results
 
 
@@ -1184,6 +1196,9 @@ def _coordinate_pipeline(
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
+            n_missing = _task_image_count(task) - len(results)
+            if n_missing > 0:
+                error_records += n_missing
 
         if completed_records > before and completed_records % _LOG_EVERY == 0:
             elapsed = time.monotonic() - t_pipeline_start
