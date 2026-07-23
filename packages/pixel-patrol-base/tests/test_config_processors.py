@@ -2,20 +2,12 @@
 Tests for processor selection configuration (included/excluded).
 
 Uses processor NAME values ("raster-basic", "raster-histogram", "thumbnail") which is
-what the production filtering code in processing.py matches against, not class names.
+what the production filtering code in project.py matches against, not class names.
 """
 
 from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.project import _filter_processors as _apply_processor_filter
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
-
-
-def _apply_processor_filter(processors, config):
-    """Exact copy of the inline filtering logic from processing.py."""
-    if config.processors_included:
-        return [p for p in processors if p.NAME in config.processors_included]
-    if config.processors_excluded:
-        return [p for p in processors if p.NAME not in config.processors_excluded]
-    return processors
 
 
 class TestProcessorSelection:

@@ -39,3 +39,25 @@ def test_corrupted_sub_image_counts_as_failed(tmp_path: Path):
 
     assert stats["n_images_processed"] == 4
     assert stats["n_images_failed"] == 1
+
+
+def test_two_corrupted_sub_images_in_one_container_task_both_count_as_failed(tmp_path: Path):
+    """Regression guard: failures must be counted per sub-image, not per container task -
+    a single task covering 2 bad images out of 5 must report n_images_failed == 2, not 1."""
+    lmdb_path = tmp_path / "test.lmdb"
+    rng = np.random.default_rng(0)
+    images = [
+        (rng.integers(0, 255, (8, 8), dtype=np.uint8), {"image-uuid": f"uuid-{i}"})
+        for i in range(5)
+    ]
+    _write_lmdb(lmdb_path, images)
+    _corrupt_entry(lmdb_path, 3)
+    _corrupt_entry(lmdb_path, 4)
+
+    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    df, stats = build_records_df(
+        [tmp_path], loader=LmdbLoader(), processors=[], config=config, base_dir=tmp_path,
+    )
+
+    assert stats["n_images_processed"] == 3
+    assert stats["n_images_failed"] == 2
