@@ -829,8 +829,8 @@ def _rollup(
         for col in getattr(proc, "OUTPUT_SCHEMA", {}):
             global_obs[col] = proc.get_aggregation(col)(proc_chunk_rows, {})
             mem_cols_added += 1
-    if all_leaf_rows or mem_cols_added:
-        obs_rows.append(global_obs)
+    # Always emit the row - image_meta alone keeps the image represented even if every processor failed.
+    obs_rows.append(global_obs)
 
     for r in range(1, n + 1):
         for g_dim_combo in itertools.combinations(active_dims, r):
