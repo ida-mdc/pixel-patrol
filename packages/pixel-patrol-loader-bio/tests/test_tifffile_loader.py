@@ -86,6 +86,32 @@ def test_load_multi_series_load_range(tmp_path: Path, loader):
     np.testing.assert_array_equal(results["1"].data.compute(), b)
 
 
+def test_load_range_one_bad_series_does_not_lose_its_siblings(tmp_path: Path, loader, monkeypatch):
+    path = tmp_path / "multi3.tif"
+    a = np.zeros((2, 4, 4), dtype=np.uint8)
+    b = np.ones((2, 4, 4), dtype=np.uint8)
+    c = np.full((2, 4, 4), 2, dtype=np.uint8)
+    with tifffile.TiffWriter(path) as tw:
+        tw.write(a, metadata={"axes": "CYX"})
+        tw.write(b, metadata={"axes": "CYX"})
+        tw.write(c, metadata={"axes": "CYX"})
+
+    real_build_record = TifffileLoader._build_record
+
+    def flaky_build_record(tf, series_index):
+        if series_index == 1:
+            raise RuntimeError("simulated decode failure")
+        return real_build_record(tf, series_index)
+
+    monkeypatch.setattr(TifffileLoader, "_build_record", staticmethod(flaky_build_record))
+
+    results = dict(loader.load_range(path, 0, 3))
+    assert set(results.keys()) == {"0", "1", "2"}
+    assert results["1"] is None
+    np.testing.assert_array_equal(results["0"].data.compute(), a)
+    np.testing.assert_array_equal(results["2"].data.compute(), c)
+
+
 def test_dask_chunks_reasonable(tmp_path: Path, loader):
     path = tmp_path / "chunked.tif"
     im = np.zeros((2, 64, 64), dtype=np.uint16)
