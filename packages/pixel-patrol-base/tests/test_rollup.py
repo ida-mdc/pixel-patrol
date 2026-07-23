@@ -38,9 +38,10 @@ def _rows_at(result, level):
 
 # ── no leaf rows ─────────────────────────────────────────────────────────────
 
-def test_empty_no_leaf_rows_no_processors_returns_nothing():
+def test_empty_no_leaf_rows_no_processors_returns_one_row():
     result = _rollup([_result()], processors=[])
-    assert len(result) == 0
+    assert len(result) == 1
+    assert result[0]["num_pixels"] == 0
 
 
 def test_empty_memory_proc_col_in_global_row():
