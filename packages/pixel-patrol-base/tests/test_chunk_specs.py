@@ -8,9 +8,12 @@ from typing import Iterator, List, Tuple
 import numpy as np
 
 from pixel_patrol_base.core.processing import (
+    BatchTask,
     ContainerTask,
     MemoryChunkResult,
+    _IndexedPath,
     _compute_memory_chunk_specs,
+    _execute_batch_task,
     _execute_container_task,
     _resolve_leaf_block_shape,
 )
@@ -285,3 +288,64 @@ def test_mixed_batch_only_chunks_the_oversized_sub_image():
     assert len(results[1]) > 1
     assert _sums(results[0]) == int(small.sum())
     assert _sums(results[1]) == int(big.sum())
+
+
+class _PoisonArray:
+    """Looks like a lazy dask array (has .compute) but raises when materialized."""
+    shape = (4, 4)
+    dtype = np.dtype("uint8")
+
+    def __getitem__(self, key):
+        return self
+
+    def compute(self, **kw):
+        raise RuntimeError("simulated decode failure")
+
+
+class _OneBadSubImageLoader:
+    """Yields good sub-images except index 1, which fails to decode."""
+
+    def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
+        for i in range(start, stop):
+            if i == 1:
+                yield str(i), Record(data=_PoisonArray(), dim_order="YX", dim_names=["Y", "X"],
+                                     kind="intensity", meta={"dim_order": "YX"}, capabilities=set())
+            else:
+                arr = np.full((4, 4), i, dtype=np.uint8)
+                yield str(i), record_from(arr, {"dim_order": "YX"}, kind="intensity")
+
+
+def test_one_bad_sub_image_does_not_discard_its_siblings():
+    task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 3))
+    config = ProcessingConfig(mb_per_task=100)
+
+    results = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
+
+    assert len(results) == 2  # sub-images 0 and 2 survive; only 1 is lost
+    assert _sums(results[0]) == 0        # sub-image 0: filled with 0
+    assert _sums(results[1]) == 4 * 4 * 2  # sub-image 2: filled with 2
+
+
+class _OneBadFileLoader:
+    """Loads good files except 'bad.tif', which fails to decode."""
+
+    def load(self, file_path: Path) -> Record:
+        if "bad" in str(file_path):
+            return Record(data=_PoisonArray(), dim_order="YX", dim_names=["Y", "X"],
+                         kind="intensity", meta={"dim_order": "YX"}, capabilities=set())
+        arr = np.full((4, 4), 7, dtype=np.uint8)
+        return record_from(arr, {"dim_order": "YX"}, kind="intensity")
+
+
+def test_one_bad_file_does_not_discard_its_batch_siblings():
+    task = BatchTask(files=(
+        _IndexedPath(file_index=0, file_path="a.tif"),
+        _IndexedPath(file_index=1, file_path="bad.tif"),
+        _IndexedPath(file_index=2, file_path="c.tif"),
+    ))
+    config = ProcessingConfig(mb_per_task=100)
+
+    results = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
+
+    assert len(results) == 2  # a.tif and c.tif survive; only bad.tif is lost
+    assert {r.file_index for r in results} == {0, 2}

@@ -218,7 +218,11 @@ class TifffileLoader:
             if not tf.series:
                 raise ValueError(f"No series found in TIFF file: {file_path}")
             for i in range(start, min(stop, len(tf.series))):
-                yield str(i), self._build_record(tf, i)
+                try:
+                    yield str(i), self._build_record(tf, i)
+                except Exception as e:
+                    logger.warning("TifffileLoader: failed to read series %d in '%s': %s", i, file_path, e)
+                    yield str(i), None
         finally:
             tf.close()
 

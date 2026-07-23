@@ -166,9 +166,14 @@ class BioIoLoader:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
         scenes = list(img.scenes) if hasattr(img, "scenes") else [None]
         for scene in scenes[start:stop]:
-            if scene is not None:
-                img.set_scene(scene)
-            yield str(scene) if scene is not None else "0", self._build_record(img)
+            child_id = str(scene) if scene is not None else "0"
+            try:
+                if scene is not None:
+                    img.set_scene(scene)
+                yield child_id, self._build_record(img)
+            except Exception as e:
+                logger.warning("BioIoLoader: failed to read scene %s in '%s': %s", child_id, file_path, e)
+                yield child_id, None
 
     @staticmethod
     def _build_record(img: BioImage) -> Record:

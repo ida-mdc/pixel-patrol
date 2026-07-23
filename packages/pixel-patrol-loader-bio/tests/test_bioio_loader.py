@@ -55,3 +55,25 @@ def test_load_unsupported_raises(tmp_path: Path, loader):
     (tmp_path / "file.xyz").write_bytes(b"not an image")
     with pytest.raises(Exception):
         loader.load(tmp_path / "file.xyz")
+
+
+def test_load_range_one_bad_scene_does_not_lose_its_siblings(monkeypatch, loader):
+    class _FakeImage:
+        scenes = ["s0", "s1", "s2"]
+
+        def set_scene(self, scene):
+            if scene == "s1":
+                raise RuntimeError("simulated decode failure")
+            self._current = scene
+
+    monkeypatch.setattr(loader, "_build_record", lambda img: img._current)
+    monkeypatch.setattr(
+        "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
+        lambda file_path: _FakeImage(),
+    )
+
+    results = dict(loader.load_range(Path("unused.lif"), 0, 3))
+    assert set(results.keys()) == {"s0", "s1", "s2"}
+    assert results["s0"] == "s0"
+    assert results["s1"] is None
+    assert results["s2"] == "s2"
