@@ -174,10 +174,14 @@ class ThumbnailProcessor:
         y_ax = dim_order_out.index("Y")
         x_ax = dim_order_out.index("X")
         h, w = chunk.shape[y_ax], chunk.shape[x_ax]
-        if h > _PATCH_MAX or w > _PATCH_MAX:
-            scale = min(_PATCH_MAX / h, _PATCH_MAX / w)
-            new_h = max(1, int(h * scale))
-            new_w = max(1, int(w * scale))
+        full_shape = record.meta.get("full_shape", record.data.shape)
+        full_h, full_w = full_shape[y_ax], full_shape[x_ax]
+        y_off, x_off = record.meta.get("dim_y", 0), record.meta.get("dim_x", 0)
+        # Sized from the full image + this chunk's position, so per-chunk sizes telescope like _assemble's placement math.
+        if full_h > _PATCH_MAX or full_w > _PATCH_MAX:
+            scale = min(_PATCH_MAX / full_h, _PATCH_MAX / full_w)
+            new_h = max(1, round((y_off + h) * scale) - round(y_off * scale))
+            new_w = max(1, round((x_off + w) * scale) - round(x_off * scale))
             r_idx = np.round(np.linspace(0, h - 1, new_h)).astype(np.int64)
             c_idx = np.round(np.linspace(0, w - 1, new_w)).astype(np.int64)
             chunk = np.take(np.take(chunk, r_idx, axis=y_ax), c_idx, axis=x_ax)
@@ -187,7 +191,6 @@ class ThumbnailProcessor:
             arr = da.where(da.isnull(arr), 0.0, arr)
 
         origin     = tuple(record.meta.get(f"dim_{d.lower()}", 0) for d in dim_order_out)
-        full_shape = record.meta.get("full_shape", record.data.shape)
         keep_dims  = {"X", "Y", color_dim} if color_dim else {"X", "Y", "S"}
         arr, reduced_order = _reduce_to_spatial(arr, dim_order_out, keep_dims, origin, full_shape)
         if arr is None or arr.size == 0:
