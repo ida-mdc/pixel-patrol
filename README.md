@@ -103,7 +103,8 @@ api.view(project)
 Send the `.parquet` file and open it in the [hosted viewer](https://pixelpatrol.app/viewer/) - no installation needed. Or build a self-contained static viewer:
 
 ```bash
-pixel-patrol build-viewer-html -o viewer.html
+pixel-patrol build-viewer-html -o viewer.html             # light (~7 MB), loads DuckDB WASM from a CDN
+pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained, works with no network
 ```
 
 > **Note:** The static viewer may not load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large reports.

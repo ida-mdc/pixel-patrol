@@ -226,16 +226,23 @@ def view(parquet_file, port, no_browser,
     "-o",
     type=click.Path(exists=False, file_okay=True, dir_okay=True, writable=True, path_type=Path),
     required=True,
-    help='Output path. Use .html/.htm for a single self-contained file, '
+    help='Output path. Use .html/.htm for a single HTML file, '
          'or a directory for a GitHub Pages-style site folder.')
-def build_viewer_html(output: Path):
+@click.option(
+    "--offline/--no-offline",
+    default=False,
+    help='For single-file (.html) output, inline EVERYTHING incl. DuckDB WASM '
+         'for a fully self-contained (~50 MB+) file that needs no network. '
+         'Default: inline the app bundle but load DuckDB WASM from a CDN (~7 MB).')
+def build_viewer_html(output: Path, offline: bool):
     """
     Build static viewer output from the installed web viewer bundle.
 
-    If OUTPUT ends in .html/.htm, writes a single self-contained HTML file.
+    If OUTPUT ends in .html/.htm, writes a single HTML file (light by default;
+    pass --offline to inline all dependencies).
     Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
     """
-    api_build_viewer(output)
+    api_build_viewer(output, offline=offline)
 
 
 @cli.command()

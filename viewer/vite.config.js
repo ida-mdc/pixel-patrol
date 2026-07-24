@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { cpSync, rmSync, readFileSync, existsSync } from 'fs';
+import { cpSync, rmSync, readFileSync, existsSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 // After a production build, sync the output into the Python package so that
@@ -63,6 +63,29 @@ function emitJsLicenses() {
   };
 }
 
+// Record the DuckDB WASM version into the build output so the Python
+// `build-viewer-html --no-offline` builder can point the worker/wasm at the
+// matching jsdelivr CDN release instead of inlining the ~38 MB local files.
+function writeBuildMeta() {
+  return {
+    name: 'write-build-meta',
+    writeBundle() {
+      try {
+        const duckdbPkg = JSON.parse(readFileSync(
+          resolve(__dirname, 'node_modules/@duckdb/duckdb-wasm/package.json'),
+          'utf8',
+        ));
+        writeFileSync(
+          resolve(__dirname, 'dist/pp_build_meta.json'),
+          JSON.stringify({ duckdbWasmVersion: duckdbPkg.version }, null, 2) + '\n',
+        );
+      } catch (e) {
+        console.warn(`\n⚠ pp_build_meta.json write failed: ${e.message}`);
+      }
+    },
+  };
+}
+
 function syncToPythonPackage() {
   return {
     name: 'sync-viewer-dist',
@@ -104,7 +127,7 @@ export default defineConfig({
     exclude: ['@duckdb/duckdb-wasm'],
   },
 
-  plugins: [stripMissingSourcemaps(), emitJsLicenses(), syncToPythonPackage()],
+  plugins: [stripMissingSourcemaps(), emitJsLicenses(), writeBuildMeta(), syncToPythonPackage()],
 
   build: {
     target: 'es2022',

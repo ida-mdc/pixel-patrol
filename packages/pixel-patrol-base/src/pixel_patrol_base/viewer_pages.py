@@ -9,6 +9,10 @@ from pathlib import Path
 
 from pixel_patrol_base.viewer_server import _discover_installed_extensions, find_viewer_dist, resolve_extension_plugins
 
+# Fallback used only if the build metadata is missing from the viewer bundle
+# (e.g. an older bundle built before pp_build_meta.json was emitted).
+_DEFAULT_DUCKDB_WASM_VERSION = "1.32.0"
+
 
 def _safe_name(name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", name).strip("-")
@@ -42,12 +46,18 @@ def _inject_extension_urls(index_html: Path, urls: list[str]) -> None:
     index_html.write_text(html, encoding="utf-8")
 
 
-def _inline_local_assets(html: str, dist_dir: Path) -> str:
+def _inline_local_assets(html: str, dist_dir: Path, exclude_names: frozenset[str] = frozenset()) -> str:
+    """Inline local script/style/media assets as data URLs.
+
+    Assets whose file name is in exclude_names are left as-is (their references
+    are not rewritten), so they can instead be served from a CDN - used to keep
+    the large DuckDB WASM/worker out of the file while inlining everything else.
+    """
     asset_data_url_map: dict[str, str] = {}
     assets_dir = dist_dir / "assets"
     if assets_dir.is_dir():
         for asset_path in assets_dir.rglob("*"):
-            if not asset_path.is_file():
+            if not asset_path.is_file() or asset_path.name in exclude_names:
                 continue
             rel = asset_path.relative_to(dist_dir).as_posix()
             name = asset_path.name
@@ -65,9 +75,12 @@ def _inline_local_assets(html: str, dist_dir: Path) -> str:
     def inline_js_asset_urls(code: str) -> str:
         # Preserve import.meta.url behavior by replacing runtime-resolved asset
         # paths (worker/wasm/etc.) with direct data URLs before embedding.
+        # Rolldown (Vite 8's bundler) minifies these as template literals
+        # (backticks) rather than quotes, so all three forms must be covered.
         for rel, data_url in asset_data_url_map.items():
             code = code.replace(f'"{rel}"', f'"{data_url}"')
             code = code.replace(f"'{rel}'", f"'{data_url}'")
+            code = code.replace(f'`{rel}`', f'`{data_url}`')
         return code
 
     def repl_script(match: re.Match[str]) -> str:
@@ -114,6 +127,40 @@ def _inline_local_assets(html: str, dist_dir: Path) -> str:
     )
     html = re.sub(r'(?P<attr>(?:src|href))="(?P<url>[^"]+)"', repl_media, html)
     return html
+
+
+def _read_duckdb_wasm_version(dist_dir: Path) -> str:
+    meta_path = dist_dir / "pp_build_meta.json"
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            version = meta.get("duckdbWasmVersion")
+            if version:
+                return str(version)
+        except (ValueError, OSError):
+            pass
+    return _DEFAULT_DUCKDB_WASM_VERSION
+
+
+def _duckdb_asset_names(dist_dir: Path) -> frozenset[str]:
+    """File names of the bundled DuckDB WASM worker/module (hash-suffixed)."""
+    assets_dir = dist_dir / "assets"
+    if not assets_dir.is_dir():
+        return frozenset()
+    return frozenset(
+        p.name for p in assets_dir.glob("*")
+        if p.is_file() and "duckdb" in p.name.lower()
+    )
+
+
+def _duckdb_cdn_urls(dist_dir: Path) -> tuple[str, str]:
+    """jsdelivr URLs for the (single-thread mvp) DuckDB WASM worker and module."""
+    version = _read_duckdb_wasm_version(dist_dir)
+    base = f"https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@{version}/dist"
+    return (
+        f"{base}/duckdb-browser-mvp.worker.js",
+        f"{base}/duckdb-mvp.wasm",
+    )
 
 
 def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
@@ -209,23 +256,52 @@ def build_github_pages_site(out_dir: str | Path = "gh-pages-site") -> Path:
     return out_dir
 
 
-def build_single_file_viewer_html(output_html: str | Path) -> Path:
+def build_single_file_viewer_html(
+    output_html: str | Path,
+    offline: bool = False,
+) -> Path:
+    """Write a single-file HTML viewer.
+
+    Default (light): inline the app's JS/CSS/images, but load the large DuckDB
+    WASM from jsdelivr (and keep the existing Bootstrap CDN links). This is
+    ~7 MB instead of ~56 MB and works for any locally-built/installed version,
+    needing a network connection only for DuckDB. Extensions are inlined too.
+
+    offline=True: a fully self-contained file with all JS/CSS/WASM inlined as
+    data URLs - works without any network access but is large (~50 MB+).
+    """
     output_html = Path(output_html).resolve()
     dist_dir = find_viewer_dist()
     index_html = dist_dir / "index.html"
     html = index_html.read_text(encoding="utf-8")
 
-    html = _inline_local_assets(html, dist_dir)
+    head_scripts = []
+    if offline:
+        # Everything inlined, including the DuckDB worker/wasm - no network.
+        html = _inline_local_assets(html, dist_dir)
+    else:
+        # Inline the app bundle but keep DuckDB out of the file.
+        html = _inline_local_assets(html, dist_dir, exclude_names=_duckdb_asset_names(dist_dir))
+        worker_url, wasm_url = _duckdb_cdn_urls(dist_dir)
+        head_scripts.append(
+            "<script>\n"
+            f"window.__PP_DUCKDB_WORKER_URL = {json.dumps(worker_url)};\n"
+            f"window.__PP_DUCKDB_WASM_URL = {json.dumps(wasm_url)};\n"
+            "</script>\n"
+        )
+
     ext_urls = _build_inline_extension_urls(_discover_installed_extensions())
-    script = (
+    head_scripts.append(
         "<script>\n"
         f"window.__PP_EXTENSION_URLS = {json.dumps(ext_urls)};\n"
         "</script>\n"
     )
+
+    head = "".join(head_scripts)
     if "</head>" in html:
-        html = html.replace("</head>", script + "</head>", 1)
+        html = html.replace("</head>", head + "</head>", 1)
     else:
-        html = script + html
+        html = head + html
 
     output_html.parent.mkdir(parents=True, exist_ok=True)
     output_html.write_text(html, encoding="utf-8")
