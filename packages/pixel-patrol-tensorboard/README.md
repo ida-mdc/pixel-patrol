@@ -17,7 +17,6 @@ pixel-patrol-tensorboard SOURCE [--port 6006]
 `SOURCE` can be:
 * `.parquet`
 * `.arrow` / `.ipc`
-* `.zip` Pixel Patrol export (requires `pixel-patrol-base`)
 
 ### Example
 

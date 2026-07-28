@@ -4,13 +4,13 @@
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
-**[Documentation](https://pixelpatrol.app/docs/) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://pixelpatrol.app/viewer/)**
+**[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Documentation](https://pixelpatrol.app/docs/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
 
-Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and generates a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
+Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and builds a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics - so you can compare conditions, catch outliers, and verify batch consistency before you use the data.
 
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/overview.png" width="">
 
-*The interactive viewer - filter, group, and explore your dataset.*
+*Overview mode - every widget as a tile; click one to expand it in place.*
 
 ---
 
@@ -84,17 +84,17 @@ api.view(project)
 
 ## Example visualizations
 
-![Plot showing the distribution of image sizes.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/size_plot.png)
+![Scatter plot of image width and height per file.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/dimensionality.png)
 
-*File size distribution across the dataset.*
+*Spot inconsistent crops or resolutions.*
 
-![Mosaic view of images, highlighting potential discrepancies.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/mosiac.png)
+![Violin plot of a per-image metric split by group.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/violin_plot.png)
 
-*Image mosaic - sort by any metric to surface outliers visually.*
+*See per-image spread and outliers, e.g. mean intensity, across groups.*
 
-![Statistical plots showing image dimensions and distributions.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/example_stats_plot.png)
+![Overlaid pixel intensity histograms for each group.](https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/histogram.png)
 
-*Dimension size distributions and statistics.*
+*Compare brightness and contrast across conditions.*
 
 ---
 
@@ -103,7 +103,8 @@ api.view(project)
 Send the `.parquet` file and open it in the [hosted viewer](https://pixelpatrol.app/viewer/) - no installation needed. Or build a self-contained static viewer:
 
 ```bash
-pixel-patrol build-viewer-html -o viewer.html
+pixel-patrol build-viewer-html -o viewer.html             # light (~7 MB), loads DuckDB WASM from a CDN
+pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained, works with no network
 ```
 
 > **Note:** The static viewer may not load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large reports.
@@ -113,9 +114,3 @@ pixel-patrol build-viewer-html -o viewer.html
 ## Extending PixelPatrol
 
 PixelPatrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See [pixel-patrol-example-extension](https://github.com/ida-mdc/pixel-patrol-example-extension) for a working template, and the [Extensions](https://pixelpatrol.app/docs/extensions/) documentation.
-
----
-
-## Full documentation
-
-[pixelpatrol.app/docs/](https://pixelpatrol.app/docs/)
