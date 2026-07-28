@@ -10,9 +10,9 @@ import { DEFAULT_PALETTE } from './constants.js';
  *   fc/fo/fv  - filter column / operator / value
  *   dims      - active dimensions, e.g. "c0.t1"  (dot-separated, no encoding needed)
  *   sig       - "1" when significance brackets enabled
- *   view      - "full" when classic full-widget mode is active (absent = condensed, the default)
+ *   view      - "full" when classic full-widget mode is active (absent = overview, the default)
  *   hidden    - dot-separated hidden widget IDs  (dot-separated, no encoding needed)
- *   opened    - dot-separated widget IDs expanded in the condensed gallery
+ *   opened    - dot-separated widget IDs expanded in the overview gallery
  *   extension - URL of a JSON extension manifest (repeatable); manifest format:
  *               { "plugins": ["./a.js", "./b.js"] }  (relative URLs resolved from manifest)
  */
@@ -33,7 +33,7 @@ export function writeUrlParams(state) {
   const dimStr = Object.entries(state.dimensions ?? {}).map(([l, i]) => `${l}${i}`).join('.');
   setOrDelete(params, 'dims',   dimStr || null);
   setOrDelete(params, 'sig',    state.showSignificance ? '1' : null);
-  setOrDelete(params, 'view',   state.condensedMode ? null : 'full');
+  setOrDelete(params, 'view',   state.overviewMode ? null : 'full');
   setOrDelete(params, 'hidden', state.hiddenWidgets?.size > 0
     ? [...state.hiddenWidgets].sort().join('.') : null);
   setOrDelete(params, 'opened', state.openedWidgets?.size > 0
@@ -63,7 +63,7 @@ export function readUrlParams() {
   }
 
   if (params.has('sig'))    out.showSignificance = params.get('sig') === '1';
-  if (params.has('view'))   out.condensedMode = params.get('view') !== 'full';
+  if (params.has('view'))   out.overviewMode = params.get('view') !== 'full';
   if (params.has('hidden')) out.hiddenWidgets = new Set(params.get('hidden').split('.').filter(Boolean));
   if (params.has('opened')) out.openedWidgets = new Set(params.get('opened').split('.').filter(Boolean));
 

@@ -216,7 +216,7 @@ const STAT_SELECT = (q, num) => `
  *   yLabel, title
  *   force:     'auto' | 'bar'
  *   isDate:    numCol is a timestamp (sampled raw violin only - no box summary)
- *   mini:      compact condensed-preview mode (no title/legend/significance)
+ *   mini:      compact overview-preview mode (no title/legend/significance)
  *   showSignificance
  *   maxRawPoints  (default MAX_VIOLIN_POINTS)
  *   series:

@@ -278,13 +278,13 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
     catch { return false; }
   });
 
-  // Always reset the collapse-all button before rendering; renderCondensedGallery
+  // Always reset the collapse-all button before rendering; renderOverviewGallery
   // will re-wire it if tiles are expanded.
   const collapseAllBtn = document.getElementById('collapse-all-btn');
   if (collapseAllBtn) { collapseAllBtn.hidden = true; collapseAllBtn.onclick = null; }
 
-  if (state.condensedMode) {
-    await renderCondensedGallery(container, activePlugins, ctx, collapseAllBtn);
+  if (state.overviewMode) {
+    await renderOverviewGallery(container, activePlugins, ctx, collapseAllBtn);
   } else {
     await renderClassic(container, activePlugins, ctx);
   }
@@ -303,7 +303,7 @@ async function renderPluginBody(plugin, body, ctx) {
 }
 
 /**
- * Classic (condensed-mode off) layout: grouped section headers, every widget
+ * Classic (overview-mode off) layout: grouped section headers, every widget
  * rendered as a full, always-expanded card.
  */
 async function renderClassic(container, activePlugins, ctx) {
@@ -344,18 +344,18 @@ function orderActivePlugins(activePlugins) {
 }
 
 /**
- * Condensed-mode "gallery" layout.
+ * Overview-mode "gallery" layout.
  *
  * Summary widgets stay pinned on top as full-width expanded cards. Every other
  * widget becomes a square, clickable tile showing a short title, one simplified
- * "hero" plot (plugin.condensedPlot) and a one-line plain-language message
- * (plugin.condensedMessage). Clicking a tile expands it *in place*: the tile
+ * "hero" plot (plugin.overviewPlot) and a one-line plain-language message
+ * (plugin.overviewMessage). Clicking a tile expands it *in place*: the tile
  * grows into a full-width card with the widget's normal render() (all controls)
  * and a × to collapse back to the preview. Several tiles can be open at once and
  * the open set is persisted in state.openedWidgets (and the URL), so a filter
  * change or reload restores the same expanded widgets.
  */
-async function renderCondensedGallery(container, activePlugins, ctx, collapseAllBtn) {
+async function renderOverviewGallery(container, activePlugins, ctx, collapseAllBtn) {
   const ordered      = orderActivePlugins(activePlugins);
   const summaryPlugs = ordered.filter(p => pluginGroup(p) === 'Summary' && p.id === 'summary');
   const tilePlugs    = ordered.filter(p => !summaryPlugs.includes(p));
@@ -388,7 +388,7 @@ async function renderCondensedGallery(container, activePlugins, ctx, collapseAll
   }
 
   // Pre-create the cells in order so tiles keep their grouped ordering, then
-  // fill them in parallel: each tile's condensedMessage/condensedPlot queries are
+  // fill them in parallel: each tile's overviewMessage/overviewPlot queries are
   // independent, so DuckDB can pipeline them instead of running one tile at a time.
   const cells = tilePlugs.map(() => {
     const cell = document.createElement('div');
@@ -422,8 +422,8 @@ const GROUP_GLYPH = {
  */
 async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
   let summary = null;
-  if (plugin.condensedMessage) {
-    try { summary = await plugin.condensedMessage(ctx); } catch { /* best-effort */ }
+  if (plugin.overviewMessage) {
+    try { summary = await plugin.overviewMessage(ctx); } catch { /* best-effort */ }
   }
   const { text, warning } = summary ? normalizeSummary(summary) : { text: '', warning: false };
 
@@ -470,9 +470,9 @@ async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
     if (heroDrawn) return;
     heroDrawn = true;
     let drew = false;
-    if (plugin.condensedPlot) {
-      try { drew = (await plugin.condensedPlot(plotArea, ctx)) !== false && plotArea.childElementCount > 0; }
-      catch (err) { console.error(`[viewer] plugin "${plugin.id}" condensedPlot error:`, err); }
+    if (plugin.overviewPlot) {
+      try { drew = (await plugin.overviewPlot(plotArea, ctx)) !== false && plotArea.childElementCount > 0; }
+      catch (err) { console.error(`[viewer] plugin "${plugin.id}" overviewPlot error:`, err); }
     }
     if (!drew) {
       plotArea.classList.add('widget-tile-plot-empty');
@@ -536,7 +536,7 @@ async function buildTile(cell, plugin, ctx, collapseRegistry, syncBar) {
   else await ensureHero();
 }
 
-/** Normalize a plugin's condensedMessage() return value to {text, warning}. */
+/** Normalize a plugin's overviewMessage() return value to {text, warning}. */
 function normalizeSummary(summary) {
   if (typeof summary === 'string') return { text: summary, warning: false };
   return { text: summary.text, warning: !!summary.warning };

@@ -22,7 +22,7 @@ export default {
     return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__'));
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
       const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
@@ -65,7 +65,7 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { andWhere, sample, groupCol: gcFn } = ctx.sql;
     const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
     if (!(sizeCols.includes('size_X') && sizeCols.includes('size_Y'))) return false;

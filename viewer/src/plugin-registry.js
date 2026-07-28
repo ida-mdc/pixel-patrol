@@ -18,9 +18,9 @@
  *     label:    string   - card header title
  *     requires(schema) → bool        - return false to hide when columns absent
  *     async render(container, ctx) → void  - draw into the provided DOM element
- *     async condensedMessage(ctx) → string | {text, warning} | null  - OPTIONAL.
- *       Only called when the user has enabled "Condensed mode" in the sidebar
- *       (ctx.state.condensedMode). Returns one short, plain-language, data-aware
+ *     async overviewMessage(ctx) → string | {text, warning} | null  - OPTIONAL.
+ *       Only called when the user has enabled "Overview mode" in the sidebar
+ *       (ctx.state.overviewMode). Returns one short, plain-language, data-aware
  *       sentence describing what this widget found (may include <strong> for
  *       key numbers). Shown as a clickable summary line; the widget's normal
  *       render() output is collapsed underneath until the user expands it.
@@ -36,7 +36,7 @@
  *   ctx.queryRows(sql)       → plain JS objects (binary cols as Uint8Array)
  *   ctx.querySample(cols, n) → sampled scalar query shorthand
  *   ctx.schema               → { metricCols, groupCols, dimensionInfo, allCols, blobCols }
- *   ctx.state                → { palette, groupCol, filter, dimensions, condensedMode }
+ *   ctx.state                → { palette, groupCol, filter, dimensions, overviewMode }
  *   ctx.colorMap             → { groupValue: hexColor }
  *   ctx.where                → SQL WHERE fragment (or '')
  *   ctx.groups               → distinct group values

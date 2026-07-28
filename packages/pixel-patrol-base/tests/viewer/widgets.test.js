@@ -56,9 +56,9 @@ describe('widget contract', () => {
       expect(plugin.label.length).toBeGreaterThan(0);
       expect(typeof plugin.requires).toBe('function');
       expect(typeof plugin.render).toBe('function');
-      // condensedMessage is optional, but when present must be callable.
-      if ('condensedMessage' in plugin) {
-        expect(typeof plugin.condensedMessage).toBe('function');
+      // overviewMessage is optional, but when present must be callable.
+      if ('overviewMessage' in plugin) {
+        expect(typeof plugin.overviewMessage).toBe('function');
       }
       // Every widget resolves to a (string) group name.
       expect(typeof pluginGroup(plugin)).toBe('string');

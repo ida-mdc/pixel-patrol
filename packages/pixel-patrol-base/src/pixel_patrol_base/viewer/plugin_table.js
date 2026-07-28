@@ -44,7 +44,7 @@ export default {
     return schema.allCols.length > 0;
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const [{ n }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
       const count = Number(n ?? 0);
@@ -52,10 +52,10 @@ export default {
     } catch { return null; }
   },
 
-  // Hero "plot" for the condensed gallery tile: an actual cropped peek at the
+  // Hero "plot" for the overview gallery tile: an actual cropped peek at the
   // data — the first few rows/columns — instead of a generic table icon. The
   // tile clips overflow, so a wide/tall table reads as a cropped preview.
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     try {
       const { q } = ctx.sql;
       const available = ctx.schema.allCols.filter(c => !SKIP_COLS.has(c));

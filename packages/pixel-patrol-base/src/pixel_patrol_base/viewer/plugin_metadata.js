@@ -11,7 +11,7 @@ const DTYPE_INCONSISTENCY_NOTE =
   'same number can mean very different things.';
 
 // Distinct categories of `col` plus a (cat, group) → count lookup. Shared by the
-// condensed tile preview and the full distribution bars so both render from one
+// overview tile preview and the full distribution bars so both render from one
 // query instead of each rebuilding the per-group counts.
 async function distCounts(ctx, col) {
   const { q, groupCol: gcFn, andWhere } = ctx.sql;
@@ -91,7 +91,7 @@ export default {
     return hasDist || hasMeta || Object.keys(schema.dimensionInfo).length > 0;
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
       const { escapeHtml } = ctx.plot;
@@ -116,12 +116,12 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { q, andWhere } = ctx.sql;
     const cols = ctx.schema.allCols;
 
     // One mini-plot per DIST_COL that actually varies — matching exactly the
-    // columns condensedMessage flags as inconsistencies. Capped at 2 (beyond
+    // columns overviewMessage flags as inconsistencies. Capped at 2 (beyond
     // that the tile becomes too cramped to read).
     const varying = [];
     let firstPresent = null;

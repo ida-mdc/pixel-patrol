@@ -217,7 +217,7 @@ function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMa
   return plotJobs.length;
 }
 
-async function acrossDimsCondensedSummary(ctx) {
+async function acrossDimsOverviewSummary(ctx) {
   try {
     const letters = Object.keys(ctx.schema.dimensionInfo ?? {})
       .map(l => l.toUpperCase())
@@ -230,7 +230,7 @@ async function acrossDimsCondensedSummary(ctx) {
 // One simple "mean across slices" line plot - the single most representative
 // metric, along the first non-spatial dimension that has data. Mirrors the
 // non-spatial query path in renderAcrossDims, kept minimal for the tile preview.
-async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref) {
+async function acrossDimsOverviewPlot(ctx, container, filterMetric, metricPref) {
   const { q, groupCol: gcFn } = ctx.sql;
   const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric);
   const metric  = metricPref.find(m => metrics.includes(m)) ?? metrics[0];
@@ -289,16 +289,16 @@ async function acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref)
   return false;
 }
 
-function makeAcrossDimsPlugin(id, label, info, filterMetric, condensedMessage, metricPref = [], shortLabel, inputMetrics) {
+function makeAcrossDimsPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics) {
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'slice', multiPlot: true,
     inputs: inputMetrics ? [...inputMetrics] : [],
     requires(schema) {
       return !!schema.hasDimSlices && schema.metricCols.some(filterMetric);
     },
-    ...(condensedMessage ? { condensedMessage } : {}),
-    async condensedPlot(container, ctx) {
-      return acrossDimsCondensedPlot(ctx, container, filterMetric, metricPref);
+    ...(overviewMessage ? { overviewMessage } : {}),
+    async overviewPlot(container, ctx) {
+      return acrossDimsOverviewPlot(ctx, container, filterMetric, metricPref);
     },
     async render(container, ctx) {
       try {
@@ -314,13 +314,13 @@ export default [
   makeAcrossDimsPlugin(
     'stats-across-dims-basic', 'Basic Statistics Across Dimensions', BASIC_INFO,
     base => BASIC_METRIC_BASES.has(base),
-    ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'brightness statistics' }),
+    ctx => acrossDimsOverviewSummary(ctx, { metricLabel: 'brightness statistics' }),
     ['mean_intensity'], 'Intensity across Slices', BASIC_METRIC_BASES,
   ),
   makeAcrossDimsPlugin(
     'stats-across-dims-quality', 'Quality Metrics Across Dimensions', QUALITY_INFO,
     base => QUALITY_METRIC_BASES.has(base),
-    ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'image quality metrics' }),
+    ctx => acrossDimsOverviewSummary(ctx, { metricLabel: 'image quality metrics' }),
     ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality across Slices', QUALITY_METRIC_BASES,
   ),
 ];

@@ -203,9 +203,9 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
 }
 
 // One simplified box plot per group, computed entirely in SQL (so it scales) -
-// the condensed-mode tile preview for a violin widget. maxRawPoints:0 forces the
+// the overview-mode tile preview for a violin widget. maxRawPoints:0 forces the
 // box-summary path regardless of size.
-async function violinCondensedPlot(ctx, container, metric) {
+async function violinOverviewPlot(ctx, container, metric) {
   if (!metric) return false;
   return ctx.plot.engine.renderDistribution(container, ctx, {
     numCol: metric,
@@ -220,7 +220,7 @@ async function violinCondensedPlot(ctx, container, metric) {
   });
 }
 
-function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metricPref = [], shortLabel, inputMetrics) {
+function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
     ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
@@ -231,9 +231,9 @@ function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metri
     requires(schema) {
       return schema.metricCols.some(filterMetric);
     },
-    ...(condensedMessage ? { condensedMessage } : {}),
-    async condensedPlot(container, ctx) {
-      return violinCondensedPlot(ctx, container, pickMetric(ctx));
+    ...(overviewMessage ? { overviewMessage } : {}),
+    async overviewPlot(container, ctx) {
+      return violinOverviewPlot(ctx, container, pickMetric(ctx));
     },
     async render(container, ctx) {
       const dimCols = ctx.schema?.dimCols ?? [];
@@ -268,7 +268,7 @@ function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metri
   };
 }
 
-async function basicCondensedSummary(ctx) {
+async function basicOverviewSummary(ctx) {
   try {
     if (!ctx.schema.allCols.includes('mean_intensity')) return null;
     // The one thing worth flagging up front is mixed pixel types, which make raw
@@ -286,14 +286,14 @@ async function basicCondensedSummary(ctx) {
 
 // Stay neutral: the old per-metric "varies a lot / looks consistent" verdicts were
 // opaque (which metric, measured how?). Just tease what the widget lets you compare.
-async function qualityCondensedSummary() {
+async function qualityOverviewSummary() {
   return `Spot quality differences and outliers across groups.`;
 }
 
 export default [
-  makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicCondensedSummary,
+  makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicOverviewSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
-  makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityCondensedSummary,
+  makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityOverviewSummary,
     ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality', QUALITY_METRIC_BASES),
 ];
 

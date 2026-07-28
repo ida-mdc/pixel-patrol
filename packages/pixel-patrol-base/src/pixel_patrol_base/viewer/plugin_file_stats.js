@@ -34,7 +34,7 @@ export default {
            schema.allCols.includes('size_bytes');
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const { andWhere, groupCol: gcFn } = ctx.sql;
       const { escapeHtml } = ctx.plot;
@@ -54,7 +54,7 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { andWhere, groupCol: gcFn } = ctx.sql;
     const gcExpr = gcFn();
 
@@ -72,7 +72,7 @@ export default {
     const countImbalance = counts.length > 1 &&
       Math.max(...counts) / Math.min(...counts) >= 1.5;
 
-    // One mini-plot per warning condition — same thresholds as condensedMessage,
+    // One mini-plot per warning condition — same thresholds as overviewMessage,
     // capped at 2 (beyond that the tile becomes too cramped to read).
     const drawers = [];
     if (exts.length > 1) {

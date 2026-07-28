@@ -312,7 +312,7 @@ function afterLoad(options = {}) {
   if (urlParams.filter)           state.filter           = urlParams.filter;
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
-  if ('condensedMode' in urlParams)     state.condensedMode     = urlParams.condensedMode;
+  if ('overviewMode' in urlParams)     state.overviewMode     = urlParams.overviewMode;
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
   if (urlParams.openedWidgets)    state.openedWidgets    = urlParams.openedWidgets;
 
