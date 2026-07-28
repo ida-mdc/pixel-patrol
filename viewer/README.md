@@ -126,6 +126,18 @@ export default {
     `);
     // write into container using plain DOM, Plotly (window.Plotly), or any CDN library
   },
+
+  // To show your widget correctly in Overview mode (the default tile-gallery view),
+  // also define these. Both optional:
+
+  async overviewMessage(ctx) {
+    // one short summary sentence shown on the tile, e.g. "Found 42 matches."
+    return 'Found some matches.';
+  },
+
+  async overviewPlot(container, ctx) {
+    // small preview plot drawn into the tile; return false to skip it
+  },
 };
 ```
 

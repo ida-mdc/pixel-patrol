@@ -101,6 +101,8 @@ Each plugin's `render(container, ctx)` method receives a `ctx` object - the rend
 - `ctx.groups` - distinct values of the active group column
 - `ctx.totalRows` / `ctx.filteredCount` - row counts
 
+To show your widget correctly in Overview mode (the default tile-gallery view), also define `overviewMessage(ctx)` and `overviewPlot(container, ctx)` - a short summary sentence and a small preview plot shown on the widget's tile. Both are optional.
+
 See the [`pixel-patrol-example-extension` README](https://github.com/ida-mdc/pixel-patrol-example-extension/blob/main/README.md) for the full `ctx` reference and worked examples.
 
 ---
