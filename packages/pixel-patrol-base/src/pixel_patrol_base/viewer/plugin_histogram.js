@@ -11,14 +11,14 @@ const INDIV_LIMIT     = 50;
 // Normalization divisor per dtype for the dtype-range display mode.
 // uint: width of the representable range (dtype_max + 1), so [0, 256) → [0, 1].
 // int:  abs(dtype_min) = 2^(bits-1), so [-128, 128) → [-1, 1].
-const DTYPE_NORM = {
-  uint8: 256, uint16: 65536, uint32: 4294967296,
-  int8:  128, int16:  32768, int32:  2147483648,
+export const DTYPE_NORM = {
+  uint8: 256, uint16: 65536, uint32: 4294967296, uint64: 2 ** 64,
+  int8:  128, int16:  32768, int32:  2147483648, int64: 2 ** 63,
 };
 
 const KIND_LABEL = { uint: 'Unsigned integer', int: 'Signed integer', float: 'Floating point' };
 
-function dtypeKind(dtype) {
+export function dtypeKind(dtype) {
   if (dtype?.startsWith('float')) return 'float';
   if (dtype?.startsWith('uint'))  return 'uint';
   if (dtype?.startsWith('int'))   return 'int';
@@ -47,6 +47,111 @@ function withAlpha(color, alpha) {
   }
   if (color.startsWith('rgb(')) return color.replace('rgb(', 'rgba(').replace(')', `,${alpha})`);
   return color;
+}
+
+function warningBanner(text, marginBottom = 16) {
+  const el = document.createElement('div');
+  el.style.cssText = 'font-size:0.88em;color:#7a5c00;background:#fff8e1;'
+    + `border-left:3px solid #f0b429;padding:8px 12px;margin:0 0 ${marginBottom}px;border-radius:2px`;
+  el.textContent = text;
+  return el;
+}
+
+function isClose(a, b, rtol = 1e-9, atol = 1e-9) {
+  return Math.abs(a - b) <= atol + rtol * Math.abs(b);
+}
+
+// Redistributes a value array from its own [srcLo,srcHi) axis onto a shared [tgtLo,tgtHi) axis via bin-centre remap.
+export function remapToAxis(values, srcLo, srcHi, tgtLo, tgtHi) {
+  if (isClose(srcLo, tgtLo) && isClose(srcHi, tgtHi)) return values;
+  const B = values.length;
+  const out = new Float64Array(B);
+  if (tgtLo === tgtHi) {
+    let total = 0; for (let i = 0; i < B; i++) total += values[i];
+    out[0] = total;
+    return out;
+  }
+  const tgtStep = (tgtHi - tgtLo) / B;
+  if (srcLo === srcHi) {
+    const idx = Math.min(Math.max(Math.floor((srcLo - tgtLo) / tgtStep), 0), B - 1);
+    for (let i = 0; i < B; i++) out[idx] += values[i];
+    return out;
+  }
+  const srcStep = (srcHi - srcLo) / B;
+  for (let i = 0; i < B; i++) {
+    if (!values[i]) continue;
+    const center = srcLo + (i + 0.5) * srcStep;
+    let idx = Math.floor((center - tgtLo) / tgtStep);
+    if (idx < 0) idx = 0; else if (idx >= B) idx = B - 1;
+    out[idx] += values[i];
+  }
+  return out;
+}
+
+// Classifies the dataset's distinct dtypes into the kinds this widget can plot, plus
+// any dtype it can't (e.g. bool) so callers can warn instead of silently dropping them.
+// dtypeRows: rows with a `dtype` field, as returned by `SELECT DISTINCT dtype`.
+export function classifyDtypes(dtypeRows, hasDtype) {
+  if (!hasDtype) return { presentKinds: ['uint'], multiKind: false, unsupportedDtypes: [] };
+  const presentKinds = ['uint', 'int', 'float'].filter(k => dtypeRows.some(r => dtypeKind(r.dtype) === k));
+  const unsupportedDtypes = [...new Set(dtypeRows.map(r => r.dtype).filter(d => !dtypeKind(d)))];
+  return { presentKinds, multiKind: presentKinds.length > 1, unsupportedDtypes };
+}
+
+// Combines per-image histograms into per-(kind,group) means on a shared axis, instead of summing raw bin indices.
+// records: [{ kind, group, counts, total, aMin, aMax, nMin, nMax }].
+export function accumulateGroupHistograms(records, { computeNormalized = true } = {}) {
+  const buckets = {};
+  for (const r of records) {
+    (buckets[r.kind] ??= {});
+    (buckets[r.kind][r.group] ??= []).push(r);
+  }
+
+  const result = {};
+  for (const kind of Object.keys(buckets)) {
+    result[kind] = {};
+    const doNorm = computeNormalized && kind !== 'float';
+    for (const group of Object.keys(buckets[kind])) {
+      const items = buckets[kind][group];
+      let aLo = Infinity, aHi = -Infinity, nLo = Infinity, nHi = -Infinity;
+      for (const it of items) {
+        if (it.aMin < aLo) aLo = it.aMin;
+        if (it.aMax > aHi) aHi = it.aMax;
+        if (doNorm) {
+          if (it.nMin < nLo) nLo = it.nMin;
+          if (it.nMax > nHi) nHi = it.nMax;
+        }
+      }
+
+      const sums      = new Float64Array(NBINS);
+      const sumSq     = new Float64Array(NBINS);
+      const sumsNorm  = doNorm ? new Float64Array(NBINS) : null;
+      const sumSqNorm = doNorm ? new Float64Array(NBINS) : null;
+
+      for (const it of items) {
+        const inv = 1 / it.total;
+        const v = new Float64Array(it.counts.length);
+        for (let i = 0; i < v.length; i++) v[i] = it.counts[i] * inv;
+
+        const vA = remapToAxis(v, it.aMin, it.aMax, aLo, aHi);
+        for (let i = 0; i < NBINS; i++) { sums[i] += vA[i]; sumSq[i] += vA[i] * vA[i]; }
+
+        if (doNorm) {
+          const vN = remapToAxis(v, it.nMin, it.nMax, nLo, nHi);
+          for (let i = 0; i < NBINS; i++) { sumsNorm[i] += vN[i]; sumSqNorm[i] += vN[i] * vN[i]; }
+        }
+      }
+
+      result[kind][group] = {
+        count: items.length,
+        aMin: aLo, aMax: aHi,
+        nMin: doNorm ? nLo : aLo, nMax: doNorm ? nHi : aHi,
+        sums, sumSq,
+        sumsNorm: sumsNorm ?? sums, sumSqNorm: sumSqNorm ?? sumSq,
+      };
+    }
+  }
+  return result;
 }
 
 export default {
@@ -96,41 +201,47 @@ export default {
     const { groupExpr: geFn } = ctx.sql;
     const { extractBinary }   = ctx.data;
     const hasRange  = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
+    const hasDtype  = ctx.schema.allCols.includes('dtype');
     const rangeCols = hasRange ? ', "histogram_min", "histogram_max"' : '';
+    const dtypeCol  = hasDtype ? ', "dtype"' : '';
 
     const result = await ctx.query(`
-      SELECT ${geFn()}, "histogram_counts"${rangeCols}
+      SELECT ${geFn()}, "histogram_counts"${rangeCols}${dtypeCol}
       FROM pp_data ${ctx.where}
       QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= 300
     `);
     const rows = result.toArray();
     if (!rows.length) return false;
 
-    const groupData = {};
+    const records = [];
+    const kindCounts = {};
     for (const row of rows) {
-      const g      = String(row.__group__);
+      const kind = hasDtype ? dtypeKind(row.dtype) : 'uint';
+      if (!kind) continue;
       const counts = extractBinary(row.histogram_counts);
       if (!counts?.length) continue;
       const total = histTotal(counts);
       if (total <= 0) continue;
-      const hMin = hasRange ? Number(row.histogram_min) : 0;
-      const hMax = hasRange ? Number(row.histogram_max) : NBINS - 1;
-      if (!groupData[g]) groupData[g] = { sums: new Float64Array(NBINS), count: 0, min: hMin, max: hMax };
-      const gd = groupData[g], inv = 1 / total;
-      for (let i = 0; i < NBINS; i++) gd.sums[i] += counts[i] * inv;
-      gd.count++;
-      if (gd.min > hMin) gd.min = hMin;
-      if (gd.max < hMax) gd.max = hMax;
+      const aMin = hasRange ? Number(row.histogram_min) : 0;
+      const aMax = hasRange ? Number(row.histogram_max) : NBINS - 1;
+      records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax });
+      kindCounts[kind] = (kindCounts[kind] || 0) + 1;
     }
+    if (!records.length) return false;
 
-    const groups = ctx.groups.filter(g => groupData[g]?.count);
+    // Mini preview is a single combined chart — plot only the dataset's dominant pixel kind.
+    const dominantKind = Object.keys(kindCounts).sort((a, b) => kindCounts[b] - kindCounts[a])[0];
+    const kindData = accumulateGroupHistograms(records.filter(r => r.kind === dominantKind), { computeNormalized: false });
+    const gdByGroup = kindData[dominantKind] ?? {};
+
+    const groups = ctx.groups.filter(g => gdByGroup[g]?.count);
     if (!groups.length) return false;
 
     ctx.plot.appendMini(container, groups.map(g => {
-      const { sums, count, min, max } = groupData[g];
+      const gd = gdByGroup[g];
       return {
         type: 'scatter', mode: 'lines', fill: 'tozeroy', opacity: 0.6,
-        x: binXs(min, max), y: Array.from(sums, v => v / count),
+        x: binXs(gd.aMin, gd.aMax), y: Array.from(gd.sums, v => v / gd.count),
         line: { color: ctx.color.group(g), width: 1.5 }, hoverinfo: 'skip',
       };
     }), { xaxis: { title: 'intensity' }, yaxis: { showticklabels: false } });
@@ -158,25 +269,35 @@ export default {
         hasNames ? ctx.queryRows(`SELECT DISTINCT "name" FROM pp_data ${ctx.where} ORDER BY 1 LIMIT ${MAX_FILE_OPTIONS}`) : [],
       ]);
 
-      const presentKinds = hasDtype
-        ? ['uint', 'int', 'float'].filter(k => dtypeRows.some(r => dtypeKind(r.dtype) === k))
-        : ['uint'];
-      const multiKind = presentKinds.length > 1;
+      const { presentKinds, multiKind, unsupportedDtypes } = classifyDtypes(dtypeRows, hasDtype);
 
       container.appendChild(buildControls(ctx, { hasNames, nameRows }));
 
-      const samplingWarning = document.createElement('div');
-      samplingWarning.style.cssText = 'font-size:0.88em;color:#7a5c00;background:#fff8e1;'
-        + 'border-left:3px solid #f0b429;padding:8px 12px;margin:0 0 16px;border-radius:2px;display:none';
+      const samplingWarning = warningBanner('', 16);
+      samplingWarning.style.display = 'none';
       container.appendChild(samplingWarning);
 
       if (multiKind) {
-        const warning = document.createElement('div');
-        warning.style.cssText = 'font-size:0.88em;color:#7a5c00;background:#fff8e1;'
-          + 'border-left:3px solid #f0b429;padding:8px 12px;margin:0 0 20px;border-radius:2px';
-        warning.textContent = 'This dataset contains multiple pixel types (e.g. integer and float). '
-          + 'Their value scales are not directly comparable, so each type is shown in its own plot below.';
-        container.appendChild(warning);
+        container.appendChild(warningBanner(
+          'This dataset contains multiple pixel types (e.g. integer and float). '
+          + 'Their value scales are not directly comparable, so each type is shown in its own plot below.',
+          20,
+        ));
+      }
+
+      if (unsupportedDtypes.length) {
+        container.appendChild(warningBanner(
+          `Images with pixel type(s) ${unsupportedDtypes.join(', ')} are not supported by this widget and are excluded.`,
+          20,
+        ));
+      }
+
+      if (!presentKinds.length) {
+        const noData = document.createElement('div');
+        noData.className = 'no-data';
+        noData.textContent = 'No supported pixel types to display.';
+        container.appendChild(noData);
+        return;
       }
 
       // One panel per kind — int/uint get a per-panel mode toggle, float does not.
@@ -228,7 +349,7 @@ export default {
       }
 
       // Cached across mode/spread toggles — re-populated on every other control change.
-      let kindData      = null; // { [kind]: { [group]: { sums, sumSq, count, aMin, aMax, nMin, nMax } } }
+      let kindData      = null; // { [kind]: { [group]: { sums, sumSq, sumsNorm, sumSqNorm, count, aMin, aMax, nMin, nMax } } }
       let fileOverlay   = null; // { ys, aMin, aMax, nMin, nMax, kind, label }
       let indivFiles    = null; // { rows: [...], overflow: bool } | null
 
@@ -252,7 +373,7 @@ export default {
         );
         const rows = result.toArray();
 
-        kindData = {};
+        const records = [];
         for (const row of rows) {
           const kind = hasDtype ? dtypeKind(row.dtype) : 'uint';
           if (!kind) continue;
@@ -267,24 +388,9 @@ export default {
           const nMin  = dNorm != null ? aMin / dNorm : aMin;
           const nMax  = dNorm != null ? aMax / dNorm : aMax;
 
-          const group = String(row.__group__);
-          if (!kindData[kind])        kindData[kind] = {};
-          if (!kindData[kind][group]) kindData[kind][group] = {
-            sums: new Float64Array(NBINS), sumSq: new Float64Array(NBINS),
-            count: 0, aMin, aMax, nMin, nMax,
-          };
-          const gd = kindData[kind][group], inv = 1 / total;
-          for (let i = 0; i < NBINS; i++) {
-            const v = counts[i] * inv;
-            gd.sums[i]  += v;
-            gd.sumSq[i] += v * v;
-          }
-          gd.count++;
-          if (gd.aMin > aMin) gd.aMin = aMin;
-          if (gd.aMax < aMax) gd.aMax = aMax;
-          if (gd.nMin > nMin) gd.nMin = nMin;
-          if (gd.nMax < nMax) gd.nMax = nMax;
+          records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax, nMin, nMax });
         }
+        kindData = accumulateGroupHistograms(records);
 
         const rowsPerGroup = {};
         for (const r of rows) {
@@ -408,8 +514,10 @@ export default {
             const color     = ctx.color.group(g);
             const lo        = useNorm ? gd.nMin : gd.aMin;
             const hi        = useNorm ? gd.nMax : gd.aMax;
+            const sumsArr   = useNorm ? gd.sumsNorm  : gd.sums;
+            const sumSqArr  = useNorm ? gd.sumSqNorm : gd.sumSq;
             const xs        = binXs(lo, hi);
-            const meanYs    = Array.from(gd.sums, v => v / gd.count);
+            const meanYs    = Array.from(sumsArr, v => v / gd.count);
             const showSpread = spreadChecked && gd.count >= 2;
 
             for (let i = 0; i < NBINS; i++) if (meanYs[i] > yMax) yMax = meanYs[i];
@@ -419,7 +527,7 @@ export default {
               const upper = new Array(NBINS), lower = new Array(NBINS);
               for (let i = 0; i < NBINS; i++) {
                 const m = meanYs[i];
-                const s = Math.sqrt(Math.max(0, gd.sumSq[i] / gd.count - m * m));
+                const s = Math.sqrt(Math.max(0, sumSqArr[i] / gd.count - m * m));
                 upper[i] = m + s;
                 lower[i] = Math.max(0, m - s);
               }
@@ -479,7 +587,7 @@ export default {
           title:  { text: multiKind ? `${KIND_LABEL[kind]} — Intensity Histograms` : 'Intensity Histograms (averaged per group)' },
           xaxis:  { title: xTitle },
           yaxis:  { title: 'Normalized count', ...(yRange ? { range: yRange } : {}) },
-          bargap: 0, height: 500, showlegend: showLegend,
+          bargap: 0, height: 500, showlegend: showLegend, hovermode: 'x unified',
           ...(showLegend ? { legend: plotlyLegendConfig } : {}),
         });
       };
