@@ -6,7 +6,6 @@ import pytest
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.record import record_from
 from pixel_patrol_base.plugins.processors.raster_image_processor import (
-    CompressionMetricsProcessor,
     QualityMetricsProcessor,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
@@ -61,7 +60,9 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("michelson_contrast", "mscn_variance", "texture_heterogeneity", "laplacian_variance"):
+    for k in ("laplacian_variance", "sobel_gradient_sharpness", "estimated_noise_std",
+              "local_range_contrast_variability", "local_texture_uniformity",
+              "saturated_pixel_fraction", "underexposed_pixel_fraction", "compression_blocking_score"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -99,9 +100,11 @@ def test_multi_dim_chunk_reduces_over_all_dims(proc):
 def test_lowercase_dim_order(quality_proc):
     data = np.random.default_rng(0).integers(10, 200, (8, 8), dtype=np.uint8).astype(np.float32)
     row = _chunk(quality_proc, data, "yx")
-    assert np.isfinite(row["michelson_contrast"])
-    assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["texture_heterogeneity"])
+    assert np.isfinite(row["local_range_contrast_variability"])
+    assert np.isfinite(row["local_texture_uniformity"])
+    assert np.isfinite(row["laplacian_variance"])
+    assert np.isfinite(row["sobel_gradient_sharpness"])
+    assert np.isfinite(row["estimated_noise_std"])
 
 
 # ---------------------------------------------------------------------------
@@ -171,21 +174,19 @@ def test_histogram_nan_count(hist_proc):
 
 
 # ---------------------------------------------------------------------------
-# Compression metrics
+# Compression metric (compression_blocking_score lives on QualityMetricsProcessor)
 # ---------------------------------------------------------------------------
 
 def test_compression_absent_from_basic(proc):
     data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
     row = _chunk(proc, data, "YX")
-    assert "blocking_index" not in row
-    assert "ringing_index" not in row
+    assert "compression_blocking_score" not in row
 
 
-def test_compression_finite_when_enabled():
+def test_compression_blocking_score_finite(quality_proc):
     data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
-    row = _chunk(CompressionMetricsProcessor(), data, "YX")
-    assert np.isfinite(row["blocking_index"])
-    assert np.isfinite(row["ringing_index"])
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isfinite(row["compression_blocking_score"])
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +196,11 @@ def test_compression_finite_when_enabled():
 def test_quality_metrics_finite(quality_proc):
     data = np.linspace(0, 1, 40 * 40, dtype=np.float32).reshape(40, 40)
     row = _chunk(quality_proc, data, "YX")
-    assert np.isfinite(row["michelson_contrast"])
-    assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["texture_heterogeneity"])
+    assert np.isfinite(row["local_range_contrast_variability"])
+    assert np.isfinite(row["local_texture_uniformity"])
     assert np.isfinite(row["laplacian_variance"])
+    assert np.isfinite(row["sobel_gradient_sharpness"])
+    assert np.isfinite(row["estimated_noise_std"])
 
 
 def test_laplacian_variance_sharper_image_scores_higher(quality_proc):
@@ -222,27 +224,43 @@ def test_laplacian_variance_small_image_returns_nan(quality_proc):
     assert np.isnan(row.get("laplacian_variance", np.nan))
 
 
-def test_michelson_contrast_high_frequency_scores_higher(quality_proc):
+def test_sobel_gradient_sharpness_sharper_image_scores_higher(quality_proc):
+    rng = np.random.default_rng(42)
+    sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    blurred = sharp.copy()
+    for _ in range(8):
+        blurred[1:-1, 1:-1] = (
+            blurred[:-2, :-2] + blurred[:-2, 1:-1] + blurred[:-2, 2:] +
+            blurred[1:-1, :-2] + blurred[1:-1, 1:-1] + blurred[1:-1, 2:] +
+            blurred[2:, :-2]  + blurred[2:, 1:-1]  + blurred[2:, 2:]
+        ) / 9.0
+    row_sharp   = _chunk(quality_proc, sharp,   "YX")
+    row_blurred = _chunk(quality_proc, blurred, "YX")
+    assert row_sharp["sobel_gradient_sharpness"] > row_blurred["sobel_gradient_sharpness"]
+
+
+def test_estimated_noise_std_noise_scores_higher_than_gradient(quality_proc):
+    # Immerkaer's kernel is constructed to null out constant/linear intensity
+    # variation, so a linear gradient should score near zero; random noise
+    # should score much higher.
+    gradient = np.linspace(0, 255, 32 * 32, dtype=np.float32).reshape(32, 32)
+    noise    = np.random.default_rng(0).integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
+    row_gradient = _chunk(quality_proc, gradient, "YX")
+    row_noise    = _chunk(quality_proc, noise,    "YX")
+    assert row_noise["estimated_noise_std"] > row_gradient["estimated_noise_std"]
+
+
+def test_local_range_contrast_variability_high_frequency_scores_higher(quality_proc):
     # Checkerboard has local range = 1 in every 3×3 window; a smooth gradient
     # has tiny local range per window, so the ratio to global std is much smaller.
     checker = (np.indices((32, 32), dtype=np.float32).sum(axis=0) % 2)
     smooth  = np.linspace(0, 1, 32 * 32, dtype=np.float32).reshape(32, 32)
     row_checker = _chunk(quality_proc, checker, "YX")
     row_smooth  = _chunk(quality_proc, smooth,  "YX")
-    assert row_checker["michelson_contrast"] > row_smooth["michelson_contrast"]
+    assert row_checker["local_range_contrast_variability"] > row_smooth["local_range_contrast_variability"]
 
 
-def test_mscn_variance_noise_scores_higher_than_gradient(quality_proc):
-    # For a linear gradient each pixel equals its 3×3 local mean exactly, so
-    # every MSCN coefficient is zero and variance is exactly zero.
-    gradient = np.linspace(0, 255, 32 * 32, dtype=np.float32).reshape(32, 32)
-    noise    = np.random.default_rng(0).integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    row_gradient = _chunk(quality_proc, gradient, "YX")
-    row_noise    = _chunk(quality_proc, noise,    "YX")
-    assert row_noise["mscn_variance"] > row_gradient["mscn_variance"]
-
-
-def test_texture_heterogeneity_patchy_scores_higher(quality_proc):
+def test_local_texture_uniformity_patchy_scores_higher(quality_proc):
     # Patchy image: flat top half (local std = 0) + noisy bottom half (local std > 0)
     # → wide spread of local stds → high CoV. Uniform noise → consistent local stds → low CoV.
     rng  = np.random.default_rng(1)
@@ -251,7 +269,31 @@ def test_texture_heterogeneity_patchy_scores_higher(quality_proc):
     patchy[:16, :] = 0.0
     row_patchy  = _chunk(quality_proc, patchy, "YX")
     row_uniform = _chunk(quality_proc, noise,  "YX")
-    assert row_patchy["texture_heterogeneity"] > row_uniform["texture_heterogeneity"]
+    assert row_patchy["local_texture_uniformity"] > row_uniform["local_texture_uniformity"]
+
+
+def test_saturated_pixel_fraction_counts_max_value_pixels(quality_proc):
+    data = np.array([[255, 255, 0, 0], [255, 0, 0, 0]], dtype=np.uint8)
+    row = _chunk(quality_proc, data, "YX")
+    assert row["saturated_pixel_fraction"] == pytest.approx(3 / 8, rel=1e-5)
+
+
+def test_saturated_pixel_fraction_nan_for_float_dtype(quality_proc):
+    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isnan(row["saturated_pixel_fraction"])
+
+
+def test_underexposed_pixel_fraction_counts_min_value_pixels(quality_proc):
+    data = np.array([[0, 0, 255, 255], [0, 255, 255, 255]], dtype=np.uint8)
+    row = _chunk(quality_proc, data, "YX")
+    assert row["underexposed_pixel_fraction"] == pytest.approx(3 / 8, rel=1e-5)
+
+
+def test_underexposed_pixel_fraction_nan_for_float_dtype(quality_proc):
+    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isnan(row["underexposed_pixel_fraction"])
 
 
 # ---------------------------------------------------------------------------
@@ -276,5 +318,3 @@ def test_get_aggregation_mean_is_correct(proc):
 
 def test_get_aggregation_histogram_callable(hist_proc):
     assert callable(hist_proc.get_aggregation("histogram_counts"))
-
-
