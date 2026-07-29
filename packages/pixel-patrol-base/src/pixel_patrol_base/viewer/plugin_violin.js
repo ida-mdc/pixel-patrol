@@ -23,12 +23,6 @@ export const QUALITY_METRIC_INFO = {
     desc: 'Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting.',
     hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
   },
-  local_range_contrast_variability: {
-    desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
-  },
-  local_texture_uniformity: {
-    desc: 'How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat.',
-  },
   saturated_pixel_fraction: {
     desc: 'Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim.',
     hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
@@ -36,6 +30,12 @@ export const QUALITY_METRIC_INFO = {
   underexposed_pixel_fraction: {
     desc: 'Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark.',
     hintUp: 'more underexposure', hintDown: 'less underexposure', goodDirection: 'down',
+  },
+  local_range_contrast_variability: {
+    desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
+  },
+  local_texture_uniformity: {
+    desc: 'How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat.',
   },
   compression_blocking_score: {
     desc: 'Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way.',
@@ -58,6 +58,19 @@ export function describeQualityMetric(col) {
     if (col === base || col.startsWith(base + '_')) return info;
   }
   return null;
+}
+
+// QUALITY_METRIC_INFO's key order is curated by generalization/importance (sharpness,
+// noise, exposure clipping, contrast/texture, then compression artifacts last - most
+// niche/situational). Parquet column order is alphabetical (an internal processing
+// detail unrelated to this), so widgets sort explicitly by this instead.
+const QUALITY_METRIC_ORDER = Object.keys(QUALITY_METRIC_INFO);
+
+/** Sort rank for a metric column by curated importance order; ties (e.g. non-quality
+ * columns) sort last and preserve their original relative order (stable sort). */
+export function qualityMetricRank(col) {
+  const idx = QUALITY_METRIC_ORDER.findIndex(base => col === base || col.startsWith(base + '_'));
+  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
 }
 
 /** Build a renderDistribution `sideInfo` object for a quality metric column, or null. */
@@ -105,6 +118,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
 
   const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions).filter(filterMetric);
+  metrics.sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b));
   if (!metrics.length) {
     plotRoot.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
     return;
@@ -264,7 +278,9 @@ async function violinOverviewPlot(ctx, container, metric) {
 function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
-    ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
+    ctx.schema.metricCols
+      .filter(m => filterMetric(m) && ctx.schema.allCols.includes(m))
+      .sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b))[0] ??
     null;
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
