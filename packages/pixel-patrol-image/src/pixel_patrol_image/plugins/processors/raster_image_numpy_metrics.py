@@ -44,9 +44,19 @@ def fold_to_chunks(
     return arr.transpose(perm), mask.transpose(perm)
 
 
-def _nbr_stats(arr: np.ndarray):
-    arr_f = arr.astype(np.float32, copy=False) if np.issubdtype(arr.dtype, np.floating) \
-            else arr.astype(np.float32)
+def _float32_cached(arr: np.ndarray, cache: Optional[Dict]) -> np.ndarray:
+    """Convert arr to float32 once per chunk and reuse across every metric."""
+    if np.issubdtype(arr.dtype, np.floating) and arr.dtype == np.float32:
+        return arr
+    if cache is not None and 'f32' in cache:
+        return cache['f32']
+    result = arr.astype(np.float32)
+    if cache is not None:
+        cache['f32'] = result
+    return result
+
+
+def _nbr_stats(arr_f: np.ndarray):
     # Filter only the spatial (H, W) dims; leading dims get size=1 (no-op).
     # Slice off the 1-pixel reflect-padded border so output shape is (..., H-2, W-2).
     size = (1,) * (arr_f.ndim - 2) + (3, 3)
@@ -59,19 +69,19 @@ def _nbr_stats(arr: np.ndarray):
 def _nbr_stats_cached(arr: np.ndarray, cache: Optional[Dict]):
     if cache is not None and 'nbr' in cache:
         return cache['nbr']
-    result = _nbr_stats(arr)
+    result = _nbr_stats(_float32_cached(arr, cache))
     if cache is not None:
         cache['nbr'] = result
     return result
 
 
-def michelson_contrast(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES) -> np.ndarray:
+def michelson_contrast(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                       cache: Optional[Dict] = None) -> np.ndarray:
     """Mean local range / spatial std over 3×3 windows."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
-    if not np.issubdtype(arr.dtype, np.floating):
-        arr = arr.astype(np.float32)
+    arr = _float32_cached(arr, cache)
     local_max = np.full_like(arr[..., :-2, :-2], np.nan)
     local_min = np.full_like(arr[..., :-2, :-2], np.nan)
     for di in range(3):
@@ -95,11 +105,11 @@ def mscn_variance(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
     local_mean, local_std = _nbr_stats_cached(arr, cache)
+    arr_f = _float32_cached(arr, cache)
     with np.errstate(all="ignore"):
-        arr_f = arr.astype(np.float32, copy=False)
         spatial_range = np.nanmax(arr_f, axis=axes, keepdims=True) - np.nanmin(arr_f, axis=axes, keepdims=True)
     C = np.maximum(spatial_range * 1e-3, 1e-10)
-    center = arr[..., 1:-1, 1:-1].astype(np.float32, copy=False)
+    center = arr_f[..., 1:-1, 1:-1]
     c = (center - local_mean) / (local_std + C)
     all_nan = np.all(np.isnan(c), axis=axes)
     if not np.any(all_nan):
@@ -129,16 +139,17 @@ def texture_heterogeneity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     return result
 
 
-def calc_blocking(arr: np.ndarray) -> np.ndarray:
+def calc_blocking(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
     """Average brightness jump across 8-pixel block boundaries."""
     lead = arr.shape[:-2]
     h, w = arr.shape[-2], arr.shape[-1]
     if h <= 8 or w <= 8:
         return np.full(lead, np.nan, dtype=np.float32)
-    col_before = arr[..., :, 7::8].astype(np.float32, copy=False)
-    col_after  = arr[..., :, 8::8].astype(np.float32, copy=False)
-    row_before = arr[..., 7::8, :].astype(np.float32, copy=False)
-    row_after  = arr[..., 8::8, :].astype(np.float32, copy=False)
+    arr = _float32_cached(arr, cache)
+    col_before = arr[..., :, 7::8]
+    col_after  = arr[..., :, 8::8]
+    row_before = arr[..., 7::8, :]
+    row_after  = arr[..., 8::8, :]
     n_col = min(col_before.shape[-1], col_after.shape[-1])
     n_row = min(row_before.shape[-2], row_after.shape[-2])
     if n_col == 0 or n_row == 0:
@@ -148,24 +159,24 @@ def calc_blocking(arr: np.ndarray) -> np.ndarray:
     return (np.nanmean(col_jumps, axis=(-2, -1)) + np.nanmean(row_jumps, axis=(-2, -1))) / 2
 
 
-def calc_ringing(arr: np.ndarray) -> np.ndarray:
+def calc_ringing(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
     """Variance of high-pass (pixel minus 3×3 box average)."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
-    arr_f = arr.astype(np.float32, copy=False)
+    arr_f = _float32_cached(arr, cache)
     kernel_avg = (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
                   arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
                   arr_f[..., 2:, :-2]  + arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:]) / 9.0
     return np.nanvar(arr_f[..., 1:-1, 1:-1] - kernel_avg, axis=(-2, -1))
 
 
-def laplacian_variance(arr: np.ndarray) -> np.ndarray:
+def laplacian_variance(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
     """Variance of the discrete Laplacian - proxy for sharpness (higher = sharper)."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
-    arr_f = arr.astype(np.float32, copy=False)
+    arr_f = _float32_cached(arr, cache)
     lap = (arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 2:] +
            arr_f[..., :-2, 1:-1] + arr_f[..., 2:, 1:-1] -
            4.0 * arr_f[..., 1:-1, 1:-1])
