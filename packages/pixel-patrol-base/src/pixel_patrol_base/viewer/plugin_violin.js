@@ -176,8 +176,16 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   }
 
   const numGroups   = groups.length;
-  const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+  let plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
   const showSignificance = !!ctx.state.showSignificance;
+
+  // Side-info text (description + optional direction badge) sits beside the
+  // chart when there's room, but wraps above it when the cell is too narrow
+  // (see appendSideInfoRow) - stacked across several narrow columns that looks
+  // cramped and uneven. Cap at 2 per row whenever it'll actually render, so
+  // each cell has enough width for text and chart side by side instead.
+  const anySideInfo = ctx.state.showInfo && toPlot.some(({ metric }) => sideInfoFor(metric));
+  if (anySideInfo) plotsPerRow = Math.min(plotsPerRow, 2);
 
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
