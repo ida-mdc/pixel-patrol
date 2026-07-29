@@ -3,35 +3,43 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA.
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA.
 // One description per metric, used as each metric's own per-plot side note (and
 // by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
 // duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
-// reading is a well-established, monotonic one - see the research this was based
-// on before adding more: mscn_variance's distortion sensitivity isn't monotonic
-// (noise raises it, blur lowers it) and michelson_contrast here isn't even the
-// standard Michelson formula, so neither gets a direction claim.
+// reading is a well-established, monotonic one - local_range_contrast_variability
+// isn't the standard Michelson formula and local_texture_uniformity has no
+// inherent "good" direction (context-dependent), so neither gets a direction claim.
 export const QUALITY_METRIC_INFO = {
-  michelson_contrast: {
-    desc: 'Global contrast ratio; higher values indicate greater dynamic range.',
-  },
-  mscn_variance: {
-    desc: 'Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
-  },
-  texture_heterogeneity: {
-    desc: 'Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
-  },
   laplacian_variance: {
-    desc: 'Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
+    desc: 'Variance of the discrete Laplacian; higher values indicate a sharper image. Directionally biased toward horizontal/vertical edges. Scale-dependent: values vary with bit depth.',
     hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
   },
-  blocking_index: {
-    desc: 'Strength of blocky compression artifacts (e.g. JPEG blocking).',
-    hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
+  sobel_gradient_sharpness: {
+    desc: 'Mean squared Sobel gradient magnitude (Tenengrad); an isotropic sharpness measure complementing laplacian_variance\'s directional bias.',
+    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
   },
-  ringing_index: {
-    desc: 'Edge oscillation artifacts around sharp boundaries, often due to compression.',
-    hintUp: 'more ringing', hintDown: 'less ringing', goodDirection: 'down',
+  estimated_noise_std: {
+    desc: 'No-reference estimate of additive noise standard deviation. Computed on raw pixel values; photon-limited data may need a variance-stabilizing transform for a fully accurate estimate.',
+    hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
+  },
+  local_range_contrast_variability: {
+    desc: 'Mean local (max-min) pixel range over 3×3 windows, divided by overall spatial standard deviation. Not true Michelson contrast.',
+  },
+  local_texture_uniformity: {
+    desc: 'Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
+  },
+  saturated_pixel_fraction: {
+    desc: 'Fraction of pixels at the dtype\'s max representable value (overexposure/sensor saturation). Not defined for floating-point data.',
+    hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
+  },
+  underexposed_pixel_fraction: {
+    desc: 'Fraction of pixels at the dtype\'s min representable value (underexposure/black-clipping). Not defined for floating-point data.',
+    hintUp: 'more underexposure', hintDown: 'less underexposure', goodDirection: 'down',
+  },
+  compression_blocking_score: {
+    desc: 'Strength of brightness jumps at 8-pixel block boundaries (JPEG-style blocking artifacts). Near zero for uncompressed/losslessly-compressed images.',
+    hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
   },
 };
 
@@ -319,7 +327,7 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicCondensedSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityCondensedSummary,
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality', QUALITY_METRIC_BASES),
+    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Image Quality', QUALITY_METRIC_BASES),
 ];
 
 function resolveMetrics(schema, dimensions) {

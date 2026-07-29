@@ -91,7 +91,7 @@ def test_metric_widgets_connect_only_to_their_metric_family():
     def sources(wid):
         return {e["source"] for e in cat["connections"] if e["target"] == f"widget:{wid}"}
 
-    quality = {"processor:raster-quality", "processor:raster-compression"}
+    quality = {"processor:raster-quality"}
     for basic in ("violin-basic", "stats-across-dims-basic"):
         assert sources(basic) == {"processor:raster-basic"}
     for qual in ("violin-quality", "stats-across-dims-quality"):

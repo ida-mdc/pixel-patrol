@@ -318,7 +318,7 @@ export default [
     'stats-across-dims-quality', 'Quality Metrics Across Dimensions', QUALITY_INFO,
     base => QUALITY_METRIC_BASES.has(base),
     ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'image quality metrics' }),
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality across Slices', QUALITY_METRIC_BASES,
+    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Quality across Slices', QUALITY_METRIC_BASES,
   ),
 ];
 
