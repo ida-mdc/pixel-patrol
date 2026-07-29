@@ -9,7 +9,6 @@ LAUNCHER_PY = Path(__file__).resolve().parents[1] / "deploy" / "launcher" / "lau
 PACKAGES = [
     "pixel-patrol-base",
     "pixel-patrol",
-    "pixel-patrol-image",
     "pixel-patrol-loader-bio",
     "pixel-patrol-aqqua",
     "pixel-patrol-slurm",

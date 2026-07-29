@@ -5,7 +5,7 @@ import pytest
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.record import record_from
-from pixel_patrol_image.plugins.processors.raster_image_processor import (
+from pixel_patrol_base.plugins.processors.raster_image_processor import (
     CompressionMetricsProcessor,
     QualityMetricsProcessor,
 )
