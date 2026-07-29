@@ -18,7 +18,6 @@ cd "$REPO_ROOT"
 PACKAGES=(
     "pixel-patrol-base"
     "pixel-patrol"
-    "pixel-patrol-image"
     "pixel-patrol-loader-bio"
     "pixel-patrol-aqqua"
     "pixel-patrol-slurm"
@@ -101,5 +100,4 @@ echo "✓ Released v$VERSION"
 ### Packages
 #* pixel-patrol: $VERSION — https://pypi.org/project/pixel-patrol/$VERSION/
 #* pixel-patrol-base: $VERSION — https://pypi.org/project/pixel-patrol-base/$VERSION/
-#* pixel-patrol-image: $VERSION — https://pypi.org/project/pixel-patrol-image/$VERSION/
 #* pixel-patrol-loader-bio: $VERSION — https://pypi.org/project/pixel-patrol-loader-bio/$VERSION/"

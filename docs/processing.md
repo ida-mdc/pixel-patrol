@@ -88,8 +88,7 @@ pixel-patrol process my-data/ -o results.parquet --processors-exclude raster-qua
 | `raster-basic` | `pixel-patrol-base` | `min_intensity`, `max_intensity`, `mean_intensity`, `std_intensity`, `finite_pixel_count` |
 | `raster-histogram` | `pixel-patrol-base` | `histogram_min`, `histogram_max`, `histogram_nan_count`, `histogram_counts` |
 | `thumbnail` | `pixel-patrol-base` | `thumbnail`, `thumbnail_norm_min`, `thumbnail_norm_max`, `thumbnail_dtype` |
-| `raster-quality` | `pixel-patrol-image` | `michelson_contrast`, `mscn_variance`, `texture_heterogeneity`, `laplacian_variance` |
-| `raster-compression` | `pixel-patrol-image` | `blocking_index`, `ringing_index` |
+| `raster-quality` | `pixel-patrol-base` | `laplacian_variance`, `sobel_gradient_sharpness`, `estimated_noise_std`, `local_range_contrast_variability`, `local_texture_uniformity`, `saturated_pixel_fraction`, `underexposed_pixel_fraction`, `compression_blocking_score` |
 
 Additional processors are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol). You can also build your own - see [Extensions](extensions.md).
 
@@ -97,7 +96,7 @@ Additional processors are available in the [GitHub repository](https://github.co
 
 Processors fall into two categories that determine what data they receive:
 
-- **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`, `raster-compression`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
+- **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
 
 - **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the `mb_per_task` budget, the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
 
