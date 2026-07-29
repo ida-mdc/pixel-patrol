@@ -38,12 +38,12 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
         warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
         warnings.filterwarnings('ignore', 'All-NaN slice encountered', RuntimeWarning)
         match spec.name:
-            case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES)))
+            case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES, ctx.cache)))
             case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
             case "texture_heterogeneity": return float(np.nanmean(texture_heterogeneity(arr, _XY_AXES, ctx.cache)))
-            case "laplacian_variance": return float(np.nanmean(laplacian_variance(arr)))
-            case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
-            case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
+            case "laplacian_variance": return float(np.nanmean(laplacian_variance(arr, ctx.cache)))
+            case "blocking_index":     return float(np.nanmean(calc_blocking(arr, ctx.cache)))
+            case "ringing_index":      return float(np.nanmean(calc_ringing(arr, ctx.cache)))
             case _:                    return None
 
 
