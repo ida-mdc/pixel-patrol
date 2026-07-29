@@ -88,6 +88,8 @@ class RasterImageProcessor:
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
     DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, contrast, texture, saturation, compression artifacts) over the 2D spatial extent of each image."
+    # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
+    # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Sharpness/focus score. Low values usually mean the image is blurry or out of focus."),
@@ -95,14 +97,14 @@ class QualityMetricsProcessor(RasterImageProcessor):
                          description="A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error."),
         RasterMetricSpec(name="estimated_noise_std", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting."),
-        RasterMetricSpec(name="local_range_contrast_variability", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample."),
-        RasterMetricSpec(name="local_texture_uniformity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat."),
         RasterMetricSpec(name="saturated_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim."),
         RasterMetricSpec(name="underexposed_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark."),
+        RasterMetricSpec(name="local_range_contrast_variability", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample."),
+        RasterMetricSpec(name="local_texture_uniformity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat."),
         RasterMetricSpec(name="compression_blocking_score", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way."),
     )
