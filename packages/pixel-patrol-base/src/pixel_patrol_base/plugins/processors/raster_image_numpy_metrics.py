@@ -3,7 +3,6 @@
 from typing import Dict, Optional, Tuple
 
 import numpy as np
-from scipy.ndimage import uniform_filter
 
 from pixel_patrol_base.plugins.processors.raster_processor import MetricContext
 
@@ -56,13 +55,29 @@ def _float32_cached(arr: np.ndarray, cache: Optional[Dict]) -> np.ndarray:
     return result
 
 
+def _box3_mean(arr_f: np.ndarray) -> np.ndarray:
+    """3x3 box-filter mean, valid convolution (output shrinks 2px per spatial dim).
+
+    Tried a separable (horizontal-then-vertical) rewrite here, like the min/max
+    trick in local_range_contrast_variability - measured *worse* peak memory in
+    practice (an extra full-size intermediate stays live across the second pass),
+    despite fewer additions. Kept as the flat 9-term sum; don't "optimize" this
+    again without re-benchmarking.
+    """
+    return (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
+            arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
+            arr_f[..., 2:, :-2]  + arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:]) / 9.0
+
+
 def _nbr_stats(arr_f: np.ndarray):
-    # Filter only the spatial (H, W) dims; leading dims get size=1 (no-op).
-    # Slice off the 1-pixel reflect-padded border so output shape is (..., H-2, W-2).
-    size = (1,) * (arr_f.ndim - 2) + (3, 3)
-    local_mean = uniform_filter(arr_f,      size=size, mode='reflect')[..., 1:-1, 1:-1]
-    mean_sq    = uniform_filter(arr_f ** 2, size=size, mode='reflect')[..., 1:-1, 1:-1]
-    local_std  = np.sqrt(np.maximum(mean_sq - local_mean ** 2, 0.0))
+    # Pure-numpy 3x3 box filter (valid, no padding) - local mean/std over the
+    # interior (H-2, W-2). Matches the border-exclusion convention used by
+    # every other 3x3 metric in this file (laplacian_variance, calc_blocking).
+    local_mean = _box3_mean(arr_f)
+    sq = arr_f ** 2
+    mean_sq = _box3_mean(sq)
+    del sq
+    local_std = np.sqrt(np.maximum(mean_sq - local_mean ** 2, 0.0))
     return local_mean, local_std
 
 
@@ -75,21 +90,33 @@ def _nbr_stats_cached(arr: np.ndarray, cache: Optional[Dict]):
     return result
 
 
-def michelson_contrast(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-                       cache: Optional[Dict] = None) -> np.ndarray:
-    """Mean local range / spatial std over 3×3 windows."""
+def local_range_contrast_variability(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                                     cache: Optional[Dict] = None) -> np.ndarray:
+    """Mean local (max-min) range over 3x3 windows, divided by the image's spatial std.
+
+    Not true Michelson contrast (that's (max-min)/(max+min) of the whole image) -
+    this is a local-range-based variability measure instead.
+    """
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
-    arr = _float32_cached(arr, cache)
-    local_max = np.full_like(arr[..., :-2, :-2], np.nan)
-    local_min = np.full_like(arr[..., :-2, :-2], np.nan)
-    for di in range(3):
-        for dj in range(3):
-            patch = arr[..., di:h - 2 + di, dj:w - 2 + dj]
-            local_max = np.fmax(local_max, patch)
-            local_min = np.fmin(local_min, patch)
-    mean_local_range = np.nanmean(local_max - local_min, axis=axes)
+    # Separable 3x3 min/max: a horizontal pass (window of 3 along X) followed by
+    # a vertical pass (window of 3 along Y) is equivalent to a full 3x3 min/max,
+    # since max/min are separable across independent axes. NaN-safe via fmax/fmin.
+    # Deliberately NOT using the shared float32 cache here: min/max comparisons
+    # don't need floating point, so this runs on the original (usually smaller)
+    # dtype, and each intermediate is dropped as soon as it's consumed instead
+    # of keeping all four alive at once (that held ~4x this array's size in
+    # memory simultaneously and was the actual cost, not the float conversion).
+    h_max = np.fmax(np.fmax(arr[..., :, :-2], arr[..., :, 1:-1]), arr[..., :, 2:])
+    local_max = np.fmax(np.fmax(h_max[..., :-2, :], h_max[..., 1:-1, :]), h_max[..., 2:, :])
+    del h_max
+    h_min = np.fmin(np.fmin(arr[..., :, :-2], arr[..., :, 1:-1]), arr[..., :, 2:])
+    local_min = np.fmin(np.fmin(h_min[..., :-2, :], h_min[..., 1:-1, :]), h_min[..., 2:, :])
+    del h_min
+    local_range = local_max.astype(np.float32) - local_min.astype(np.float32)
+    del local_max, local_min
+    mean_local_range = np.nanmean(local_range, axis=axes)
     with np.errstate(all="ignore"):
         spatial_std = np.nanstd(arr, axis=axes)
     result = np.full_like(spatial_std, np.nan)
@@ -98,29 +125,9 @@ def michelson_contrast(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     return result
 
 
-def mscn_variance(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-                  cache: Optional[Dict] = None) -> np.ndarray:
-    """Variance of MSCN coefficients over 3×3 windows."""
-    h, w = arr.shape[-2], arr.shape[-1]
-    if h < 3 or w < 3:
-        return np.full(arr.shape[:-2], np.nan)
-    local_mean, local_std = _nbr_stats_cached(arr, cache)
-    arr_f = _float32_cached(arr, cache)
-    with np.errstate(all="ignore"):
-        spatial_range = np.nanmax(arr_f, axis=axes, keepdims=True) - np.nanmin(arr_f, axis=axes, keepdims=True)
-    C = np.maximum(spatial_range * 1e-3, 1e-10)
-    center = arr_f[..., 1:-1, 1:-1]
-    c = (center - local_mean) / (local_std + C)
-    all_nan = np.all(np.isnan(c), axis=axes)
-    if not np.any(all_nan):
-        return np.nanvar(c, axis=axes)
-    c_safe = np.where(all_nan[..., np.newaxis, np.newaxis], 0.0, c)
-    return np.where(all_nan, np.nan, np.nanvar(c_safe, axis=axes))
-
-
-def texture_heterogeneity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-                          cache: Optional[Dict] = None) -> np.ndarray:
-    """Coefficient of variation of local 3×3 stds - how unevenly distributed texture is."""
+def local_texture_uniformity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                             cache: Optional[Dict] = None) -> np.ndarray:
+    """Coefficient of variation of local 3x3 stds - how unevenly distributed texture is."""
     h, w = arr.shape[-2], arr.shape[-1]
     if h < 3 or w < 3:
         return np.full(arr.shape[:-2], np.nan)
@@ -139,8 +146,8 @@ def texture_heterogeneity(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     return result
 
 
-def calc_blocking(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
-    """Average brightness jump across 8-pixel block boundaries."""
+def compression_blocking_score(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
+    """Average brightness jump across 8-pixel block boundaries (JPEG-style blocking artifacts)."""
     lead = arr.shape[:-2]
     h, w = arr.shape[-2], arr.shape[-1]
     if h <= 8 or w <= 8:
@@ -159,18 +166,6 @@ def calc_blocking(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
     return (np.nanmean(col_jumps, axis=(-2, -1)) + np.nanmean(row_jumps, axis=(-2, -1))) / 2
 
 
-def calc_ringing(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
-    """Variance of high-pass (pixel minus 3×3 box average)."""
-    h, w = arr.shape[-2], arr.shape[-1]
-    if h < 3 or w < 3:
-        return np.full(arr.shape[:-2], np.nan)
-    arr_f = _float32_cached(arr, cache)
-    kernel_avg = (arr_f[..., :-2, :-2] + arr_f[..., :-2, 1:-1] + arr_f[..., :-2, 2:] +
-                  arr_f[..., 1:-1, :-2] + arr_f[..., 1:-1, 1:-1] + arr_f[..., 1:-1, 2:] +
-                  arr_f[..., 2:, :-2]  + arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:]) / 9.0
-    return np.nanvar(arr_f[..., 1:-1, 1:-1] - kernel_avg, axis=(-2, -1))
-
-
 def laplacian_variance(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
     """Variance of the discrete Laplacian - proxy for sharpness (higher = sharper)."""
     h, w = arr.shape[-2], arr.shape[-1]
@@ -183,3 +178,75 @@ def laplacian_variance(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndar
     return np.nanvar(lap, axis=(-2, -1))
 
 
+def sobel_gradient_sharpness(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                             cache: Optional[Dict] = None) -> np.ndarray:
+    """Mean squared Sobel gradient magnitude - isotropic sharpness (Tenengrad), complements
+    laplacian_variance's directionally-biased cross kernel."""
+    h, w = arr.shape[-2], arr.shape[-1]
+    if h < 3 or w < 3:
+        return np.full(arr.shape[:-2], np.nan)
+    arr_f = _float32_cached(arr, cache)
+    # Not cached: nothing else currently reuses gx/gy, and holding both plus
+    # their squares alive at once (the old _sobel_gradients_cached approach)
+    # was the single biggest memory cost in this file - free each gradient
+    # before computing the next instead.
+    gx = (arr_f[..., :-2, 2:] + 2 * arr_f[..., 1:-1, 2:] + arr_f[..., 2:, 2:] -
+          arr_f[..., :-2, :-2] - 2 * arr_f[..., 1:-1, :-2] - arr_f[..., 2:, :-2])
+    grad_sq = gx * gx
+    del gx
+    gy = (arr_f[..., 2:, :-2] + 2 * arr_f[..., 2:, 1:-1] + arr_f[..., 2:, 2:] -
+          arr_f[..., :-2, :-2] - 2 * arr_f[..., :-2, 1:-1] - arr_f[..., :-2, 2:])
+    grad_sq += gy * gy
+    del gy
+    return np.nanmean(grad_sq, axis=axes)
+
+
+def estimated_noise_std(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                        cache: Optional[Dict] = None) -> np.ndarray:
+    """No-reference noise standard deviation estimate (Immerkaer 1996).
+
+    Computed on raw pixel values by default - no Anscombe transform is applied.
+    For photon-limited (shot-noise-dominated) modalities, this may under/overstate
+    the true noise level; a variance-stabilizing transform could be applied
+    upstream if needed, but isn't baked in here.
+    """
+    h, w = arr.shape[-2], arr.shape[-1]
+    if h < 3 or w < 3:
+        return np.full(arr.shape[:-2], np.nan)
+    arr_f = _float32_cached(arr, cache)
+    # Fixed 3x3 kernel from the paper: [[1,-2,1],[-2,4,-2],[1,-2,1]].
+    conv = (arr_f[..., :-2, :-2]  - 2 * arr_f[..., :-2, 1:-1]  + arr_f[..., :-2, 2:] -
+            2 * arr_f[..., 1:-1, :-2] + 4 * arr_f[..., 1:-1, 1:-1] - 2 * arr_f[..., 1:-1, 2:] +
+            arr_f[..., 2:, :-2]  - 2 * arr_f[..., 2:, 1:-1]  + arr_f[..., 2:, 2:])
+    n = (h - 2) * (w - 2)
+    scale = np.sqrt(np.pi / 2) / (6.0 * n)
+    return scale * np.nansum(np.abs(conv), axis=axes)
+
+
+def saturated_pixel_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                             cache: Optional[Dict] = None) -> np.ndarray:
+    """Fraction of pixels at the dtype's max representable value (overexposure/saturation).
+
+    Only defined for integer dtypes (a fixed max representable value); returns
+    NaN for floating-point data, which has no such bound. Uses the container
+    dtype's max, not the sensor's true bit depth (e.g. 12-bit data stored as
+    uint16 reads as if it were full-range uint16) - a known limitation.
+    """
+    if not np.issubdtype(arr.dtype, np.integer):
+        return np.full(arr.shape[:-2], np.nan)
+    max_val = np.iinfo(arr.dtype).max
+    return np.mean(arr == max_val, axis=axes)
+
+
+def underexposed_pixel_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                                cache: Optional[Dict] = None) -> np.ndarray:
+    """Fraction of pixels at the dtype's min representable value (underexposure/black-clipping).
+
+    Same caveats as saturated_pixel_fraction: only defined for integer dtypes
+    (NaN for floating-point data), and uses the container dtype's min, not the
+    sensor's true bit depth.
+    """
+    if not np.issubdtype(arr.dtype, np.integer):
+        return np.full(arr.shape[:-2], np.nan)
+    min_val = np.iinfo(arr.dtype).min
+    return np.mean(arr == min_val, axis=axes)
