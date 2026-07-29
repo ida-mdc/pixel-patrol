@@ -347,7 +347,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       </div>
       <div class="wiz-adv-field-hint">
         By default all installed processors run: <code>raster-basic</code>, <code>raster-histogram</code>,
-        <code>thumbnail</code>, <code>raster-quality</code>, <code>raster-compression</code>.
+        <code>thumbnail</code>, <code>raster-quality</code>.
         List specific ones here to run only those - takes precedence over exclude.
         Useful for speeding up processing when you only need a subset of metrics.
       </div>
