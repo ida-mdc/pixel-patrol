@@ -11,7 +11,7 @@ import numpy as np
 from pixel_patrol_base.core.contracts import ChunkKind
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
-from pixel_patrol_image.plugins.processors.raster_image_numpy_metrics import (
+from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     MetricContext,
     _XY_AXES,
     calc_blocking,
