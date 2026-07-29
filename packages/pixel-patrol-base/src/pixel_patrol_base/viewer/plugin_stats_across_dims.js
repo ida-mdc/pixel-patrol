@@ -1,4 +1,4 @@
-import { QUALITY_METRIC_INFO, describeQualityMetric } from './plugin_violin.js';
+import { QUALITY_METRIC_INFO, describeQualityMetric, qualityMetricRank } from './plugin_violin.js';
 
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
@@ -34,7 +34,8 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   const { q, groupCol: gcFn } = ctx.sql;
   const { append: appendPlot, niceName, escapeHtml, LAYOUT } = ctx.plot;
 
-  const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric).sort();
+  const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric)
+    .sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b));
   const activeDims = ctx.state.dimensions ?? {};
   const dimLetters = Object.keys(ctx.schema.dimensionInfo ?? {})
     .filter(letter => activeDims[letter] === undefined)
