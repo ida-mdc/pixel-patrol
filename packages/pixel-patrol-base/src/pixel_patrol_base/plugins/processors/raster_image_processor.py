@@ -90,21 +90,21 @@ class QualityMetricsProcessor(RasterImageProcessor):
     DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, contrast, texture, saturation, compression artifacts) over the 2D spatial extent of each image."
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Variance of the Laplacian; a focus/sharpness measure (higher = sharper). Directionally biased toward horizontal/vertical edges."),
+                         description="Sharpness/focus score. Low values usually mean the image is blurry or out of focus."),
         RasterMetricSpec(name="sobel_gradient_sharpness", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Mean squared Sobel gradient magnitude (Tenengrad); an isotropic sharpness measure (higher = sharper), complementing laplacian_variance's directional bias."),
+                         description="A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error."),
         RasterMetricSpec(name="estimated_noise_std", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="No-reference estimate of additive noise standard deviation (Immerkaer 1996). Computed on raw pixel values; photon-limited (shot-noise-dominated) data may need a variance-stabilizing transform for a fully accurate estimate, not applied here."),
+                         description="Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting."),
         RasterMetricSpec(name="local_range_contrast_variability", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Mean local (max-min) pixel range over 3x3 windows, divided by the image's overall spatial standard deviation. Not true Michelson contrast."),
+                         description="Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample."),
         RasterMetricSpec(name="local_texture_uniformity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Coefficient of variation of local 3x3 standard deviations; how uniformly texture roughness is distributed across the image."),
+                         description="How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat."),
         RasterMetricSpec(name="saturated_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels at the dtype's max representable value (overexposure/sensor saturation). NaN for floating-point data, which has no fixed max."),
+                         description="Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim."),
         RasterMetricSpec(name="underexposed_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels at the dtype's min representable value (underexposure/black-clipping). NaN for floating-point data, which has no fixed min."),
+                         description="Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark."),
         RasterMetricSpec(name="compression_blocking_score", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Average brightness jump across 8-pixel block boundaries; indicates JPEG-style block-based compression artifacts. Near zero for uncompressed/losslessly-compressed images."),
+                         description="Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

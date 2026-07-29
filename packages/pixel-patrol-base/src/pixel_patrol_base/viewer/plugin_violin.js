@@ -12,33 +12,33 @@ const BASIC_METRIC_BASES = new Set([
 // inherent "good" direction (context-dependent), so neither gets a direction claim.
 export const QUALITY_METRIC_INFO = {
   laplacian_variance: {
-    desc: 'Variance of the discrete Laplacian; higher values indicate a sharper image. Directionally biased toward horizontal/vertical edges. Scale-dependent: values vary with bit depth.',
+    desc: 'Sharpness/focus score. Low values usually mean the image is blurry or out of focus.',
     hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
   },
   sobel_gradient_sharpness: {
-    desc: 'Mean squared Sobel gradient magnitude (Tenengrad); an isotropic sharpness measure complementing laplacian_variance\'s directional bias.',
+    desc: 'A second sharpness score. Use alongside laplacian_variance; when the two disagree it\'s usually about edge orientation, not a measurement error.',
     hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
   },
   estimated_noise_std: {
-    desc: 'No-reference estimate of additive noise standard deviation. Computed on raw pixel values; photon-limited data may need a variance-stabilizing transform for a fully accurate estimate.',
+    desc: 'Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting.',
     hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
   },
   local_range_contrast_variability: {
-    desc: 'Mean local (max-min) pixel range over 3×3 windows, divided by overall spatial standard deviation. Not true Michelson contrast.',
+    desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
   },
   local_texture_uniformity: {
-    desc: 'Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
+    desc: 'How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat.',
   },
   saturated_pixel_fraction: {
-    desc: 'Fraction of pixels at the dtype\'s max representable value (overexposure/sensor saturation). Not defined for floating-point data.',
+    desc: 'Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim.',
     hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
   },
   underexposed_pixel_fraction: {
-    desc: 'Fraction of pixels at the dtype\'s min representable value (underexposure/black-clipping). Not defined for floating-point data.',
+    desc: 'Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark.',
     hintUp: 'more underexposure', hintDown: 'less underexposure', goodDirection: 'down',
   },
   compression_blocking_score: {
-    desc: 'Strength of brightness jumps at 8-pixel block boundaries (JPEG-style blocking artifacts). Near zero for uncompressed/losslessly-compressed images.',
+    desc: 'Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way.',
     hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
   },
 };
