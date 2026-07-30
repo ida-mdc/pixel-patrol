@@ -252,6 +252,9 @@ def _setup_file_logging(project: Project) -> None:
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s", datefmt="%H:%M:%S"))
     root.addHandler(fh)
+    # These two loggers never propagate to root - attach fh directly or the debug file misses them.
+    logging.getLogger("distributed").addHandler(fh)
+    logging.getLogger("distributed.worker.memory").addHandler(fh)
     logger.info("Debug log → '%s'", log_path)
 
 
