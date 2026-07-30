@@ -61,6 +61,7 @@ class RasterImageProcessor:
     INPUT       = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {}
+    IS_MEMORY_HEAVY: bool = False
     OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {}
 
     def run_chunk(self, record: Record) -> Dict:
@@ -88,6 +89,7 @@ class RasterImageProcessor:
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
     DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, contrast, texture, saturation, compression artifacts) over the 2D spatial extent of each image."
+    IS_MEMORY_HEAVY = True  # measured ~21x peak memory vs. raw chunk bytes
     # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
     # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
