@@ -189,7 +189,7 @@ def _count_tasks(sc: Dict[str, Any], mode: str, datasets_dir: Path) -> Dict[str,
         stream = _discover_files([datasets_dir / sc["name"]], "all")
     dummy_meta: List[dict] = []
     counts: Dict[str, int] = {}
-    for t in _plan_tasks(stream, config, loader, dummy_meta):
+    for t in _plan_tasks(stream, config, loader, dummy_meta, processors=[]):
         k = _TASK_TYPE_NAMES.get(type(t), type(t).__name__)
         counts[k] = counts.get(k, 0) + 1
     return {"n_tasks": sum(counts.values()), "task_types": counts}
@@ -223,7 +223,7 @@ def run_one(
         stream = _discover_files([datasets_dir / sc["name"]], "all")
 
     files_meta: List[dict] = []
-    task_stream = _plan_tasks(stream, config, loader, files_meta)
+    task_stream = _plan_tasks(stream, config, loader, files_meta, processors=processors)
 
     parts_dir: Optional[Path] = None
     if sc.get("use_parts_dir"):
