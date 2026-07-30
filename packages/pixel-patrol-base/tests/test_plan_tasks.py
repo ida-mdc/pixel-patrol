@@ -34,7 +34,7 @@ def _stream(pairs: List[Tuple[str, int]]) -> Iterator[Tuple[Path, dict]]:
 def _run(pairs: List[Tuple[str, int]], loader: MockLoader,
          config: ProcessingConfig) -> Tuple[List[Task], List[dict]]:
     files_meta: List[dict] = []
-    tasks = list(_plan_tasks(_stream(pairs), config, loader, files_meta))
+    tasks = list(_plan_tasks(_stream(pairs), config, loader, files_meta, processors=[]))
     return tasks, files_meta
 
 

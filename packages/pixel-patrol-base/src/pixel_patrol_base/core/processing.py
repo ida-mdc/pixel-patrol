@@ -65,6 +65,12 @@ for _name in ("distributed", "distributed.worker", "distributed.scheduler",
               "distributed.nanny", "asyncio", "tornado", "numexpr", "numexpr.utils"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
+# Pause/resume noise is off the console but still counted by _PauseCounter below.
+# A handler must be attached here too - propagate=False with zero handlers falls
+# through to logging.lastResort, which prints unformatted anyway.
+logging.getLogger("distributed.worker.memory").addHandler(logging.NullHandler())
+logging.getLogger("distributed.worker.memory").propagate = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,6 +104,10 @@ _LOG_EVERY = 200
 # gates the small-file fast path.
 _MAX_SIZE_EXPANSION_FACTOR = 8
 
+# Used instead, for chunk-splitting decisions only (never for worker RAM sizing -
+# see _effective_split_mb_per_task), when a memory-heavy processor is active.
+_MAX_SIZE_EXPANSION_FACTOR_HEAVY = 24
+
 # Headroom left unused when packing workers into available RAM.
 _AVAILABLE_RAM_PACKING_FRACTION = 0.9
 
@@ -111,6 +121,22 @@ _WORKER_THREAD_ENV = {
     "NUMEXPR_MAX_THREADS":  "1",
     "NUMEXPR_NUM_THREADS":  "1",
 }
+
+
+def _effective_split_mb_per_task(mb_per_task: float, processors: List[Any]) -> float:
+    """Shrink the per-task chunk-splitting budget when a memory-heavy processor is
+    active, so a chunk's peak memory after processing still fits the worker RAM
+    sized for the default case - without growing that worker budget itself (which
+    would cost parallelism on every run, not just ones with genuinely large files).
+
+    Only affects how finely large files get split; small files/images that never
+    approach mb_per_task are untouched, so plain batches of small images see no
+    slowdown regardless of which processors are active.
+    """
+    factor = (_MAX_SIZE_EXPANSION_FACTOR_HEAVY
+             if any(getattr(p, "IS_MEMORY_HEAVY", False) for p in processors)
+             else _MAX_SIZE_EXPANSION_FACTOR)
+    return mb_per_task * _MAX_SIZE_EXPANSION_FACTOR / factor
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -356,6 +382,7 @@ def _plan_tasks(
     config:      ProcessingConfig,
     loader:      Any,
     files_meta:  List[dict],
+    processors:  List[Any],
 ) -> Iterator[Task]:
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
 
@@ -365,7 +392,8 @@ def _plan_tasks(
                                    if unsplittable, fall through to batch.
       otherwise     → accumulate in current batch; flush when budget fills.
     """
-    budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
+    _split_mb_per_task: float = _effective_split_mb_per_task(config.mb_per_task, processors)
+    budget_bytes: int = int(_split_mb_per_task * 1024 * 1024)
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
     # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
@@ -426,7 +454,7 @@ def _plan_tasks(
                             "mb_per_task=%.0f gives ~%d images/task - tasks may take many minutes. "
                             "Consider --mb-per-task 50 or lower.",
                             info.n_images, image_bytes / 1024 / 1024,
-                            config.mb_per_task, images_per_task,
+                            _split_mb_per_task, images_per_task,
                         )
             yield from _plan_container_tasks(file_index, str(file_path), info, budget_bytes, _MAX_IMAGES_PER_TASK)
             continue
@@ -437,7 +465,7 @@ def _plan_tasks(
             if pending := _flush_batch():
                 yield pending
             specs = _compute_memory_chunk_specs(file_path, info.dim_order, info.shape, info.dtype,
-                                                config.mb_per_task, config.slice_size, info.deferred_dims)
+                                                _split_mb_per_task, config.slice_size, info.deferred_dims)
             if specs:
                 n = len(specs)
                 for spec in specs:
@@ -715,6 +743,7 @@ def _execute_container_task(
     results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
     file_path = Path(task.file_path)
+    _split_mb_per_task = _effective_split_mb_per_task(config.mb_per_task, processors)
     for child_id, record in loader.load_range(file_path, start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
@@ -723,7 +752,7 @@ def _execute_container_task(
         try:
             # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
             specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
-                                                record.data.dtype, config.mb_per_task, config.slice_size)
+                                                record.data.dtype, _split_mb_per_task, config.slice_size)
             if specs:
                 results.append([
                     _run_record(record, record.data[spec.slices], spec.origin,
@@ -1581,6 +1610,7 @@ def build_records_df(
             config=cfg,
             loader=loader,
             files_meta=files_meta,
+            processors=processors,
         )
         return _coordinate_pipeline(
             client=client,
