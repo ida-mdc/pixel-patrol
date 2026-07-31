@@ -138,6 +138,27 @@ def _aggregate_histograms(rows: List[Dict]) -> Any:
 # NumPy n-D backend
 # ---------------------------------------------------------------------------
 
+def _hist_bounds(arr: np.ndarray, s_min: float, s_max: float) -> Tuple[float, float]:
+    """Value range the histogram bins span. Integer data whose span is narrower than
+    the (fixed) bin count is widened to exactly HISTOGRAM_BINS so every bin is one
+    integer level wide - otherwise 256 bins over a handful of levels produce a sparse
+    'comb' of empty bins. Float data (and integer data spanning ≥ HISTOGRAM_BINS
+    levels, where bins are already ≥ 1 wide) keeps its true span.
+
+    The widened window is anchored to the dtype's representable range: it slides left
+    so the top edge never lands past dtype.max + 1, so e.g. any uint8 image bins over
+    [0, 256) to match the data type rather than spilling outside it."""
+    if np.issubdtype(arr.dtype, np.floating) or (s_max - s_min) >= HISTOGRAM_BINS:
+        return s_min, s_max
+    try:
+        info = np.iinfo(arr.dtype)
+    except ValueError:      # non-integer, non-float (e.g. bool): no representable range to anchor to
+        return s_min, s_min + HISTOGRAM_BINS
+    lo = min(s_min, float(info.max) + 1 - HISTOGRAM_BINS)   # slide left so the top edge stays in-range
+    lo = max(lo, float(info.min))                           # ...but never below the dtype minimum
+    return lo, lo + HISTOGRAM_BINS
+
+
 def _histogram_counts(arr: np.ndarray, s_min: float, s_max: float) -> np.ndarray:
     B = HISTOGRAM_BINS
     flat = arr.ravel().astype(np.float32, copy=False)
@@ -159,11 +180,11 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
         case MetricNames.MEAN_INTENSITY:     return float(np.nanmean(arr))
         case MetricNames.STD_INTENSITY:      return float(np.nanstd(arr))
         case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
-        case MetricNames.HISTOGRAM_MIN:      return float(ctx.s_min)
-        case MetricNames.HISTOGRAM_MAX:      return float(ctx.s_max)
+        case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
+        case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
         case MetricNames.HISTOGRAM_NAN_COUNT:
             return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
-        case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, ctx.s_min, ctx.s_max)
+        case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
         case _:                              return None
 
 
@@ -231,7 +252,7 @@ class HistogramProcessor(RasterProcessor):
         RasterMetricSpec(name=MetricNames.HISTOGRAM_NAN_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
                          description="Number of NaN pixels excluded from the histogram."),
         RasterMetricSpec(name=MetricNames.HISTOGRAM_COUNTS,    data_type=np.ndarray, aggregate_rows=lambda spec, rows: _aggregate_histograms(rows),
-                         description="Per-bin pixel counts over the histogram value range (fixed number of bins)."),
+                         description="Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins)."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
