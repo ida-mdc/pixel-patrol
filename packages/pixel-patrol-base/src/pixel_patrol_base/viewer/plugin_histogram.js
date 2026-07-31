@@ -37,6 +37,18 @@ function binXs(lo, hi) {
   return Array.from({ length: NBINS }, (_, i) => lo + i * step);
 }
 
+// Value-space extent of the non-zero bins of a [lo, hi)-spanning series, or null if all zero.
+// Used to zoom the plotted x-axis onto real data instead of the (possibly dtype-widened) bin window.
+export function populatedExtent(lo, hi, ys) {
+  const step = (hi - lo) / ys.length || 1 / ys.length;
+  let first = -1, last = -1;
+  for (let i = 0; i < ys.length; i++) {
+    if (ys[i] > 0) { if (first < 0) first = i; last = i; }
+  }
+  if (first < 0) return null;
+  return [lo + first * step, lo + (last + 1) * step];
+}
+
 // Convert a color string (hex or rgb) to rgba with the given alpha.
 function withAlpha(color, alpha) {
   if (color.startsWith('#') && color.length === 7) {
@@ -313,7 +325,7 @@ export default {
           wrap.appendChild(h);
         }
 
-        let toggleEl = null;
+        let toggleEl = null, labelLeft = null, labelRight = null;
         if (kind !== 'float') {
           const normLabel  = kind === 'int' ? 'Dtype range (−1 to 1, 256 bins)' : 'Dtype range (0 to 1, 256 bins)';
           const toggleWrap = document.createElement('div');
@@ -328,12 +340,12 @@ export default {
           toggleEl.style.cursor = 'pointer';
           switchWrap.appendChild(toggleEl);
 
-          const left  = document.createElement('span');
-          left.textContent = 'Actual values (256 bins)';
-          const right = document.createElement('span');
-          right.textContent = normLabel;
+          labelLeft  = document.createElement('span');
+          labelLeft.textContent = 'Actual values (256 bins)';
+          labelRight = document.createElement('span');
+          labelRight.textContent = normLabel;
 
-          toggleWrap.append(left, switchWrap, right);
+          toggleWrap.append(labelLeft, switchWrap, labelRight);
           wrap.appendChild(toggleWrap);
         } else if (multiKind) {
           const note = document.createElement('div');
@@ -345,7 +357,7 @@ export default {
         const plotDiv = document.createElement('div');
         wrap.appendChild(plotDiv);
         container.appendChild(wrap);
-        panels[kind] = { plotDiv, toggleEl };
+        panels[kind] = { plotDiv, toggleEl, labelLeft, labelRight };
       }
 
       // Cached across mode/spread toggles — re-populated on every other control change.
@@ -482,12 +494,17 @@ export default {
 
       const renderPanel = (kind) => {
         if (!kindData) return;
-        const { plotDiv, toggleEl }  = panels[kind];
+        const { plotDiv, toggleEl, labelLeft, labelRight } = panels[kind];
         const useNorm                = (toggleEl?.checked ?? false) && kind !== 'float';
         const spreadChecked          = container.querySelector(`#${SPREAD_ID}`)?.checked ?? false;
         const ctrl                   = readControls(container);
         const activeGroups           = ctrl.selectedGroups.length ? ctrl.selectedGroups : ctx.groups;
         const { append: appendPlot, plotlyLegendConfig } = ctx.plot;
+
+        if (labelLeft) {
+          labelLeft.style.fontWeight  = useNorm ? 'normal' : '600';
+          labelRight.style.fontWeight = useNorm ? '600' : 'normal';
+        }
 
         plotDiv.innerHTML = '';
         const kd         = kindData[kind] ?? {};
@@ -501,6 +518,13 @@ export default {
 
         const traces = [];
         let yMax = 0;
+        let xLo = Infinity, xHi = -Infinity;
+        const trackExtent = (lo, hi, ys) => {
+          const ext = populatedExtent(lo, hi, ys);
+          if (!ext) return;
+          if (ext[0] < xLo) xLo = ext[0];
+          if (ext[1] > xHi) xHi = ext[1];
+        };
 
         // Individual file traces replace the group mean when active.
         const kindRows  = (indivFiles && visGroups.length === 1)
@@ -521,6 +545,7 @@ export default {
             const showSpread = spreadChecked && gd.count >= 2;
 
             for (let i = 0; i < NBINS; i++) if (meanYs[i] > yMax) yMax = meanYs[i];
+            trackExtent(lo, hi, meanYs);
 
             if (showSpread) {
               // ±1 std band as a closed polygon behind the mean line.
@@ -553,6 +578,7 @@ export default {
             const lo = useNorm ? row.nMin : row.aMin;
             const hi = useNorm ? row.nMax : row.aMax;
             for (let i = 0; i < row.ys.length; i++) if (row.ys[i] > yMax) yMax = row.ys[i];
+            trackExtent(lo, hi, row.ys);
             traces.push({
               type: 'scatter', mode: 'lines',
               x: binXs(lo, hi), y: row.ys,
@@ -570,6 +596,7 @@ export default {
           const lo = useNorm ? fo.nMin : fo.aMin;
           const hi = useNorm ? fo.nMax : fo.aMax;
           const xs = binXs(lo, hi);
+          trackExtent(lo, hi, fo.ys);
           traces.unshift({
             type: 'bar', name: `File: ${fo.label}`, x: xs, y: fo.ys,
             width: Array(NBINS).fill(xs.length > 1 ? xs[1] - xs[0] : 1),
@@ -582,10 +609,14 @@ export default {
           : 'Pixel value';
         const showLegend = ctx.groups.length > 1 || hasOverlay;
         const yRange     = yMax > 0 ? [0, yMax * 1.12] : undefined;
+        // Zoom to where the data actually is instead of the full (possibly dtype-widened) bin window,
+        // which would otherwise pad narrow-range integer data out with a wall of empty bins.
+        const xPad       = xHi > xLo ? (xHi - xLo) * 0.04 : 0;
+        const xRange     = xHi > xLo ? [xLo - xPad, xHi + xPad] : undefined;
 
         appendPlot(plotDiv, traces, {
           title:  { text: multiKind ? `${KIND_LABEL[kind]} — Intensity Histograms` : 'Intensity Histograms (averaged per group)' },
-          xaxis:  { title: xTitle },
+          xaxis:  { title: xTitle, exponentformat: 'e', ...(xRange ? { range: xRange } : {}) },
           yaxis:  { title: 'Normalized count', ...(yRange ? { range: yRange } : {}) },
           bargap: 0, height: 500, showlegend: showLegend, hovermode: 'x unified',
           ...(showLegend ? { legend: plotlyLegendConfig } : {}),

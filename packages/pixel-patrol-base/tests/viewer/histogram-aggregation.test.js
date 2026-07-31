@@ -5,6 +5,7 @@ import {
   accumulateGroupHistograms,
   classifyDtypes,
   DTYPE_NORM,
+  populatedExtent,
 } from '../../src/pixel_patrol_base/viewer/plugin_histogram.js';
 
 const NBINS = 256;
@@ -103,6 +104,35 @@ describe('remapToAxis', () => {
     const out = remapToAxis(values, 0, 256, 7, 7);
     expect(out[0]).toBe(5);
     expect(out.reduce((a, b) => a + b, 0)).toBe(5);
+  });
+});
+
+describe('populatedExtent', () => {
+  it('returns null when every bin is zero', () => {
+    expect(populatedExtent(0, 256, new Array(NBINS).fill(0))).toBeNull();
+  });
+
+  it('trims leading and trailing zeros to the real data span', () => {
+    // Narrow integer data widened to a 256-wide window: only the first 10 levels are populated.
+    const values = new Array(NBINS).fill(0);
+    for (let i = 0; i < 10; i++) values[i] = 1;
+    expect(populatedExtent(100, 356, values)).toEqual([100, 110]);
+  });
+
+  it('preserves a real internal gap between two populated clusters', () => {
+    const values = spike(5, 1);
+    values[250] = 1;
+    const [lo, hi] = populatedExtent(0, 256, values);
+    expect(lo).toBe(5);
+    expect(hi).toBe(251);
+  });
+
+  it('matches binXs bin placement for a constant-value (zero-width) window', () => {
+    // hi === lo: same degenerate case binXs falls back to step = 1/NBINS for.
+    const values = spike(0, 1);
+    const [lo, hi] = populatedExtent(100, 100, values);
+    expect(lo).toBeCloseTo(100);
+    expect(hi).toBeCloseTo(100 + 1 / NBINS);
   });
 });
 
