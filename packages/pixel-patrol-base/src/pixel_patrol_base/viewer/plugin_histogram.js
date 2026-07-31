@@ -730,6 +730,14 @@ function wireControls(container, onDraw) {
       onDraw();
     });
   }
-  for (const id of [FILE_SEL_ID, SAMPLE_INPUT_ID, INDIV_ID])
+  for (const id of [FILE_SEL_ID, SAMPLE_INPUT_ID])
     container.querySelector(`#${id}`)?.addEventListener('change', onDraw);
+
+  // Individual-image lines replace the group mean, so "spread around the mean" is meaningless then.
+  const indivEl  = container.querySelector(`#${INDIV_ID}`);
+  const spreadEl = container.querySelector(`#${SPREAD_ID}`);
+  indivEl?.addEventListener('change', () => {
+    if (spreadEl) spreadEl.disabled = indivEl.checked;
+    onDraw();
+  });
 }
