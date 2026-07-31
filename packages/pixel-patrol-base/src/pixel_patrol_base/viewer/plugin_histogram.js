@@ -61,11 +61,19 @@ function withAlpha(color, alpha) {
   return color;
 }
 
+// Uses the same widget-warning-yellow class other widgets share (see plot-utils.js's prependWarning) -
+// built by hand instead of via prependWarning since these banners are inserted at a specific position,
+// not always as the container's first child.
 function warningBanner(text, marginBottom = 16) {
   const el = document.createElement('div');
-  el.style.cssText = 'font-size:0.88em;color:#7a5c00;background:#fff8e1;'
-    + `border-left:3px solid #f0b429;padding:8px 12px;margin:0 0 ${marginBottom}px;border-radius:2px`;
-  el.textContent = text;
+  el.className = 'widget-warning widget-warning-yellow';
+  if (marginBottom !== 16) el.style.marginBottom = `${marginBottom}px`;
+  const icon = document.createElement('span');
+  icon.className = 'widget-warning-icon';
+  icon.textContent = '⚠️';
+  const content = document.createElement('div');
+  content.textContent = text;
+  el.append(icon, content);
   return el;
 }
 
@@ -178,18 +186,18 @@ export default {
     'Histograms are computed per image (256 bins) and averaged per group.',
     'Each image is area-normalized before averaging, so image size does not affect the result.',
     '',
-    'If the dataset contains multiple pixel types, each type gets its own plot.',
+    'If the dataset mixes unsigned integer, signed integer, and/or floating-point images, each kind gets its own plot.',
     '',
     '**Display mode** (integer panels only)',
-    '- **Actual values** -- x-axis shows real pixel values.',
-    '- **Dtype range** -- x-axis normalized to the representable range of the pixel type',
-    '  (uint8: 0 to 1, int16: -1 to 1). Useful for comparing images across bit depths.',
+    '- **Actual values** – x-axis shows real pixel values.',
+    '- **Dtype range** – x-axis normalized to the representable range of the pixel type (unsigned integers: 0 to 1, signed integers: -1 to 1). Useful for comparing images across bit depths.',
+    '',
     'Float images always show actual values.',
     '',
-    '**Spread** -- shaded +/-1 std band around the group mean.',
+    '**Spread** – shaded +/-1 std band around the group mean.',
     'A wider band means more variation between images in that group.',
     '',
-    '**Show individual images** -- visible when one group is selected with 50 or fewer images.',
+    '**Show individual images** – visible when one group is selected with 50 or fewer images.',
     'Replaces the group mean with one line per image.',
   ].join('\n'),
 
@@ -291,8 +299,8 @@ export default {
 
       if (multiKind) {
         container.appendChild(warningBanner(
-          'This dataset contains multiple pixel types (e.g. integer and float). '
-          + 'Their value scales are not directly comparable, so each type is shown in its own plot below.',
+          'This dataset mixes different kinds of pixel types (e.g. integer and float). '
+          + 'Their value scales are not directly comparable, so each kind is shown in its own plot below.',
           20,
         ));
       }
@@ -418,7 +426,7 @@ export default {
           let msg = `Results are sampled: showing up to ${ctrl.samplesPerGroup.toLocaleString()} images per group`;
           if (!allCapped)
             msg += `. Groups at limit: ${cappedGroups.map(g => ctx.groupLabel(g)).join(', ')}`;
-          samplingWarning.textContent = msg + '. Increase "Max samples" for full accuracy.';
+          samplingWarning.querySelector('div').textContent = msg + '. Increase "Max samples" for full accuracy.';
           samplingWarning.style.display = '';
         }
 
