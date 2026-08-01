@@ -137,8 +137,8 @@ describe('populatedExtent', () => {
 });
 
 describe('accumulateGroupHistograms - the core cross-image bug fix', () => {
-  function record({ kind = 'uint', group = 'g', total = 100, aMin, aMax, nMin = aMin, nMax = aMax, spikeAt = 0 }) {
-    return { kind, group, counts: spike(spikeAt, total), total, aMin, aMax, nMin, nMax };
+  function record({ kind = 'uint', group = 'g', total = 100, aMin, aMax, nMin = aMin, nMax = aMax, spikeAt = 0, nanCount = 0 }) {
+    return { kind, group, counts: spike(spikeAt, total), total, aMin, aMax, nMin, nMax, nanCount };
   }
 
   it('does not collapse images with different ranges into the same bin (the reported bug)', () => {
@@ -235,5 +235,18 @@ describe('accumulateGroupHistograms - the core cross-image bug fix', () => {
     const sumSqBins = nonZeroBins(gd.sumSq);
     expect(sumsBins.length).toBe(2); // sanity: the two images really do land on different bins
     expect(sumSqBins).toEqual(sumsBins);
+  });
+
+  it('defaults nanCount to 0, matching prior no-NaN behavior', () => {
+    const { uint: { g: gd } } = accumulateGroupHistograms([record({ aMin: 0, aMax: 256 })]);
+    expect(gd.nanSum).toBe(0);
+  });
+
+  it('folds NaN pixels into the per-image denominator, shrinking its bin mass accordingly', () => {
+    // 100 finite pixels + 100 NaN pixels -> each bin's mass is halved, nanFrac is 0.5.
+    const records = [record({ aMin: 0, aMax: 256, total: 100, nanCount: 100 })];
+    const { uint: { g: gd } } = accumulateGroupHistograms(records);
+    expect(gd.nanSum).toBeCloseTo(0.5);
+    expect(gd.sums.reduce((a, b) => a + b, 0)).toBeCloseTo(0.5);
   });
 });
