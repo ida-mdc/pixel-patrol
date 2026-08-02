@@ -511,18 +511,15 @@ export default {
   shortLabel: 'Explore',
   group: 'Explore',
   info:  'Build your own plot from the columns in your current data.\n\n' +
-         'Each plot has its own **Slice by** toggles (top right) and a **per image** / ' +
-         '**per slice** badge showing what one of its datapoints represents. With nothing ' +
-         'toggled, each point is one whole-image aggregate (**per image**). Switching a ' +
-         'toggle on stops that dimension from being aggregated away, so each point becomes ' +
-         'one (image × that dimension) combination instead (**per slice**) - e.g. switching ' +
-         'on "C" gives one point per C-slice per image.\n\n' +
+         'Each plot has its own **Slice by** toggles and **per image** / **per slice** badge, ' +
+         'controlling whether each datapoint is a whole-image aggregate (**per image**) or one ' +
+         '(image × dimension) combination (**per slice**).\n\n' +
          '- **Two numerics** → scatter\n' +
          '- **Categorical × numeric** → violin or bar (mean ± sd)\n' +
          '- **Any column × (count)** → count bar\n' +
          '- **Two categoricals** → count heatmap\n\n' +
-         'Single unique value → table instead of plot. For scatter, this applies when the Y ' +
-         'column is constant across all rows (regardless of X).\n\n' +
+         'If a column has **no variance**, it is shown in a table instead of a plot. For scatter, ' +
+         'this checks the Y column only (regardless of X).\n\n' +
          '**Color by:**\n' +
          '- **(none)** → a single, ungrouped trace (no legend), in a color you pick with the swatch ' +
          'next to "Color by".\n' +
@@ -540,11 +537,11 @@ export default {
          '**Heatmaps** (two categoricals) never use color-by/hue grouping — instead, pick a single ' +
          'base color with the swatch; cell counts are shown on a white-to-color scale (white = 0, ' +
          'your color = the maximum). Check **Invert** to reverse this (your color = 0, white = the maximum).\n\n' +
-         '**Dates**: `modification_date` is always plotted as a date axis (never as a category), ' +
-         'shown as a readable timestamp. "Bar (mean ± sd)" is unavailable for it — use violin instead.\n\n' +
          `**Missing values**: for violin/bar/heatmap, rows where a *categorical* axis is null are ` +
          `grouped into their own "${NULL_LABEL}" category (shown last). For scatter, rows where X or Y ` +
          `is null can't be placed on a numeric axis and are excluded — a warning shows how many.\n\n` +
+         '**↓ Export plugin** downloads the plot as a standalone `plugin_*.js` file - ' +
+         'drop it into your own viewer extension folder to keep this exact plot as a permanent widget.\n\n' +
          '**＋ Add plot** adds an independent plot below.',
 
   requires(schema) {

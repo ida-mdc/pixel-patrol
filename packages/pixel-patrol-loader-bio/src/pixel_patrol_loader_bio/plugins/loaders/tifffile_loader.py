@@ -145,7 +145,8 @@ def _dask_from_series(series: tifffile.TiffPageSeries) -> da.Array:
         # da.from_zarr re-opens za.store via zarr.open(), which returns the Group root
         # for multiscale stores rather than the level-0 array, causing a failure.
         # da.from_array avoids this by using the zarr array's __getitem__ directly.
-        return da.from_array(za, chunks=za.chunks)
+        # "auto" regroups tiny native chunks (e.g. one row each) into ~128MB blocks.
+        return da.from_array(za, chunks="auto")
     except Exception as e:
         logger.warning(
             "tifffile aszarr/Zarr failed (%s); falling back to in-memory array + Dask auto chunks.",

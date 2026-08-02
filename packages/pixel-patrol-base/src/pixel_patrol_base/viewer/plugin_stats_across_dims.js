@@ -1,32 +1,27 @@
+import { QUALITY_METRIC_INFO, describeQualityMetric, qualityMetricRank } from './plugin_violin.js';
+
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
-const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
-  'blocking_index', 'ringing_index',
-]);
+const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 const COL_BG    = ['#ffffff', '#f4f6f9'];
 const MIN_COL_PX = 180;  // min width per "Across 'X' slices" column in the grid
 
-const RAGGED_INFO = 'The dashed line (right-hand axis) shows the **% of images that still have a ' +
+const RAGGED_INFO = 'The dashed line shows the **% of images that still have a ' +
   'slice at this position**, per condition - useful for spotting datasets where images have ' +
   'different numbers of slices.';
 
 const BASIC_INFO = [
   'Shows how image statistics (e.g., mean, std, min, max) change **across different dimension slices**.',
-  '', 'Useful for identifying drift, artifacts, or unexpected variation within (e.g.) T/C/Z/S dimensions.',
-  '', 'You can select slices in the dropdowns to filter the tables.',
+  '', 'Useful for identifying drift, artifacts, or unexpected variation.',
   '', RAGGED_INFO,
 ].join('\n');
 
 const QUALITY_INFO = [
-  'Shows how **image quality metrics** change across (e.g. T, C, Z, S) slices.',
-  '', 'Use this view to detect:',
-  '- drift in focus or noise over time (T)',
-  '- channel-specific artifacts (C)',
-  '- depth-dependent quality changes (Z)',
-  '', RAGGED_INFO,
+  'Shows how **image quality metrics** change across different dimension slices.',
+  '', 'Useful to detect e.g. drift in focus or noise over time (T) and depth (Z) as well as channel (C) specific artifacts.',
+  '', 'The dashed line shows the **% of images that still have a slice at this position**, per condition.',
 ].join('\n');
 
 // X and Y are spatial tile coordinates. When querying non-spatial dims we
@@ -39,7 +34,8 @@ async function renderAcrossDims(container, ctx, filterMetric) {
   const { q, groupCol: gcFn } = ctx.sql;
   const { append: appendPlot, niceName, escapeHtml, LAYOUT } = ctx.plot;
 
-  const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric).sort();
+  const metrics = (ctx.schema.metricCols ?? []).filter(filterMetric)
+    .sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b));
   const activeDims = ctx.state.dimensions ?? {};
   const dimLetters = Object.keys(ctx.schema.dimensionInfo ?? {})
     .filter(letter => activeDims[letter] === undefined)
@@ -137,7 +133,7 @@ function appendRetentionLegend(container, ctx) {
   const dash = document.createElement('span');
   dash.style.cssText = 'display:flex;align-items:center;gap:5px;color:#6c757d';
   dash.innerHTML = '<span style="display:inline-block;width:16px;height:0;border-top:1px dashed #6c757d"></span>'
-    + '% of images with this slice (right axis)';
+    + '% of images with this slice';
   legend.appendChild(dash);
   container.appendChild(legend);
 }
@@ -170,7 +166,7 @@ function buildStatsLayout(ctx) {
 
 // Build the dimension × metric table of mini scatter plots; returns the plot count.
 function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMap, layout }, selected) {
-  const { niceName } = ctx.plot;
+  const { niceName, escapeHtml } = ctx.plot;
   tableHost.innerHTML = '';
   const metricsToRender = selected === '__all__' ? metrics : [selected];
   const plotJobs = [];
@@ -199,7 +195,9 @@ function renderMetricGrid(tableHost, ctx, { metrics, dimLettersVisible, dimAggMa
     const titleCell = tbody.insertRow().insertCell();
     titleCell.colSpan = dimLettersVisible.length;
     titleCell.style.cssText = 'font-weight:500;font-size:0.95rem;color:#343a40;padding:5px 10px;border-top:1px solid #e9ecef;background:#f8f9fa';
-    titleCell.textContent = niceName(metric);
+    const metricInfo = ctx.state.showInfo ? describeQualityMetric(metric) : null;
+    titleCell.innerHTML = escapeHtml(niceName(metric))
+      + (metricInfo ? ` <span class="plot-side-info-inline">${escapeHtml(metricInfo.desc)}</span>` : '');
 
     const plotRow = tbody.insertRow();
     dimLettersVisible.forEach((letter, ci) => {
@@ -321,7 +319,7 @@ export default [
     'stats-across-dims-quality', 'Quality Metrics Across Dimensions', QUALITY_INFO,
     base => QUALITY_METRIC_BASES.has(base),
     ctx => acrossDimsCondensedSummary(ctx, { metricLabel: 'image quality metrics' }),
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Quality across Slices', QUALITY_METRIC_BASES,
+    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Quality across Slices', QUALITY_METRIC_BASES,
   ),
 ];
 

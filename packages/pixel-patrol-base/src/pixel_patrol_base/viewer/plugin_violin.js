@@ -3,11 +3,47 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
-const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
-  'blocking_index', 'ringing_index',
-]);
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA.
+// One description per metric, used as each metric's own per-plot side note (and
+// by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
+// duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
+// reading is a well-established, monotonic one - local_range_contrast_variability
+// isn't the standard Michelson formula and local_texture_uniformity has no
+// inherent "good" direction (context-dependent), so neither gets a direction claim.
+export const QUALITY_METRIC_INFO = {
+  laplacian_variance: {
+    desc: 'Sharpness/focus score. Low values usually mean the image is blurry or out of focus.',
+    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
+  },
+  sobel_gradient_sharpness: {
+    desc: 'A second sharpness score. Use alongside laplacian_variance; when the two disagree it\'s usually about edge orientation, not a measurement error.',
+    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
+  },
+  estimated_noise_std: {
+    desc: 'Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting.',
+    hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
+  },
+  saturated_pixel_fraction: {
+    desc: 'Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim.',
+    hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
+  },
+  underexposed_pixel_fraction: {
+    desc: 'Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark.',
+    hintUp: 'more underexposure', hintDown: 'less underexposure', goodDirection: 'down',
+  },
+  local_range_contrast_variability: {
+    desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
+  },
+  local_texture_uniformity: {
+    desc: 'How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat.',
+  },
+  compression_blocking_score: {
+    desc: 'Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way.',
+    hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
+  },
+};
+
+const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 function matchesBases(col, bases) {
   for (const base of bases) {
@@ -16,38 +52,55 @@ function matchesBases(col, bases) {
   return false;
 }
 
+/** Look up a quality metric's shared metadata by column name, stripping any per-channel suffix. */
+export function describeQualityMetric(col) {
+  for (const [base, info] of Object.entries(QUALITY_METRIC_INFO)) {
+    if (col === base || col.startsWith(base + '_')) return info;
+  }
+  return null;
+}
+
+// QUALITY_METRIC_INFO's key order is curated by generalization/importance (sharpness,
+// noise, exposure clipping, contrast/texture, then compression artifacts last - most
+// niche/situational). Parquet column order is alphabetical (an internal processing
+// detail unrelated to this), so widgets sort explicitly by this instead.
+const QUALITY_METRIC_ORDER = Object.keys(QUALITY_METRIC_INFO);
+
+/** Sort rank for a metric column by curated importance order; ties (e.g. non-quality
+ * columns) sort last and preserve their original relative order (stable sort). */
+export function qualityMetricRank(col) {
+  const idx = QUALITY_METRIC_ORDER.findIndex(base => col === base || col.startsWith(base + '_'));
+  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+}
+
+/** Build a renderDistribution `sideInfo` object for a quality metric column, or null. */
+function sideInfoFor(col) {
+  const info = describeQualityMetric(col);
+  return info && {
+    text: info.desc, hintUp: info.hintUp, hintDown: info.hintDown, goodDirection: info.goodDirection,
+  };
+}
+
 const SIGNIFICANCE_HELP = [
   '**Statistical Comparisons**',
   '',
-  'Pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
+  'If selected (side menu), pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
   '',
-  '**Significance levels:**',
-  '- `ns`: not significant (p ≥ 0.05)',
-  '- `*`: p < 0.05',
-  '- `**`: p < 0.01',
-  '- `***`: p < 0.001',
+  'Significance levels: `ns` not significant (p ≥ 0.05), `*` p < 0.05, `**` p < 0.01, `***` p < 0.001.',
 ].join('\n');
 
 // Mirrors plot-engine.js MAX_VIOLIN_POINTS - kept here only for the help text.
 const MAX_VIOLIN_POINTS = 5000;
 
 const DISTRIBUTION_HELP = `Plots with ${MAX_VIOLIN_POINTS.toLocaleString()} or fewer datapoints show the actual ` +
-  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, ' +
-  'mean) computed directly in the database for performance.';
+  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, mean).';
 
-const GRANULARITY_HELP = 'For datasets with multiple dimensions (channels, Z-planes, timepoints, ' +
-  'spatial tiles, …), use the **Slice by** toggles above to control what one datapoint represents - ' +
-  'shown by the **per image** / **per slice** badge in the card header. With nothing toggled, each ' +
-  'point is one whole-image aggregate (**per image**). Switching a toggle on stops that dimension ' +
-  'from being aggregated away, so each point becomes one (image × that dimension) combination instead ' +
-  '(**per slice**) - e.g. switching on "C" gives one point per C-slice per image. Switching on ' +
-  'more dimensions multiplies the number of points, so check the sample size shown in the plot ' +
-  'subtitle before trusting significance results.';
+const GRANULARITY_HELP = 'Use the **Slice by** toggles to control whether each datapoint is a whole-image ' +
+  'aggregate (**per image**) or one (image × dimension) combination (**per slice**) - shown by the badge in the ' +
+  'card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
 
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
-  '', 'You can choose which statistic to plot and filter by image dimensions.',
-  '', 'Each plot shows the distribution per group: median, quartiles, min/max, and mean.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
   '', SIGNIFICANCE_HELP,
@@ -55,16 +108,8 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Visualizes **image quality metrics** across groups.',
-  '', 'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
-  '', '**Metrics**',
-  '- **Michelson contrast** – Global contrast ratio; higher values indicate greater dynamic range.',
-  '- **MSCN variance** – Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
-  '- **Texture heterogeneity** – Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
-  '- **Laplacian variance** – Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
-  '- **Blocking index** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
-  '- **Ringing index** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
@@ -73,6 +118,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
 
   const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions).filter(filterMetric);
+  metrics.sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b));
   if (!metrics.length) {
     plotRoot.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
     return;
@@ -144,8 +190,16 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   }
 
   const numGroups   = groups.length;
-  const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+  let plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
   const showSignificance = !!ctx.state.showSignificance;
+
+  // Side-info text (description + optional direction badge) sits beside the
+  // chart when there's room, but wraps above it when the cell is too narrow
+  // (see appendSideInfoRow) - stacked across several narrow columns that looks
+  // cramped and uneven. Cap at 2 per row whenever it'll actually render, so
+  // each cell has enough width for text and chart side by side instead.
+  const anySideInfo = ctx.state.showInfo && toPlot.some(({ metric }) => sideInfoFor(metric));
+  if (anySideInfo) plotsPerRow = Math.min(plotsPerRow, 2);
 
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
@@ -188,6 +242,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
+        sideInfo: sideInfoFor(metric),
       });
     }
   }
@@ -223,7 +278,9 @@ async function violinCondensedPlot(ctx, container, metric) {
 function makeViolinPlugin(id, label, info, filterMetric, condensedMessage, metricPref = [], shortLabel, inputMetrics) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
-    ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
+    ctx.schema.metricCols
+      .filter(m => filterMetric(m) && ctx.schema.allCols.includes(m))
+      .sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b))[0] ??
     null;
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
@@ -294,7 +351,7 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicCondensedSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityCondensedSummary,
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality', QUALITY_METRIC_BASES),
+    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Image Quality', QUALITY_METRIC_BASES),
 ];
 
 function resolveMetrics(schema, dimensions) {

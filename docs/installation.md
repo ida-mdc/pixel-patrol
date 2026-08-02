@@ -50,9 +50,8 @@ pip install pixel-patrol
 PixelPatrol is split into focused packages so you only install what you need. The core package (`pixel-patrol-base`) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.
 
 ```bash
-uv pip install pixel-patrol-base           # core only
+uv pip install pixel-patrol-base           # core, includes image quality metrics
 uv pip install pixel-patrol-loader-bio     # BioIO + Zarr + Tifffile loaders (CZI, ND2, LIF, TIFF, ...)
-uv pip install pixel-patrol-image          # image quality metrics and extra viewer widgets
 ```
 
 `pixel-patrol-base` alone collects basic file metadata (name, size, extension) without reading image data. Add `pixel-patrol-loader-bio` to extract image metadata, pixel statistics, and thumbnails.
@@ -64,9 +63,8 @@ uv pip install pixel-patrol-image          # image quality metrics and extra vie
 | Package | What it adds |
 |---|---|
 | `pixel-patrol` | Full bundle - everything below in one install |
-| `pixel-patrol-base` | Core framework, CLI, viewer |
+| `pixel-patrol-base` | Core framework, CLI, viewer, image quality metrics |
 | `pixel-patrol-loader-bio` | BioIO, Zarr, and Tifffile loaders for scientific image formats |
-| `pixel-patrol-image` | Image quality metrics (blur, contrast, noise) and extra viewer widgets |
 
 Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend PixelPatrol by creating your own packages; see [Extensions](extensions.md).
 
