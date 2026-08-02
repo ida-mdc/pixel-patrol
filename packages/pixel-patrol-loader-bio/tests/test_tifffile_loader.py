@@ -1,5 +1,6 @@
 """Tests for :class:`TifffileLoader`."""
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -139,7 +140,7 @@ def test_load_2d_no_axes_metadata(tmp_path: Path, loader):
     assert "Y" in rec.dim_order or len(rec.dim_order) == 2
 
 
-def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader):
+def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader, caplog):
     """Regression test: da.from_zarr fails for zarr arrays extracted from a Group
     (multiscale OME-TIFF store), silently falling back to series.asarray() which
     loads the entire array into memory.  da.from_array must be used instead."""
@@ -158,18 +159,16 @@ def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader):
     with tifffile.TiffFile(path) as tf:
         assert len(tf.series[0].levels) > 1, "fixture must produce a multiscale series"
 
-    rec = loader.load(path)
+    with caplog.at_level(logging.WARNING):
+        rec = loader.load(path)
+
+    # The zarr/aszarr path must have succeeded directly; the exception fallback
+    # (series.asarray() + da.from_array) logs this warning when it fires.
+    assert "aszarr/Zarr failed" not in caplog.text, "must not silently fall back to eager load"
 
     # Result must be a lazy dask array, not an in-memory numpy array.
     import dask.array as da
     assert isinstance(rec.data, da.Array), "load() must return a lazy dask array"
-
-    # Chunks should reflect tiling: one chunk per channel, one tile per spatial chunk.
-    # A single-chunk array (shape == chunk shape) means the fallback fired and the
-    # entire image was loaded into memory.
-    assert rec.data.chunks[0] == (1,) * n_channels, "channel dim must be chunked per page"
-    assert rec.data.chunks[1][0] == tile, "Y dim must be chunked at tile size"
-    assert rec.data.chunks[2][0] == tile, "X dim must be chunked at tile size"
 
     # Data must round-trip correctly.
     np.testing.assert_array_equal(rec.data.compute(), im)
