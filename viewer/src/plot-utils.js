@@ -195,6 +195,84 @@ export function escapeHtml(s) {
 }
 
 /**
+ * Minimal markdown → HTML converter for widget info panels and plot side-info
+ * notes: paragraphs/bullets, **bold**, and `code`.
+ */
+export function renderInfoHtml(text) {
+  let html = '';
+  for (const para of text.trim().split(/\n\n+/)) {
+    const lines = para.split('\n');
+    const bullets = lines.filter(l => /^\s*-\s/.test(l));
+    const prose   = lines.filter(l => !/^\s*-\s/.test(l));
+    if (prose.length)   html += `<p>${prose.map(mdInline).join('<br>')}</p>`;
+    if (bullets.length) html += `<ul>${bullets.map(l => `<li>${mdInline(l.replace(/^\s*-\s*/, ''))}</li>`).join('')}</ul>`;
+  }
+  return html;
+}
+
+function mdInline(t) {
+  // Protect code spans before the bold pass, so literal `**`/`***` inside
+  // backticks (e.g. significance-level markers) aren't consumed as bold
+  // delimiters and swallowed.
+  const codeSpans = [];
+  const escaped = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const withPlaceholders = escaped.replace(/`([^`]+?)`/g, (_, code) => {
+    codeSpans.push(code);
+    return `\x00${codeSpans.length - 1}\x00`;
+  });
+  const bolded = withPlaceholders.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return bolded.replace(/\x00(\d+)\x00/g, (_, i) => `<code>${codeSpans[Number(i)]}</code>`);
+}
+
+/**
+ * Split `container` into a [plot | info] row and return the plot column for the
+ * caller to render into. Used when a single plot (not the whole widget) needs
+ * its own short explanatory note beside it - e.g. one metric in a multi-plot
+ * grid. `container` must already be attached to the DOM (see appendPlot).
+ *
+ * @param {HTMLElement} container
+ * @param {string|{text: string, hintUp?: string, hintDown?: string, goodDirection?: 'up'|'down'}} info
+ *   Markdown-lite note, rendered via renderInfoHtml. Pass an object instead of a
+ *   plain string to also show a two-line ▲/▼ direction badge (e.g. "▲ more
+ *   ringing" / "▼ less ringing") - only set these when the reading is a
+ *   well-established, monotonic one; omit them rather than guess. `goodDirection`
+ *   just picks which line is colored green vs red.
+ * @returns {HTMLElement} the plot column - render your chart into this, not `container`.
+ */
+export function appendSideInfoRow(container, info) {
+  const { text, hintUp, hintDown, goodDirection } = typeof info === 'string' ? { text: info } : info;
+
+  const row = document.createElement('div');
+  // flex-wrap so the note drops below the plot instead of squeezing it when
+  // the grid cell is too narrow to fit both side by side.
+  row.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;width:100%';
+  container.appendChild(row);
+
+  const infoCol = document.createElement('div');
+  infoCol.className = 'plot-side-info';
+  if (hintUp && hintDown) {
+    const badge = document.createElement('div');
+    badge.className = 'plot-side-info-direction';
+    const upClass   = goodDirection === 'up'   ? 'plot-side-info-good' : 'plot-side-info-bad';
+    const downClass = goodDirection === 'down' ? 'plot-side-info-good' : 'plot-side-info-bad';
+    badge.innerHTML =
+      `<div class="${upClass}"><span aria-hidden="true">▲</span> ${escapeHtml(hintUp)}</div>` +
+      `<div class="${downClass}"><span aria-hidden="true">▼</span> ${escapeHtml(hintDown)}</div>`;
+    infoCol.appendChild(badge);
+  }
+  const body = document.createElement('div');
+  body.innerHTML = renderInfoHtml(text);
+  infoCol.appendChild(body);
+  row.appendChild(infoCol);
+
+  const plotCol = document.createElement('div');
+  plotCol.style.cssText = 'flex:1 1 240px;min-width:0';
+  row.appendChild(plotCol);
+
+  return plotCol;
+}
+
+/**
  * Bargap for bar charts - mirrors Dash _apply_standard_styling.
  *   1 category → 0.7,  2 → 0.4,  3+ → 0.1
  */
