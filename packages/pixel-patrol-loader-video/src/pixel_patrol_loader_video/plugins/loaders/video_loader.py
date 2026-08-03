@@ -360,9 +360,15 @@ class VideoLoader:
 
     FOLDER_EXTENSIONS: Set[str] = set()
 
-    # Video files always contain exactly one video stream / image sequence,
-    # never multiple sub-images, so no extension ever needs container routing.
-    CONTAINER_EXTENSIONS: Set[str] = set()
+    # Video files compress heavily; on-disk size is a poor proxy for uncompressed
+    # size. Listing them here forces read_header to always be called so that
+    # processing.py uses the true uncompressed size for routing.
+    # Eager formats (gif, apng, webp) are omitted -- they are typically small and
+    # are decoded all-at-once anyway, so forced header reading doesn't help them.
+    CONTAINER_EXTENSIONS: Set[str] = {
+        "mp4", "m4v", "mov", "avi", "mkv", "webm", "flv", "wmv",
+        "mts", "m2ts", "ts",
+    }
 
     # Tuneable chunk size (frames per dask chunk).
     chunk_size: int = DEFAULT_CHUNK_SIZE
@@ -376,7 +382,11 @@ class VideoLoader:
         shape = tuple(int(x) for x in meta["shape"])
         dim_order = meta["dim_order"]
         dtype = np.dtype(meta["dtype"])
-        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
+        # Colour channels are packed per-frame and decoded together; defer them in
+        # memory-chunk splitting so temporal dims absorb the reduction first.
+        deferred = "".join(d for d in dim_order if d not in "TYX") or None
+        return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1,
+                        deferred_dims=deferred)
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         """Yield the single (child_id, record) pair for a video file.

@@ -53,11 +53,30 @@ def test_loader_array_shape(tiny_mp4):
     assert arr.dtype == np.uint8
 
 
+def test_read_header(tiny_mp4):
+    loader = VideoLoader()
+    info = loader.read_header(tiny_mp4)
+
+    assert info.shape == (10, 32, 32, 3)
+    assert info.dim_order == "TYXC"
+    assert info.n_images == 1
+    assert info.deferred_dims == "C"
+
+
 def test_supported_extensions():
     loader = VideoLoader()
     assert "mp4" in loader.SUPPORTED_EXTENSIONS
     assert "avi" in loader.SUPPORTED_EXTENSIONS
     assert "gif" in loader.SUPPORTED_EXTENSIONS
+
+
+def test_container_extensions_covers_compressed_formats():
+    loader = VideoLoader()
+    for ext in ("mp4", "avi", "mov", "mkv"):
+        assert ext in loader.CONTAINER_EXTENSIONS
+    # eager formats stay out -- they are loaded all-at-once anyway
+    for ext in ("gif", "apng", "webp"):
+        assert ext not in loader.CONTAINER_EXTENSIONS
 
 
 def test_is_folder_supported(tmp_path):

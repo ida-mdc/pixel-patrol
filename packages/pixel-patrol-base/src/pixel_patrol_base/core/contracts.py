@@ -32,10 +32,11 @@ class FileInfo:
     Used by _plan_tasks to decide task routing (batch vs. chunk vs. sub-image)
     without loading any pixel data.
     """
-    shape:     Tuple[int, ...]
-    dtype:     Any                # numpy dtype or compatible
-    dim_order: str                # e.g. 'ZYX', specifying 'X' and 'Y' is important for many processors
-    n_images:  int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …)
+    shape:         Tuple[int, ...]
+    dtype:         Any                # numpy dtype or compatible
+    dim_order:     str                # e.g. 'ZYX', specifying 'X' and 'Y' is important for many processors
+    n_images:      int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …)
+    deferred_dims: Optional[str] = None  # dims to defer in memory-chunk splitting (after primary dims, before spatial fallback); optional
 
 
 class PixelPatrolLoader(Protocol):
@@ -44,7 +45,7 @@ class PixelPatrolLoader(Protocol):
     OUTPUT_SCHEMA: Dict[str, Any]
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]]
     FOLDER_EXTENSIONS: Set[str]
-    CONTAINER_EXTENSIONS: Set[str]  # extensions that may have n_images > 1; always read_header
+    CONTAINER_EXTENSIONS: Set[str]  # always call read_header (n_images > 1, or on-disk size understates uncompressed size)
 
     def is_folder_supported(self, path: Path) -> bool: ...
 
