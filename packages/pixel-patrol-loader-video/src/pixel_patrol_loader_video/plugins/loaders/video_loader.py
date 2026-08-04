@@ -60,10 +60,6 @@ EAGER_FORMATS: Set[str] = {"gif", "apng", "webp"}
 NO_SEEK_FORMATS: Set[str] = {"mts", "m2ts", "wmv"}
 
 
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
 def _pix_fmt_to_channels(pix_fmt: str) -> int:
     """Return 1 for grayscale pixel formats, 3 for everything else."""
     return 1 if any(t in pix_fmt for t in ("gray", "mono", "pal8")) else 3
@@ -128,6 +124,7 @@ def _probe_video(source: str) -> Dict[str, Any]:
 
 
 def _av_fmt(n_channels: int) -> str:
+    # rgb24: 8 bits per channel, 24 bits per pixel; gray: 8-bit single channel
     return "rgb24" if n_channels == 3 else "gray"
 
 
@@ -291,10 +288,6 @@ def _build_eager_array(source: str, meta: Dict[str, Any]) -> da.Array:
     return da.from_delayed(delayed_frames, shape=shape, dtype=np.uint8)
 
 
-# ---------------------------------------------------------------------------
-# Public loader class
-# ---------------------------------------------------------------------------
-
 class VideoLoader:
     """
     Loader that reads video files (mp4, avi, mov, mkv, …) via PyAV (FFmpeg).
@@ -349,7 +342,7 @@ class VideoLoader:
         "n_frames": int,
         "n_channels": int,
         "fps": float,
-        "codec": str,
+        "codec": str,  # video codec name (e.g. "h264", "vp9")
         "duration_seconds": float,
     }
 
