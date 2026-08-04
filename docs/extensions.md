@@ -57,6 +57,12 @@ If PixelPatrol can't read your file format - or doesn't read it (and its metadat
 
 `dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` — the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
 
+`dim_order` is the only metadata field that must be correct. `shape` and `dtype` are always derived from the pixel array, not from `meta`. If `dim_order`/`dim_names` doesn't match the array's `ndim`, it's silently dropped and replaced with generic `A`/`B`/`C`… labels - check the length matches.
+
+The pipeline overwrites these after loading, so don't bother setting them: `shape`, `ndim`, `num_pixels`, `size_<axis>`, `dim_<axis>`, `dtype`, and the filesystem columns (`path`, `name`, `type`, `parent`, `depth`, `size_bytes`, `file_extension`, `modification_date`, `imported_path`, `common_base`, `child_id`).
+
+Any other field in `meta` is passed through to the table as-is, whether or not it's declared in `OUTPUT_SCHEMA` - a loader can dump every field it read from a file's metadata without knowing what each one means. `OUTPUT_SCHEMA` is only for the schema catalog/docs (see [schema doc](schema.md)): undeclared columns still work, they just won't show up there. Exception: loaders using the shared `RASTER_IMAGE_LOADER_SCHEMA` (BioIO/tifffile/Zarr-style), where `dim_order` and `dtype` are marked required in that schema's "Required columns".
+
 See [`pixel-patrol-example-extension`](https://github.com/ida-mdc/pixel-patrol-example-extension) for a full working example, including the complete protocol table.
 
 ---
@@ -100,6 +106,8 @@ Each plugin's `render(container, ctx)` method receives a `ctx` object - the rend
 - `ctx.colorMap` - maps group values to hex colors from the active palette
 - `ctx.groups` - distinct values of the active group column
 - `ctx.totalRows` / `ctx.filteredCount` - row counts
+
+To show your widget correctly in Overview mode (the default tile-gallery view), also define `overviewMessage(ctx)` and `overviewPlot(container, ctx)` - a short summary sentence and a small preview plot shown on the widget's tile. Both are optional.
 
 See the [`pixel-patrol-example-extension` README](https://github.com/ida-mdc/pixel-patrol-example-extension/blob/main/README.md) for the full `ctx` reference and worked examples.
 

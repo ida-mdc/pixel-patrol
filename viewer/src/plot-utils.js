@@ -91,7 +91,7 @@ const CHART_CONFIG = {
   toImageButtonOptions: { format: 'png', scale: 3 },
 };
 
-// Config for the small "hero" plot shown inside a condensed-mode tile: no toolbar,
+// Config for the small "hero" plot shown inside an overview-mode tile: no toolbar,
 // no interactivity hints - it's a glanceable preview, the full plot lives in the
 // expanded detail view.
 const MINI_CONFIG = {
@@ -101,7 +101,7 @@ const MINI_CONFIG = {
 };
 
 /**
- * Compact layout defaults for condensed-mode tile previews. Tiny margins, no
+ * Compact layout defaults for overview-mode tile previews. Tiny margins, no
  * legend, small fonts - just enough to read the shape of the data at a glance.
  */
 export const MINI_LAYOUT = {
@@ -151,7 +151,7 @@ export function appendPlot(container, traces, layout, divStyle = '') {
 }
 
 /**
- * Render a single compact "hero" plot for a condensed-mode tile. Fills the
+ * Render a single compact "hero" plot for an overview-mode tile. Fills the
  * given container (which should already be sized by CSS), merges MINI_LAYOUT
  * defaults, and hides the mode bar. Same DOM-first ordering rule as appendPlot.
  *
@@ -311,7 +311,7 @@ export function prependWarning(container, { level = 'yellow', html }) {
   return div;
 }
 
-/** Pixel value ranges for common integer dtypes - used to phrase condensed-mode summaries. */
+/** Pixel value ranges for common integer dtypes - used to phrase overview-mode summaries. */
 const DTYPE_RANGES = {
   uint8:  [0, 255],
   int8:   [-128, 127],
@@ -406,7 +406,7 @@ export function statTable(headers, rowData) {
 }
 
 /**
- * Render a cropped table "peek" into a condensed-mode tile plot area. Used as a
+ * Render a cropped table "peek" into an overview-mode tile plot area. Used as a
  * tile preview when the full widget would only show a table (e.g. a metadata
  * column that's constant across every image, so there's no distribution to plot).
  * Mirrors the Image Table tile's markup so the shared clip/fade styling applies.

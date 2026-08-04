@@ -205,7 +205,7 @@ export default {
     return schema.blobCols.includes('histogram_counts');
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const [{ total, n }] = await ctx.queryRows(
         `SELECT COUNT(*) AS total, COUNT("histogram_counts") AS n FROM pp_data ${ctx.where}`,
@@ -217,7 +217,7 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { groupExpr: geFn } = ctx.sql;
     const { extractBinary }   = ctx.data;
     const hasRange  = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');

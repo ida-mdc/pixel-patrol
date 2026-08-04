@@ -12,7 +12,7 @@ export default {
            schema.allCols.includes('file_extension');
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const hasNImages = ctx.schema.allCols.includes('n_images');
       const [row] = await ctx.queryRows(`
@@ -42,9 +42,9 @@ export default {
       }
       const summary = summarize(ctx, rows, pathRow);
 
-      // In condensed mode the summary is a bare header; the uneven-group warning
+      // In overview mode the summary is a bare header; the uneven-group warning
       // is surfaced in the File Metadata tile instead.
-      if (summary.nGroups > 1 && !ctx.state.condensedMode) prependUnevenGroupWarning(container, ctx, rows);
+      if (summary.nGroups > 1 && !ctx.state.overviewMode) prependUnevenGroupWarning(container, ctx, rows);
       renderKpis(container, ctx, summary);
       renderMetaLines(container, ctx, summary);
       if (summary.nGroups > 1) renderGroupTable(container, ctx, rows, summary);

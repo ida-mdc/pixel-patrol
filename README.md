@@ -4,13 +4,13 @@
 
 <img src="packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
-**[Documentation](https://pixelpatrol.app/docs/) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [PyPI](https://pypi.org/project/pixel-patrol/) | [Viewer](https://pixelpatrol.app/viewer/)**
+**[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/tutorials/) | [Documentation](https://pixelpatrol.app/docs/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
 
-Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and generates a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics. Get immediate results, compare conditions, catch outliers, verify batch consistency, and get the full picture before you use your dataset.
+Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and builds a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics - so you can compare conditions, catch outliers, and verify batch consistency before you use the data.
 
 <img src="packages/pixel-patrol/readme_assets/overview.png" width="">
 
-*The interactive viewer - filter, group, and explore your dataset.*
+*Overview mode - every widget as a tile; click one to expand it in place.*
 
 ---
 
@@ -84,17 +84,17 @@ api.view(project)
 
 ## Example visualizations
 
-![Plot showing the distribution of image sizes.](packages/pixel-patrol/readme_assets/size_plot.png)
+![Scatter plot of image width and height per file.](packages/pixel-patrol/readme_assets/dimensionality.png)
 
-*File size distribution across the dataset.*
+*Spot inconsistent crops or resolutions.*
 
-![Mosaic view of images, highlighting potential discrepancies.](packages/pixel-patrol/readme_assets/mosiac.png)
+![Violin plot of a per-image metric split by group.](packages/pixel-patrol/readme_assets/violin_plot.png)
 
-*Image mosaic - sort by any metric to surface outliers visually.*
+*See per-image spread and outliers, e.g. mean intensity, across groups.*
 
-![Statistical plots showing image dimensions and distributions.](packages/pixel-patrol/readme_assets/example_stats_plot.png)
+![Overlaid pixel intensity histograms for each group.](packages/pixel-patrol/readme_assets/histogram.png)
 
-*Dimension size distributions and statistics.*
+*Compare brightness and contrast across conditions.*
 
 ---
 
@@ -114,9 +114,3 @@ pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained
 ## Extending PixelPatrol
 
 PixelPatrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See [pixel-patrol-example-extension](https://github.com/ida-mdc/pixel-patrol-example-extension) for a working template, and the [Extensions](https://pixelpatrol.app/docs/extensions/) documentation.
-
----
-
-## Full documentation
-
-[pixelpatrol.app/docs/](https://pixelpatrol.app/docs/)

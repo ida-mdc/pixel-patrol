@@ -222,7 +222,7 @@ body { background: #f8f9fa; }
 .widget-warning-yellow { background: #fff8e6; border: 1px solid #ffe69c; color: #664500; }
 .widget-warning code { background: rgba(0, 0, 0, 0.06); padding: 1px 4px; border-radius: 3px; }
 
-/* ── Condensed-mode narrative summaries ── */
+/* ── Overview-mode narrative summaries ── */
 .widget-narrative {
   display: flex; gap: 10px; align-items: center;
   width: 100%; padding: 10px 16px; border: none; border-radius: 0;
@@ -244,7 +244,7 @@ button.widget-narrative:hover { background: #ece0fb; }
 .widget-narrative-warning .widget-narrative-text strong { color: #9c6f00; }
 .widget-narrative-warning.widget-narrative:hover { background: #fef0c7; }
 .widget-narrative-warning .widget-narrative-chevron { color: #9c6f00; }
-/* ── Condensed-mode tile gallery ── */
+/* ── Overview-mode tile gallery ── */
 /* The summary sits at the top as plain content - no box, since (unlike the
    tiles) there's nothing to open. */
 .gallery-summary { margin: 0 0 28px; }

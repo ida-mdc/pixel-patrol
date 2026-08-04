@@ -551,7 +551,7 @@ export default {
     return schema.allCols.length > 0;
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const cols = ctx.schema.allCols ?? [];
       const has  = c => cols.includes(c);

@@ -26,13 +26,13 @@ export function initStaticUi() {
   const viewBtnOverview = el('view-btn-overview');
   const viewBtnFull     = el('view-btn-full');
   syncViewToggle = () => {
-    viewBtnOverview?.setAttribute('aria-pressed', String(state.condensedMode));
-    viewBtnFull?.setAttribute('aria-pressed',     String(!state.condensedMode));
+    viewBtnOverview?.setAttribute('aria-pressed', String(state.overviewMode));
+    viewBtnFull?.setAttribute('aria-pressed',     String(!state.overviewMode));
   };
   if (viewBtnOverview && viewBtnFull) {
     syncViewToggle();
-    viewBtnOverview.onclick = () => { if (state.condensedMode) return; state.condensedMode = true;  syncViewToggle(); emit('render'); };
-    viewBtnFull.onclick     = () => { if (!state.condensedMode) return; state.condensedMode = false; syncViewToggle(); emit('render'); };
+    viewBtnOverview.onclick = () => { if (state.overviewMode) return; state.overviewMode = true;  syncViewToggle(); emit('render'); };
+    viewBtnFull.onclick     = () => { if (!state.overviewMode) return; state.overviewMode = false; syncViewToggle(); emit('render'); };
   }
   initCollapseToggle('appearance-section-header', 'appearance-section');
   initHeaderPopover('export-menu-btn', 'export-menu-panel');

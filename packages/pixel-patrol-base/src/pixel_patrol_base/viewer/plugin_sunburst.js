@@ -15,7 +15,7 @@ export default {
     return schema.allCols.includes('path') && schema.allCols.includes('size_bytes');
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const { andWhere } = ctx.sql;
       const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}`);
@@ -24,7 +24,7 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const pathWhere = ctx.sql.andWhere(ctx.where, '"path" IS NOT NULL');
     const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path")::BIGINT AS n FROM pp_data ${pathWhere}`);
     if (!Number(n ?? 0)) return false;

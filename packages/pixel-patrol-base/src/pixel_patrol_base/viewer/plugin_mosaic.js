@@ -35,7 +35,7 @@ export default {
     return schema.blobCols.includes('thumbnail') && hasMetric;
   },
 
-  async condensedMessage(ctx) {
+  async overviewMessage(ctx) {
     try {
       const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
       const defaultSort = sortableMetrics.includes('mean_intensity') ? 'mean_intensity' : (sortableMetrics[0] ?? null);
@@ -46,7 +46,7 @@ export default {
     } catch { return null; }
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { q, groupExpr: geFn } = ctx.sql;
     const sortableMetrics = ctx.schema.metricCols.filter(c => ctx.schema.allCols.includes(c));
     const metricCol = sortableMetrics.includes('mean_intensity') ? 'mean_intensity' : (sortableMetrics[0] ?? null);
