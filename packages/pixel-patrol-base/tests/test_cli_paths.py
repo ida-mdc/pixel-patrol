@@ -116,3 +116,9 @@ def test_process_accepts_absolute_paths(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert added_paths == [pngs_dir.resolve(), tifs_dir.resolve()]
+
+
+def test_list():
+    result = CliRunner().invoke(cli_module.cli, ["list"])
+    assert result.exit_code == 0
+    assert "raster-basic" in result.output  # always registered by pixel-patrol-base
