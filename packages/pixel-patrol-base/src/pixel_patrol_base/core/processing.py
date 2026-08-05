@@ -54,7 +54,7 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
-from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
+from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, SkipFile
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
@@ -412,6 +412,8 @@ def _plan_tasks(
 
         try:
             info: FileInfo = loader.read_header(file_path)
+        except SkipFile:
+            continue
         except Exception as exc:
             logger.warning("_plan_tasks: read_header failed for %s; skipping (%s)", file_path, exc)
             continue

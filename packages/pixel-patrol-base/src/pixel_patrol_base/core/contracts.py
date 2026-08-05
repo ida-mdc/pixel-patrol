@@ -10,6 +10,11 @@ from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import ProcessResult, RecordSpec, ProcessorOutput
 
 
+class SkipFile(Exception):
+    """Raised by read_header when a file is valid but not a supported image (e.g. DICOM SR).
+    Silently skipped by the pipeline - no warning emitted."""
+
+
 class ChunkKind(StrEnum):
     """Declares which level of chunking a processor operates on.
 
