@@ -1,0 +1,44 @@
+[project]
+name = "pixel-patrol-loader-medical"
+version = "0.8.0"
+description = "PixelPatrol add-on package for loading medical images (NIfTI, DICOM)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
+]
+requires-python = ">=3.11"
+
+dependencies = [
+    "nibabel==5.3.2",
+    "pydicom==3.0.1",
+    "pylibjpeg==2.1.0",
+    "pylibjpeg-libjpeg==2.4.0",
+    "pixel-patrol-base==0.8.0",
+]
+
+[project.urls]
+Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_loader_medical"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+pixel_patrol_loader_medical_builtins = "pixel_patrol_loader_medical.plugin_registry:register_loader_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.2",
+]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }
