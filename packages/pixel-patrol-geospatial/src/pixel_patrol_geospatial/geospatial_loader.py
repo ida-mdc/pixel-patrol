@@ -60,6 +60,7 @@ class GeospatialLoader:
     """Read geospatial images/data using rasterio."""
 
     NAME = "geospatial"
+    DESCRIPTION = "Loads geospatial raster files (GeoTIFF, NetCDF) via rasterio, extracting CRS, spatial extent, and band metadata."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "nc"}
     FOLDER_EXTENSIONS:    Set[str] = set()
@@ -79,6 +80,15 @@ class GeospatialLoader:
         "dtype": str,
         "footprint": Optional[str], # GeoJSON string, EPSG:4326; None only when crs is absent
         "nodata_value": Optional[int | float],
+    }
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "crs_str":      "Coordinate reference system as a WKT string.",
+        "crs_epsg":     "EPSG code of the CRS; None if not EPSG-registered.",
+        "latitude":     "Centroid latitude in WGS-84 degrees.",
+        "longitude":    "Centroid longitude in WGS-84 degrees.",
+        "shape":        "Raster dimensions as [bands, height, width].",
+        "footprint":    "Bounding-box footprint as a GeoJSON polygon in EPSG:4326.",
+        "nodata_value": "Declared nodata/fill value from the file metadata.",
     }
     OUTPUT_SCHEMA_PATTERNS: List[tuple]    = []
 

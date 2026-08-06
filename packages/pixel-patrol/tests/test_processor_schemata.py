@@ -58,9 +58,8 @@ def test_processor_schemata():
     )
     project.process_records(processing_config=processing_config)
 
-    parquet_files = list(project.output_path.parent.glob("*.parquet"))
-    assert len(parquet_files) > 0, f"No parquet file found in {project.output_path.parent}"
-    records_df, metadata = api.load(parquet_files[0])
+    assert project.output_path.exists(), f"No parquet file found at {project.output_path}"
+    records_df, metadata = api.load(project.output_path)
 
     if records_df is None or records_df.is_empty():
         print("    [Error] No records processed!")

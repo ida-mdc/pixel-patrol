@@ -14,12 +14,14 @@ class NoDataCountProcessor:
     """Counts pixels matching the declared nodata_value. NaN is only counted when nodata_value itself is NaN."""
 
     NAME       = "nodata-statistics"
+    DESCRIPTION = "Counts pixels matching the declared nodata value."
     CHUNK_KIND = ChunkKind.LEAF
     INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
     OUTPUT     = "features"
 
-    OUTPUT_SCHEMA          = {"nodata_count": int}
-    OUTPUT_SCHEMA_PATTERNS = []
+    OUTPUT_SCHEMA              = {"nodata_count": int}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {"nodata_count": "Number of pixels equal to the declared nodata value."}
+    OUTPUT_SCHEMA_PATTERNS     = []
 
     def run_chunk(self, record: Record) -> Dict:
         arr = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)

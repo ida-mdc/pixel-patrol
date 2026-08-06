@@ -127,7 +127,9 @@ def get_viewer_extension_dir():
 <tbody>
 <tr><td><code>NAME</code></td><td><code>str</code></td><td>yes</td><td>unique identifier passed to <code>create_project(..., loader=...)</code></td></tr>
 <tr><td><code>SUPPORTED_EXTENSIONS</code></td><td><code>set[str]</code></td><td>yes</td><td>file extensions this loader can read (lower-case, no dot)</td></tr>
+<tr><td><code>DESCRIPTION</code></td><td><code>str</code></td><td>yes</td><td>one-line description of the loader, shown in the schema catalog</td></tr>
 <tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>yes</td><td>extra metadata columns this loader adds to the table, with their types</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_DESCRIPTIONS</code></td><td><code>dict[str, str]</code></td><td>yes</td><td>one-line description for each column declared in <code>OUTPUT_SCHEMA</code></td></tr>
 <tr><td><code>read_header(path)</code></td><td><code>(Path) -> FileInfo</code></td><td>yes</td><td>cheap shape/dtype/dim-order probe, <strong>no pixel data loaded</strong></td></tr>
 <tr><td><code>load(path)</code></td><td><code>(Path) -> Record</code></td><td>yes</td><td>loads one image and returns a <code>Record</code>; the metadata passed to <code>record_from()</code> must include <code>dim_order</code> with at least <code>X</code> and/or <code>Y</code> for spatial images</td></tr>
 <tr><td><code>load_range(path, start, stop)</code></td><td><code>(Path, int, int) -> Iterator[(str, Record)]</code></td><td>yes</td><td>yields sub-images for container formats; raise <code>NotImplementedError</code> otherwise</td></tr>
@@ -148,8 +150,11 @@ class SharkCamLoader:
     FOLDER_EXTENSIONS    = set()
     CONTAINER_EXTENSIONS = set()
 
-    OUTPUT_SCHEMA          = {"depth_zone": str}
-    OUTPUT_SCHEMA_PATTERNS = []
+    DESCRIPTION = "Loads SharkCam dive-patch parquet files."
+
+    OUTPUT_SCHEMA              = {"depth_zone": str}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {"depth_zone": "Ocean depth zone of the dive patch."}
+    OUTPUT_SCHEMA_PATTERNS     = []
 
     def is_folder_supported(self, path):
         return False
@@ -215,7 +220,9 @@ class SharkCamLoader:
 <tr><td><code>CHUNK_KIND</code></td><td><code>ChunkKind</code></td><td><code>LEAF</code> (user-configured tiles/slices) or <code>MEMORY</code> (whole record, memory-safe chunking)</td></tr>
 <tr><td><code>INPUT</code></td><td><code>RecordSpec</code></td><td>which records this processor runs on (<code>kinds</code>, <code>axes</code>, <code>capabilities</code>, ...)</td></tr>
 <tr><td><code>OUTPUT</code></td><td><code>"features" | "record"</code></td><td>whether <code>run_chunk</code> returns columns to merge, or a brand-new <code>Record</code></td></tr>
+<tr><td><code>DESCRIPTION</code></td><td><code>str</code></td><td>one-line description of the processor, shown in the schema catalog</td></tr>
 <tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>the columns this processor adds, with their types</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_DESCRIPTIONS</code></td><td><code>dict[str, str]</code></td><td>one-line description for each column declared in <code>OUTPUT_SCHEMA</code></td></tr>
 <tr><td><code>run_chunk(record)</code></td><td><code>(Record) -> dict</code></td><td>does the actual computation on one chunk</td></tr>
 <tr><td><code>get_aggregation(name)</code></td><td><code>(str) -> Callable | None</code></td><td>how to combine multiple chunks' values for column <code>name</code> into the per-image value</td></tr>
 </tbody>
@@ -230,8 +237,11 @@ class GlowSpotterProcessor:
     INPUT      = RecordSpec(axes={"X", "Y"}, kinds={"intensity"})
     OUTPUT     = "features"
 
-    OUTPUT_SCHEMA          = {"glow_count": int}
-    OUTPUT_SCHEMA_PATTERNS = []
+    DESCRIPTION = "Counts bright-spot (glow) pixels per image."
+
+    OUTPUT_SCHEMA              = {"glow_count": int}
+    OUTPUT_SCHEMA_DESCRIPTIONS = {"glow_count": "Number of pixels brighter than median + 60."}
+    OUTPUT_SCHEMA_PATTERNS     = []
 
     def run_chunk(self, record):
         arr = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
