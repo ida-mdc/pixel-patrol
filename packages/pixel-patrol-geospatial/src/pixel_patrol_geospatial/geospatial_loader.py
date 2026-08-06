@@ -14,6 +14,11 @@ from pixel_patrol_base.core.record import Record, record_from
 
 logger = logging.getLogger(__name__)
 
+def _collapse(values):
+    """Return a scalar if all values are equal, otherwise the full list."""
+    lst = list(values)
+    return lst[0] if len(set(lst)) == 1 else lst
+
 def _get_footprint_geojson(bounds: rasterio.coords.BoundingBox, img_crs) -> str:
     lat_lon_crs = rasterio.CRS.from_epsg(4326)
     coords = [
@@ -139,13 +144,13 @@ class GeospatialLoader:
                 metadata["colorinterp"] = colorinterp
 
             if any(s != 1.0 for s in img.scales):
-                metadata["scales"] = list(img.scales)
+                metadata["scales"] = _collapse(img.scales)
             if any(o != 0.0 for o in img.offsets):
-                metadata["offsets"] = list(img.offsets)
+                metadata["offsets"] = _collapse(img.offsets)
 
             units = list(img.units)
             if any(u is not None for u in units):
-                metadata["units"] = units
+                metadata["units"] = _collapse(units)
 
             for k, v in img.tags().items():
                 metadata[f"tag_{k}"] = v
