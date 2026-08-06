@@ -82,6 +82,9 @@ def cli():
 @click.option('--omit-base-dir', is_flag=True, default=False,
               help='Do not store the base directory in the parquet metadata. '
                    'Useful when sharing tables without revealing local filesystem paths.')
+@click.option('--view', 'open_viewer', is_flag=True, default=False,
+              help='Open the viewer immediately after processing completes, using default viewer settings. '
+                   'Equivalent to running `pixel-patrol view OUTPUT` afterwards.')
 def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
               loader: str, file_extensions: tuple[str, ...],
               flavor: str, description: str,
@@ -94,7 +97,8 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               slice_size: tuple[str, ...],
               rows_per_part: int | None,
               log_file: bool,
-              omit_base_dir: bool):
+              omit_base_dir: bool,
+              open_viewer: bool):
     """
     Scan images in BASE_DIRECTORY, process them, and write a .parquet table.
 
@@ -103,6 +107,11 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     \b
       pixel-patrol process path/to/images/ -o results.parquet --loader bioio
       pixel-patrol view results.parquet
+
+    Or in one step:
+
+    \b
+      pixel-patrol process path/to/images/ -o results.parquet --loader bioio --view
     """
     base_directory = base_directory.resolve()
 
@@ -144,6 +153,10 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
     except KeyboardInterrupt:
         click.echo("\nCancelled.")
         raise SystemExit(1)
+
+    resolved_output = output if output.suffix.lower() == ".parquet" else output.with_suffix(".parquet")
+    if open_viewer and resolved_output.exists():
+        api_view(resolved_output)
 
 
 @cli.command()

@@ -42,6 +42,7 @@ pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 | `--parquet-row-group-size N` | 2048 | Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer. |
 | `--log-file` | off | Write a debug log file alongside the output parquet. |
 | `--omit-base-dir` | off | Do not store the base directory in the parquet metadata. Useful when sharing tables without revealing local filesystem paths. See the [privacy policy](privacy.md). |
+| `--view` | off | Open the viewer immediately after processing completes, using default viewer settings. Equivalent to running `pixel-patrol view OUTPUT` afterwards. |
 
 **Examples**
 
@@ -56,6 +57,9 @@ pixel-patrol process my-data/ -o results.parquet --loader bioio \
 # Large dataset on a cluster:
 pixel-patrol process my-data/ -o results.parquet --loader bioio \
   --scheduler tcp://host:8786 --mb-per-task 128 --log-file
+
+# Process and open the viewer in one step:
+pixel-patrol process my-data/ -o results.parquet --loader bioio --view
 ```
 
 ---

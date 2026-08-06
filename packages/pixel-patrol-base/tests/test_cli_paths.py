@@ -14,10 +14,11 @@ sys.modules.pop("pixel_patrol_base", None)
 from pixel_patrol_base import cli as cli_module
 
 
-def _setup_fake_cli(monkeypatch, dataset_root: Path):
+def _setup_fake_cli(monkeypatch, dataset_root: Path, create_output: bool = False):
     """Wire the CLI entry points to lightweight fakes for deterministic assertions."""
     dummy_project: dict[str, Any] = {}
     added_paths: list[Path] = []
+    view_calls: list[Path] = []
 
     def fake_create_project(name: str, base_dir: str, loader: str | None = None, output_path: str | Path | None = None):
         assert Path(base_dir).resolve() == dataset_root.resolve()
@@ -43,13 +44,19 @@ def _setup_fake_cli(monkeypatch, dataset_root: Path):
         return project
 
     def fake_process_files(project, **kwargs):
+        if create_output and dummy_project.get("output_path"):
+            dummy_project["output_path"].touch()
         return project
+
+    def fake_view(path, **kwargs):
+        view_calls.append(path)
 
     monkeypatch.setattr(cli_module, "create_project", fake_create_project)
     monkeypatch.setattr(cli_module, "add_paths", fake_add_paths)
     monkeypatch.setattr(cli_module, "process_files", fake_process_files)
+    monkeypatch.setattr(cli_module, "api_view", fake_view)
 
-    return added_paths
+    return added_paths, view_calls
 
 
 def test_process_accepts_relative_base_and_paths(monkeypatch, tmp_path):
@@ -63,7 +70,7 @@ def test_process_accepts_relative_base_and_paths(monkeypatch, tmp_path):
 
     output_path = tmp_path / "out.parquet"
 
-    added_paths = _setup_fake_cli(monkeypatch, dataset_root)
+    added_paths, _ = _setup_fake_cli(monkeypatch, dataset_root)
 
     monkeypatch.chdir(dataset_root.parent)
 
@@ -97,7 +104,7 @@ def test_process_accepts_absolute_paths(monkeypatch, tmp_path):
 
     output_path = tmp_path / "out.parquet"
 
-    added_paths = _setup_fake_cli(monkeypatch, dataset_root)
+    added_paths, _ = _setup_fake_cli(monkeypatch, dataset_root)
 
     result = runner.invoke(
         cli_module.cli,
@@ -116,3 +123,63 @@ def test_process_accepts_absolute_paths(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert added_paths == [pngs_dir.resolve(), tifs_dir.resolve()]
+
+
+def test_process_view_flag_opens_viewer(monkeypatch, tmp_path):
+    runner = CliRunner()
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    output_path = tmp_path / "out.parquet"
+
+    _, view_calls = _setup_fake_cli(monkeypatch, dataset_root, create_output=True)
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["process", str(dataset_root), "-o", str(output_path), "--view"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert view_calls == [output_path]
+
+
+def test_process_view_flag_skipped_when_no_output(monkeypatch, tmp_path):
+    runner = CliRunner()
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    output_path = tmp_path / "out.parquet"
+
+    _, view_calls = _setup_fake_cli(monkeypatch, dataset_root, create_output=False)
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["process", str(dataset_root), "-o", str(output_path), "--view"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert view_calls == []
+
+
+def test_process_view_flag_corrects_missing_extension(monkeypatch, tmp_path):
+    """--output without .parquet extension should still open the viewer with the corrected path."""
+    runner = CliRunner()
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    output_no_ext = tmp_path / "out"  # no .parquet
+    output_corrected = tmp_path / "out.parquet"
+
+    _, view_calls = _setup_fake_cli(monkeypatch, dataset_root, create_output=False)
+    # fake_process_files won't create the file; touch it manually to simulate the corrected path
+    output_corrected.touch()
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["process", str(dataset_root), "-o", str(output_no_ext), "--view"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert view_calls == [output_corrected]
+
+
