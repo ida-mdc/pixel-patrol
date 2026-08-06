@@ -11,12 +11,7 @@ from pixel_patrol_base.core.specs import RecordSpec
 
 
 class NoDataCountProcessor:
-    """Calculated statistics of the no data percentage per image.
-
-    No data is either a defined NoData value or NaN.
-    Adds "no data pixel count" and "nan data pixel count"
-    Supports a "no data percentage per image"
-    """
+    """Counts pixels matching the declared nodata_value. NaN is only counted when nodata_value itself is NaN."""
 
     NAME       = "nodata-statistics"
     CHUNK_KIND = ChunkKind.LEAF
