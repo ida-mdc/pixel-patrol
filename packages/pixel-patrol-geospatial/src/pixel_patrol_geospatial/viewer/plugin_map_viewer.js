@@ -12,7 +12,7 @@
  * positions can be off by up to ~1 m.
  */
 
-const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js';
+const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.mjs';
 // map licence: CC BY 4.0 (https://sgx.geodatenzentrum.de/web_public/gdz/lizenz/deu/Nutzungsbedingungen_basemapworld.pdf)
 const MAP_STYLE_URL = 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json';
 const MAX_POPUP_PATHS  = 5;  // up to this many overlapping images, list their paths; beyond it, a summary
@@ -20,8 +20,7 @@ const MAX_POPUP_GROUPS = 3;  // for how many groups display the number of images
 
 async function loadMaplibre() {
   // cached, so condensedView and render don't load it twice
-  await import(MAPLIBRE_SCRIPT_URL);
-  return maplibregl;
+  return await import(MAPLIBRE_SCRIPT_URL);
 }
 
 // needed for the static html snapshot. idle WebGL map returns
