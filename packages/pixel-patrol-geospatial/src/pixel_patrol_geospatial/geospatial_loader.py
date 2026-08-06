@@ -33,10 +33,10 @@ def _get_nodata_value_rasterio(
         band_nodata_values: Optional[List]) -> Optional[int | float]:
     """Combine the two possible NoData fields of rasterio together."""
     nodata_values = list()
-    if image_nodata_value: nodata_values.append(image_nodata_value)
+    if image_nodata_value is not None: nodata_values.append(image_nodata_value)
     if band_nodata_values: nodata_values.extend(band_nodata_values)
 
-    nodata_values = [v for v in nodata_values if v and ~np.isnan(v)]  # remove NaNs, because float("nan") != float("nan")
+    nodata_values = [v for v in nodata_values if v is not None and not np.isnan(float(v))]  # remove NaNs, because float("nan") != float("nan")
     if len(set(nodata_values)) > 1:
         msg = (
             "Multiple no data values found: '%s', which is currently not supported!\n"
