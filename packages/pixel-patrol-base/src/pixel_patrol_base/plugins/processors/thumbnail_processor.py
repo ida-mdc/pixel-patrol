@@ -1,4 +1,4 @@
-"""Thumbnail processor - generates one spatial patch per memory chunk, assembled by get_aggregation."""
+"""Thumbnail processor - generates a spatial patch per spatial chunk, assembled by get_aggregation."""
 
 import warnings
 from collections import defaultdict
@@ -25,15 +25,18 @@ def _get_color_dim(capabilities) -> str | None:
     return None
 
 
-def _reduce_to_spatial(arr, dim_order: str, keep_dims: set) -> tuple[da.Array, str]:
-    """Reduce all dimensions not in keep_dims by taking the center slice."""
+def _reduce_to_spatial(arr, dim_order: str, keep_dims: set, origin: tuple, full_shape: tuple):
+    """Reduce non-kept dims to the image's true center; (None, None) if this chunk misses it."""
     current = dim_order
     i = 0
     while i < len(current):
         dim = current[i]
         if dim not in keep_dims:
-            center = arr.shape[i] // 2
-            arr = da.take(arr, indices=center, axis=i)
+            full_i = dim_order.index(dim)
+            local_center = full_shape[full_i] // 2 - origin[full_i]
+            if not (0 <= local_center < arr.shape[i]):
+                return None, None
+            arr = da.take(arr, indices=local_center, axis=i)
             current = current.replace(dim, '', 1)
         else:
             i += 1
@@ -43,10 +46,8 @@ def _reduce_to_spatial(arr, dim_order: str, keep_dims: set) -> tuple[da.Array, s
 def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     """Assemble per-chunk patches into one SPRITE_SIZE × SPRITE_SIZE RGBA thumbnail.
 
-    Full image extent is derived from the patches' own position + size metadata,
-    so no external full_shape is needed.  Normalization is applied globally across
-    all spatial positions so tiles with different local intensity ranges don't
-    produce visible seams at chunk boundaries.
+    Spatial (Y/X) extent comes from the patches' own position + size. Normalization
+    is applied globally across positions so tiles don't show seams at boundaries.
     """
     valid = [r for r in rows if "__thumbnail_patch__" in r]
     if not valid:
@@ -65,8 +66,8 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
     for r in valid:
         by_pos[(r["dim_y"], r["dim_x"])].append(r)
 
-    # One representative patch per spatial position (middle of any Z/C/T stack)
-    selected = [group[len(group) // 2] for group in by_pos.values()]
+    # run_chunk already emits only the true-center chunk per spatial position, so each group has one row
+    selected = [group[0] for group in by_pos.values()]
 
     # Global min/max across all spatial positions for seamless normalization
     flat_vals = [r["__thumbnail_patch__"].ravel() for r in selected if r["__thumbnail_patch__"].size > 0]
@@ -134,10 +135,9 @@ def _assemble(rows: List[Dict]) -> Dict[str, Any]:
 class ThumbnailProcessor:
     """Generates a downsampled spatial patch from each memory chunk.
 
-    CHUNK_KIND = MEMORY: the pipeline delivers memory-safe chunks.
-    run_chunk returns a patch dict with position metadata; get_aggregation
-    assembles all patches into the final thumbnail, deriving the full extent
-    from the patches themselves.
+    run_chunk skips non-spatial chunks that don't own the image's true center
+    (only one chunk per spatial position does); get_aggregation assembles the
+    surviving patches into the final thumbnail.
     """
 
     NAME        = "thumbnail"
@@ -157,6 +157,7 @@ class ThumbnailProcessor:
         "thumbnail_norm_max": "Upper intensity bound used to normalize the thumbnail.",
         "thumbnail_dtype":    "Original pixel dtype of the source image the thumbnail was built from.",
     }
+    IS_MEMORY_HEAVY: bool = False
 
     def get_aggregation(self, name: str):
         if name not in self.OUTPUT_SCHEMA:
@@ -174,10 +175,14 @@ class ThumbnailProcessor:
         y_ax = dim_order_out.index("Y")
         x_ax = dim_order_out.index("X")
         h, w = chunk.shape[y_ax], chunk.shape[x_ax]
-        if h > _PATCH_MAX or w > _PATCH_MAX:
-            scale = min(_PATCH_MAX / h, _PATCH_MAX / w)
-            new_h = max(1, int(h * scale))
-            new_w = max(1, int(w * scale))
+        full_shape = record.meta.get("full_shape", record.data.shape)
+        full_h, full_w = full_shape[y_ax], full_shape[x_ax]
+        y_off, x_off = record.meta.get("dim_y", 0), record.meta.get("dim_x", 0)
+        # Sized from the full image + this chunk's position, so per-chunk sizes telescope like _assemble's placement math.
+        if full_h > _PATCH_MAX or full_w > _PATCH_MAX:
+            scale = min(_PATCH_MAX / full_h, _PATCH_MAX / full_w)
+            new_h = max(1, round((y_off + h) * scale) - round(y_off * scale))
+            new_w = max(1, round((x_off + w) * scale) - round(x_off * scale))
             r_idx = np.round(np.linspace(0, h - 1, new_h)).astype(np.int64)
             c_idx = np.round(np.linspace(0, w - 1, new_w)).astype(np.int64)
             chunk = np.take(np.take(chunk, r_idx, axis=y_ax), c_idx, axis=x_ax)
@@ -186,9 +191,10 @@ class ThumbnailProcessor:
         if np.issubdtype(chunk.dtype, np.floating):
             arr = da.where(da.isnull(arr), 0.0, arr)
 
-        keep_dims = {"X", "Y", color_dim} if color_dim else {"X", "Y", "S"}
-        arr, reduced_order = _reduce_to_spatial(arr, dim_order_out, keep_dims=keep_dims)
-        if arr.size == 0:
+        origin     = tuple(record.meta.get(f"dim_{d.lower()}", 0) for d in dim_order_out)
+        keep_dims  = {"X", "Y", color_dim} if color_dim else {"X", "Y", "S"}
+        arr, reduced_order = _reduce_to_spatial(arr, dim_order_out, keep_dims, origin, full_shape)
+        if arr is None or arr.size == 0:
             return {}
 
         if color_dim and color_dim in reduced_order:

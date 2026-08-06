@@ -11,7 +11,7 @@ import pytest
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.processing import (
     BatchTask, ContainerTask, MemoryChunkTask, Task,
-    _plan_container_tasks, _plan_tasks,
+    _effective_split_mb_per_task, _plan_container_tasks, _plan_tasks,
 )
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from _processing_mocks import MockEntry, MockLoader, capture_warnings
@@ -34,8 +34,32 @@ def _stream(pairs: List[Tuple[str, int]]) -> Iterator[Tuple[Path, dict]]:
 def _run(pairs: List[Tuple[str, int]], loader: MockLoader,
          config: ProcessingConfig) -> Tuple[List[Task], List[dict]]:
     files_meta: List[dict] = []
-    tasks = list(_plan_tasks(_stream(pairs), config, loader, files_meta))
+    tasks = list(_plan_tasks(_stream(pairs), config, loader, files_meta, processors=[]))
     return tasks, files_meta
+
+
+class _HeavyProcessor:
+    IS_MEMORY_HEAVY = True
+
+
+# ── IS_MEMORY_HEAVY chunk-budget shrink ──────────────────────────────────────
+
+def test_effective_split_budget_shrinks_for_heavy_processor():
+    plain = _effective_split_mb_per_task(512, [])
+    heavy = _effective_split_mb_per_task(512, [_HeavyProcessor()])
+    assert heavy < plain
+
+
+def test_heavy_processor_splits_large_file_into_more_chunks():
+    loader = MockLoader({"/big.npy": MockEntry((512, 512), np.float32, "YX")})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
+    pairs = [("/big.npy", 512 * 512 * 4)]
+
+    plain_tasks, _ = _run(pairs, loader, config)
+    heavy_tasks = list(_plan_tasks(_stream(pairs), config, loader, [], processors=[_HeavyProcessor()]))
+
+    assert all(isinstance(t, MemoryChunkTask) for t in heavy_tasks)
+    assert len(heavy_tasks) > len(plain_tasks)
 
 
 # ── _plan_container_tasks unit tests ─────────────────────────────────────────

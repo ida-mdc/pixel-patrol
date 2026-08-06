@@ -170,19 +170,28 @@ class LmdbLoader:
         return path.is_dir() and (path / "data.mdb").exists()
 
     def read_header(self, lmdb_path: Path) -> FileInfo:
-        """Open the LMDB, count entries, and peek the first entry for shape/dtype."""
+        """Open the LMDB, count entries, and return the largest of the first few entries' shape/dtype."""
         env, db, txn = _open_lmdb_readonly(lmdb_path)
         try:
             n_images = txn.stat(db)["entries"]
             if n_images == 0:
                 raise RuntimeError(f"LmdbLoader: empty database at '{lmdb_path}'")
+            best_nbytes = -1
+            shape = dtype = dim_order = None
             with txn.cursor() as cursor:
                 cursor.first()
-                array = _uncompress_blosc2(cursor.value())
-            meta = _extract_metadata(array)
-            shape = tuple(int(x) for x in meta["shape"])
-            dtype = np.dtype(str(meta["dtype"]))
-            return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
+                for _ in range(min(3, n_images)):
+                    array = _uncompress_blosc2(cursor.value())
+                    meta = _extract_metadata(array)
+                    candidate_shape = tuple(int(x) for x in meta["shape"])
+                    candidate_dtype = np.dtype(str(meta["dtype"]))
+                    nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
+                    if nbytes > best_nbytes:
+                        best_nbytes = nbytes
+                        shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+                    if not cursor.next():
+                        break
+            return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
         finally:
             env.close()
 

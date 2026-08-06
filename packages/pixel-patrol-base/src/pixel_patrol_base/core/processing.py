@@ -65,13 +65,25 @@ for _name in ("distributed", "distributed.worker", "distributed.scheduler",
               "distributed.nanny", "asyncio", "tornado", "numexpr", "numexpr.utils"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
+# Pause/resume noise is off the console but still counted by _PauseCounter below.
+# A handler must be attached here too - propagate=False with zero handlers falls
+# through to logging.lastResort, which prints unformatted anyway.
+logging.getLogger("distributed.worker.memory").addHandler(logging.NullHandler())
+logging.getLogger("distributed.worker.memory").propagate = False
+
 logger = logging.getLogger(__name__)
 
 
-def _silence_numcodecs_warning():
+def _silence_third_party_warnings():
     """Same showwarning patch as core/__init__.py, applied to each Dask worker process."""
     _sw = warnings.showwarning
-    warnings.showwarning = lambda m, c, f, l, *a, **kw: None if c is DeprecationWarning and "numcodecs" in str(f) else _sw(m, c, f, l, *a, **kw)
+    def _filtered(m, c, f, l, *a, **kw):
+        if c is DeprecationWarning and "numcodecs" in str(f):
+            return
+        if c is UserWarning and "Could not parse tiff pixel size" in str(m):
+            return
+        _sw(m, c, f, l, *a, **kw)
+    warnings.showwarning = _filtered
 
 
 # Fields that are PP-internal per-chunk values, not image-level metadata.
@@ -88,9 +100,16 @@ _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
 
-# Per-worker RAM multiplier: ~5× covers decompression + processor peak overhead,
-# ÷0.60 keeps actual usage below Dask's 80% pause threshold.
-_WORKER_MEMORY_MULTIPLIER = 8
+# Worst-case on-disk-to-actual-memory expansion factor; sizes worker RAM and
+# gates the small-file fast path.
+_MAX_SIZE_EXPANSION_FACTOR = 8
+
+# Used instead, for chunk-splitting decisions only (never for worker RAM sizing -
+# see _effective_split_mb_per_task), when a memory-heavy processor is active.
+_MAX_SIZE_EXPANSION_FACTOR_HEAVY = 24
+
+# Headroom left unused when packing workers into available RAM.
+_AVAILABLE_RAM_PACKING_FRACTION = 0.9
 
 # OMP/BLAS/NumExpr thread-count env vars passed to Dask nanny pre-spawn-environ
 # so they take effect before worker subprocesses initialize their thread pools.
@@ -102,6 +121,22 @@ _WORKER_THREAD_ENV = {
     "NUMEXPR_MAX_THREADS":  "1",
     "NUMEXPR_NUM_THREADS":  "1",
 }
+
+
+def _effective_split_mb_per_task(mb_per_task: float, processors: List[Any]) -> float:
+    """Shrink the per-task chunk-splitting budget when a memory-heavy processor is
+    active, so a chunk's peak memory after processing still fits the worker RAM
+    sized for the default case - without growing that worker budget itself (which
+    would cost parallelism on every run, not just ones with genuinely large files).
+
+    Only affects how finely large files get split; small files/images that never
+    approach mb_per_task are untouched, so plain batches of small images see no
+    slowdown regardless of which processors are active.
+    """
+    factor = (_MAX_SIZE_EXPANSION_FACTOR_HEAVY
+             if any(getattr(p, "IS_MEMORY_HEAVY", False) for p in processors)
+             else _MAX_SIZE_EXPANSION_FACTOR)
+    return mb_per_task * _MAX_SIZE_EXPANSION_FACTOR / factor
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -119,7 +154,6 @@ class MemoryChunkSpec:
     slices:      Tuple[slice, ...]  # applied as arr[spec.slices]
     origin:      Tuple[int, ...]    # global start coordinate of this sub-region
     dim_order:   str
-    image_shape: Tuple[int, ...]    # shape of the full source image
 
 
 @dataclass(frozen=True)
@@ -143,6 +177,30 @@ class ContainerTask:
     file_index:   int
     file_path:   str
     image_slice: Tuple[int, int]   # (start, stop) half-open
+
+
+def _task_image_count(task: Any) -> int:
+    """Number of images a task represents, for accurate error accounting on failure."""
+    if isinstance(task, BatchTask):
+        return len(task.files)
+    if isinstance(task, ContainerTask):
+        return task.image_slice[1] - task.image_slice[0]
+    return 1
+
+
+def _count_failed_images(task: Any, failed_chunked_files: Set[int]) -> int:
+    """How many newly-failed images this failed task should add to the error count.
+
+    A large image split into several MemoryChunkTasks must only count once even
+    if more than one of its chunks fails independently; failed_chunked_files
+    tracks which file_index has already been counted, and is updated in place.
+    """
+    if isinstance(task, MemoryChunkTask):
+        if task.file_index in failed_chunked_files:
+            return 0
+        failed_chunked_files.add(task.file_index)
+        return 1
+    return _task_image_count(task)
 
 
 Task = Union[BatchTask, MemoryChunkTask, ContainerTask]
@@ -204,21 +262,21 @@ def _split_into_ranges(
 
 def _compute_memory_chunk_specs(
     file_path:        Path,
-    info:             FileInfo,
+    dim_order:        str,
+    shape:            Tuple[int, ...],
+    dtype:            Any,
     mb_per_task:      float,
     leaf_block_shape: Optional[Dict[str, int]],
 ) -> Optional[List[MemoryChunkSpec]]:
-    """Return one MemoryChunkSpec per memory chunk for a file described by info.
+    """Return one MemoryChunkSpec per memory chunk for an image of the given shape/dtype/dim_order.
 
     Splits dims in two tiers - explicit-block-size dims first, then spatial defaults
     (X/Y) - so spatial dims are only touched as a last resort. Within each tier the
     required reduction is distributed geometrically across all dims in that tier,
     largest first, so no single dim absorbs all the splitting.
-    Returns None when the file already fits within the budget.
+    Returns None when the image already fits within the budget.
     """
-    dim_order    = info.dim_order
-    shape        = info.shape
-    dtype_bytes  = np.dtype(info.dtype).itemsize
+    dtype_bytes  = np.dtype(dtype).itemsize
     budget_bytes = int(mb_per_task * 1024 * 1024)
 
     total_bytes = math.prod(shape) * dtype_bytes
@@ -272,7 +330,7 @@ def _compute_memory_chunk_specs(
     for combo in itertools.product(*per_dim_ranges):
         slc    = tuple(slice(None) if s is None else slice(s, e) for s, e in combo)
         origin = tuple(0 if s is None else s for s, _ in combo)
-        specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order, image_shape=shape))
+        specs.append(MemoryChunkSpec(slices=slc, origin=origin, dim_order=dim_order))
 
     chunk_mb = math.prod(chunk_sizes.values()) * dtype_bytes / (1024 * 1024)
     logger.info(
@@ -313,6 +371,7 @@ def _plan_tasks(
     config:      ProcessingConfig,
     loader:      Any,
     files_meta:  List[dict],
+    processors:  List[Any],
 ) -> Iterator[Task]:
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
 
@@ -322,14 +381,15 @@ def _plan_tasks(
                                    if unsplittable, fall through to batch.
       otherwise     → accumulate in current batch; flush when budget fills.
     """
-    budget_bytes: int = int(config.mb_per_task * 1024 * 1024)
+    _split_mb_per_task: float = _effective_split_mb_per_task(config.mb_per_task, processors)
+    budget_bytes: int = int(_split_mb_per_task * 1024 * 1024)
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
     # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
     # can be orders of magnitude smaller than the uncompressed array - never skip
     # read_header for them or they'll be mis-classified as small files.
     _folder_exts: frozenset    = frozenset(getattr(loader, "FOLDER_EXTENSIONS", ()))
-    _small_file_threshold: int = budget_bytes // 8
+    _small_file_threshold: int = budget_bytes // _MAX_SIZE_EXPANSION_FACTOR
     _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
     batch_bytes: int = 0
@@ -383,7 +443,7 @@ def _plan_tasks(
                             "mb_per_task=%.0f gives ~%d images/task - tasks may take many minutes. "
                             "Consider --mb-per-task 50 or lower.",
                             info.n_images, image_bytes / 1024 / 1024,
-                            config.mb_per_task, images_per_task,
+                            _split_mb_per_task, images_per_task,
                         )
             yield from _plan_container_tasks(file_index, str(file_path), info, budget_bytes, _MAX_IMAGES_PER_TASK)
             continue
@@ -393,7 +453,8 @@ def _plan_tasks(
         if uncompressed > budget_bytes:
             if pending := _flush_batch():
                 yield pending
-            specs = _compute_memory_chunk_specs(file_path, info, config.mb_per_task, config.slice_size)
+            specs = _compute_memory_chunk_specs(file_path, info.dim_order, info.shape, info.dtype,
+                                                _split_mb_per_task, config.slice_size)
             if specs:
                 n = len(specs)
                 for spec in specs:
@@ -583,27 +644,55 @@ def _process_memory_chunk(
     )
 
 
+def _run_record(
+    record:     Record,
+    data:       Any,
+    origin:     Tuple[int, ...],
+    file_index: int,
+    child_id:   Optional[str],
+    processors: List[Any],
+    config:     ProcessingConfig,
+    file_path:  str,
+) -> MemoryChunkResult:
+    """Extract image metadata from record, build a memory-chunk from data/origin, and process it.
+
+    record supplies the (possibly full, unsliced) image metadata; data/origin describe
+    the specific chunk to build - which may be record.data itself (origin=0) or a
+    sub-region of it (data=record.data[slices], origin=slice start).
+    """
+    image_meta = _extract_image_meta(record)
+    mem_record = _build_record(record, data, origin)
+    mem_record.meta["full_shape"] = tuple(record.data.shape)  # lets processors locate their chunk in the whole image
+    return _process_memory_chunk(mem_record, file_index, child_id, processors, config,
+                                 file_path, image_meta=image_meta)
+
+
 def _execute_batch_task(
     task:       BatchTask,
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
 ) -> List[MemoryChunkResult]:
-    """Process every file in the task as one complete memory chunk each."""
+    """Process every file in the task as one complete memory chunk each.
+
+    Each file is isolated in its own try/except so one bad file doesn't
+    discard the rest of the batch's already-processed results.
+    """
     results: List[MemoryChunkResult] = []
     for idxed_path in task.files:
-        _t = time.perf_counter()
-        record = loader.load(Path(idxed_path.file_path))
-        load_s = time.perf_counter() - _t
-        if record is None:
-            logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
-            continue
-        image_meta = _extract_image_meta(record)
-        mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        result = _process_memory_chunk(mem_record, idxed_path.file_index, None, processors, config,
-                                       idxed_path.file_path, image_meta=image_meta)
-        result.timing["load"] = result.timing.get("load", 0.0) + load_s
-        results.append(result)
+        try:
+            _t = time.perf_counter()
+            record = loader.load(Path(idxed_path.file_path))
+            load_s = time.perf_counter() - _t
+            if record is None:
+                logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
+                continue
+            result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                                 idxed_path.file_index, None, processors, config, idxed_path.file_path)
+            result.timing["load"] = result.timing.get("load", 0.0) + load_s
+            results.append(result)
+        except Exception as exc:
+            logger.warning("worker: failed to process '%s': %s", idxed_path.file_path, exc)
     return results
 
 
@@ -620,12 +709,10 @@ def _execute_memory_chunk_task(
     if record is None:
         logger.warning("worker: loader returned None for %s; skipping", task.file_path)
         return []
-    # Extract image_meta from the full record BEFORE slicing - record.data.shape
-    # here is the full image shape; task.spec.image_shape is the same value.
-    image_meta = _extract_image_meta(record)
-    mem_record = _build_record(record, record.data[task.spec.slices], task.spec.origin)
-    result = _process_memory_chunk(mem_record, task.file_index, None, processors, config,
-                                   task.file_path, image_meta=image_meta)
+    # record supplies image_meta from the full (unsliced) shape - record.data.shape
+    # here is the full image shape, before task.spec.slices is applied.
+    result = _run_record(record, record.data[task.spec.slices], task.spec.origin,
+                         task.file_index, None, processors, config, task.file_path)
     result.timing["load"] = result.timing.get("load", 0.0) + load_s
     return [result]
 
@@ -635,21 +722,39 @@ def _execute_container_task(
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
-) -> List[MemoryChunkResult]:
-    """Load and process a batch of sub-images from a container file."""
-    results: List[MemoryChunkResult] = []
+) -> List[List[MemoryChunkResult]]:
+    """Load and process a batch of sub-images from a container file.
+
+    One inner list per sub-image - length 1 normally, or one entry per memory
+    chunk if a sub-image turns out oversized. Each sub-image is isolated in
+    its own try/except so one bad sub-image doesn't discard its siblings.
+    """
+    results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
-    for child_id, record in loader.load_range(Path(task.file_path), start, stop):
+    file_path = Path(task.file_path)
+    _split_mb_per_task = _effective_split_mb_per_task(config.mb_per_task, processors)
+    for child_id, record in loader.load_range(file_path, start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
                            child_id, task.file_path)
             continue
-        # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
-        image_meta = _extract_image_meta(record)
-        mem_record = _build_record(record, record.data, tuple(0 for _ in record.dim_order))
-        result = _process_memory_chunk(mem_record, task.file_index, child_id, processors, config,
-                                       task.file_path, image_meta=image_meta)
-        results.append(result)
+        try:
+            # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
+            specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
+                                                record.data.dtype, _split_mb_per_task, config.slice_size)
+            if specs:
+                results.append([
+                    _run_record(record, record.data[spec.slices], spec.origin,
+                               task.file_index, child_id, processors, config, task.file_path)
+                    for spec in specs
+                ])
+            else:
+                result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
+                                     task.file_index, child_id, processors, config, task.file_path)
+                results.append([result])
+        except Exception as exc:
+            logger.warning("worker: failed to process sub-image %s in %s: %s",
+                           child_id, task.file_path, exc)
     return results
 
 
@@ -742,8 +847,8 @@ def _rollup(
         for col in getattr(proc, "OUTPUT_SCHEMA", {}):
             global_obs[col] = proc.get_aggregation(col)(proc_chunk_rows, {})
             mem_cols_added += 1
-    if all_leaf_rows or mem_cols_added:
-        obs_rows.append(global_obs)
+    # Always emit the row - image_meta alone keeps the image represented even if every processor failed.
+    obs_rows.append(global_obs)
 
     for r in range(1, n + 1):
         for g_dim_combo in itertools.combinations(active_dims, r):
@@ -971,6 +1076,8 @@ def _coordinate_pipeline(
     task_type_counts:  Dict[str, int]   = {}
     all_timing:        Dict[str, float] = {}
     error_records     = 0
+    failed_chunked_files: Set[int] = set()  # file_index already counted, so a second
+                                             # failing chunk of the same image isn't double-counted
     t_pipeline_start  = time.monotonic()
 
     # Count memory-pressure pause events from Dask's distributed logger.
@@ -995,6 +1102,8 @@ def _coordinate_pipeline(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
         n_workers_live, max_pending, config.rows_per_part,
     )
+    logger.info("If workers keep pausing/restarting on memory, raise --mb-per-task (currently %.0f).",
+                config.mb_per_task)
     if is_distributed:
         worker_info = client.scheduler_info().get("workers", {})
         for addr, w in worker_info.items():
@@ -1065,29 +1174,23 @@ def _coordinate_pipeline(
     logger.debug("Pipeline: %d initial futures submitted", len(initial_futures))
 
     ac = as_completed(initial_futures)
-    all_submitted = False
     for future in ac:
         task = future_to_task.pop(future)
 
         next_task = next(task_iter, None)
         if next_task is not None:
             ac.add(_submit(next_task))
-        elif not all_submitted:
-            all_submitted = True
-            pbar.total = len(files_meta)
-            pbar.refresh()
 
         try:
-            results: List[MemoryChunkResult] = future.result()
+            results: Any = future.result()  # shape depends on task type - see _executor_for
         except Exception as exc:
             # Emit one user-visible warning per affected file path.
             if isinstance(task, BatchTask):
                 for ip in task.files:
                     logger.warning("Skipping '%s' - worker error: %s", ip.file_path, exc)
-                    error_records += 1
             else:
                 logger.warning("Skipping '%s' - worker error: %s", task.file_path, exc)
-                error_records += 1
+            error_records += _count_failed_images(task, failed_chunked_files)
             continue
 
         before = completed_records
@@ -1102,9 +1205,18 @@ def _coordinate_pipeline(
                 _chunk_info[0] = f"{n_received}/{task.n_memory_chunks} ({Path(task.file_path).name})"
                 _update_pbar_postfix()
                 pbar.refresh()
+        elif isinstance(task, ContainerTask):
+            for chunk_group in results:
+                _handle_record(chunk_group, chunk_group[0].file_index, chunk_group[0].child_id)
+            n_missing = _task_image_count(task) - len(results)
+            if n_missing > 0:
+                error_records += n_missing
         else:
             for result in results:
                 _handle_record([result], result.file_index, result.child_id)
+            n_missing = _task_image_count(task) - len(results)
+            if n_missing > 0:
+                error_records += n_missing
 
         if completed_records > before and completed_records % _LOG_EVERY == 0:
             elapsed = time.monotonic() - t_pipeline_start
@@ -1117,11 +1229,14 @@ def _coordinate_pipeline(
     pbar.close()
     wall_s = time.perf_counter() - t_wall_start
     elapsed_total = time.monotonic() - t_pipeline_start
+    attempted = completed_records + error_records
     logger.info(
-        "Pipeline done: %d images, %d errors, %d parts, %.1fs total (%.1f img/s avg)",
-        completed_records, error_records, writer._part_counter,
+        "Pipeline done: %d/%d images processed, %d parts, %.1fs total (%.1f img/s avg)",
+        completed_records, attempted, writer._part_counter,
         elapsed_total, completed_records / elapsed_total if elapsed_total > 0 else 0,
     )
+    if error_records:
+        logger.warning("%d image(s) were not processed - see warnings above for affected files.", error_records)
 
     logging.getLogger("distributed.worker.memory").removeHandler(_pause_handler)
 
@@ -1141,6 +1256,8 @@ def _coordinate_pipeline(
 
     stats: Dict[str, Any] = {
         "wall_s":                    wall_s,
+        "n_images_processed":        completed_records,
+        "n_images_failed":           error_records,
         "n_files":                   len(files_meta),
         "n_tasks":                   n_tasks_submitted,
         "task_types":                task_type_counts,
@@ -1150,6 +1267,7 @@ def _coordinate_pipeline(
         "peak_worker_rss_mb":        round(peak_worker_rss_mb, 1),
         "n_memory_pressure_events":  _pause_handler.count,
         "load_cpu_s":                all_timing.get("load", 0.0),
+        "part_paths":                [str(p) for p in writer._part_paths],
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
     result_df = writer.finalize()
@@ -1345,8 +1463,9 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         yield client, True
     except ValueError:
         n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
-        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _WORKER_MEMORY_MULTIPLIER
-        n_workers_ram = max(1, int(psutil.virtual_memory().available / worker_mem_bytes))
+        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _MAX_SIZE_EXPANSION_FACTOR
+        usable_ram = psutil.virtual_memory().available * _AVAILABLE_RAM_PACKING_FRACTION
+        n_workers_ram = max(1, int(usable_ram / worker_mem_bytes))
         n_workers = min(n_workers_cpu, n_workers_ram)
         if n_workers < n_workers_cpu:
             logger.info(
@@ -1367,11 +1486,12 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
                 n_workers=n_workers,
                 threads_per_worker=1,
                 processes=True,
+                memory_limit=int(worker_mem_bytes),
             )
         if _in_main:
             signal.signal(signal.SIGINT, _old_sigint)
         client = Client(cluster)
-        client.run(_silence_numcodecs_warning)
+        client.run(_silence_third_party_warnings)
         try:
             yield client, False
         finally:
@@ -1479,6 +1599,7 @@ def build_records_df(
             config=cfg,
             loader=loader,
             files_meta=files_meta,
+            processors=processors,
         )
         return _coordinate_pipeline(
             client=client,

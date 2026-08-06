@@ -51,8 +51,8 @@ class PixelPatrolLoader(Protocol):
     def read_header(self, file_path: Path) -> FileInfo:
         """Read file header only; return shape/dtype/dim_order without loading pixels.
 
-        For container formats (n_images > 1), shape/dtype/dim_order describe a
-        representative sub-image (typically the first). n_images is the total count.
+        For container formats (n_images > 1), shape/dtype/dim_order describe the
+        largest of a small sample of sub-images. n_images is the total count.
         Must be picklable - no open file handles in instance state after return.
         """
         ...
@@ -82,6 +82,7 @@ class PixelPatrolProcessor(Protocol):
     INPUT: RecordSpec
     OUTPUT: ProcessorOutput            # "features" or "record"
     OUTPUT_SCHEMA: Dict[str, Any]
+    IS_MEMORY_HEAVY: bool              # needs much more than the default per-chunk memory budget
     def run_chunk(self, record: Record) -> Dict[str, Any]: ...
     def get_aggregation(self, name: str) -> Optional[Any]: ...
 
