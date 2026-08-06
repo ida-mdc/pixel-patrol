@@ -345,4 +345,3 @@ function buildSizeCaseSQL(breaks, labels) {
   sql += ` ELSE '${labels[labels.length - 1]}' END`;
   return sql;
 }
-

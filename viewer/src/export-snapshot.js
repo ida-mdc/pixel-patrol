@@ -118,6 +118,12 @@ export async function exportBakedHtml(state, schema, plugins) {
   // DOMParser base is about:blank - resolve all URLs against the live page instead.
   const pageBase = window.location.href;
 
+  // needed for the WebGL based map of the geospatial-extension
+  // allows the re-redner into the buffer that same tick the canvas
+  // image is generated. otherwise, only an empty buffer is used
+  // resulting in an empty image
+  window.dispatchEvent(new Event('pp:before-snapshot'));
+
   // Canvas pixel data is not in outerHTML - capture from live DOM first.
   const liveCanvasDataUrls = [...document.querySelectorAll('canvas')].map(c => {
     try { return c.toDataURL(); } catch { return null; }

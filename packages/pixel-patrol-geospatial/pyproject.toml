@@ -1,0 +1,41 @@
+[project]
+name = "pixel-patrol-geospatial"
+version = "0.8.0"
+description = "Extension for geospatial data"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pixel-patrol-base==0.8.0",
+    "rasterio==1.5.0",
+    "shapely==2.1.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_geospatial"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+geospatial_loaders = "pixel_patrol_geospatial.plugin_registry:register_loader_plugins"
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+geospatial_processors = "pixel_patrol_geospatial.plugin_registry:register_processor_plugins"
+
+[project.entry-points."pixel_patrol.viewer_extensions"]
+geospatial_viewer = "pixel_patrol_geospatial.plugin_registry:get_viewer_extension_dir"
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../../packages/pixel-patrol-base", editable = true }

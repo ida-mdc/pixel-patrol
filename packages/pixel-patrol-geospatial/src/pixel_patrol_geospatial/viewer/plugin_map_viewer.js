@@ -1,0 +1,340 @@
+/**
+ * Map Points plugin - shows locations on an interactive MapLibre map.
+ *
+ * Reads `latitude`, `longitude`, and `footprint` (GeoJSON string).
+ *
+ * The images' locations are shown as cluster badges: one circle per area
+ * with the summed number of images.
+ * Hovering a badge shows a popup with the
+ * image path(s) and, if a grouping is selected, a per-group tally.
+ *
+ * Note: MapLibre's clustering stores coordinates as 32-bit floats, so badge
+ * positions can be off by up to ~1 m.
+ */
+
+const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.mjs';
+// map licence: CC BY 4.0 (https://sgx.geodatenzentrum.de/web_public/gdz/lizenz/deu/Nutzungsbedingungen_basemapworld.pdf)
+const MAP_STYLE_URL = 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json';
+const MAX_POPUP_PATHS  = 5;  // up to this many overlapping images, list their paths; beyond it, a summary
+const MAX_POPUP_GROUPS = 3;  // for how many groups display the number of images when they overlap
+
+async function loadMaplibre() {
+  // cached, so condensedView and render don't load it twice
+  return await import(MAPLIBRE_SCRIPT_URL);
+}
+
+// needed for the static html snapshot. idle WebGL map returns
+// blank buffer, so redraw when the snapshot is generated.
+function captureableInSnapshot(map, container) {
+  const redraw = () => {
+    if (!document.contains(container)) {
+      window.removeEventListener('pp:before-snapshot', redraw);
+      return;
+    }
+    map.redraw();
+  };
+  window.addEventListener('pp:before-snapshot', redraw);
+}
+
+// Group the query rows by coordinate and build one GeoJSON
+// feature (geometry + arbitrary `properties`) per distinct position.
+// The images' {path, group} list is stored as a JSON string because MapLibre
+// only preserves flat properties when it hands features back in hover events.
+function groupedPointFeatures(rows) {
+  const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
+  for (const row of rows) {
+    const key = `${row.lat},${row.lon}`;
+    if (!rowsPerCoord.has(key)) rowsPerCoord.set(key, []);
+    rowsPerCoord.get(key).push(row);
+  }
+
+  const features = [];
+  for (const rowsHere of rowsPerCoord.values()) {
+    const members = rowsHere.map(row => ({ path: row.path, group: row.__group__ }));
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
+      properties: { count: rowsHere.length, members: JSON.stringify(members) },
+    });
+  }
+  return features;
+}
+
+// The {path, group} members of every feature stacked at the hovered pixel.
+function membersOf(features) {
+  const members = [];
+  for (const feature of features) {
+    members.push(...JSON.parse(feature.properties.members));
+  }
+  return members;
+}
+
+function abbreviatedCount(valueExpr) {
+  // shorten numbers: 2000 → "2k", 2345 → "2.3k", 3200000 → "3.2M"
+  return ['case',
+    ['>=', valueExpr, 1e6], ['concat', ['/', ['round', ['/', valueExpr, 1e5]], 10], 'M'],
+    ['>=', valueExpr, 1e3], ['concat', ['/', ['round', ['/', valueExpr, 1e2]], 10], 'k'],
+    ['to-string', valueExpr],
+  ];
+}
+
+// Add the image positions to the map as cluster badges, aggregated by
+// on-screen proximity.
+function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
+  const features = groupedPointFeatures(rows);
+  if (bounds) {
+    for (const feature of features) bounds.extend(feature.geometry.coordinates);
+  }
+
+  map.addSource('points-clustered', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features },
+    cluster:          true,
+    clusterRadius:    20,  // merge features within 20 screen pixels
+    clusterMinPoints: 1,   // even a lone coordinate becomes a (1-member) cluster
+    clusterMaxZoom:   24,  // never un-cluster (features would lose cluster_id/total)
+    clusterProperties: { total: ['+', ['get', 'count']] },  // sum image counts, not feature counts
+  });
+
+  map.addLayer({
+    id:     'points-cluster',
+    type:   'circle',
+    source: 'points-clustered',
+    paint: {
+      'circle-radius':       radius + 6,
+      'circle-color':        '#4a90d9',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1,
+    },
+  });
+
+  if (showCount) {  // don't show numbers in condensed view
+    // Clustered features carry the summed 'total'; a feature the clustering
+    // left unwrapped only has its own 'count' — hence the coalesce.
+    const countExpr = ['coalesce', ['get', 'total'], ['get', 'count']];
+    map.addLayer({
+      id:     'points-cluster-count',
+      type:   'symbol',  // 'symbol' layers draw text (and/or icons)
+      source: 'points-clustered',
+      layout: { 'text-field': abbreviatedCount(countExpr), 'text-size': 12 },
+      paint:  { 'text-color': '#fff' },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hover popups
+// ---------------------------------------------------------------------------
+
+// Popup text for the images at one hovered spot. `members` is a list of
+// {path, group} objects.
+function popupHtml(ctx, members, kindLabel) {
+  const escapeHtml = ctx.plot.escapeHtml;
+  const groupingLabel = ctx.plot.groupingLabel();  // '' when no grouping is selected
+
+  // Few images: list their paths.
+  if (members.length <= MAX_POPUP_PATHS) {
+    return members.map((member) => {
+      let line = escapeHtml(String(member.path ?? ''));
+      if (groupingLabel) line += ` <i>(${escapeHtml(ctx.groupLabel(member.group))})</i>`;
+      return line;
+    }).join('<br>');
+  }
+
+  // Many images: a count plus a per-group tally.
+  let html = `${members.length} ${kindLabel}`;
+  if (groupingLabel) {
+    // Tally members per group, largest group first (≈ Counter.most_common).
+    const countPerGroup = new Map();
+    for (const member of members) {
+      countPerGroup.set(member.group, (countPerGroup.get(member.group) ?? 0) + 1);
+    }
+    const entries = [...countPerGroup.entries()];
+    entries.sort((entryA, entryB) => entryB[1] - entryA[1]);
+
+    const parts = entries.slice(0, MAX_POPUP_GROUPS)
+      .map(([group, count]) => `${count}× ${escapeHtml(ctx.groupLabel(group))}`);
+    const hidden = entries.length - parts.length;
+    if (hidden > 0) parts.push(`+${hidden} more`);
+    html += `<br><b>${escapeHtml(groupingLabel)}:</b> ${parts.join(', ')}`;
+  }
+  return html;
+}
+
+// one popup on hover for points and polygons. manually setting order, so that the info
+// of points is displayed instead of the polygon.
+function addHoverPopup(map, ctx) {
+  const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
+  const hoverLayers = ['points-cluster', 'footprints-fill'];  // priority order
+
+  const hide = () => {
+    map.getCanvas().style.cursor = '';
+    popup.remove();
+  };
+
+  map.on('mousemove', async (event) => {
+    const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
+    if (!hits.length) return hide();
+    map.getCanvas().style.cursor = 'pointer';
+
+    // A point badge (possibly a cluster) wins over the footprint beneath it.
+    const badge = hits.find(hit => hit.layer.id === 'points-cluster');
+    if (badge) {
+      const clusterId = badge.properties.cluster_id;
+      const members = clusterId !== undefined
+        ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+        : membersOf([badge]);  // feature the clustering left unwrapped
+      popup.setLngLat(badge.geometry.coordinates).setHTML(popupHtml(ctx, members, 'points')).addTo(map);
+      return;
+    }
+
+    // Otherwise the footprint polygon(s) under the cursor, anchored at the
+    // mouse (a polygon has no single meaningful anchor point).
+    const footprints = hits.map(hit => hit.properties);
+    popup.setLngLat(event.lngLat).setHTML(popupHtml(ctx, footprints, 'footprints')).addTo(map);
+  });
+
+  // mousemove stops firing once the cursor leaves the canvas entirely.
+  map.on('mouseout', hide);
+}
+
+export default {
+  id:    'map-points',
+  label: 'Locations',
+  group: 'Geospatial extension',
+  scope: 'image',
+
+  requires(schema) {
+    const cols = ['latitude', 'longitude', 'footprint'];
+    return cols.every(c => schema.allCols.includes(c));
+  },
+
+  async overviewPlot(container, ctx) {
+    const rows = await ctx.queryRows(`
+      SELECT
+        "latitude" AS lat,
+        "longitude" AS lon,
+        ${ctx.sql.groupCol()} AS __group__
+      FROM pp_data
+      ${ctx.sql.andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
+      ORDER BY random()
+      LIMIT 100
+    `);
+    if (!rows.length) return false;  // placeholder icon will be displayed
+
+    container.style.height = '100%';
+    container.style.width = '100%';
+
+    const maplibregl = await loadMaplibre();
+    const map = new maplibregl.Map({
+      container,
+      style: MAP_STYLE_URL,
+      center: [0, 0],
+      zoom: 1,
+      attributionControl: false,
+      interactive: false,  // so that map can be clicked to open the condensed view
+      preserveDrawingBuffer: true, // needed for the static html snapshot
+    });
+    captureableInSnapshot(map, container);
+
+    // add points when map has loaded
+    map.on('load', () => {
+      const bounds = new maplibregl.LngLatBounds();
+      addPointsLayers(map, rows, { radius: 3, bounds });
+      map.fitBounds(bounds, { padding: 20, maxZoom: 8, animate: false });
+    });
+
+    return true;
+  },
+
+  async render(container, ctx) {
+    const rows = await ctx.queryRows(`
+      SELECT
+        "latitude"  AS lat,
+        "longitude" AS lon,
+        "path" AS path,
+        "footprint" as footprint,
+        ${ctx.sql.groupCol()} AS __group__
+      FROM pp_data
+      ${ctx.sql.andWhere(ctx.where, '"latitude" IS NOT NULL AND "longitude" IS NOT NULL')}
+    `);
+
+    if (!rows.length) {
+      container.textContent = 'No geographic data available.';
+      return;
+    }
+
+    // The card body has no fixed size of its own — without an explicit
+    // height the map would collapse to 0 pixels.
+    container.style.height = '600px';
+    container.style.minHeight = '200px';
+    container.style.width = '100%';
+    container.style.position = 'relative';
+
+    const maplibregl = await loadMaplibre();
+
+    const map = new maplibregl.Map({
+      container,
+      style: MAP_STYLE_URL,
+      center: [0, 0],
+      zoom: 2,
+      attributionControl: true,
+      pitch: 0,
+      preserveDrawingBuffer: true,  // needed for the static html snapshot
+    });
+    captureableInSnapshot(map, container);
+    map.addControl(new maplibregl.ScaleControl());
+    map.addControl(new maplibregl.NavigationControl());
+
+    map.on('load', () => {
+      const bounds = new maplibregl.LngLatBounds();
+
+      // One polygon feature per image that has a footprint; grow `bounds`
+      // by every polygon corner.
+      const footprintFeatures = [];
+      for (const row of rows) {
+        if (row.footprint == null) continue;
+        const geometry = JSON.parse(row.footprint);
+        for (const [lon, lat] of geometry.coordinates[0]) {
+          bounds.extend([lon, lat]);
+        }
+        footprintFeatures.push({
+          type: 'Feature',
+          geometry,
+          properties: { path: row.path, group: row.__group__ },
+        });
+      }
+
+      map.addSource('footprints', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: footprintFeatures },
+      });
+
+      // add footprint filling and outline first
+      map.addLayer({
+        id:     'footprints-fill',
+        type:   'fill',
+        source: 'footprints',
+        paint: { 'fill-color': '#4a90d9', 'fill-opacity': 0.15 },
+      });
+      map.addLayer({
+        id:     'footprints-outline',
+        type:   'line',
+        source: 'footprints',
+        paint: { 'line-color': '#4a90d9', 'line-width': 1.5 },
+      });
+      // on top, draw points
+      addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
+
+      addHoverPopup(map, ctx);
+
+      map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
+    });
+
+    // Redraw the map whenever the container is resized
+    const observer = new ResizeObserver(() => {
+      if (map) map.resize();
+    });
+    observer.observe(container);
+  },
+};

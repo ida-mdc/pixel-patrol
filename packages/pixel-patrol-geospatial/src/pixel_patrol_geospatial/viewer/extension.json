@@ -1,0 +1,7 @@
+{
+  "name": "Geospatial Extension",
+  "plugins": [
+    "./plugin_map_viewer.js",
+    "./barplot_distinct_nodata_values.js"
+  ]
+}
