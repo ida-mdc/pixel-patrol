@@ -209,7 +209,7 @@ export default {
     return cols.every(c => schema.allCols.includes(c));
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const rows = await ctx.queryRows(`
       SELECT
         "latitude" AS lat,

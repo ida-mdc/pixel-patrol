@@ -16,7 +16,7 @@ export default {
     return schema.allCols.includes('nodata_value');
   },
 
-  async condensedPlot(container, ctx) {
+  async overviewPlot(container, ctx) {
     const { groupCol: gcFn } = ctx.sql;
     const rows = await ctx.queryRows(`
       SELECT COALESCE(CAST("nodata_value" AS VARCHAR), 'not set') AS nodata_value,
