@@ -372,8 +372,8 @@ def _plan_tasks(
 
         try:
             info: FileInfo = loader.read_header(file_path)
-        except Exception:
-            logger.warning("_plan_tasks: read_header failed for %s; skipping", file_path)
+        except Exception as exc:
+            logger.warning("_plan_tasks: read_header failed for %s; skipping (%s)", file_path, exc)
             continue
 
         file_index = len(files_meta)

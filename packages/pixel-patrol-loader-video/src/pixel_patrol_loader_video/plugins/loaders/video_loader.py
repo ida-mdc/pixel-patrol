@@ -65,6 +65,13 @@ def _pix_fmt_to_channels(pix_fmt: str) -> int:
     return 1 if any(t in pix_fmt for t in ("gray", "mono", "pal8")) else 3
 
 
+def _count_packets(source: str) -> int:
+    """Count video packets without decoding — fast even for large files."""
+    with av.open(source) as container:
+        stream = container.streams.video[0]
+        return sum(1 for pkt in container.demux(stream) if pkt.pts is not None)
+
+
 def _probe_video(source: str) -> Dict[str, Any]:
     """Open the file and extract video-stream metadata without decoding frames."""
     with av.open(source) as container:
@@ -84,7 +91,15 @@ def _probe_video(source: str) -> Dict[str, Any]:
         # handled at load time by counting frames during the eager decode.
         n_frames: int = stream.frames or 0
         if n_frames == 0 and duration_s and fps:
-            n_frames = math.ceil(duration_s * fps)
+            estimated = math.ceil(duration_s * fps)
+            actual = _count_packets(source)
+            if abs(actual - estimated) > 1:
+                raise ValueError(
+                    f"VFR (variable frame rate) video not yet supported: "
+                    f"container stores no frame count; estimated {estimated} frames "
+                    f"from duration×fps but found {actual} encoded frames."
+                )
+            n_frames = actual
 
         width: int = stream.width
         height: int = stream.height
