@@ -62,7 +62,7 @@ class GeospatialLoader:
 
     OUTPUT_SCHEMA:          Dict[str, Any] = {
         "crs_str": Optional[str],
-        "crs_epsg": Optional[rasterio.crs.CRS],
+        "crs_epsg": Optional[int],
         "latitude": Optional[float],
         "longitude": Optional[float],
         "dim_order": str,
