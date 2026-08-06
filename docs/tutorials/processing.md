@@ -449,6 +449,22 @@ Answer the questions below and we'll walk you through each decision together, bu
       </label>
     </div>
 
+    <!-- Open viewer -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Open viewer when done <code class="wiz-badge">--view</code>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Opens the interactive report automatically once processing completes, using default viewer settings.
+        Equivalent to running <code>pixel-patrol view results.parquet</code> afterwards.
+      </div>
+      <label class="wiz-option" style="max-width:260px">
+        <input type="checkbox" id="pwi-open_viewer"
+               onchange="procWiz.set('open_viewer', this.checked)">
+        <div><div class="wiz-opt-title">Open viewer after processing</div></div>
+      </label>
+    </div>
+
   </div>
 
 </div>
@@ -481,6 +497,7 @@ const procWiz = {
     max_images_per_task: '',
     rows_per_part:       '',
     log_file:            false,
+    open_viewer:         false,
     output_mode:         'cli',
   },
 
@@ -630,7 +647,9 @@ const procWiz = {
     if (doneText) {
       doneText.innerHTML = (s.output_mode === 'api')
         ? '✓ Your script is ready above - save it (e.g. <code>run_processing.py</code>) and run it with <code>python run_processing.py</code>. It already opens the viewer at the end via <code>api.view(project)</code>.'
-        : '✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.';
+        : s.open_viewer
+          ? '✓ Your command is ready above. The viewer will open automatically when processing completes.'
+          : '✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.';
     }
   },
 
@@ -666,6 +685,7 @@ const procWiz = {
     if (s.max_images_per_task) pp.push('--max-images-per-task ' + s.max_images_per_task);
     if (s.rows_per_part)       pp.push('--rows-per-part ' + s.rows_per_part);
     if (s.log_file)            pp.push('--log-file');
+    if (s.open_viewer)         pp.push('--view');
 
     let lines = [];
     if (isSlurm) {
