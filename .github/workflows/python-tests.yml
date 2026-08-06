@@ -22,6 +22,7 @@ jobs:
           - pixel-patrol-loader-bio
           - pixel-patrol
           - pixel-patrol-tensorboard
+          - pixel-patrol-loader-video
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:

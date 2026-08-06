@@ -210,10 +210,10 @@ def _compute_memory_chunk_specs(
 ) -> Optional[List[MemoryChunkSpec]]:
     """Return one MemoryChunkSpec per memory chunk for a file described by info.
 
-    Splits dims in two tiers - explicit-block-size dims first, then spatial defaults
-    (X/Y) - so spatial dims are only touched as a last resort. Within each tier the
-    required reduction is distributed geometrically across all dims in that tier,
-    largest first, so no single dim absorbs all the splitting.
+    Splits dims in three tiers (largest first within each):
+      primary    - split first; dims with an explicit leaf block size, minus any loader-deferred dims
+      deferred   - split only if primary is not enough; loader hint via info.deferred_dims
+      last_resort - split only if unavoidable; full-extent dims (X/Y by default)
     Returns None when the file already fits within the budget.
     """
     dim_order    = info.dim_order
@@ -230,17 +230,27 @@ def _compute_memory_chunk_specs(
 
 
     # Dims the user explicitly pinned to -1 are never split, not even as a fallback.
-    user_pinned   = {d for d in dim_order
-                     if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1}
-    constrained   = sorted([d for d in dim_order if leaf_block_sizes[d] != -1],
-                            key=lambda d: -dim_sizes[d])
-    unconstrained = sorted([d for d in dim_order
-                            if leaf_block_sizes[d] == -1 and d not in user_pinned],
-                            key=lambda d: -dim_sizes[d])
+    user_pinned    = {d for d in dim_order
+                      if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1}
+    # Loader-requested deferred dims (e.g. packed colour channels that are inefficient to split
+    # independently). User override takes precedence: if the user explicitly set a block size
+    # for a dim, it stays in the primary tier regardless of the loader hint.
+    user_specified = set(leaf_block_shape or {})
+    loader_deferred = set(info.deferred_dims or "") - user_specified
+
+    primary     = sorted([d for d in dim_order
+                           if leaf_block_sizes[d] != -1 and d not in loader_deferred],
+                          key=lambda d: -dim_sizes[d])
+    deferred    = sorted([d for d in dim_order
+                           if leaf_block_sizes[d] != -1 and d in loader_deferred],
+                          key=lambda d: -dim_sizes[d])
+    last_resort = sorted([d for d in dim_order
+                           if leaf_block_sizes[d] == -1 and d not in user_pinned],
+                          key=lambda d: -dim_sizes[d])
 
     chunk_sizes: Dict[str, int] = dict(dim_sizes)
 
-    for tier in (constrained, unconstrained):
+    for tier in (primary, deferred, last_resort):
         for i, dim in enumerate(tier):
             current_bytes = math.prod(chunk_sizes.values()) * dtype_bytes
             if current_bytes <= budget_bytes:
@@ -362,8 +372,8 @@ def _plan_tasks(
 
         try:
             info: FileInfo = loader.read_header(file_path)
-        except Exception:
-            logger.warning("_plan_tasks: read_header failed for %s; skipping", file_path)
+        except Exception as exc:
+            logger.warning("_plan_tasks: read_header failed for %s; skipping (%s)", file_path, exc)
             continue
 
         file_index = len(files_meta)

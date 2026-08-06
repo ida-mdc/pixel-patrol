@@ -178,3 +178,33 @@ def test_exact_3d_z_and_y_both_split():
         (slice(2, 3), slice(0,   128), slice(None)),
         (slice(2, 3), slice(128, 256), slice(None)),
     }
+
+
+# ── deferred_dims ─────────────────────────────────────────────────────────────
+
+def _specs_deferred(shape, dim_order, mb_per_task, deferred_dims, dtype=np.float32):
+    info = FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, deferred_dims=deferred_dims)
+    return _compute_memory_chunk_specs(_DUMMY_PATH, info, mb_per_task, None)
+
+
+def test_deferred_dim_is_not_split_when_primary_absorbs_budget():
+    # TYXC, C=3 deferred. T=50, uncompressed ~0.6 MB, budget=0.1 MB.
+    # T alone (primary tier) reduces ratio from 6 to 1; C and Y/X are never touched.
+    specs = _specs_deferred((50, 32, 32, 3), "TYXC", 0.1, "C")
+    assert specs is not None
+    assert any(s.slices[0] != slice(None) for s in specs)   # T split
+    assert all(s.slices[3] == slice(None) for s in specs)   # C never split
+    assert all(s.slices[1] == slice(None) for s in specs)   # Y never split
+    assert all(s.slices[2] == slice(None) for s in specs)   # X never split
+
+
+def test_deferred_dim_is_split_when_primary_insufficient():
+    # T=2 is too small to absorb the full reduction alone; C (deferred) must also contribute.
+    # TYXC, C=3, T=2, Y=256, X=256, float32 = ~1.5 MB, budget=0.1 MB → ratio 15.
+    # Primary: T=2 splits into 2 (max), ratio falls to ~7.5.
+    # Deferred: C=3 can split into 3, ratio falls to ~2.5.
+    # Last resort: Y/X absorb the rest.
+    specs = _specs_deferred((2, 256, 256, 3), "TYXC", 0.1, "C")
+    assert specs is not None
+    assert any(s.slices[0] != slice(None) for s in specs)   # T split
+    assert any(s.slices[3] != slice(None) for s in specs)   # C also split (T not enough)
