@@ -71,7 +71,6 @@ class GeospatialLoader:
         "num_pixels": int,
         "shape": list,
         "ndim": int,
-        "channel_names": list,  # could be list[str]
         "dtype": str,
         "footprint": Optional[str], # GeoJSON string, EPSG:4326; None only when crs is absent
         "nodata_value": Optional[int | float],
@@ -125,6 +124,31 @@ class GeospatialLoader:
             metadata["num_pixels"] = np.prod(img.shape) * img.count
             metadata["ndim"] = len(shape)
             metadata["nodata_value"] = nodata_value
+
+            # extra rasterio metadata - dump freely
+            metadata["driver"]  = img.driver
+            metadata["res_x"]   = img.res[0]
+            metadata["res_y"]   = img.res[1]
+
+            descriptions = list(img.descriptions)
+            if any(d is not None for d in descriptions):
+                metadata["channel_names"] = descriptions
+
+            colorinterp = [ci.name for ci in img.colorinterp]
+            if any(c not in ("gray", "undefined") for c in colorinterp):
+                metadata["colorinterp"] = colorinterp
+
+            if any(s != 1.0 for s in img.scales):
+                metadata["scales"] = list(img.scales)
+            if any(o != 0.0 for o in img.offsets):
+                metadata["offsets"] = list(img.offsets)
+
+            units = list(img.units)
+            if any(u is not None for u in units):
+                metadata["units"] = units
+
+            for k, v in img.tags().items():
+                metadata[f"tag_{k}"] = v
 
             pixels = img.read()
         return record_from(pixels, metadata, kind="intensity")
