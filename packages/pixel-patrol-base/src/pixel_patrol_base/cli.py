@@ -245,6 +245,28 @@ def build_viewer_html(output: Path, offline: bool):
     api_build_viewer(output, offline=offline)
 
 
+@cli.command("list")
+@click.option("--loaders",    "show_loaders",    is_flag=True, default=False, help="List available loader IDs.")
+@click.option("--processors", "show_processors", is_flag=True, default=False, help="List available processor IDs.")
+def list_plugins(show_loaders: bool, show_processors: bool):
+    """
+    List available loaders and processors from installed extensions.
+
+    With no flags, lists both. Use --loaders or --processors to narrow down.
+    """
+    from pixel_patrol_base.plugin_registry import discover_plugins_from_entrypoints, discover_processor_plugins
+
+    show_all = not show_loaders and not show_processors
+
+    if show_all or show_loaders:
+        loaders = discover_plugins_from_entrypoints("pixel_patrol.loader_plugins")
+        click.echo("Loaders:    " + (", ".join(p.NAME for p in loaders) or "(none)"))
+
+    if show_all or show_processors:
+        processors = discover_processor_plugins()
+        click.echo("Processors: " + (", ".join(p.NAME for p in processors) or "(none)"))
+
+
 @cli.command()
 @click.option('--output', '-o',
               type=click.Path(exists=False, file_okay=True, dir_okay=False, writable=True, path_type=Path),
