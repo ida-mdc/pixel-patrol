@@ -97,14 +97,35 @@ def _oracle_scalars(arr: np.ndarray) -> dict:
     }
 
 
-def _oracle_histogram(arr: np.ndarray, s_min: float, s_max: float) -> np.ndarray:
-    """Independently reproduces the floor-bin formula documented in
-    raster_processor._histogram_counts, without importing it."""
+def _oracle_histogram(arr: np.ndarray) -> np.ndarray:
+    """Independently reproduces raster_processor histogram computation including _hist_bounds widening.
+
+    Replicates _hist_bounds: integer data whose span is narrower than HISTOGRAM_BINS gets a
+    widened range so every bin is one integer level wide, anchored to the dtype range.
+    Float data keeps its true span. Then bins using the same floor formula as _histogram_counts.
+    """
     B = HISTOGRAM_BINS
+    s_min = float(np.nanmin(arr))
+    s_max = float(np.nanmax(arr))
+    # replicate _hist_bounds
+    if np.issubdtype(arr.dtype, np.floating) or (s_max - s_min) >= B:
+        h_min, h_max = s_min, s_max
+    else:
+        try:
+            info = np.iinfo(arr.dtype)
+            lo = min(s_min, float(info.max) + 1 - B)
+            lo = max(lo, float(info.min))
+        except ValueError:
+            lo = s_min
+        h_min, h_max = lo, lo + B
     flat = arr.ravel().astype(np.float32)
+    finite = flat[np.isfinite(flat)] if np.issubdtype(arr.dtype, np.floating) else flat
     h = np.zeros(B, dtype=np.int64)
-    bins = np.clip(np.floor((flat - s_min) / ((s_max - s_min) / B)).astype(np.int32), 0, B - 1)
-    np.add.at(h, bins, 1)
+    if h_min < h_max:
+        bins = np.clip(np.floor((finite - h_min) / ((h_max - h_min) / B)).astype(np.int32), 0, B - 1)
+        np.add.at(h, bins, 1)
+    else:
+        h[0] = len(finite)
     return h
 
 
@@ -115,7 +136,7 @@ def _assert_scalar_row_matches_oracle(row: dict, arr: np.ndarray) -> None:
     assert row["min_intensity"] == oracle["min_intensity"]
     assert row["max_intensity"] == oracle["max_intensity"]
     assert row["finite_pixel_count"] == oracle["finite_pixel_count"]
-    oracle_hist = _oracle_histogram(arr, oracle["min_intensity"], oracle["max_intensity"])
+    oracle_hist = _oracle_histogram(arr)
     pipeline_hist = np.asarray(row["histogram_counts"])
     assert pipeline_hist.sum() == oracle["finite_pixel_count"]
     np.testing.assert_array_equal(pipeline_hist, oracle_hist)
@@ -124,12 +145,18 @@ def _assert_scalar_row_matches_oracle(row: dict, arr: np.ndarray) -> None:
 # ── Test image builders ──────────────────────────────────────────────────────
 
 def _write_small_zcyx(tmp_path: Path) -> Tuple[Path, np.ndarray]:
-    """Z=3, C=3, Y=37, X=53 (~34.5KB) - small, fast, awkward Z (not divisible by 2)."""
+    """Z=3, C=3, Y=37, X=53 (~34.5KB) - small, fast, awkward Z (not divisible by 2).
+
+    All channels use the same value range [50, 59] so every per-(Z,C) leaf gets
+    the same _hist_bounds output ([50, 306]), letting _aggregate_histograms take
+    the exact fast path - necessary for byte-exact histogram assertions.
+    Channels still get independent random values so per-channel scalars differ.
+    """
     rng = np.random.default_rng(42)
     Z, C, Y, X = 3, 3, 37, 53
     arr = np.zeros((Z, C, Y, X), dtype=np.uint16)
     for c in range(C):
-        arr[:, c] = (c + 1) * 50 + rng.integers(0, 10, size=(Z, Y, X))
+        arr[:, c] = 50 + rng.integers(0, 10, size=(Z, Y, X))
     path = tmp_path / "small.tif"
     tifffile.imwrite(path, arr, metadata={"axes": "ZCYX"})
     return path, arr
@@ -138,12 +165,15 @@ def _write_small_zcyx(tmp_path: Path) -> Tuple[Path, np.ndarray]:
 def _write_medium_zcyx(tmp_path: Path, name: str = "medium.tif") -> Tuple[Path, np.ndarray]:
     """Z=7, C=3, Y=50, X=50 (~102.5KB) - at mb_per_task=0.05 still forces ragged
     Z-group memory chunking (7 -> 3+3+1); size is irrelevant to the raggedness,
-    only the ratio of array size to budget is."""
+    only the ratio of array size to budget is.
+
+    Same-range channels as _write_small_zcyx - see that docstring for rationale.
+    """
     rng = np.random.default_rng(11)
     Z, C, Y, X = 7, 3, 50, 50
     arr = np.zeros((Z, C, Y, X), dtype=np.uint16)
     for c in range(C):
-        arr[:, c] = (c + 1) * 50 + rng.integers(0, 10, size=(Z, Y, X))
+        arr[:, c] = 50 + rng.integers(0, 10, size=(Z, Y, X))
     path = tmp_path / name
     tifffile.imwrite(path, arr, metadata={"axes": "ZCYX"})
     return path, arr
