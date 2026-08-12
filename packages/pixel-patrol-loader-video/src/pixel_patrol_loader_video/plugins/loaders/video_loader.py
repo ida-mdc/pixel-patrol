@@ -329,6 +329,18 @@ class VideoLoader:
     """
 
     NAME = "video"
+    DESCRIPTION = "Loads video files (mp4, avi, mov, mkv, gif, …) via PyAV (FFmpeg), returning frames as a lazy dask array."
+
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "n_frames": "Total number of frames in the video.",
+        "n_channels": "Number of colour channels per frame.",
+        "fps": "Frames per second of the video stream.",
+        "codec": "Video codec name (e.g. 'h264', 'vp9').",
+        "duration_seconds": "Duration of the video in seconds.",
+    }
+    OUTPUT_SCHEMA_PATTERN_DESCRIPTIONS: Dict[str, str] = {
+        r"^[A-Za-z]_size$": "Size of the named axis in pixels (e.g. X_size, Y_size, T_size).",
+    }
 
     SUPPORTED_EXTENSIONS: Set[str] = {
         # Common web / consumer formats
