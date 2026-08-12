@@ -116,6 +116,9 @@ class NiftiLoader:
     CONTAINER_EXTENSIONS: Set[str] = {"gz"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA, "nifti_intent": str}
+    OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
+        "nifti_intent": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL').",
+    }
     OUTPUT_SCHEMA_PATTERNS: List[tuple] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     def is_folder_supported(self, path: Path) -> bool:
