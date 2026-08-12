@@ -119,7 +119,8 @@ export function classifyDtypes(dtypeRows, hasDtype) {
 }
 
 // Combines per-image histograms into per-(kind,group) means on a shared axis, instead of summing raw bin indices.
-// records: [{ kind, group, counts, total, aMin, aMax, nMin, nMax }].
+// records: [{ kind, group, counts, total, aMin, aMax, nMin, nMax, nanCount }].
+// Normalized by (finite + nan), so bins + nanFrac sum to 1 per image.
 export function accumulateGroupHistograms(records, { computeNormalized = true } = {}) {
   const buckets = {};
   for (const r of records) {
@@ -147,11 +148,14 @@ export function accumulateGroupHistograms(records, { computeNormalized = true } 
       const sumSq     = new Float64Array(NBINS);
       const sumsNorm  = doNorm ? new Float64Array(NBINS) : null;
       const sumSqNorm = doNorm ? new Float64Array(NBINS) : null;
+      let nanSum = 0;
 
       for (const it of items) {
-        const inv = 1 / it.total;
+        const nanCount = it.nanCount || 0;
+        const inv = 1 / (it.total + nanCount);
         const v = new Float64Array(it.counts.length);
         for (let i = 0; i < v.length; i++) v[i] = it.counts[i] * inv;
+        nanSum += nanCount * inv;
 
         const vA = remapToAxis(v, it.aMin, it.aMax, aLo, aHi);
         for (let i = 0; i < NBINS; i++) { sums[i] += vA[i]; sumSq[i] += vA[i] * vA[i]; }
@@ -168,6 +172,7 @@ export function accumulateGroupHistograms(records, { computeNormalized = true } 
         nMin: doNorm ? nLo : aLo, nMax: doNorm ? nHi : aHi,
         sums, sumSq,
         sumsNorm: sumsNorm ?? sums, sumSqNorm: sumSqNorm ?? sumSq,
+        nanSum,
       };
     }
   }
@@ -177,7 +182,7 @@ export function accumulateGroupHistograms(records, { computeNormalized = true } 
 export default {
   id: 'histogram',
   required_inputs: ['histogram_counts'],
-  inputs: ['histogram_min', 'histogram_max', 'dtype', 'name'],
+  inputs: ['histogram_min', 'histogram_max', 'histogram_nan_count', 'dtype', 'name'],
   group: 'Dataset Stats',
   scope: 'image',
   label: 'Pixel Value Histograms',
@@ -185,6 +190,7 @@ export default {
   info: [
     'Histograms are computed per image (256 bins) and averaged per group.',
     'Each image is area-normalized before averaging, so image size does not affect the result.',
+    'A **NaN** bucket left of the real data shows the fraction of pixels excluded as NaN, if any.',
     '',
     'If the dataset mixes unsigned integer, signed integer, and/or floating-point images, each kind gets its own plot.',
     '',
@@ -220,13 +226,15 @@ export default {
   async overviewPlot(container, ctx) {
     const { groupExpr: geFn } = ctx.sql;
     const { extractBinary }   = ctx.data;
-    const hasRange  = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
-    const hasDtype  = ctx.schema.allCols.includes('dtype');
-    const rangeCols = hasRange ? ', "histogram_min", "histogram_max"' : '';
-    const dtypeCol  = hasDtype ? ', "dtype"' : '';
+    const hasRange    = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
+    const hasDtype    = ctx.schema.allCols.includes('dtype');
+    const hasNanCount = ctx.schema.allCols.includes('histogram_nan_count');
+    const rangeCols   = hasRange    ? ', "histogram_min", "histogram_max"' : '';
+    const dtypeCol    = hasDtype    ? ', "dtype"'                          : '';
+    const nanCol      = hasNanCount ? ', "histogram_nan_count"'            : '';
 
     const result = await ctx.query(`
-      SELECT ${geFn()}, "histogram_counts"${rangeCols}${dtypeCol}
+      SELECT ${geFn()}, "histogram_counts"${rangeCols}${dtypeCol}${nanCol}
       FROM pp_data ${ctx.where}
       QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= 300
     `);
@@ -241,10 +249,11 @@ export default {
       const counts = extractBinary(row.histogram_counts);
       if (!counts?.length) continue;
       const total = histTotal(counts);
-      if (total <= 0) continue;
+      const nanCount = hasNanCount ? Number(row.histogram_nan_count ?? 0) : 0;
+      if (total <= 0 && nanCount <= 0) continue; // no pixels at all - nothing to show, even as NaN
       const aMin = hasRange ? Number(row.histogram_min) : 0;
       const aMax = hasRange ? Number(row.histogram_max) : NBINS - 1;
-      records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax });
+      records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax, nanCount });
       kindCounts[kind] = (kindCounts[kind] || 0) + 1;
     }
     if (!records.length) return false;
@@ -257,14 +266,33 @@ export default {
     const groups = ctx.groups.filter(g => gdByGroup[g]?.count);
     if (!groups.length) return false;
 
-    ctx.plot.appendMini(container, groups.map(g => {
+    const traces = groups.map(g => {
       const gd = gdByGroup[g];
       return {
         type: 'scatter', mode: 'lines', fill: 'tozeroy', opacity: 0.6,
         x: binXs(gd.aMin, gd.aMax), y: Array.from(gd.sums, v => v / gd.count),
         line: { color: ctx.color.group(g), width: 1.5 }, hoverinfo: 'skip',
       };
-    }), { xaxis: { title: 'intensity' }, yaxis: { showticklabels: false } });
+    });
+
+    // NaN bucket on its own small axis, same trick as the full widget.
+    let hasNanBar = false;
+    for (const g of groups) {
+      const gd = gdByGroup[g];
+      const nanMean = gd.nanSum / gd.count;
+      if (!(nanMean > 0)) continue;
+      hasNanBar = true;
+      traces.push({
+        type: 'bar', xaxis: 'x2', x: [0], y: [nanMean], width: [0.5],
+        marker: { color: ctx.color.group(g) }, opacity: 0.6, hoverinfo: 'skip',
+      });
+    }
+
+    ctx.plot.appendMini(container, traces, {
+      xaxis: { title: 'intensity', ...(hasNanBar ? { domain: [0, 0.86] } : {}) },
+      yaxis: { showticklabels: false },
+      ...(hasNanBar ? { xaxis2: { domain: [0.92, 1], anchor: 'y', range: [-0.5, 0.5], tickvals: [0], ticktext: ['NaN'] } } : {}),
+    });
     return true;
   },
 
@@ -272,6 +300,7 @@ export default {
     const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
     const hasDtype = ctx.schema.allCols.includes('dtype');
     const hasNames = ctx.schema.allCols.includes('name');
+    const hasNanCount = ctx.schema.allCols.includes('histogram_nan_count');
 
     try {
       const [availRow] = await ctx.queryRows(
@@ -319,6 +348,9 @@ export default {
         container.appendChild(noData);
         return;
       }
+
+      const nanWarning = hasNanCount ? warningBanner('', 20) : null;
+      if (nanWarning) { nanWarning.style.display = 'none'; container.appendChild(nanWarning); }
 
       // One panel per kind — int/uint get a per-panel mode toggle, float does not.
       const panels = {};
@@ -384,10 +416,11 @@ export default {
           where += ` ${where ? 'AND' : 'WHERE'} ${q(ctx.state.groupCol)} IN (${list})`;
         }
 
-        const rangeSel = hasRange ? ', "histogram_min", "histogram_max"' : '';
-        const dtypeSel = hasDtype ? ', "dtype"'                          : '';
+        const rangeSel = hasRange    ? ', "histogram_min", "histogram_max"' : '';
+        const dtypeSel = hasDtype    ? ', "dtype"'                          : '';
+        const nanSel   = hasNanCount ? ', "histogram_nan_count"'           : '';
         const result   = await ctx.query(
-          `SELECT ${geFn()}, "histogram_counts"${rangeSel}${dtypeSel}
+          `SELECT ${geFn()}, "histogram_counts"${rangeSel}${dtypeSel}${nanSel}
            FROM pp_data ${where}
            QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= ${ctrl.samplesPerGroup}`
         );
@@ -400,7 +433,8 @@ export default {
           const counts = extractBinary(row.histogram_counts);
           if (!counts?.length) continue;
           const total = histTotal(counts);
-          if (total <= 0) continue;
+          const nanCount = hasNanCount ? Number(row.histogram_nan_count ?? 0) : 0;
+          if (total <= 0 && nanCount <= 0) continue; // no pixels at all - nothing to show, even as NaN
 
           const aMin  = hasRange ? Number(row.histogram_min) : 0;
           const aMax  = hasRange ? Number(row.histogram_max) : NBINS - 1;
@@ -408,7 +442,7 @@ export default {
           const nMin  = dNorm != null ? aMin / dNorm : aMin;
           const nMax  = dNorm != null ? aMax / dNorm : aMax;
 
-          records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax, nMin, nMax });
+          records.push({ kind, group: String(row.__group__), counts, total, aMin, aMax, nMin, nMax, nanCount });
         }
         kindData = accumulateGroupHistograms(records);
 
@@ -445,7 +479,7 @@ export default {
         if (container.querySelector(`#${INDIV_ID}`)?.checked && isSingleGroup && singleGroupCount <= INDIV_LIMIT) {
           const nameSel2  = hasNames ? ', "name"' : '';
           const iResult   = await ctx.query(
-            `SELECT "histogram_counts"${rangeSel}${dtypeSel}${nameSel2}
+            `SELECT "histogram_counts"${rangeSel}${dtypeSel}${nanSel}${nameSel2}
              FROM pp_data ${where}
              LIMIT ${INDIV_LIMIT + 1}`
           );
@@ -456,12 +490,15 @@ export default {
             const counts = extractBinary(row.histogram_counts);
             if (!counts?.length) continue;
             const total  = histTotal(counts);
-            if (total <= 0) continue;
+            const nanCount = hasNanCount ? Number(row.histogram_nan_count ?? 0) : 0;
+            if (total <= 0 && nanCount <= 0) continue;
             const aMin   = hasRange ? Number(row.histogram_min) : 0;
             const aMax   = hasRange ? Number(row.histogram_max) : NBINS - 1;
             const dNorm  = DTYPE_NORM[row.dtype];
+            const inv    = 1 / (total + nanCount);
             indivFiles.rows.push({
-              ys: Array.from(counts, c => c / total),
+              ys: Array.from(counts, c => c * inv),
+              nanFrac: nanCount * inv,
               aMin, aMax,
               nMin: dNorm != null ? aMin / dNorm : aMin,
               nMax: dNorm != null ? aMax / dNorm : aMax,
@@ -477,7 +514,7 @@ export default {
           const safe       = ctrl.selectedFile.replace(/'/g, "''");
           const fileWhere  = ctx.where ? `${ctx.where} AND "name" = '${safe}'` : `WHERE "name" = '${safe}'`;
           const fileResult = await ctx.query(
-            `SELECT "histogram_counts", "histogram_min", "histogram_max"${dtypeSel}
+            `SELECT "histogram_counts", "histogram_min", "histogram_max"${dtypeSel}${nanSel}
              FROM pp_data ${fileWhere} LIMIT 1`
           );
           const fr = fileResult.toArray()[0];
@@ -487,8 +524,11 @@ export default {
               const total = histTotal(counts);
               const aMin  = Number(fr.histogram_min), aMax = Number(fr.histogram_max);
               const dNorm = DTYPE_NORM[fr.dtype];
+              const nanCount = hasNanCount ? Number(fr.histogram_nan_count ?? 0) : 0;
+              const inv   = total + nanCount > 0 ? 1 / (total + nanCount) : 0;
               fileOverlay = {
-                ys:    Array.from(counts, v => total > 0 ? v / total : 0),
+                ys:    Array.from(counts, v => v * inv),
+                nanFrac: nanCount * inv,
                 aMin,  aMax,
                 nMin:  dNorm != null ? aMin / dNorm : aMin,
                 nMax:  dNorm != null ? aMax / dNorm : aMax,
@@ -525,6 +565,7 @@ export default {
         }
 
         const traces = [];
+        const nanSeries = []; // { frac, color, label } - rendered as a bucket left of the real bins
         let yMax = 0;
         let xLo = Infinity, xHi = -Infinity;
         const trackExtent = (lo, hi, ys) => {
@@ -544,6 +585,7 @@ export default {
           for (const g of visGroups) {
             const gd        = kd[g];
             const color     = ctx.color.group(g);
+            const label     = ctx.groupLabel(String(g));
             const lo        = useNorm ? gd.nMin : gd.aMin;
             const hi        = useNorm ? gd.nMax : gd.aMax;
             const sumsArr   = useNorm ? gd.sumsNorm  : gd.sums;
@@ -554,6 +596,7 @@ export default {
 
             for (let i = 0; i < NBINS; i++) if (meanYs[i] > yMax) yMax = meanYs[i];
             trackExtent(lo, hi, meanYs);
+            nanSeries.push({ frac: gd.nanSum / gd.count, color, label });
 
             if (showSpread) {
               // ±1 std band as a closed polygon behind the mean line.
@@ -574,7 +617,7 @@ export default {
             }
 
             traces.push({
-              type: 'scatter', mode: 'lines', name: ctx.groupLabel(String(g)),
+              type: 'scatter', mode: 'lines', name: label,
               x: xs, y: meanYs,
               fill: showSpread ? 'none' : 'tozeroy',
               opacity: 0.6, line: { color, width: 2 },
@@ -587,6 +630,7 @@ export default {
             const hi = useNorm ? row.nMax : row.aMax;
             for (let i = 0; i < row.ys.length; i++) if (row.ys[i] > yMax) yMax = row.ys[i];
             trackExtent(lo, hi, row.ys);
+            nanSeries.push({ frac: row.nanFrac || 0, color, label: row.label || 'file' });
             traces.push({
               type: 'scatter', mode: 'lines',
               x: binXs(lo, hi), y: row.ys,
@@ -601,14 +645,30 @@ export default {
 
         if (hasOverlay) {
           const fo = fileOverlay;
+          const label = `File: ${fo.label}`;
           const lo = useNorm ? fo.nMin : fo.aMin;
           const hi = useNorm ? fo.nMax : fo.aMax;
           const xs = binXs(lo, hi);
           trackExtent(lo, hi, fo.ys);
+          nanSeries.push({ frac: fo.nanFrac || 0, color: 'black', label, opacity: 0.3 });
           traces.unshift({
-            type: 'bar', name: `File: ${fo.label}`, x: xs, y: fo.ys,
+            type: 'bar', name: label, x: xs, y: fo.ys,
             width: Array(NBINS).fill(xs.length > 1 ? xs[1] - xs[0] : 1),
             marker: { color: 'black' }, opacity: 0.3,
+          });
+        }
+
+        // NaN bucket - own small categorical axis (xaxis2), not part of the numeric intensity
+        // axis, so it can never coincide with a real tick like "100".
+        let hasNanBar = false;
+        for (const { frac, color, label, opacity: op } of nanSeries) {
+          if (!(frac > 0)) continue;
+          hasNanBar = true;
+          if (frac > yMax) yMax = frac;
+          traces.push({
+            type: 'bar', name: `${label} (NaN)`, xaxis: 'x2', x: [0], y: [frac], width: [0.5],
+            marker: { color }, opacity: op ?? 0.6, showlegend: false,
+            hovertemplate: `NaN pixels: %{y:.4f}<extra>${label}</extra>`,
           });
         }
 
@@ -624,15 +684,43 @@ export default {
 
         appendPlot(plotDiv, traces, {
           title:  { text: multiKind ? `${KIND_LABEL[kind]} — Intensity Histograms` : 'Intensity Histograms (averaged per group)' },
-          xaxis:  { title: xTitle, exponentformat: 'e', ...(xRange ? { range: xRange } : {}) },
+          xaxis:  {
+            title: xTitle, exponentformat: 'e', ...(xRange ? { range: xRange } : {}),
+            ...(hasNanBar ? { domain: [0, 0.86] } : {}),
+          },
           yaxis:  { title: 'Normalized count', ...(yRange ? { range: yRange } : {}) },
           bargap: 0, height: 500, showlegend: showLegend, hovermode: 'x unified',
+          ...(hasNanBar ? {
+            xaxis2: {
+              domain: [0.92, 1], anchor: 'y', range: [-0.5, 0.5],
+              tickvals: [0], ticktext: ['NaN'], showgrid: false, zeroline: false,
+            },
+          } : {}),
           ...(showLegend ? { legend: plotlyLegendConfig } : {}),
         });
       };
 
       const renderPanels = () => { for (const kind of presentKinds) renderPanel(kind); };
-      const draw         = async () => { await fetchAndAccumulate(); renderPanels(); };
+
+      const updateNanWarning = () => {
+        if (!nanWarning || !kindData) return;
+        const pct = g => {
+          let nanSum = 0, count = 0;
+          for (const kd of Object.values(kindData)) { if (kd[g]) { nanSum += kd[g].nanSum; count += kd[g].count; } }
+          return count ? nanSum / count : 0;
+        };
+        const groups = [...new Set(Object.values(kindData).flatMap(kd => Object.keys(kd)))];
+        const withNan = groups.filter(g => pct(g) > 0);
+        if (!withNan.length) { nanWarning.style.display = 'none'; return; }
+        const parts = withNan.map(g => {
+          const label = ctx.groupLabel ? ctx.groupLabel(g) : g;
+          return groups.length > 1 ? `${label}: ${(pct(g) * 100).toFixed(2)}%` : `${(pct(g) * 100).toFixed(2)}%`;
+        });
+        nanWarning.querySelector('div').innerHTML = `NaN pixels detected${groups.length > 1 ? '' : ` (${parts[0]})`}${groups.length > 1 ? ': ' + parts.join(', ') : ''}.`;
+        nanWarning.style.display = '';
+      };
+
+      const draw = async () => { await fetchAndAccumulate(); updateNanWarning(); renderPanels(); };
 
       // Per-panel mode toggles re-render only their panel; spread and group controls re-render all.
       for (const kind of presentKinds)
