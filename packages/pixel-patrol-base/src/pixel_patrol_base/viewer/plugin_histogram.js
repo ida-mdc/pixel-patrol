@@ -668,7 +668,7 @@ export default {
           traces.push({
             type: 'bar', name: `${label} (NaN)`, xaxis: 'x2', x: [0], y: [frac], width: [0.5],
             marker: { color }, opacity: op ?? 0.6, showlegend: false,
-            hovertemplate: `NaN pixels: %{y:.2%}<extra>${label}</extra>`,
+            hovertemplate: `NaN pixels: %{y:.4f}<extra>${label}</extra>`,
           });
         }
 
