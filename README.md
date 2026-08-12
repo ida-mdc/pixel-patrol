@@ -61,6 +61,18 @@ pixel-patrol process path/to/images/ -o results.parquet --loader bioio \
 pixel-patrol view results.parquet
 ```
 
+Or combine both steps with `--view`:
+
+```bash
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio --view
+```
+
+To use viewer parameters, run the two commands sequentially:
+
+```bash
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio && pixel-patrol view results.parquet
+```
+
 **Or use the processing dashboard** for a visual interface:
 
 ```bash
