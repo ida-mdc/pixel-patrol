@@ -349,6 +349,9 @@ export default {
         return;
       }
 
+      const nanWarning = hasNanCount ? warningBanner('', 20) : null;
+      if (nanWarning) { nanWarning.style.display = 'none'; container.appendChild(nanWarning); }
+
       // One panel per kind — int/uint get a per-panel mode toggle, float does not.
       const panels = {};
       for (const kind of presentKinds) {
@@ -698,7 +701,26 @@ export default {
       };
 
       const renderPanels = () => { for (const kind of presentKinds) renderPanel(kind); };
-      const draw         = async () => { await fetchAndAccumulate(); renderPanels(); };
+
+      const updateNanWarning = () => {
+        if (!nanWarning || !kindData) return;
+        const pct = g => {
+          let nanSum = 0, count = 0;
+          for (const kd of Object.values(kindData)) { if (kd[g]) { nanSum += kd[g].nanSum; count += kd[g].count; } }
+          return count ? nanSum / count : 0;
+        };
+        const groups = [...new Set(Object.values(kindData).flatMap(kd => Object.keys(kd)))];
+        const withNan = groups.filter(g => pct(g) > 0);
+        if (!withNan.length) { nanWarning.style.display = 'none'; return; }
+        const parts = withNan.map(g => {
+          const label = ctx.groupLabel ? ctx.groupLabel(g) : g;
+          return groups.length > 1 ? `${label}: ${(pct(g) * 100).toFixed(2)}%` : `${(pct(g) * 100).toFixed(2)}%`;
+        });
+        nanWarning.querySelector('div').innerHTML = `NaN pixels detected${groups.length > 1 ? '' : ` (${parts[0]})`}${groups.length > 1 ? ': ' + parts.join(', ') : ''}.`;
+        nanWarning.style.display = '';
+      };
+
+      const draw = async () => { await fetchAndAccumulate(); updateNanWarning(); renderPanels(); };
 
       // Per-panel mode toggles re-render only their panel; spread and group controls re-render all.
       for (const kind of presentKinds)
