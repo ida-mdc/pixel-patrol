@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY
 from pixel_patrol_base.core.processing import (
     BatchTask, ContainerTask, MemoryChunkTask, Task,
     _effective_split_mb_per_task, _plan_container_tasks, _plan_tasks,
@@ -122,6 +123,23 @@ def test_small_files_batched_into_one_task():
     assert isinstance(tasks[0], BatchTask)
     assert len(tasks[0].files) == 3
     assert len(fi) == 3
+
+
+def test_folder_dataset_is_routed_by_its_header_not_its_on_disk_size():
+    """On-disk size says nothing about a folder dataset's extent, so the marker must
+    keep it off the small-file fast path and send it through read_header."""
+    loader = MockLoader({"/cell_a": MockEntry((512, 512), np.float32, "YX")})
+    config = ProcessingConfig(mb_per_task=0.1, slice_size={"Y": 64})
+
+    stream = _stream([("/cell_a", 4096)])
+    marked = ((p, {**m, FOLDER_DATASET_KEY: True}) for p, m in stream)
+    files_meta: List[dict] = []
+    tasks = list(_plan_tasks(marked, config, loader, files_meta, processors=[]))
+
+    assert all(isinstance(t, MemoryChunkTask) for t in tasks)
+    assert len(tasks) > 1
+    # The marker is consumed by planning and never reaches the table.
+    assert FOLDER_DATASET_KEY not in files_meta[0]
 
 
 def test_batch_flushes_when_on_disk_budget_reached():
