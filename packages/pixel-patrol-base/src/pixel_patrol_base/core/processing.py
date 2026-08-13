@@ -55,7 +55,7 @@ from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
-from pixel_patrol_base.core.file_system import _discover_files
+from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
@@ -376,10 +376,6 @@ def _plan_tasks(
     budget_bytes: int = int(_split_mb_per_task * 1024 * 1024)
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
-    # Folder-based formats (zarr, ome.zarr) report compressed on-disk size which
-    # can be orders of magnitude smaller than the uncompressed array - never skip
-    # read_header for them or they'll be mis-classified as small files.
-    _folder_exts: frozenset    = frozenset(getattr(loader, "FOLDER_EXTENSIONS", ()))
     _small_file_threshold: int = budget_bytes // _MAX_SIZE_EXPANSION_FACTOR
     _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
@@ -398,10 +394,13 @@ def _plan_tasks(
         return batch_bytes >= budget_bytes or len(batch_files) >= _MAX_IMAGES_PER_TASK
 
     for file_path, file_meta in file_stream:
+        # On-disk size is no guide to a folder dataset's decompressed extent, so route it
+        # by its header. Popped here to keep the marker out of files_meta, hence the table.
+        is_folder_dataset: bool = file_meta.pop(FOLDER_DATASET_KEY, False)
         size_bytes: int = file_meta.get("size_bytes", 0)
         ext: str = file_meta.get("file_extension", "")
 
-        if 0 < size_bytes < _small_file_threshold and ext not in _container_exts and ext not in _folder_exts:
+        if not is_folder_dataset and 0 < size_bytes < _small_file_threshold and ext not in _container_exts:
             file_index = len(files_meta)
             files_meta.append(file_meta)
             batch_files.append(_IndexedPath(file_index=file_index, file_path=str(file_path)))
@@ -1587,7 +1586,8 @@ def build_records_df(
         files_meta: List[dict] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
-            _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir),
+            _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir,
+                            is_folder_dataset=getattr(loader, "is_folder_supported", None)),
             config=cfg,
             loader=loader,
             files_meta=files_meta,

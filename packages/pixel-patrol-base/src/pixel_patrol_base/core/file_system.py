@@ -1,10 +1,31 @@
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import os
 from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Marks a discovered path as a folder dataset (zarr store, cell folder, …). Private to
+# the discovery → planning handoff: the planner pops it, so it never reaches the table.
+FOLDER_DATASET_KEY = "__folder_dataset"
+
+
+def _folder_dataset_size(path: Path) -> int:
+    """Total size of the files inside a folder dataset.
+
+    A directory's own st_size is its inode - a few KB whatever it holds - so a
+    folder-based record has to add its contents up to report the size_bytes the schema
+    promises ("aggregated for folders"). One metadata pass per claimed dataset.
+    """
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.stat(os.path.join(root, name)).st_size
+            except OSError:
+                continue
+    return total
 
 
 def _discover_files(
@@ -12,6 +33,7 @@ def _discover_files(
     accepted_extensions: Union[Set[str], str],
     folder_extensions:   Optional[Set[str]] = None,
     base_dir:            Optional[Path] = None,
+    is_folder_dataset:   Optional[Callable[[Path], bool]] = None,
 ) -> Iterator[Tuple[Path, dict]]:
     """Yield (file_path, file_metadata) for every matching file under bases, one at a time.
 
@@ -23,10 +45,16 @@ def _discover_files(
       (e.g. {"zarr"}).  Matching directories are yielded as files and their contents
       are not descended into.
 
+    is_folder_dataset: loader.is_folder_supported - consulted for every directory, so
+      datasets that are plain directories with no telltale suffix are discovered too.
+      A directory it claims is yielded whatever accepted_extensions says, having no
+      meaningful suffix to filter on.
+
     file_metadata contains all filesystem attributes compatible with the original
     processing output: path, name, type, parent, depth, size_bytes, file_extension,
     modification_date, imported_path, common_base, and
-    imported_path_short (only when len(bases) > 1).
+    imported_path_short (only when len(bases) > 1).  Folder datasets are sized by their
+    contents and marked with FOLDER_DATASET_KEY, so planning can route them by header.
 
     No file is opened or loaded. Runs concurrently with _plan_tasks via the generator
     protocol - yields tasks to workers before the scan completes.
@@ -73,17 +101,22 @@ def _discover_files(
             dir_path = Path(dirpath)
             depth    = len(dir_path.parts) - len(base_path.parts)
 
-            if folder_exts:
+            if folder_exts or is_folder_dataset is not None:
                 keep_dirs: List[str] = []
                 for dname in sorted(dirnames):
                     sub = dir_path / dname
                     ext_raw = sub.suffix.lower().lstrip(".")
-                    if ext_raw in folder_exts and (extensions is None or ("." + ext_raw) in extensions):
+                    by_ext = ext_raw in folder_exts and (extensions is None or ("." + ext_raw) in extensions)
+                    if by_ext or (is_folder_dataset is not None and is_folder_dataset(sub)):
                         try:
                             stat = sub.stat()
                         except OSError:
                             continue
-                        yield sub, _make_meta(sub, stat, depth + 1)
+                        yield sub, {
+                            **_make_meta(sub, stat, depth + 1),
+                            "size_bytes": _folder_dataset_size(sub),
+                            FOLDER_DATASET_KEY: True,
+                        }
                     else:
                         keep_dirs.append(dname)
                 dirnames[:] = keep_dirs

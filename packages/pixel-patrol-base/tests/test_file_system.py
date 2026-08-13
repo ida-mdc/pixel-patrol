@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 import os
 
 
-from pixel_patrol_base.core.file_system import _discover_files
+from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
+
 
 # --- Fixture ---
 
@@ -93,3 +94,75 @@ def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
     assert meta["file1.txt"]["path"] == str(root / "file1.txt")
     assert meta["file1.txt"]["parent"] == str(root)
     assert meta["file1.txt"]["imported_path"] == str(root)
+
+
+# --- Tests for folder-dataset discovery ---
+
+def _dataset_dir(root: Path, name: str, *files: tuple[str, int]) -> Path:
+    """A directory that a loader claims as one dataset, with sized files inside it."""
+    d = root / name
+    d.mkdir(parents=True)
+    for rel, size in files or (("volume.tif", 1),):
+        (d / rel).parent.mkdir(parents=True, exist_ok=True)
+        (d / rel).write_bytes(b"x" * size)
+    return d
+
+
+def test_directory_claimed_by_loader_is_yielded_as_one_dataset(tmp_path: Path):
+    """A dataset directory with no telltale suffix is discovered, and not walked into."""
+    _dataset_dir(tmp_path, "cell_a", ("source.tif", 1000), ("nested/chunk", 250))
+    (tmp_path / "loose.tif").write_bytes(b"x" * 40)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files(
+            [tmp_path], "all", is_folder_dataset=lambda p: p.name == "cell_a"
+        )
+    }
+
+    assert set(found) == {"cell_a", "loose.tif"}
+    assert found["cell_a"][FOLDER_DATASET_KEY] is True
+    assert FOLDER_DATASET_KEY not in found["loose.tif"]
+    assert found["loose.tif"]["size_bytes"] == 40
+    # A directory's own st_size is its inode, so the dataset has to report the total
+    # of the files inside it - including nested ones.
+    assert found["cell_a"]["size_bytes"] == 1250
+
+
+def test_claimed_directory_is_yielded_even_when_extensions_are_restricted(tmp_path: Path):
+    """A folder dataset has no meaningful suffix, so the extension filter can't judge it."""
+    _dataset_dir(tmp_path, "cell_a")
+
+    names = [
+        meta["name"]
+        for _, meta in _discover_files(
+            [tmp_path], {".nd2"}, is_folder_dataset=lambda p: p.name == "cell_a"
+        )
+    ]
+
+    assert names == ["cell_a"]
+
+
+def test_unclaimed_directories_are_still_walked_into(tmp_path: Path):
+    """Refusing a directory must leave discovery of its contents unchanged."""
+    _dataset_dir(tmp_path, "plain_dir", ("inside.tif", 1))
+
+    names = [
+        meta["name"]
+        for _, meta in _discover_files([tmp_path], "all", is_folder_dataset=lambda p: False)
+    ]
+
+    assert names == ["inside.tif"]
+
+
+def test_extension_matched_folder_datasets_are_marked_and_sized_too(tmp_path: Path):
+    """The zarr-style path behaves identically, so planning has one rule to follow."""
+    _dataset_dir(tmp_path, "store.zarr", (".zarray", 1), ("0.0", 500))
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], "all", folder_extensions={"zarr"})
+    }
+
+    assert found["store.zarr"][FOLDER_DATASET_KEY] is True
+    assert found["store.zarr"]["size_bytes"] == 501  # .zarray (1 byte) + chunk (500)
