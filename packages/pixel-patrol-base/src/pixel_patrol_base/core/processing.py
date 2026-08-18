@@ -1431,7 +1431,10 @@ def _collect_file_metadata_only(
     if not rows:
         return None, stats
 
-    return _post_process(pl.from_dicts(rows)), stats
+    # overwrite default infer_schema_length=100 with None to look at all dicts before
+    # creating the scheme. needed if only the 101st file is deeper and suddenly has
+    # parent<N+1>.
+    return _post_process(pl.from_dicts(rows, infer_schema_length=None)), stats
 
 
 def build_records_df(

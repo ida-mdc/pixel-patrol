@@ -11,6 +11,15 @@ from pixel_patrol_base.core.contracts import PixelPatrolLoader
 logger = logging.getLogger(__name__)
 
 
+def _parent_level_columns(parent: Path, root: Path) -> Dict[str, str]:
+    """Split the directories between `root` and `parent` into parent0, parent1, ..."""
+    try:
+        rel = parent.relative_to(root)
+    except ValueError:
+        return {}
+    return {f"parent{i}": part for i, part in enumerate(rel.parts)}
+
+
 def _discover_files(
     bases:               List[Path],
     accepted_extensions: Union[Set[str], str],
@@ -28,9 +37,9 @@ def _discover_files(
       are not descended into.
 
     file_metadata contains all filesystem attributes compatible with the original
-    processing output: path, name, type, parent, depth, size_bytes, file_extension,
-    modification_date, imported_path, common_base, and
-    imported_path_short (only when len(bases) > 1).
+    processing output: path, name, type, parent, parent0...N, depth, size_bytes, file_extension,
+    modification_date, imported_path, common_base, and imported_path_short (only when
+    len(bases) > 1).
 
     No file is opened or loaded. Runs concurrently with _plan_tasks via the generator
     protocol - yields tasks to workers before the scan completes.
@@ -50,6 +59,8 @@ def _discover_files(
         base_path  = Path(base).resolve()
         base_str   = str(base_path)
         path_short = base_str[len(common_base_path):].lstrip(os.sep) if multiple_bases else None
+        # Reference to get the parent<N> levels
+        level_root = base_dir if base_dir is not None else base_path
 
         def _make_meta(path: Path, stat, depth: int) -> Dict[str, Any]:
             ext = path.suffix.lower().lstrip(".")
@@ -62,6 +73,7 @@ def _discover_files(
                 "name":              path.name,
                 "type":              "file",
                 "parent":            parent_val,
+                **_parent_level_columns(path.parent, level_root),
                 "depth":             depth,
                 "size_bytes":        stat.st_size,
                 "file_extension":    ext,
@@ -124,6 +136,7 @@ def make_basic_record(path: Path, base: Path, is_folder: bool = False) -> Dict[s
         "name": path.name,
         "type": "folder" if is_folder else "file",
         "parent": str(path.parent) if path != base else None,
+        **_parent_level_columns(path.parent, base),
         "depth": depth,
         "size_bytes": 0 if is_folder else st.st_size,
         "modification_date": datetime.fromtimestamp(os.path.getmtime(path)),
@@ -176,7 +189,9 @@ def walk_filesystem(
                     if include_all or p.suffix.lower().lstrip(".") in accepted_extensions:
                         records.append(make_basic_record(p, base, is_folder=False))
 
-    return pl.DataFrame(records) if records else pl.DataFrame()
+    # infer_schema_length=None: the deepest file decides how many parent<N> keys
+    # exist, therefore all records have to be looked at.
+    return pl.DataFrame(records, infer_schema_length=None) if records else pl.DataFrame()
 
 
 def _aggregate_folder_sizes(df: pl.DataFrame) -> pl.DataFrame:
