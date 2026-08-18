@@ -80,7 +80,10 @@ def deep_many_files_dir(tmp_path: Path) -> Path:
         subdir = subdir_b / f"subdir_b{level2}"
         subdir.mkdir()
         (subdir / f"file_{level2}.txt").write_bytes(bytes(str(level2), "utf8") * 20)
-    deep_subdir = root / "subdir_a" / "subdir_b" / "subdir_c" / "subdir_d" / "subdir_e" / "subdir_f"
+    # super deep file (2*26 parents)
+    deep_subdir = root
+    for subdir in list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+        deep_subdir = deep_subdir / f"subdir_{subdir}"
     deep_subdir.mkdir(parents=True)
     (deep_subdir / f"file_deep.txt").write_bytes(b"deep" * 10)
 
@@ -201,7 +204,7 @@ def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
 def test_deep_many_files_directory(deep_many_files_dir: Path):
     df = walk_filesystem([deep_many_files_dir], accepted_extensions="all")
     assert len(df) == 301
-    assert {"parent", "parent0", "parent1", "parent2", "parent5"}.issubset(set(df.columns))
+    assert {"parent", "parent0", "parent1", "parent2", "parent51"}.issubset(set(df.columns))
 
 
 def test_walk_filesystem_empty_dir(empty_temp_dir: Path):
