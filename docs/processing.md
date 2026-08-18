@@ -168,6 +168,8 @@ Key columns that are always present:
 
 All path columns (`path`, `parent`, `imported_path`) are stored **relative to the base directory**, so the table does not contain absolute filesystem paths. A file at `/data/images/condition_a/img01.tif` processed with base directory `/data/images/` is stored as `condition_a/img01.tif`.
 
+The directory levels of `parent` are additionally split into one column each, numbered from the top. So `root/subdir1/subdir2/subdir3` will result in `parent0=""subdir1"`, `parent1="subdir2"`, and so on.
+
 ### Project metadata
 
 Project metadata (name, description, version, processing stats, base directory, paths) is embedded in the parquet file's own metadata fields, not as data columns. It is accessible via `api.load()` and shown in the viewer footer. See the [privacy policy](privacy.md) for what a table contains before sharing it.
