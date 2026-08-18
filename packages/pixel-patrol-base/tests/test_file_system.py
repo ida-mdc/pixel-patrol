@@ -1,11 +1,14 @@
 import pytest
 import polars as pl
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 import os
 
 
 from pixel_patrol_base.core.file_system import walk_filesystem, _aggregate_folder_sizes, _discover_files
+
+_PARENT_LEVEL_RE = re.compile(r"^parent\d+$")  # parent0, parent1, ...
 
 _AGGREGATE_SCHEMA = {
     "path":              pl.String,
@@ -61,6 +64,32 @@ def complex_temp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def deep_many_files_dir(tmp_path: Path) -> Path:
+    """Directory with many, differently deep files."""
+    root = tmp_path / "deep_many_files_test_root"
+    root.mkdir()
+    # 200 files at depth=2
+    for level1 in range(200):
+        subdir = root / f"subdir_{level1}"
+        subdir.mkdir()
+        (subdir / f"file{level1}.txt").write_bytes(bytes(str(level1), "utf8") * 10)
+    # 100 files at depth=3
+    subdir_b = root / "subdir_b"
+    subdir_b.mkdir()
+    for level2 in range(100):
+        subdir = subdir_b / f"subdir_b{level2}"
+        subdir.mkdir()
+        (subdir / f"file_{level2}.txt").write_bytes(bytes(str(level2), "utf8") * 20)
+    deep_subdir = root / "subdir_a" / "subdir_b" / "subdir_c" / "subdir_d" / "subdir_e" / "subdir_f"
+    deep_subdir.mkdir(parents=True)
+    (deep_subdir / f"file_deep.txt").write_bytes(b"deep" * 10)
+
+    return root
+
+
+
+
+@pytest.fixture
 def empty_temp_dir(tmp_path: Path) -> Path:
     """Creates an empty temporary directory."""
     empty_dir = tmp_path / "empty_dir"
@@ -111,6 +140,14 @@ def _assert_directory_tree_df(df: pl.DataFrame, expected_data: list[dict], impor
             assert actual_schema[col] == expected_type, \
                 f"Mismatch in schema for column '{col}': Expected {expected_type}, got {actual_schema[col]}"
 
+    # Check parentN
+    expected_parent_cols = sorted({k for row in expected_data for k in row if _PARENT_LEVEL_RE.match(k)})
+    actual_parent_cols = sorted(c for c in actual_schema if _PARENT_LEVEL_RE.match(c))
+    assert actual_parent_cols == expected_parent_cols, \
+        f"Mismatch in parent level columns: expected {expected_parent_cols}, got {actual_parent_cols}"
+    for col in actual_parent_cols:
+        assert actual_schema[col] == pl.String, \
+            f"Mismatch in schema for column '{col}': Expected {pl.String}, got {actual_schema[col]}"
 
     df_dict = df.sort("path").to_dicts()
     expected_data.sort(key=lambda x: x['path'])
@@ -126,11 +163,15 @@ def _assert_directory_tree_df(df: pl.DataFrame, expected_data: list[dict], impor
                 assert actual_row[key] == imported_path, f"Mismatch in row {i}, key '{key}'"
             else:
                 assert actual_row[key] == expected_value, f"Mismatch in row {i}, key '{key}'"
+        # Levels the file is not deep enough to have must be null, not filled in.
+        for col in actual_parent_cols:
+            if col not in expected_row:
+                assert actual_row[col] is None, f"Mismatch in row {i}, key '{col}': expected None"
 
 def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
     """
     Tests _fetch_single_directory_tree with a complex directory structure.
-    Verifies column types, content, depth, parent, and imported_path.
+    Verifies column types, content, depth, parent, parentN, and imported_path.
     """
     df = walk_filesystem([complex_temp_dir], accepted_extensions="all")
     base_imported_path = str(complex_temp_dir)
@@ -140,18 +181,27 @@ def test_fetch_single_directory_tree_complex_structure(complex_temp_dir: Path):
           "parent": str(complex_temp_dir), "depth": 1, "size_bytes": 10, "file_extension": "txt",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_a" / "fileA.jpg"), "name": "fileA.jpg", "type": "file",
-          "parent": str(complex_temp_dir / "subdir_a"), "depth": 2, "size_bytes": 20, "file_extension": "jpg",
+          "parent": str(complex_temp_dir / "subdir_a"), "parent0": "subdir_a",
+          "depth": 2, "size_bytes": 20, "file_extension": "jpg",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_a" / "subdir_aa" / "fileAA.csv"), "name": "fileAA.csv",
-          "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"), "depth": 3,
-          "size_bytes": 30, "file_extension": "csv",
+          "type": "file", "parent": str(complex_temp_dir / "subdir_a" / "subdir_aa"),
+          "parent0": "subdir_a", "parent1": "subdir_aa",
+          "depth": 3, "size_bytes": 30, "file_extension": "csv",
           "imported_path": base_imported_path},
         {"path": str(complex_temp_dir / "subdir_b" / "fileB.png"), "name": "fileB.png", "type": "file",
-          "parent": str(complex_temp_dir / "subdir_b"), "depth": 2, "size_bytes": 40,
+          "parent": str(complex_temp_dir / "subdir_b"), "parent0": "subdir_b",
+          "depth": 2, "size_bytes": 40,
           "file_extension": "png",
           "imported_path": base_imported_path},
     ]
     _assert_directory_tree_df(df, expected_data, base_imported_path)
+
+
+def test_deep_many_files_directory(deep_many_files_dir: Path):
+    df = walk_filesystem([deep_many_files_dir], accepted_extensions="all")
+    assert len(df) == 301
+    assert {"parent", "parent0", "parent1", "parent2", "parent5"}.issubset(set(df.columns))
 
 
 def test_walk_filesystem_empty_dir(empty_temp_dir: Path):
@@ -209,6 +259,19 @@ def test_discover_files_paths_relative_to_base_dir(complex_temp_dir: Path):
     assert meta["fileAA.csv"]["parent"] == os.path.join("subdir_a", "subdir_aa")
 
 
+def test_discover_files_parent_levels_are_numbered_top_down(complex_temp_dir: Path):
+    """parent0 is the first directory below base_dir, parent1 the next one down."""
+    root = complex_temp_dir.resolve()
+    meta = _discover_by_name([root], base_dir=root)
+
+    # Directly in the base directory - not deep enough to have any level.
+    assert "parent0" not in meta["file1.txt"]
+    assert meta["fileA.jpg"]["parent0"] == "subdir_a"
+    assert meta["fileB.png"]["parent0"] == "subdir_b"
+    assert meta["fileAA.csv"]["parent0"] == "subdir_a"
+    assert meta["fileAA.csv"]["parent1"] == "subdir_aa"
+
+
 def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
     """When base_dir is an ancestor of the scanned base, paths stay relative to base_dir
     and imported_path names the base's location beneath it."""
@@ -219,7 +282,9 @@ def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
     assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
     assert meta["fileA.jpg"]["parent"] == "subdir_a"
     assert meta["fileA.jpg"]["imported_path"] == "subdir_a"
-
+    assert meta["fileA.jpg"]["parent0"] == "subdir_a"
+    assert meta["fileAA.csv"]["parent0"] == "subdir_a"
+    assert meta["fileAA.csv"]["parent1"] == "subdir_aa"
 
 def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
     """Without base_dir, path/parent/imported_path remain absolute (default behavior)."""
@@ -231,7 +296,17 @@ def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
     assert meta["file1.txt"]["imported_path"] == str(root)
 
 
-# --- Tests for _aggregate_folder_sizes ---
+def test_discover_files_parent_levels_without_base_dir(complex_temp_dir: Path):
+    """Without base_dir the levels are counted from the scanned base, so they stay
+    directory names rather than turning into the absolute path's leading components."""
+    root = complex_temp_dir.resolve()
+    meta = _discover_by_name([root])
+
+    assert "parent0" not in meta["file1.txt"]
+    assert meta["fileB.png"]["parent0"] == "subdir_b"
+    assert meta["fileAA.csv"]["parent0"] == "subdir_a"
+    assert meta["fileAA.csv"]["parent1"] == "subdir_aa"
+
 
 @pytest.fixture
 def sample_flat_df() -> pl.DataFrame:
@@ -257,6 +332,7 @@ def sample_simple_nested_df() -> pl.DataFrame:
         "name": ["root", "file1.txt", "subdir", "file2.txt"],
         "type": ["folder", "file", "folder", "file"],
         "parent": [None, "/root", "/root", "/root/subdir"],
+        "parent0": [None, None, None, "subdir"],
         "depth": [0, 1, 1, 2],
         "size_bytes": [0, 100, 0, 50],  # Initial folder sizes are 0
         "modification_date": [datetime.now()] * 4,
