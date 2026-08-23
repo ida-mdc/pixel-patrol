@@ -238,9 +238,9 @@ def saturated_pixel_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     return np.mean(arr == max_val, axis=axes)
 
 
-def underexposed_pixel_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-                                cache: Optional[Dict] = None) -> np.ndarray:
-    """Fraction of pixels at the dtype's min representable value (underexposure/black-clipping).
+def min_value_pixel_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
+                             cache: Optional[Dict] = None) -> np.ndarray:
+    """Fraction of pixels at the dtype's min representable value (0 for unsigned types).
 
     Same caveats as saturated_pixel_fraction: only defined for integer dtypes
     (NaN for floating-point data), and uses the container dtype's min, not the

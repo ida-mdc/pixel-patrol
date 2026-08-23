@@ -19,9 +19,9 @@ from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     laplacian_variance,
     local_range_contrast_variability,
     local_texture_uniformity,
+    min_value_pixel_fraction,
     saturated_pixel_fraction,
     sobel_gradient_sharpness,
-    underexposed_pixel_fraction,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
     RasterMetricSpec,
@@ -46,7 +46,7 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
             case "sobel_gradient_sharpness": return float(np.nanmean(sobel_gradient_sharpness(arr, _XY_AXES, ctx.cache)))
             case "estimated_noise_std":      return float(np.nanmean(estimated_noise_std(arr, _XY_AXES, ctx.cache)))
             case "saturated_pixel_fraction": return float(np.nanmean(saturated_pixel_fraction(arr, _XY_AXES, ctx.cache)))
-            case "underexposed_pixel_fraction": return float(np.nanmean(underexposed_pixel_fraction(arr, _XY_AXES, ctx.cache)))
+            case "min_value_pixel_fraction": return float(np.nanmean(min_value_pixel_fraction(arr, _XY_AXES, ctx.cache)))
             case "compression_blocking_score": return float(np.nanmean(compression_blocking_score(arr, ctx.cache)))
             case _:                    return None
 
@@ -101,8 +101,8 @@ class QualityMetricsProcessor(RasterImageProcessor):
                          description="Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting."),
         RasterMetricSpec(name="saturated_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim."),
-        RasterMetricSpec(name="underexposed_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark."),
+        RasterMetricSpec(name="min_value_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Fraction of pixels at the minimum representable value for the pixel type. In natural images this often means underexposure; in scientific data it may be expected background or missing values."),
         RasterMetricSpec(name="local_range_contrast_variability", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample."),
         RasterMetricSpec(name="local_texture_uniformity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
