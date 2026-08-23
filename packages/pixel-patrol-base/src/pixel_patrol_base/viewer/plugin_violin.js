@@ -27,9 +27,9 @@ export const QUALITY_METRIC_INFO = {
     desc: 'Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim.',
     hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
   },
-  underexposed_pixel_fraction: {
-    desc: 'Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark.',
-    hintUp: 'more underexposure', hintDown: 'less underexposure', goodDirection: 'down',
+  min_value_pixel_fraction: {
+    desc: 'Fraction of pixels at the minimum representable value for the pixel type. In natural images this often means underexposure; in scientific data it may be expected background or missing values.',
+    hintUp: 'more min-value pixels', hintDown: 'fewer min-value pixels', goodDirection: 'down',
   },
   local_range_contrast_variability: {
     desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
@@ -112,6 +112,84 @@ const QUALITY_INFO = [
   '', GRANULARITY_HELP,
   '', SIGNIFICANCE_HELP,
 ].join('\n');
+
+// Thresholds for fraction metrics where an absolute reading is meaningful - these
+// are normalized 0-1 regardless of dtype or image content, so the numbers mean
+// the same thing in every domain. Content-dependent metrics (laplacian_variance,
+// estimated_noise_std, etc.) deliberately get no thresholds.
+const FRACTION_WARNINGS = [
+  {
+    col: 'saturated_pixel_fraction',
+    threshold: 0.01,
+    label: 'overexposed (blown-out)',
+    consequence: 'Detail in those pixels is unrecoverable.',
+  },
+  {
+    col: 'min_value_pixel_fraction',
+    threshold: 0.05,
+    // label/consequence used only as fallback when dtype column is absent.
+    label: 'at minimum value',
+    consequence: 'This may indicate background, missing values, or underexposure.',
+  },
+];
+
+/** Return the minimum representable integer value for a dtype string like 'uint8', 'int16'. */
+function dtypeMinValue(dtype) {
+  if (dtype.startsWith('uint')) return 0;
+  const bits = parseInt(dtype.replace(/^[a-z]+/, ''), 10);
+  return Number.isFinite(bits) ? -(2 ** (bits - 1)) : null;
+}
+
+/** Check fraction metrics against absolute thresholds and prepend inline warnings. */
+async function prependFractionWarnings(plotRoot, ctx) {
+  const { q, andWhere } = ctx.sql;
+  const cols = ctx.schema.allCols;
+
+  // Fraction metrics (saturated, min-value)
+  for (const { col, threshold, label, consequence } of FRACTION_WARNINGS) {
+    if (!cols.includes(col)) continue;
+    const pct = (threshold * 100).toLocaleString(undefined, { maximumSignificantDigits: 2 });
+    const where = andWhere(ctx.where, `${q(col)} > ${threshold}`);
+    // min_value_pixel_fraction: split unsigned (zero = background/void/underexposure) from
+    // signed (min = lower-bound clipping, signal loss) -- they mean different things.
+    if (col === 'min_value_pixel_fraction' && cols.includes('dtype')) {
+      const uWhere = andWhere(where, `"dtype" LIKE 'uint%'`);
+      const sWhere = andWhere(where, `"dtype" NOT LIKE 'uint%' AND "dtype" LIKE '%int%'`);
+      const [[uRow], [sRow]] = await Promise.all([
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${uWhere}`),
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${sWhere}`),
+      ]);
+      const nu = Number(uRow?.n ?? 0), ns = Number(sRow?.n ?? 0);
+      if (nu > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nu.toLocaleString()} image${nu === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at value 0. ${consequence}`,
+        });
+      }
+      if (ns > 0) {
+        const dtypeRows = await ctx.queryRows(`SELECT DISTINCT "dtype" FROM pp_data ${sWhere}`);
+        const vals = [...new Set(dtypeRows.map(r => dtypeMinValue(r.dtype)).filter(v => v !== null))];
+        const valStr = vals.length ? ` (${vals.length === 1 ? 'value' : 'values'} ${vals.sort((a, b) => a - b).join(', ')})` : '';
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${ns.toLocaleString()} image${ns === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels clipped at the lower bound${valStr}. Signal in those pixels may have been lost.`,
+        });
+      }
+      continue;
+    }
+
+    const [row] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${where}`);
+    const n = Number(row?.n ?? 0);
+    if (n === 0) continue;
+    ctx.plot.prependWarning(plotRoot, {
+      level: 'yellow',
+      html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+            `have more than ${pct}% of pixels ${label}. ${consequence}`,
+    });
+  }
+}
 
 async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
   const { q, groupExpr: geFn, groupCol: gcFn } = ctx.sql;
@@ -340,65 +418,6 @@ async function basicOverviewSummary(ctx) {
     }
     return `Compare per-image intensity statistics across groups.`;
   } catch { return null; }
-}
-
-// Thresholds for fraction metrics where an absolute reading is meaningful - these
-// are normalized 0-1 regardless of dtype or image content, so the numbers mean
-// the same thing in every domain. Content-dependent metrics (laplacian_variance,
-// estimated_noise_std, etc.) deliberately get no thresholds.
-const FRACTION_WARNINGS = [
-  {
-    col: 'saturated_pixel_fraction',
-    threshold: 0.01,
-    // nodata_count is the count of special nodata/fill pixels (geospatial); not
-    // the same concept - skip here and handle it separately via nodata_fraction.
-    label: 'overexposed (blown-out)',
-    consequence: 'Detail in those pixels is unrecoverable.',
-  },
-  {
-    col: 'underexposed_pixel_fraction',
-    threshold: 0.05,
-    label: 'underexposed (crushed to black)',
-    consequence: 'Detail in those pixels is unrecoverable.',
-  },
-];
-
-/** Check fraction metrics against absolute thresholds and prepend inline warnings. */
-async function prependFractionWarnings(plotRoot, ctx) {
-  const { q, andWhere } = ctx.sql;
-  const cols = ctx.schema.allCols;
-
-  // Fraction metrics (saturated, underexposed)
-  for (const { col, threshold, label, consequence } of FRACTION_WARNINGS) {
-    if (!cols.includes(col)) continue;
-    const pct = (threshold * 100).toLocaleString(undefined, { maximumSignificantDigits: 2 });
-    const [row] = await ctx.queryRows(
-      `SELECT COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} > ${threshold}`)}`
-    );
-    const n = Number(row?.n ?? 0);
-    if (n === 0) continue;
-    ctx.plot.prependWarning(plotRoot, {
-      level: 'yellow',
-      html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
-            `have more than ${pct}% of pixels ${label}. ${consequence}`,
-    });
-  }
-
-  // nodata fraction: only meaningful if both nodata_count and num_pixels exist
-  if (cols.includes('nodata_count') && cols.includes('num_pixels')) {
-    const [row] = await ctx.queryRows(
-      `SELECT COUNT(*) AS n FROM pp_data
-       ${andWhere(ctx.where, `"num_pixels" > 0 AND CAST("nodata_count" AS DOUBLE) / "num_pixels" > 0.01`)}`
-    );
-    const n = Number(row?.n ?? 0);
-    if (n > 0) {
-      ctx.plot.prependWarning(plotRoot, {
-        level: 'yellow',
-        html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
-              `have more than 1% nodata/fill pixels. Results from those regions are absent from all metrics.`,
-      });
-    }
-  }
 }
 
 // Stay neutral: the old per-metric "varies a lot / looks consistent" verdicts were
