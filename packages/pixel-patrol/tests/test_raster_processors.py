@@ -62,7 +62,7 @@ def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
     for k in ("laplacian_variance", "sobel_gradient_sharpness", "estimated_noise_std",
               "local_range_contrast_variability", "local_texture_uniformity",
-              "saturated_pixel_fraction", "underexposed_pixel_fraction", "compression_blocking_score"):
+              "saturated_pixel_fraction", "min_value_pixel_fraction", "compression_blocking_score"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -284,16 +284,16 @@ def test_saturated_pixel_fraction_nan_for_float_dtype(quality_proc):
     assert np.isnan(row["saturated_pixel_fraction"])
 
 
-def test_underexposed_pixel_fraction_counts_min_value_pixels(quality_proc):
+def test_min_value_pixel_fraction_counts_min_value_pixels(quality_proc):
     data = np.array([[0, 0, 255, 255], [0, 255, 255, 255]], dtype=np.uint8)
     row = _chunk(quality_proc, data, "YX")
-    assert row["underexposed_pixel_fraction"] == pytest.approx(3 / 8, rel=1e-5)
+    assert row["min_value_pixel_fraction"] == pytest.approx(3 / 8, rel=1e-5)
 
 
-def test_underexposed_pixel_fraction_nan_for_float_dtype(quality_proc):
+def test_min_value_pixel_fraction_nan_for_float_dtype(quality_proc):
     data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
     row = _chunk(quality_proc, data, "YX")
-    assert np.isnan(row["underexposed_pixel_fraction"])
+    assert np.isnan(row["min_value_pixel_fraction"])
 
 
 # ---------------------------------------------------------------------------
