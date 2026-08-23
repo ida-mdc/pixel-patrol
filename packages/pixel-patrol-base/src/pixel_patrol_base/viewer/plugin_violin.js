@@ -113,7 +113,7 @@ const QUALITY_INFO = [
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
-async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
+async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
   const { q, groupExpr: geFn, groupCol: gcFn } = ctx.sql;
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
 
@@ -131,6 +131,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   const tot = Number(availRow.total);
   const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
   dataAvailabilityWarning(plotRoot, counts, tot, { unit: splitDims.size ? 'slices' : 'images' });
+  if (fractionWarnings) await prependFractionWarnings(plotRoot, ctx);
 
   const fixed = {};
   for (const [letter, idxRaw] of Object.entries(ctx.state.dimensions ?? {})) {
@@ -275,7 +276,7 @@ async function violinOverviewPlot(ctx, container, metric) {
   });
 }
 
-function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics) {
+function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics, { fractionWarnings = false } = {}) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
     ctx.schema.metricCols
@@ -309,7 +310,7 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
       const draw = async () => {
         plotRoot.innerHTML = '';
         try {
-          await renderViolins(plotRoot, ctx, filterMetric, splitDims);
+          await renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings);
         } catch {
           plotRoot.innerHTML = '<div class="no-data">Failed to load data.</div>';
         }
@@ -341,6 +342,65 @@ async function basicOverviewSummary(ctx) {
   } catch { return null; }
 }
 
+// Thresholds for fraction metrics where an absolute reading is meaningful - these
+// are normalized 0-1 regardless of dtype or image content, so the numbers mean
+// the same thing in every domain. Content-dependent metrics (laplacian_variance,
+// estimated_noise_std, etc.) deliberately get no thresholds.
+const FRACTION_WARNINGS = [
+  {
+    col: 'saturated_pixel_fraction',
+    threshold: 0.01,
+    // nodata_count is the count of special nodata/fill pixels (geospatial); not
+    // the same concept - skip here and handle it separately via nodata_fraction.
+    label: 'overexposed (blown-out)',
+    consequence: 'Detail in those pixels is unrecoverable.',
+  },
+  {
+    col: 'underexposed_pixel_fraction',
+    threshold: 0.05,
+    label: 'underexposed (crushed to black)',
+    consequence: 'Detail in those pixels is unrecoverable.',
+  },
+];
+
+/** Check fraction metrics against absolute thresholds and prepend inline warnings. */
+async function prependFractionWarnings(plotRoot, ctx) {
+  const { q, andWhere } = ctx.sql;
+  const cols = ctx.schema.allCols;
+
+  // Fraction metrics (saturated, underexposed)
+  for (const { col, threshold, label, consequence } of FRACTION_WARNINGS) {
+    if (!cols.includes(col)) continue;
+    const pct = (threshold * 100).toLocaleString(undefined, { maximumSignificantDigits: 2 });
+    const [row] = await ctx.queryRows(
+      `SELECT COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} > ${threshold}`)}`
+    );
+    const n = Number(row?.n ?? 0);
+    if (n === 0) continue;
+    ctx.plot.prependWarning(plotRoot, {
+      level: 'yellow',
+      html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+            `have more than ${pct}% of pixels ${label}. ${consequence}`,
+    });
+  }
+
+  // nodata fraction: only meaningful if both nodata_count and num_pixels exist
+  if (cols.includes('nodata_count') && cols.includes('num_pixels')) {
+    const [row] = await ctx.queryRows(
+      `SELECT COUNT(*) AS n FROM pp_data
+       ${andWhere(ctx.where, `"num_pixels" > 0 AND CAST("nodata_count" AS DOUBLE) / "num_pixels" > 0.01`)}`
+    );
+    const n = Number(row?.n ?? 0);
+    if (n > 0) {
+      ctx.plot.prependWarning(plotRoot, {
+        level: 'yellow',
+        html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+              `have more than 1% nodata/fill pixels. Results from those regions are absent from all metrics.`,
+      });
+    }
+  }
+}
+
 // Stay neutral: the old per-metric "varies a lot / looks consistent" verdicts were
 // opaque (which metric, measured how?). Just tease what the widget lets you compare.
 async function qualityOverviewSummary() {
@@ -351,7 +411,8 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicOverviewSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityOverviewSummary,
-    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Image Quality', QUALITY_METRIC_BASES),
+    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Image Quality', QUALITY_METRIC_BASES,
+    { fractionWarnings: true }),
 ];
 
 function resolveMetrics(schema, dimensions) {
