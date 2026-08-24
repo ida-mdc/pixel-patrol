@@ -44,6 +44,7 @@ Some loaders support **container files** - single files that hold multiple image
 |---|---|---|
 | `bioio` | TIFF, CZI, ND2, LIF, PNG, JPG, and more via BioIO | `pixel-patrol-loader-bio` |
 | `zarr` | Zarr datasets | `pixel-patrol-loader-bio` |
+| `h5` | HDF5 files, incl. BigDataViewer/BDV | `pixel-patrol-loader-bio` |
 | `tifffile` | TIFF only, lightweight | `pixel-patrol-loader-bio` |
 | *(none)* | Basic file info only (name, size, extension) | `pixel-patrol-base` |
 
