@@ -1,5 +1,4 @@
 import logging
-import string
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Set, List, Mapping, Tuple
 
@@ -13,7 +12,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import record_from, Record
-from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
+from pixel_patrol_loader_bio.plugins.loaders._utils import infer_dim_order, is_zarr_store
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +58,6 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
                 f"Could not load '{path}' as a Zarr array (tried as array/group): {e1}; {e2}"
             )
             return None
-
-
-def _infer_dim_order(n: int) -> str:
-    """
-    Infer a simple dim order assuming the last two dims are YX.
-    Preceding dims are assigned A,B,C,... in order.
-    """
-    if n <= 2:
-        return "YX"[-n:]  # n==0 -> "", n==1 -> "X", n==2 -> "YX"
-    return string.ascii_uppercase[: n - 2] + "YX"
 
 
 def _read_zarr_root_and_primary_attrs(path: Path) -> Dict[str, Any]:
@@ -143,7 +132,7 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
     if dim_names and all(isinstance(n, str) and len(n) == 1 for n in dim_names):
         dim_order = "".join(n.upper() for n in dim_names)
     else:
-        dim_order = _infer_dim_order(ndim)
+        dim_order = infer_dim_order(ndim)
 
     if not dim_names:
         dim_names = [f"dim{c}" for c in dim_order]

@@ -27,7 +27,7 @@ pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 | `-o, --output PATH` | **required** | Path for the output `.parquet` file. |
 | `--name TEXT` | folder name | Project name embedded in the parquet metadata. |
 | `-p, --paths PATH` | | Subdirectory to process. Repeatable. If specified, only files within those paths are processed and they become the default grouping when the interactive report opens. Paths are relative to `BASE_DIRECTORY`. |
-| `-l, --loader TEXT` | *(none)* | Loader plugin, e.g. `bioio`, `zarr`, `tifffile`. Without a loader only basic file info is collected. |
+| `-l, --loader TEXT` | *(none)* | Loader plugin, e.g. `bioio`, `zarr`, `tifffile`, `h5`. Without a loader only basic file info is collected. |
 | `-e, --file-extensions EXT` | *(all supported)* | File extension to include, e.g. `tif`. Repeatable. |
 | `--flavor TEXT` | | Label shown next to the title in the viewer. |
 | `--description TEXT` | | Free-form description shown below the title in the viewer and embedded in the parquet metadata. |
