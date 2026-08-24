@@ -18,8 +18,8 @@ from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 logger = logging.getLogger(__name__)
 
 
-def _ngff_group_and_prefix(root: zarr.Group) -> Tuple[zarr.Group, str]:
-    """Return (group, component_prefix) resolving bioformats2raw layout 3 indirection."""
+def _resolve_bf2raw_group(root: zarr.Group) -> Tuple[zarr.Group, str]:
+    """Return (group, component_prefix) unwrapping the bioformats2raw layout 3 container."""
     if "bioformats2raw.layout" in dict(root.attrs) and "0" in root:
         sub = root["0"]
         if isinstance(sub, zarr.Group):
@@ -38,7 +38,7 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
             candidates = []
 
             if isinstance(root, zarr.Group):
-                group, prefix = _ngff_group_and_prefix(root)
+                group, prefix = _resolve_bf2raw_group(root)
                 attrs = dict(group.attrs)
                 # NGFF: multiscales[0].datasets[*].path  (often "0")
                 for d in attrs.get("multiscales", [{}])[0].get("datasets", []):
@@ -89,7 +89,7 @@ def _read_zarr_root_and_primary_attrs(path: Path) -> Dict[str, Any]:
     attrs: Dict[str, Any] = {}
     try:
         root = zarr.open(str(path), mode="r")
-        group, _ = _ngff_group_and_prefix(root) if isinstance(root, zarr.Group) else (root, "")
+        group, _ = _resolve_bf2raw_group(root) if isinstance(root, zarr.Group) else (root, "")
         attrs.update(dict(getattr(group, "attrs", {}) or {}))
         try:
             if hasattr(group, "arrays"):
