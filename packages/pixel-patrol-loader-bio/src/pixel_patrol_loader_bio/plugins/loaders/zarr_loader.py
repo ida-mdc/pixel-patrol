@@ -46,14 +46,13 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
                     if p:
                         candidates.append(prefix + p)
 
-                # Common fallbacks
-                candidates += [prefix + "0", prefix + "data", "0", "data"]
-
-                # Single-array group: use that array’s name
+                # Common fallbacks relative to the resolved group
                 if not candidates:
                     arrays = list(group.arrays())
                     if len(arrays) == 1:
                         candidates.append(prefix + arrays[0][0])
+                    else:
+                        candidates += [prefix + "0", prefix + "data"]
 
                 for comp in candidates:
                     try:
