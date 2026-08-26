@@ -60,10 +60,10 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("laplacian_variance", "sobel_gradient_sharpness", "estimated_noise_std",
-              "local_range_contrast_variability", "local_texture_uniformity",
-              "saturated_pixel_fraction", "min_value_pixel_fraction", "compression_blocking_score"):
+    for k in ("laplacian_variance", "ringing_index", "estimated_noise_std", "jpeg_block_ratio",
+              "min_value_pixel_fraction", "fraction_at_image_max"):
         assert k in row, f"Missing key: {k}"
+    assert "saturated_pixel_fraction" not in row
 
 
 # ---------------------------------------------------------------------------
@@ -100,10 +100,8 @@ def test_multi_dim_chunk_reduces_over_all_dims(proc):
 def test_lowercase_dim_order(quality_proc):
     data = np.random.default_rng(0).integers(10, 200, (8, 8), dtype=np.uint8).astype(np.float32)
     row = _chunk(quality_proc, data, "yx")
-    assert np.isfinite(row["local_range_contrast_variability"])
-    assert np.isfinite(row["local_texture_uniformity"])
     assert np.isfinite(row["laplacian_variance"])
-    assert np.isfinite(row["sobel_gradient_sharpness"])
+    assert np.isfinite(row["ringing_index"])
     assert np.isfinite(row["estimated_noise_std"])
 
 
@@ -174,32 +172,14 @@ def test_histogram_nan_count(hist_proc):
 
 
 # ---------------------------------------------------------------------------
-# Compression metric (compression_blocking_score lives on QualityMetricsProcessor)
-# ---------------------------------------------------------------------------
-
-def test_compression_absent_from_basic(proc):
-    data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
-    row = _chunk(proc, data, "YX")
-    assert "compression_blocking_score" not in row
-
-
-def test_compression_blocking_score_finite(quality_proc):
-    data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
-    row = _chunk(quality_proc, data, "YX")
-    assert np.isfinite(row["compression_blocking_score"])
-
-
-# ---------------------------------------------------------------------------
 # Quality metrics
 # ---------------------------------------------------------------------------
 
 def test_quality_metrics_finite(quality_proc):
     data = np.linspace(0, 1, 40 * 40, dtype=np.float32).reshape(40, 40)
     row = _chunk(quality_proc, data, "YX")
-    assert np.isfinite(row["local_range_contrast_variability"])
-    assert np.isfinite(row["local_texture_uniformity"])
     assert np.isfinite(row["laplacian_variance"])
-    assert np.isfinite(row["sobel_gradient_sharpness"])
+    assert np.isfinite(row["ringing_index"])
     assert np.isfinite(row["estimated_noise_std"])
 
 
@@ -224,7 +204,14 @@ def test_laplacian_variance_small_image_returns_nan(quality_proc):
     assert np.isnan(row.get("laplacian_variance", np.nan))
 
 
-def test_sobel_gradient_sharpness_sharper_image_scores_higher(quality_proc):
+def test_laplacian_variance_flat_image_scores_zero(quality_proc):
+    # A flat image has zero second derivatives everywhere -- variance is 0.
+    data = np.full((8, 8), 255, dtype=np.uint8)
+    row = _chunk(quality_proc, data, "YX")
+    assert row["laplacian_variance"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_ringing_index_blurring_reduces_score(quality_proc):
     rng = np.random.default_rng(42)
     sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
     blurred = sharp.copy()
@@ -236,7 +223,19 @@ def test_sobel_gradient_sharpness_sharper_image_scores_higher(quality_proc):
         ) / 9.0
     row_sharp   = _chunk(quality_proc, sharp,   "YX")
     row_blurred = _chunk(quality_proc, blurred, "YX")
-    assert row_sharp["sobel_gradient_sharpness"] > row_blurred["sobel_gradient_sharpness"]
+    assert row_sharp["ringing_index"] > row_blurred["ringing_index"]
+
+
+def test_jpeg_block_ratio_finite(quality_proc):
+    data = np.linspace(0, 255, 64 * 64, dtype=np.float32).reshape(64, 64)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isfinite(row["jpeg_block_ratio"])
+
+
+def test_jpeg_block_ratio_nan_for_tiny_image(quality_proc):
+    data = np.ones((8, 8), dtype=np.float32)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isnan(row["jpeg_block_ratio"])
 
 
 def test_estimated_noise_std_noise_scores_higher_than_gradient(quality_proc):
@@ -250,38 +249,6 @@ def test_estimated_noise_std_noise_scores_higher_than_gradient(quality_proc):
     assert row_noise["estimated_noise_std"] > row_gradient["estimated_noise_std"]
 
 
-def test_local_range_contrast_variability_high_frequency_scores_higher(quality_proc):
-    # Checkerboard has local range = 1 in every 3×3 window; a smooth gradient
-    # has tiny local range per window, so the ratio to global std is much smaller.
-    checker = (np.indices((32, 32), dtype=np.float32).sum(axis=0) % 2)
-    smooth  = np.linspace(0, 1, 32 * 32, dtype=np.float32).reshape(32, 32)
-    row_checker = _chunk(quality_proc, checker, "YX")
-    row_smooth  = _chunk(quality_proc, smooth,  "YX")
-    assert row_checker["local_range_contrast_variability"] > row_smooth["local_range_contrast_variability"]
-
-
-def test_local_texture_uniformity_patchy_scores_higher(quality_proc):
-    # Patchy image: flat top half (local std = 0) + noisy bottom half (local std > 0)
-    # → wide spread of local stds → high CoV. Uniform noise → consistent local stds → low CoV.
-    rng  = np.random.default_rng(1)
-    noise = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    patchy = noise.copy()
-    patchy[:16, :] = 0.0
-    row_patchy  = _chunk(quality_proc, patchy, "YX")
-    row_uniform = _chunk(quality_proc, noise,  "YX")
-    assert row_patchy["local_texture_uniformity"] > row_uniform["local_texture_uniformity"]
-
-
-def test_saturated_pixel_fraction_counts_max_value_pixels(quality_proc):
-    data = np.array([[255, 255, 0, 0], [255, 0, 0, 0]], dtype=np.uint8)
-    row = _chunk(quality_proc, data, "YX")
-    assert row["saturated_pixel_fraction"] == pytest.approx(3 / 8, rel=1e-5)
-
-
-def test_saturated_pixel_fraction_nan_for_float_dtype(quality_proc):
-    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
-    row = _chunk(quality_proc, data, "YX")
-    assert np.isnan(row["saturated_pixel_fraction"])
 
 
 def test_min_value_pixel_fraction_counts_min_value_pixels(quality_proc):
@@ -294,6 +261,37 @@ def test_min_value_pixel_fraction_nan_for_float_dtype(quality_proc):
     data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
     row = _chunk(quality_proc, data, "YX")
     assert np.isnan(row["min_value_pixel_fraction"])
+
+
+def test_fraction_at_image_max_uint8(quality_proc):
+    # 3 pixels at max value 255 out of 8.
+    data = np.array([[255, 255, 0, 0], [255, 0, 0, 0]], dtype=np.uint8)
+    row = _chunk(quality_proc, data, "YX")
+    assert row["fraction_at_image_max"] == pytest.approx(3 / 8, rel=1e-5)
+
+
+def test_fraction_at_image_max_12bit_in_uint16(quality_proc):
+    # 12-bit data in uint16: image max is 4095, not 65535.
+    # fraction_at_image_max finds the clipped pixels even though dtype ceiling wasn't hit.
+    data = np.zeros((8, 8), dtype=np.uint16)
+    data[0, 0] = 4095
+    data[0, 1] = 4095
+    row = _chunk(quality_proc, data, "YX")
+    assert row["fraction_at_image_max"] == pytest.approx(2 / 64, rel=1e-5)
+
+
+def test_fraction_at_image_max_float32(quality_proc):
+    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
+    row = _chunk(quality_proc, data, "YX")
+    assert row["fraction_at_image_max"] == pytest.approx(1 / 64, rel=1e-4)
+
+
+def test_fraction_at_image_max_float_nan_excluded(quality_proc):
+    # NaN pixels should be excluded from both numerator and denominator.
+    data = np.ones((8, 8), dtype=np.float32)
+    data[0, 0] = np.nan  # 1 NaN pixel, 63 valid pixels all at value 1.0
+    row = _chunk(quality_proc, data, "YX")
+    assert row["fraction_at_image_max"] == pytest.approx(63 / 63, rel=1e-5)
 
 
 # ---------------------------------------------------------------------------
