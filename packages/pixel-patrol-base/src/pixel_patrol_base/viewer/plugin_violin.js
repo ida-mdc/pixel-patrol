@@ -7,39 +7,49 @@ const BASIC_METRIC_BASES = new Set([
 // One description per metric, used as each metric's own per-plot side note (and
 // by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
 // duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
-// reading is a well-established, monotonic one - local_range_contrast_variability
-// isn't the standard Michelson formula and local_texture_uniformity has no
-// inherent "good" direction (context-dependent), so neither gets a direction claim.
+// reading is a well-established, monotonic one.
 export const QUALITY_METRIC_INFO = {
   laplacian_variance: {
-    desc: 'Sharpness/focus score. Low values usually mean the image is blurry or out of focus.',
-    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
+    desc: 'High-frequency content measure. Low values reliably indicate blur or heavy compression — ' +
+          'both suppress high spatial frequencies. High values are ambiguous: genuine sharpness and ' +
+          'fine detail produce high scores, but so do noise, quantization artifacts (false edges from ' +
+          'too few color levels), and transmission errors. Clipped pixels create artificial edges at ' +
+          'clip boundaries and inflate the score — interpret with caution whenever clipping fractions ' +
+          'are elevated.',
+    hintDown: 'blurrier / more compressed',
   },
-  sobel_gradient_sharpness: {
-    desc: 'A second sharpness score. Use alongside laplacian_variance; when the two disagree it\'s usually about edge orientation, not a measurement error.',
-    hintUp: 'sharper', hintDown: 'blurrier', goodDirection: 'up',
+  ringing_index: {
+    desc: 'Variance of the residual after subtracting a 3×3 local mean. Captures oscillatory ' +
+          'high-frequency content -- elevated by ringing artifacts near edges (lossy compression, ' +
+          'over-sharpening) and by noise.',
+    hintUp: 'more ringing/noise', hintDown: 'less ringing/noise', goodDirection: 'down',
   },
   estimated_noise_std: {
-    desc: 'Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting.',
+    desc: 'High-frequency variation estimate (Immerkaer 1996). Responds to noise and to natural ' +
+          'image texture. The absolute value is only meaningful when comparing images of the same ' +
+          'content type. Cannot detect sparse noise (impulse/salt-and-pepper).',
     hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
   },
-  saturated_pixel_fraction: {
-    desc: 'Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim.',
-    hintUp: 'more overexposure', hintDown: 'less overexposure', goodDirection: 'down',
+  jpeg_block_ratio: {
+    desc: 'Ratio of mean pixel-difference at 8-pixel block boundaries vs within-block differences. ' +
+          'Values near 1.0 are normal. Values above ~1.5 suggest JPEG-style 8×8 blocking artifacts. ' +
+          'Robust to image content: normalizing by within-block contrast removes the influence of ' +
+          'brightness and texture.',
+    hintUp: 'more blocking', hintDown: 'no blocking', goodDirection: 'down',
   },
   min_value_pixel_fraction: {
-    desc: 'Fraction of pixels at the minimum representable value for the pixel type. In natural images this often means underexposure; in scientific data it may be expected background or missing values.',
+    desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
+          'NaN for float). In natural images this often means underexposure; in scientific data ' +
+          'it may be expected background or missing values (e.g. ocean nodata in elevation rasters).',
     hintUp: 'more min-value pixels', hintDown: 'fewer min-value pixels', goodDirection: 'down',
   },
-  local_range_contrast_variability: {
-    desc: 'Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample.',
-  },
-  local_texture_uniformity: {
-    desc: 'How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat.',
-  },
-  compression_blocking_score: {
-    desc: 'Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way.',
-    hintUp: 'more blocking', hintDown: 'less blocking', goodDirection: 'down',
+  fraction_at_image_max: {
+    desc: 'Fraction of pixels at this image\'s own observed maximum value (all dtypes, NaN excluded). ' +
+          'Detects pixel-value clipping regardless of storage format: catches uint8 at 255, uint16 at 65535, ' +
+          'and also sub-dtype clipping such as 12-bit data stored in uint16 (clips at 4095, not 65535). ' +
+          'For float32, where there is no fixed ceiling, this is the only available clipping proxy. ' +
+          'A high value here is a signal that the image may have lost information at the bright end.',
+    hintUp: 'more clipping', hintDown: 'less clipping', goodDirection: 'down',
   },
 };
 
@@ -119,10 +129,13 @@ const QUALITY_INFO = [
 // estimated_noise_std, etc.) deliberately get no thresholds.
 const FRACTION_WARNINGS = [
   {
-    col: 'saturated_pixel_fraction',
+    col: 'fraction_at_image_max',
     threshold: 0.01,
-    label: 'overexposed (blown-out)',
-    consequence: 'Detail in those pixels is unrecoverable.',
+    label: 'at their own image maximum',
+    consequence: 'This may indicate clipping at the bright end. If the dtype is integer and these ' +
+                 'images are NOT at the dtype ceiling (e.g. uint16 max pixel is 4095, not 65535), ' +
+                 'the data is likely stored in a wider format than its true bit depth -- ' +
+                 'clipping occurred at the sensor level, not the container level.',
   },
   {
     col: 'min_value_pixel_fraction',
@@ -144,6 +157,26 @@ function dtypeMinValue(dtype) {
 async function prependFractionWarnings(plotRoot, ctx) {
   const { q, andWhere } = ctx.sql;
   const cols = ctx.schema.allCols;
+
+  // Clipping inflates laplacian_variance via artificial clip-boundary edges.
+  if (cols.includes('laplacian_variance')) {
+    const clipParts = [];
+    if (cols.includes('fraction_at_image_max')) clipParts.push(`"fraction_at_image_max" > 0.01`);
+    if (cols.includes('min_value_pixel_fraction')) clipParts.push(`"min_value_pixel_fraction" > 0.05`);
+    if (clipParts.length) {
+      const clipWhere = andWhere(ctx.where, `(${clipParts.join(' OR ')})`);
+      const [clipRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${clipWhere}`);
+      const nClip = Number(clipRow?.n ?? 0);
+      if (nClip > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nClip.toLocaleString()} image${nClip === 1 ? '' : 's'}</strong> ` +
+                `have clipped pixels. <strong>laplacian_variance</strong> is inflated by ` +
+                `artificial edges at clip boundaries — interpret with caution for those images.`,
+        });
+      }
+    }
+  }
 
   // Fraction metrics (saturated, min-value)
   for (const { col, threshold, label, consequence } of FRACTION_WARNINGS) {
@@ -430,7 +463,7 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicOverviewSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityOverviewSummary,
-    ['laplacian_variance', 'sobel_gradient_sharpness', 'estimated_noise_std', 'local_range_contrast_variability'], 'Image Quality', QUALITY_METRIC_BASES,
+    ['laplacian_variance', 'ringing_index', 'estimated_noise_std'], 'Image Quality', QUALITY_METRIC_BASES,
     { fractionWarnings: true }),
 ];
 
