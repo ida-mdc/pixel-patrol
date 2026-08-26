@@ -4,7 +4,7 @@ that require Y and X axes (transposed to last before kernel computation).
 """
 
 import warnings
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 
@@ -14,14 +14,12 @@ from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     MetricContext,
     _XY_AXES,
-    compression_blocking_score,
     estimated_noise_std,
+    fraction_at_image_max,
+    jpeg_block_ratio,
     laplacian_variance,
-    local_range_contrast_variability,
-    local_texture_uniformity,
     min_value_pixel_fraction,
-    saturated_pixel_fraction,
-    sobel_gradient_sharpness,
+    ringing_index,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
     RasterMetricSpec,
@@ -39,16 +37,15 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
          warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
         warnings.filterwarnings('ignore', 'All-NaN slice encountered', RuntimeWarning)
+        warnings.filterwarnings('ignore', 'Degrees of freedom <= 0', RuntimeWarning)
         match spec.name:
-            case "local_range_contrast_variability": return float(np.nanmean(local_range_contrast_variability(arr, _XY_AXES, ctx.cache)))
-            case "local_texture_uniformity": return float(np.nanmean(local_texture_uniformity(arr, _XY_AXES, ctx.cache)))
             case "laplacian_variance":       return float(np.nanmean(laplacian_variance(arr, ctx.cache)))
-            case "sobel_gradient_sharpness": return float(np.nanmean(sobel_gradient_sharpness(arr, _XY_AXES, ctx.cache)))
+            case "ringing_index":            return float(np.nanmean(ringing_index(arr, ctx.cache)))
             case "estimated_noise_std":      return float(np.nanmean(estimated_noise_std(arr, _XY_AXES, ctx.cache)))
-            case "saturated_pixel_fraction": return float(np.nanmean(saturated_pixel_fraction(arr, _XY_AXES, ctx.cache)))
+            case "jpeg_block_ratio":         return float(np.nanmean(jpeg_block_ratio(arr, ctx.cache)))
             case "min_value_pixel_fraction": return float(np.nanmean(min_value_pixel_fraction(arr, _XY_AXES, ctx.cache)))
-            case "compression_blocking_score": return float(np.nanmean(compression_blocking_score(arr, ctx.cache)))
-            case _:                    return None
+            case "fraction_at_image_max":    return float(np.nanmean(fraction_at_image_max(arr, _XY_AXES, ctx.cache)))
+            case _:                          return None
 
 
 class RasterImageProcessor:
@@ -88,27 +85,23 @@ class RasterImageProcessor:
 
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
-    DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, contrast, texture, saturation, compression artifacts) over the 2D spatial extent of each image."
+    DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, compression artifacts, saturation) over the 2D spatial extent of each image."
     IS_MEMORY_HEAVY = True  # measured ~21x peak memory vs. raw chunk bytes
     # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
     # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Sharpness/focus score. Low values usually mean the image is blurry or out of focus."),
-        RasterMetricSpec(name="sobel_gradient_sharpness", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error."),
+                         description="Sharpness/focus score. Saturated and min-value pixels are excluded before computation. Low values usually mean blur or defocus; high values can also result from artificial discontinuities."),
+        RasterMetricSpec(name="ringing_index", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Variance of the residual after subtracting a 3x3 local mean. Elevated by ringing artifacts and noise."),
         RasterMetricSpec(name="estimated_noise_std", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting."),
-        RasterMetricSpec(name="saturated_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim."),
+                         description="High-frequency variation estimate (Immerkaer 1996). Responds to noise and to natural texture -- the absolute value is only meaningful when comparing images of the same content type."),
+        RasterMetricSpec(name="jpeg_block_ratio", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Ratio of mean pixel-difference at 8-pixel block boundaries vs within-block. Values near 1.0 are normal; values above ~1.5 suggest JPEG-style 8x8 blocking artifacts."),
         RasterMetricSpec(name="min_value_pixel_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels at the minimum representable value for the pixel type. In natural images this often means underexposure; in scientific data it may be expected background or missing values."),
-        RasterMetricSpec(name="local_range_contrast_variability", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample."),
-        RasterMetricSpec(name="local_texture_uniformity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat."),
-        RasterMetricSpec(name="compression_blocking_score", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way."),
+                         description="Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float)."),
+        RasterMetricSpec(name="fraction_at_image_max", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Fraction of pixels at this image's own observed maximum value (all dtypes). Detects clipping regardless of storage format or bit depth."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
