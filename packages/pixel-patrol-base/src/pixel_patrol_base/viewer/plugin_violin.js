@@ -18,38 +18,39 @@ export const QUALITY_METRIC_INFO = {
           'are elevated.',
     hintDown: 'blurrier / more compressed',
   },
-  ringing_index: {
-    desc: 'Variance of the residual after subtracting a 3×3 local mean. Captures oscillatory ' +
-          'high-frequency content -- elevated by ringing artifacts near edges (lossy compression, ' +
-          'over-sharpening) and by noise.',
-    hintUp: 'more ringing/noise', hintDown: 'less ringing/noise', goodDirection: 'down',
-  },
-  estimated_noise_std: {
-    desc: 'High-frequency variation estimate (Immerkaer 1996). Responds to noise and to natural ' +
-          'image texture. The absolute value is only meaningful when comparing images of the same ' +
-          'content type. Cannot detect sparse noise (impulse/salt-and-pepper).',
+  noise_mad: {
+    desc: 'Noise standard deviation estimated from the diagonal detail subband of a single-level ' +
+          'Haar wavelet (Donoho & Johnstone 1994 MAD estimator). The median discards the sparse ' +
+          'large coefficients that represent real image structure, making this robust to texture — ' +
+          'unlike mean-based estimators. For integer images an Anscombe transform is applied first ' +
+          'to handle Poisson noise (dominant in photon-limited scientific imaging such as fluorescence ' +
+          'microscopy). Comparable within a batch of similar images; the absolute value depends on ' +
+          'bit depth and signal scale.',
     hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
   },
-  jpeg_block_ratio: {
-    desc: 'Ratio of mean pixel-difference at 8-pixel block boundaries vs within-block differences. ' +
-          'Values near 1.0 are normal. Values above ~1.5 suggest JPEG-style 8×8 blocking artifacts. ' +
-          'Robust to image content: normalizing by within-block contrast removes the influence of ' +
-          'brightness and texture.',
-    hintUp: 'more blocking', hintDown: 'no blocking', goodDirection: 'down',
+  spectral_slope: {
+    desc: 'Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band ' +
+          '(5–40% of Nyquist). Blur concentrates energy at low frequencies and steepens the slope ' +
+          '(more negative values). Noise adds flat energy across all frequencies and flattens the ' +
+          'slope (toward zero). This is the only metric that maps blur and noise to opposite ' +
+          'directions on a single axis — laplacian_variance cannot make this distinction. ' +
+          'Typical range for well-focused low-noise images: −2 to −4.',
+    hintDown: 'blurrier / more compressed', hintUp: 'noisier / flatter spectrum',
   },
-  min_value_pixel_fraction: {
+  dark_clipping_fraction: {
     desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
-          'NaN for float). In natural images this often means underexposure; in scientific data ' +
-          'it may be expected background or missing values (e.g. ocean nodata in elevation rasters).',
-    hintUp: 'more min-value pixels', hintDown: 'fewer min-value pixels', goodDirection: 'down',
+          'NaN for float, which has no fixed lower bound). Detects underexposure, background, and ' +
+          'nodata at the dark end. In scientific data this may be expected (ocean nodata in elevation ' +
+          'rasters, dark background in fluorescence) or a sign of clipping below the dynamic range.',
+    hintUp: 'more dark-clipped pixels', hintDown: 'fewer dark-clipped pixels', goodDirection: 'down',
   },
-  fraction_at_image_max: {
+  bright_clipping_fraction: {
     desc: 'Fraction of pixels at this image\'s own observed maximum value (all dtypes, NaN excluded). ' +
-          'Detects pixel-value clipping regardless of storage format: catches uint8 at 255, uint16 at 65535, ' +
-          'and also sub-dtype clipping such as 12-bit data stored in uint16 (clips at 4095, not 65535). ' +
-          'For float32, where there is no fixed ceiling, this is the only available clipping proxy. ' +
-          'A high value here is a signal that the image may have lost information at the bright end.',
-    hintUp: 'more clipping', hintDown: 'less clipping', goodDirection: 'down',
+          'Detects bright-end clipping regardless of storage format or bit depth: catches uint8 at 255, ' +
+          'uint16 at 65535, and also sub-dtype clipping such as 12-bit data stored in uint16 (clips at ' +
+          '4095, not 65535). For float images, where there is no fixed ceiling, this is the only ' +
+          'available proxy for bright-end clipping.',
+    hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
   },
 };
 
@@ -129,7 +130,7 @@ const QUALITY_INFO = [
 // estimated_noise_std, etc.) deliberately get no thresholds.
 const FRACTION_WARNINGS = [
   {
-    col: 'fraction_at_image_max',
+    col: 'bright_clipping_fraction',
     threshold: 0.01,
     label: 'at their own image maximum',
     consequence: 'This may indicate clipping at the bright end. If the dtype is integer and these ' +
@@ -138,7 +139,7 @@ const FRACTION_WARNINGS = [
                  'clipping occurred at the sensor level, not the container level.',
   },
   {
-    col: 'min_value_pixel_fraction',
+    col: 'dark_clipping_fraction',
     threshold: 0.05,
     // label/consequence used only as fallback when dtype column is absent.
     label: 'at minimum value',
@@ -161,8 +162,8 @@ async function prependFractionWarnings(plotRoot, ctx) {
   // Clipping inflates laplacian_variance via artificial clip-boundary edges.
   if (cols.includes('laplacian_variance')) {
     const clipParts = [];
-    if (cols.includes('fraction_at_image_max')) clipParts.push(`"fraction_at_image_max" > 0.01`);
-    if (cols.includes('min_value_pixel_fraction')) clipParts.push(`"min_value_pixel_fraction" > 0.05`);
+    if (cols.includes('bright_clipping_fraction')) clipParts.push(`"bright_clipping_fraction" > 0.01`);
+    if (cols.includes('dark_clipping_fraction')) clipParts.push(`"dark_clipping_fraction" > 0.05`);
     if (clipParts.length) {
       const clipWhere = andWhere(ctx.where, `(${clipParts.join(' OR ')})`);
       const [clipRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${clipWhere}`);
@@ -185,7 +186,7 @@ async function prependFractionWarnings(plotRoot, ctx) {
     const where = andWhere(ctx.where, `${q(col)} > ${threshold}`);
     // min_value_pixel_fraction: split unsigned (zero = background/void/underexposure) from
     // signed (min = lower-bound clipping, signal loss) -- they mean different things.
-    if (col === 'min_value_pixel_fraction' && cols.includes('dtype')) {
+    if (col === 'dark_clipping_fraction' && cols.includes('dtype')) {
       const uWhere = andWhere(where, `"dtype" LIKE 'uint%'`);
       const sWhere = andWhere(where, `"dtype" NOT LIKE 'uint%' AND "dtype" LIKE '%int%'`);
       const [[uRow], [sRow]] = await Promise.all([
