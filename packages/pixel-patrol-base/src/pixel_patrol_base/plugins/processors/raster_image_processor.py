@@ -17,7 +17,6 @@ from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     bright_clipping_fraction,
     dark_clipping_fraction,
     laplacian_variance,
-    noise_mad,
     spectral_slope,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
@@ -39,7 +38,6 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
         warnings.filterwarnings('ignore', 'Degrees of freedom <= 0', RuntimeWarning)
         match spec.name:
             case "laplacian_variance":       return float(np.nanmean(laplacian_variance(arr, ctx.cache)))
-            case "noise_mad":                return float(np.nanmean(noise_mad(arr, _XY_AXES, ctx.cache)))
             case "spectral_slope":           return float(np.nanmean(spectral_slope(arr, ctx.cache)))
             case "dark_clipping_fraction":   return float(np.nanmean(dark_clipping_fraction(arr, _XY_AXES, ctx.cache)))
             case "bright_clipping_fraction": return float(np.nanmean(bright_clipping_fraction(arr, _XY_AXES, ctx.cache)))
@@ -90,8 +88,6 @@ class QualityMetricsProcessor(RasterImageProcessor):
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries."),
-        RasterMetricSpec(name="noise_mad", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Noise standard deviation via Haar wavelet MAD estimator (Donoho & Johnstone 1994). Robust to image texture. Anscombe-transformed for integer dtypes to handle Poisson noise."),
         RasterMetricSpec(name="spectral_slope", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions."),
         RasterMetricSpec(name="dark_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,

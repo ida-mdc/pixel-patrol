@@ -10,46 +10,33 @@ const BASIC_METRIC_BASES = new Set([
 // reading is a well-established, monotonic one.
 export const QUALITY_METRIC_INFO = {
   laplacian_variance: {
-    desc: 'High-frequency content measure. Low values reliably indicate blur or heavy compression — ' +
-          'both suppress high spatial frequencies. High values are ambiguous: genuine sharpness and ' +
-          'fine detail produce high scores, but so do noise, quantization artifacts (false edges from ' +
-          'too few color levels), and transmission errors. Clipped pixels create artificial edges at ' +
-          'clip boundaries and inflate the score — interpret with caution whenever clipping fractions ' +
-          'are elevated.',
-    hintDown: 'blurrier / more compressed',
-  },
-  noise_mad: {
-    desc: 'Noise standard deviation estimated from the diagonal detail subband of a single-level ' +
-          'Haar wavelet (Donoho & Johnstone 1994 MAD estimator). The median discards the sparse ' +
-          'large coefficients that represent real image structure, making this robust to texture — ' +
-          'unlike mean-based estimators. For integer images an Anscombe transform is applied first ' +
-          'to handle Poisson noise (dominant in photon-limited scientific imaging such as fluorescence ' +
-          'microscopy). Comparable within a batch of similar images; the absolute value depends on ' +
-          'bit depth and signal scale.',
-    hintUp: 'noisier', hintDown: 'cleaner', goodDirection: 'down',
+    desc: 'High-frequency content measure. Values depend on both image quality and scene content: ' +
+          'blur and heavy compression push values down; sharpness, noise, and fine texture push ' +
+          'values up. A smooth, featureless scene will score low regardless ' +
+          'of focus quality. Clipped pixels create artificial edges at clip boundaries and inflate ' +
+          'the score.',
+    hintUp: 'more high-frequency content (sharpness, noise, or fine texture)',
+    hintDown: 'less high-frequency content (blur, compression, or smooth content)',
   },
   spectral_slope: {
     desc: 'Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band ' +
-          '(5–40% of Nyquist). Blur concentrates energy at low frequencies and steepens the slope ' +
-          '(more negative values). Noise adds flat energy across all frequencies and flattens the ' +
-          'slope (toward zero). This is the only metric that maps blur and noise to opposite ' +
-          'directions on a single axis — laplacian_variance cannot make this distinction. ' +
-          'Typical range for well-focused low-noise images: −2 to −4.',
-    hintDown: 'blurrier / more compressed', hintUp: 'noisier / flatter spectrum',
+          '(5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 can indicate noise, heavy blur, ' +
+          'or spatially uniform content. In comparison, more negative values reflect stronger ' +
+          'low-frequency dominance relative to high. Most interpretable when comparing images of ' +
+          'similar content type.',
+    hintUp: 'flatter spectrum (noise, blur, or uniform content)',
+    hintDown: 'steeper spectrum (structured or sharp content)',
   },
   dark_clipping_fraction: {
     desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
           'NaN for float, which has no fixed lower bound). Detects underexposure, background, and ' +
-          'nodata at the dark end. In scientific data this may be expected (ocean nodata in elevation ' +
-          'rasters, dark background in fluorescence) or a sign of clipping below the dynamic range.',
+          'nodata at the dark end.',
     hintUp: 'more dark-clipped pixels', hintDown: 'fewer dark-clipped pixels', goodDirection: 'down',
   },
   bright_clipping_fraction: {
-    desc: 'Fraction of pixels at this image\'s own observed maximum value (all dtypes, NaN excluded). ' +
-          'Detects bright-end clipping regardless of storage format or bit depth: catches uint8 at 255, ' +
-          'uint16 at 65535, and also sub-dtype clipping such as 12-bit data stored in uint16 (clips at ' +
-          '4095, not 65535). For float images, where there is no fixed ceiling, this is the only ' +
-          'available proxy for bright-end clipping.',
+    desc: 'Fraction of pixels at this image\'s own observed maximum value. ' +
+          'A high fraction may indicate sensor saturation, insufficient dynamic range, or ' +
+          'that the image content genuinely reaches maximum brightness.',
     hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
   },
 };
@@ -119,6 +106,9 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Visualizes **image quality metrics** across groups.',
+  '', 'These metrics are **whole-image aggregates** — they detect global quality issues such as blur, ' +
+  'noise, or exposure problems that affect the image broadly. They are not sensitive to localized ' +
+  'defects or anomalies that cover only a small fraction of pixels.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
   '', SIGNIFICANCE_HELP,
@@ -133,10 +123,7 @@ const FRACTION_WARNINGS = [
     col: 'bright_clipping_fraction',
     threshold: 0.01,
     label: 'at their own image maximum',
-    consequence: 'This may indicate clipping at the bright end. If the dtype is integer and these ' +
-                 'images are NOT at the dtype ceiling (e.g. uint16 max pixel is 4095, not 65535), ' +
-                 'the data is likely stored in a wider format than its true bit depth -- ' +
-                 'clipping occurred at the sensor level, not the container level.',
+    consequence: 'This may indicate sensor saturation or insufficient dynamic range.',
   },
   {
     col: 'dark_clipping_fraction',
@@ -209,6 +196,48 @@ async function prependFractionWarnings(plotRoot, ctx) {
           level: 'yellow',
           html: `<strong>${ns.toLocaleString()} image${ns === 1 ? '' : 's'}</strong> ` +
                 `have more than ${pct}% of pixels clipped at the lower bound${valStr}. Signal in those pixels may have been lost.`,
+        });
+      }
+      continue;
+    }
+
+    // bright_clipping_fraction: split by dtype so float and sub-dtype cases get specific messages.
+    if (col === 'bright_clipping_fraction' && cols.includes('dtype')) {
+      const floatWhere = andWhere(where, `"dtype" LIKE 'float%'`);
+      const intWhere   = andWhere(where, `"dtype" NOT LIKE 'float%'`);
+      const [[floatRow], [intRow]] = await Promise.all([
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${floatWhere}`),
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${intWhere}`),
+      ]);
+      const nFloat = Number(floatRow?.n ?? 0), nInt = Number(intRow?.n ?? 0);
+      if (nFloat > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nFloat.toLocaleString()} float image${nFloat === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at their observed maximum. Float images have no fixed ceiling — ` +
+                `this metric is the only available proxy for bright-end saturation.`,
+        });
+      }
+      if (nInt > 0) {
+        let subNote = '';
+        if (cols.includes('max_intensity')) {
+          const ceilExpr = `CASE "dtype" WHEN 'uint8' THEN 255 WHEN 'uint16' THEN 65535 ` +
+                           `WHEN 'uint32' THEN 4294967295 WHEN 'int8' THEN 127 ` +
+                           `WHEN 'int16' THEN 32767 WHEN 'int32' THEN 2147483647 ELSE NULL END`;
+          const subWhere = andWhere(intWhere, `"max_intensity" < ${ceilExpr}`);
+          const [subRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${subWhere}`);
+          const nSub = Number(subRow?.n ?? 0);
+          if (nSub > 0) {
+            subNote = ` ${nSub.toLocaleString()} of these have a max pixel below the dtype ceiling ` +
+                      `(e.g. uint16 peaking at 4095, not 65535) — clipping occurred at the sensor level, ` +
+                      `not the storage format.`;
+          }
+        }
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nInt.toLocaleString()} image${nInt === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at their observed maximum. ` +
+                `This may indicate sensor saturation or insufficient dynamic range.${subNote}`,
         });
       }
       continue;
@@ -342,6 +371,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
       cell.style.cssText = `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`;
       wrap.appendChild(cell);
 
+      const isClipping = metric === 'bright_clipping_fraction' || metric === 'dark_clipping_fraction';
       await engine.renderDistribution(cell, ctx, {
         numCol: metric,
         source: { table: sourceTable, where: combinedWhere },
@@ -356,6 +386,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
         catLabelFn: ctx.groupLabel,
         stats,
         sideInfo: sideInfoFor(metric),
+        ...(isClipping ? { layout: { yaxis: { tickformat: '.2%', title: label } } } : {}),
       });
     }
   }
