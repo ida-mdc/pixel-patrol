@@ -429,7 +429,7 @@ NaN pixels are excluded from all calculations.
 </details>
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling — sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak below the dtype ceiling (e.g. uint16 peaking at 4095, not 65535) — sensor-level clipping that this metric won't catch directly.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) — data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
 </div>
 </div>
 
