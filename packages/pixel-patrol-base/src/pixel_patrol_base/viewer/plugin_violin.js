@@ -33,9 +33,7 @@ export const QUALITY_METRIC_INFO = {
     hintUp: 'more dark-clipped pixels', hintDown: 'fewer dark-clipped pixels', goodDirection: 'down',
   },
   bright_clipping_fraction: {
-    desc: 'Fraction of pixels at the dtype\'s maximum representable value (integer types only; NaN for float). ' +
-          'Detects sensor saturation at the dtype ceiling (e.g. 255 for uint8, 65535 for uint16). ' +
-          'Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095) is flagged separately in the warning below.',
+    desc: 'Fraction of pixels at the dtype\'s maximum representable value (integer types only; NaN for float).',
     hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
   },
 };
@@ -225,23 +223,47 @@ async function prependFractionWarnings(plotRoot, ctx) {
     });
   }
 
-  // Sub-dtype clipping: independent of bright_clipping_fraction (which only fires at the dtype ceiling).
-  // E.g. 12-bit data in uint16 peaking at 4095 — bright_clipping_fraction stays 0 for those.
-  if (cols.includes('bright_clipping_fraction') && cols.includes('max_intensity') && cols.includes('dtype')) {
+  // Sub-dtype packing: uint images where max_intensity is a power-of-2-minus-1 below the dtype ceiling.
+  // E.g. uint16 peaking at 4095 → likely 12-bit data stored in a wider type.
+  // bright_clipping_fraction compares against the dtype ceiling and stays 0 for these images.
+  if (cols.includes('max_intensity') && cols.includes('dtype')) {
     const ceilExpr = `CASE "dtype" WHEN 'uint8' THEN 255 WHEN 'uint16' THEN 65535 ` +
-                     `WHEN 'uint32' THEN 4294967295 WHEN 'int8' THEN 127 ` +
-                     `WHEN 'int16' THEN 32767 WHEN 'int32' THEN 2147483647 ELSE NULL END`;
+                     `WHEN 'uint32' THEN 4294967295 ELSE NULL END`;
     const subWhere = andWhere(ctx.where,
-      `"dtype" NOT LIKE 'float%' AND "max_intensity" IS NOT NULL AND "max_intensity" < ${ceilExpr}`);
-    const [subRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${subWhere}`);
-    const nSub = Number(subRow?.n ?? 0);
-    if (nSub > 0) {
+      `"dtype" LIKE 'uint%' AND "max_intensity" IS NOT NULL AND "max_intensity" > 0 ` +
+      `AND (CAST("max_intensity" AS BIGINT) & (CAST("max_intensity" AS BIGINT) + 1)) = 0 ` +
+      `AND "max_intensity" < ${ceilExpr}`);
+    const subRows = await ctx.queryRows(
+      `SELECT COUNT(*) AS n, "max_intensity", "dtype" FROM pp_data ${subWhere} ` +
+      `GROUP BY "max_intensity", "dtype" ORDER BY n DESC`);
+    if (subRows.length > 0) {
+      const total = subRows.reduce((s, r) => s + Number(r.n), 0);
+      const details = subRows.map(r => {
+        const bits = Math.round(Math.log2(Number(r.max_intensity) + 1));
+        return `${r.dtype} peaking at ${Number(r.max_intensity).toLocaleString()} (${bits}-bit)`;
+      }).join('; ');
       ctx.plot.prependWarning(plotRoot, {
         level: 'yellow',
-        html: `<strong>${nSub.toLocaleString()} image${nSub === 1 ? '' : 's'}</strong> ` +
-              `have a max pixel below the dtype ceiling (e.g. uint16 peaking at 4095, not 65535) — ` +
-              `clipping occurred at the sensor or ADC level. ` +
-              `<strong>bright_clipping_fraction</strong> compares against the dtype ceiling and will not flag these.`,
+        html: `<strong>${total.toLocaleString()} image${total === 1 ? '' : 's'}</strong> ` +
+              `appear stored in a wider type than acquired — ${details}. ` +
+              `The effective dynamic range is narrower than the dtype suggests. ` +
+              `<strong>bright_clipping_fraction</strong> will not flag clipping at the sub-dtype ceiling.`,
+      });
+    }
+  }
+
+  // Signed-as-unsigned: signed int images with no negative values — signed range is unused.
+  if (cols.includes('min_intensity') && cols.includes('dtype')) {
+    const signedWhere = andWhere(ctx.where,
+      `"dtype" LIKE '%int%' AND "dtype" NOT LIKE 'uint%' AND "min_intensity" IS NOT NULL AND "min_intensity" >= 0`);
+    const [signedRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${signedWhere}`);
+    const nSigned = Number(signedRow?.n ?? 0);
+    if (nSigned > 0) {
+      ctx.plot.prependWarning(plotRoot, {
+        level: 'blue',
+        html: `<strong>${nSigned.toLocaleString()} image${nSigned === 1 ? '' : 's'}</strong> ` +
+              `use a signed integer dtype but have no negative values — ` +
+              `data may have been acquired as unsigned but stored as signed.`,
       });
     }
   }
