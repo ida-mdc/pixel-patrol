@@ -12,7 +12,6 @@ from pixel_patrol_base.core.contracts import ChunkKind
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
 from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
-    MetricContext,
     _XY_AXES,
     bright_clipping_fraction,
     dark_clipping_fraction,
@@ -20,6 +19,7 @@ from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     spectral_slope,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
+    MetricContext,
     RasterMetricSpec,
     _weighted_mean_agg,
 )
@@ -54,7 +54,6 @@ class RasterImageProcessor:
     INPUT       = RecordSpec(axes={"X", "Y"}, kinds={"intensity"}, capabilities={"spatial-2d"})
     OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {}
-    IS_MEMORY_HEAVY: bool = False
     OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {}
 
     def run_chunk(self, record: Record) -> Dict:
@@ -65,7 +64,7 @@ class RasterImageProcessor:
         if y_ax != len(dim_order_out) - 2 or x_ax != len(dim_order_out) - 1:
             other = [i for i in range(chunk.ndim) if i not in (y_ax, x_ax)]
             chunk = chunk.transpose(other + [y_ax, x_ax])
-        ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+        ctx = MetricContext()
         return {
             spec.name: val
             for spec in self.METRICS
@@ -82,7 +81,6 @@ class RasterImageProcessor:
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
     DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, spectral characteristics, clipping) over the 2D spatial extent of each image."
-    IS_MEMORY_HEAVY = True  # measured ~21x peak memory vs. raw chunk bytes
     # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
     # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
@@ -93,7 +91,7 @@ class QualityMetricsProcessor(RasterImageProcessor):
         RasterMetricSpec(name="dark_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata."),
         RasterMetricSpec(name="bright_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels at this image's own observed maximum value (all dtypes). Detects bright-end clipping regardless of storage format or bit depth."),
+                         description="Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

@@ -88,7 +88,7 @@ pixel-patrol process my-data/ -o results.parquet --processors-exclude raster-qua
 | `raster-basic` | `pixel-patrol-base` | `min_intensity`, `max_intensity`, `mean_intensity`, `std_intensity`, `finite_pixel_count` |
 | `raster-histogram` | `pixel-patrol-base` | `histogram_min`, `histogram_max`, `histogram_nan_count`, `histogram_counts` |
 | `thumbnail` | `pixel-patrol-base` | `thumbnail`, `thumbnail_norm_min`, `thumbnail_norm_max`, `thumbnail_dtype` |
-| `raster-quality` | `pixel-patrol-base` | `laplacian_variance`, `sobel_gradient_sharpness`, `estimated_noise_std`, `local_range_contrast_variability`, `local_texture_uniformity`, `saturated_pixel_fraction`, `underexposed_pixel_fraction`, `compression_blocking_score` |
+| `raster-quality` | `pixel-patrol-base` | `laplacian_variance`, `spectral_slope`, `dark_clipping_fraction`, `bright_clipping_fraction` |
 
 Additional processors are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol). You can also build your own - see [Extensions](extensions.md).
 

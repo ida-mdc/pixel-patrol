@@ -104,10 +104,6 @@ _LOG_EVERY = 200
 # gates the small-file fast path.
 _MAX_SIZE_EXPANSION_FACTOR = 8
 
-# Used instead, for chunk-splitting decisions only (never for worker RAM sizing -
-# see _effective_split_mb_per_task), when a memory-heavy processor is active.
-_MAX_SIZE_EXPANSION_FACTOR_HEAVY = 24
-
 # Headroom left unused when packing workers into available RAM.
 _AVAILABLE_RAM_PACKING_FRACTION = 0.9
 
@@ -121,22 +117,6 @@ _WORKER_THREAD_ENV = {
     "NUMEXPR_MAX_THREADS":  "1",
     "NUMEXPR_NUM_THREADS":  "1",
 }
-
-
-def _effective_split_mb_per_task(mb_per_task: float, processors: List[Any]) -> float:
-    """Shrink the per-task chunk-splitting budget when a memory-heavy processor is
-    active, so a chunk's peak memory after processing still fits the worker RAM
-    sized for the default case - without growing that worker budget itself (which
-    would cost parallelism on every run, not just ones with genuinely large files).
-
-    Only affects how finely large files get split; small files/images that never
-    approach mb_per_task are untouched, so plain batches of small images see no
-    slowdown regardless of which processors are active.
-    """
-    factor = (_MAX_SIZE_EXPANSION_FACTOR_HEAVY
-             if any(getattr(p, "IS_MEMORY_HEAVY", False) for p in processors)
-             else _MAX_SIZE_EXPANSION_FACTOR)
-    return mb_per_task * _MAX_SIZE_EXPANSION_FACTOR / factor
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -392,7 +372,7 @@ def _plan_tasks(
                                    if unsplittable, fall through to batch.
       otherwise     → accumulate in current batch; flush when budget fills.
     """
-    _split_mb_per_task: float = _effective_split_mb_per_task(config.mb_per_task, processors)
+    _split_mb_per_task: float = config.mb_per_task
     budget_bytes: int = int(_split_mb_per_task * 1024 * 1024)
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
@@ -743,7 +723,7 @@ def _execute_container_task(
     results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
     file_path = Path(task.file_path)
-    _split_mb_per_task = _effective_split_mb_per_task(config.mb_per_task, processors)
+    _split_mb_per_task = config.mb_per_task
     for child_id, record in loader.load_range(file_path, start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",

@@ -42,38 +42,47 @@ table is generated from the installed plugins.
 | `path` | `str` | Path of the file (or folder), relative to the project base directory. | File system | base processing | pixel-patrol-base |
 | `size_bytes` | `int` | Size on disk in bytes (aggregated for folders). | File system | base processing | pixel-patrol-base |
 | `type` | `str` | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). | File system | base processing | pixel-patrol-base |
-| `channel_names` | `list` | Names of the image channels, if available. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `child_id` | `string` | Identifier of a sub-image within a container file (null for single-image files). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dim_names` | `list` | Human-readable names of the image axes. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dim_order` | `string` | Axis order of the image, e.g. 'TCZYX'. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dtype` | `string` | Pixel data type of the source image (e.g. 'uint8', 'float32'). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
+| `channel_names` | `list` | Names of the image channels, if available. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `child_id` | `string` | Identifier of a sub-image within a container file (null for single-image files). | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `codec` | `string` |  | Loaders | video | pixel-patrol-loader-video |
+| `crs_epsg` | `Optional` | EPSG code of the CRS; None if not EPSG-registered. | Loaders | geospatial | pixel-patrol-geospatial |
+| `crs_str` | `Optional` | Coordinate reference system as a WKT string. | Loaders | geospatial | pixel-patrol-geospatial |
+| `dim_names` | `list` | Human-readable names of the image axes. | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `dim_order` | `string` | Axis order of the image, e.g. 'TCZYX'. | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `dtype` | `string` | Pixel data type of the source image (e.g. 'uint8', 'float32'). | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `duration_seconds` | `float` |  | Loaders | video | pixel-patrol-loader-video |
+| `footprint` | `Optional` | Bounding-box footprint as a GeoJSON polygon in EPSG:4326. | Loaders | geospatial | pixel-patrol-geospatial |
+| `fps` | `float` |  | Loaders | video | pixel-patrol-loader-video |
+| `latitude` | `Optional` | Centroid latitude in WGS-84 degrees. | Loaders | geospatial | pixel-patrol-geospatial |
+| `longitude` | `Optional` | Centroid longitude in WGS-84 degrees. | Loaders | geospatial | pixel-patrol-geospatial |
+| `n_channels` | `int` |  | Loaders | video | pixel-patrol-loader-video |
+| `n_frames` | `int` |  | Loaders | video | pixel-patrol-loader-video |
+| `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `nodata_value` | `Union` | Declared nodata/fill value from the file metadata. | Loaders | geospatial | pixel-patrol-geospatial |
+| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `shape` | `list` | Raster dimensions as [bands, height, width]. | Loaders | geospatial | pixel-patrol-geospatial |
 | `zarr_attributes` | `dict` | Raw key-value attributes stored in the Zarr/OME-Zarr group metadata. | Loaders | zarr | pixel-patrol-loader-bio |
 | `ndim` | `int` | Number of image dimensions, derived from dim_order. | Pipeline | base processing | pixel-patrol-base |
 | `num_pixels` | `int` | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). | Pipeline | base processing | pixel-patrol-base |
 | `size_<axis>` | `int` | Extent (number of elements) of this row along the given axis. | Pipeline | base processing | pixel-patrol-base |
 | `dim_<axis>` | `int` | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. | Aggregation | base processing | pixel-patrol-base |
 | `obs_level` | `int` | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. | Aggregation | base processing | pixel-patrol-base |
-| `compression_blocking_score` | `float32` | Strength of JPEG-style blocky artifacts. Non-zero on data that should be lossless (TIFF etc.) usually means it was compressed somewhere along the way. | raster-quality | raster-quality | pixel-patrol-base |
-| `estimated_noise_std` | `float32` | Estimated noise level. Higher means grainier/noisier - check sensor gain, exposure time, or lighting. | raster-quality | raster-quality | pixel-patrol-base |
+| `bright_clipping_fraction` | `float32` | Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling. | raster-quality | raster-quality | pixel-patrol-base |
+| `dark_clipping_fraction` | `float32` | Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata. | raster-quality | raster-quality | pixel-patrol-base |
 | `finite_pixel_count` | `uint64` | Number of finite (non-NaN/Inf) pixels contributing to the statistics. | raster-basic | raster-basic | pixel-patrol-base |
-| `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins). | raster-histogram | raster-histogram | pixel-patrol-base |
+| `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins). | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_max` | `float32` | Upper bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_min` | `float32` | Lower bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_nan_count` | `uint64` | Number of NaN pixels excluded from the histogram. | raster-histogram | raster-histogram | pixel-patrol-base |
-| `laplacian_variance` | `float32` | Sharpness/focus score. Low values usually mean the image is blurry or out of focus. | raster-quality | raster-quality | pixel-patrol-base |
-| `local_range_contrast_variability` | `float32` | Local contrast score. Low values mean the image looks flat - check for underexposure, overexposure, or a genuinely low-contrast sample. | raster-quality | raster-quality | pixel-patrol-base |
-| `local_texture_uniformity` | `float32` | How evenly detail/texture is spread across the image. High values mean some regions are richly textured while others are flat. | raster-quality | raster-quality | pixel-patrol-base |
+| `laplacian_variance` | `float32` | High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries. | raster-quality | raster-quality | pixel-patrol-base |
 | `max_intensity` | `float32` | Maximum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `mean_intensity` | `float32` | Pixel-count-weighted mean intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `min_intensity` | `float32` | Minimum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
-| `saturated_pixel_fraction` | `float32` | Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim. | raster-quality | raster-quality | pixel-patrol-base |
-| `sobel_gradient_sharpness` | `float32` | A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error. | raster-quality | raster-quality | pixel-patrol-base |
+| `nodata_count` | `int` | Number of pixels equal to the declared nodata value. | nodata-statistics | nodata-statistics | pixel-patrol-geospatial |
+| `spectral_slope` | `float32` | Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions. | raster-quality | raster-quality | pixel-patrol-base |
 | `std_intensity` | `float32` | Pooled standard deviation of intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `thumbnail` | `bytes` | Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size). | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_dtype` | `string` | Original pixel dtype of the source image the thumbnail was built from. | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_norm_max` | `float` | Upper intensity bound used to normalize the thumbnail. | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_norm_min` | `float` | Lower intensity bound used to normalize the thumbnail. | thumbnail | thumbnail | pixel-patrol-base |
-| `underexposed_pixel_fraction` | `float32` | Fraction of pixels fully underexposed (crushed to black). Any real detail there is lost, not just dark. | raster-quality | raster-quality | pixel-patrol-base |
 <!-- END GENERATED COLUMNS -->
