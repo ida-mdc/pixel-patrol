@@ -157,7 +157,6 @@ class ThumbnailProcessor:
         "thumbnail_norm_max": "Upper intensity bound used to normalize the thumbnail.",
         "thumbnail_dtype":    "Original pixel dtype of the source image the thumbnail was built from.",
     }
-    IS_MEMORY_HEAVY: bool = False
 
     def get_aggregation(self, name: str):
         if name not in self.OUTPUT_SCHEMA:

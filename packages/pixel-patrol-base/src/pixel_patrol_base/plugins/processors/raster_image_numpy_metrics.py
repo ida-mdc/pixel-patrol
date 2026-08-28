@@ -4,8 +4,6 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from pixel_patrol_base.plugins.processors.raster_processor import MetricContext
-
 
 # Spatial (Y, X) axes within any (..., H, W) array.
 _XY_AXES = (-2, -1)
@@ -40,44 +38,6 @@ def laplacian_variance(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndar
            arr_f[..., :-2, 1:-1] + arr_f[..., 2:, 1:-1] -
            4.0 * arr_f[..., 1:-1, 1:-1])
     return np.nanvar(lap, axis=(-2, -1))
-
-
-def noise_mad(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
-              cache: Optional[Dict] = None) -> np.ndarray:
-    """Noise standard deviation via Haar wavelet MAD estimator (Donoho & Johnstone 1994).
-
-    Computes the diagonal detail subband (HH) of a single-level 2-D Haar wavelet
-    and returns median(|HH|) / 0.6745. The median discards the sparse large
-    coefficients that represent genuine image structure, so the estimate reflects
-    additive noise rather than texture -- unlike mean-based estimators such as
-    Immerkaer (1996), which texture spikes dominate.
-
-    For integer dtypes an Anscombe transform (2*sqrt(x + 3/8)) is applied before
-    decomposition. This variance-stabilises Poisson noise (the dominant noise model
-    in fluorescence microscopy and photon-limited scientific imaging) so the
-    Gaussian MAD estimator remains valid. For float arrays no transform is applied.
-
-    Returns NaN for spatial extents smaller than 4x4 or where fewer than 16
-    finite HH coefficients exist (typically arising in heavily NaN-masked regions).
-    """
-    h, w = arr.shape[-2], arr.shape[-1]
-    if h < 4 or w < 4:
-        return np.full(arr.shape[:-2], np.nan)
-    arr_f = _float32_cached(arr, cache)
-    # Anscombe transform for integer dtypes: stabilises Poisson variance to ~1.
-    if np.issubdtype(arr.dtype, np.integer):
-        arr_work = 2.0 * np.sqrt(arr_f + 0.375)
-    else:
-        arr_work = arr_f
-    # Trim to even spatial dims for non-overlapping 2×2 Haar blocks.
-    he, we = (h // 2) * 2, (w // 2) * 2
-    a = arr_work[..., :he, :we]
-    # HH diagonal detail subband: A - B - C + D (top-left, top-right, bottom-left, bottom-right).
-    HH = (a[..., 0::2, 0::2] - a[..., 0::2, 1::2]
-          - a[..., 1::2, 0::2] + a[..., 1::2, 1::2]) / 4.0
-    valid_n = np.sum(np.isfinite(HH), axis=(-2, -1))
-    sigma = np.nanmedian(np.abs(HH), axis=(-2, -1)) / 0.6745
-    return np.where(valid_n >= 16, sigma, np.nan).astype(np.float32)
 
 
 def spectral_slope(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
@@ -157,8 +117,7 @@ def dark_clipping_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
     """Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers).
 
     Detects underexposure, background/void regions, and nodata at the dark end.
-    Returns NaN for floating-point arrays (no fixed lower bound; use
-    bright_clipping_fraction to detect clipping relative to the observed peak).
+    Returns NaN for floating-point arrays (no fixed lower bound).
     In natural images this often indicates underexposure; in scientific data it
     may be expected background or missing values (e.g. ocean nodata in elevation).
     """
@@ -169,19 +128,17 @@ def dark_clipping_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
 
 def bright_clipping_fraction(arr: np.ndarray, axes: Tuple[int, int] = _XY_AXES,
                              cache: Optional[Dict] = None) -> np.ndarray:
-    """Fraction of pixels at this image's own observed maximum value (all dtypes, NaN excluded).
+    """Fraction of pixels at the dtype's maximum representable value (integer types only).
 
-    Detects clipping at the bright end regardless of storage format or dtype ceiling.
-    For integer types, catches both dtype-level saturation (e.g. 255 for uint8)
-    and sub-dtype clipping (e.g. 12-bit data stored in uint16 clipping at 4095).
-    For float arrays, where there is no fixed ceiling, this is the only available
-    proxy for bright-end clipping. A high value indicates potential loss of
-    information at the bright end of the signal.
+    Detects sensor saturation or storage-format clipping at the dtype ceiling
+    (e.g. 255 for uint8, 65535 for uint16). Returns NaN for floating-point arrays,
+    which have no fixed upper bound.
+
+    Note: sub-dtype clipping (e.g. 12-bit data stored in uint16 peaking at 4095,
+    not 65535) is not detected here -- compare max_intensity against the dtype
+    ceiling to identify those cases.
     """
-    chunk_max = np.nanmax(arr, axis=axes, keepdims=True)
-    at_max = (arr == chunk_max)  # NaN comparisons are False -- NaN excluded from numerator
-    if np.issubdtype(arr.dtype, np.floating):
-        valid_n = np.sum(np.isfinite(arr), axis=axes)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            return np.where(valid_n > 0, np.sum(at_max, axis=axes) / valid_n, np.nan).astype(np.float32)
-    return np.mean(at_max, axis=axes).astype(np.float32)
+    if not np.issubdtype(arr.dtype, np.integer):
+        return np.full(arr.shape[:-2], np.nan)
+    dtype_max = np.iinfo(arr.dtype).max
+    return np.mean(arr == dtype_max, axis=axes).astype(np.float32)

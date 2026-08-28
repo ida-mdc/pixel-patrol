@@ -20,12 +20,11 @@ export const QUALITY_METRIC_INFO = {
   },
   spectral_slope: {
     desc: 'Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band ' +
-          '(5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 can indicate noise, heavy blur, ' +
-          'or spatially uniform content. In comparison, more negative values reflect stronger ' +
-          'low-frequency dominance relative to high. Most interpretable when comparing images of ' +
-          'similar content type.',
-    hintUp: 'flatter spectrum (noise, blur, or uniform content)',
-    hintDown: 'steeper spectrum (structured or sharp content)',
+          '(5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform ' +
+          'content. More negative values indicate blur or stronger low-frequency dominance. ' +
+          'Most interpretable when comparing images of similar content type.',
+    hintUp: 'flatter spectrum (noise or uniform content)',
+    hintDown: 'steeper spectrum (blur or low-frequency dominance)',
   },
   dark_clipping_fraction: {
     desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
@@ -34,9 +33,9 @@ export const QUALITY_METRIC_INFO = {
     hintUp: 'more dark-clipped pixels', hintDown: 'fewer dark-clipped pixels', goodDirection: 'down',
   },
   bright_clipping_fraction: {
-    desc: 'Fraction of pixels at this image\'s own observed maximum value. ' +
-          'A high fraction may indicate sensor saturation, insufficient dynamic range, or ' +
-          'that the image content genuinely reaches maximum brightness.',
+    desc: 'Fraction of pixels at the dtype\'s maximum representable value (integer types only; NaN for float). ' +
+          'Detects sensor saturation at the dtype ceiling (e.g. 255 for uint8, 65535 for uint16). ' +
+          'Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095) is flagged separately in the warning below.',
     hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
   },
 };
@@ -117,12 +116,12 @@ const QUALITY_INFO = [
 // Thresholds for fraction metrics where an absolute reading is meaningful - these
 // are normalized 0-1 regardless of dtype or image content, so the numbers mean
 // the same thing in every domain. Content-dependent metrics (laplacian_variance,
-// estimated_noise_std, etc.) deliberately get no thresholds.
+// spectral_slope, etc.) deliberately get no thresholds.
 const FRACTION_WARNINGS = [
   {
     col: 'bright_clipping_fraction',
     threshold: 0.01,
-    label: 'at their own image maximum',
+    label: 'at the dtype ceiling',
     consequence: 'This may indicate sensor saturation or insufficient dynamic range.',
   },
   {
@@ -201,43 +200,16 @@ async function prependFractionWarnings(plotRoot, ctx) {
       continue;
     }
 
-    // bright_clipping_fraction: split by dtype so float and sub-dtype cases get specific messages.
-    if (col === 'bright_clipping_fraction' && cols.includes('dtype')) {
-      const floatWhere = andWhere(where, `"dtype" LIKE 'float%'`);
-      const intWhere   = andWhere(where, `"dtype" NOT LIKE 'float%'`);
-      const [[floatRow], [intRow]] = await Promise.all([
-        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${floatWhere}`),
-        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${intWhere}`),
-      ]);
-      const nFloat = Number(floatRow?.n ?? 0), nInt = Number(intRow?.n ?? 0);
-      if (nFloat > 0) {
+    // bright_clipping_fraction: integer only (float → NaN, never above threshold).
+    if (col === 'bright_clipping_fraction') {
+      const [row] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${where}`);
+      const n = Number(row?.n ?? 0);
+      if (n > 0) {
         ctx.plot.prependWarning(plotRoot, {
           level: 'yellow',
-          html: `<strong>${nFloat.toLocaleString()} float image${nFloat === 1 ? '' : 's'}</strong> ` +
-                `have more than ${pct}% of pixels at their observed maximum. Float images have no fixed ceiling — ` +
-                `this metric is the only available proxy for bright-end saturation.`,
-        });
-      }
-      if (nInt > 0) {
-        let subNote = '';
-        if (cols.includes('max_intensity')) {
-          const ceilExpr = `CASE "dtype" WHEN 'uint8' THEN 255 WHEN 'uint16' THEN 65535 ` +
-                           `WHEN 'uint32' THEN 4294967295 WHEN 'int8' THEN 127 ` +
-                           `WHEN 'int16' THEN 32767 WHEN 'int32' THEN 2147483647 ELSE NULL END`;
-          const subWhere = andWhere(intWhere, `"max_intensity" < ${ceilExpr}`);
-          const [subRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${subWhere}`);
-          const nSub = Number(subRow?.n ?? 0);
-          if (nSub > 0) {
-            subNote = ` ${nSub.toLocaleString()} of these have a max pixel below the dtype ceiling ` +
-                      `(e.g. uint16 peaking at 4095, not 65535) — clipping occurred at the sensor level, ` +
-                      `not the storage format.`;
-          }
-        }
-        ctx.plot.prependWarning(plotRoot, {
-          level: 'yellow',
-          html: `<strong>${nInt.toLocaleString()} image${nInt === 1 ? '' : 's'}</strong> ` +
-                `have more than ${pct}% of pixels at their observed maximum. ` +
-                `This may indicate sensor saturation or insufficient dynamic range.${subNote}`,
+          html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at the dtype's maximum value — sensor saturation. ` +
+                `Real signal there is lost.`,
         });
       }
       continue;
@@ -251,6 +223,27 @@ async function prependFractionWarnings(plotRoot, ctx) {
       html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
             `have more than ${pct}% of pixels ${label}. ${consequence}`,
     });
+  }
+
+  // Sub-dtype clipping: independent of bright_clipping_fraction (which only fires at the dtype ceiling).
+  // E.g. 12-bit data in uint16 peaking at 4095 — bright_clipping_fraction stays 0 for those.
+  if (cols.includes('bright_clipping_fraction') && cols.includes('max_intensity') && cols.includes('dtype')) {
+    const ceilExpr = `CASE "dtype" WHEN 'uint8' THEN 255 WHEN 'uint16' THEN 65535 ` +
+                     `WHEN 'uint32' THEN 4294967295 WHEN 'int8' THEN 127 ` +
+                     `WHEN 'int16' THEN 32767 WHEN 'int32' THEN 2147483647 ELSE NULL END`;
+    const subWhere = andWhere(ctx.where,
+      `"dtype" NOT LIKE 'float%' AND "max_intensity" IS NOT NULL AND "max_intensity" < ${ceilExpr}`);
+    const [subRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${subWhere}`);
+    const nSub = Number(subRow?.n ?? 0);
+    if (nSub > 0) {
+      ctx.plot.prependWarning(plotRoot, {
+        level: 'yellow',
+        html: `<strong>${nSub.toLocaleString()} image${nSub === 1 ? '' : 's'}</strong> ` +
+              `have a max pixel below the dtype ceiling (e.g. uint16 peaking at 4095, not 65535) — ` +
+              `clipping occurred at the sensor or ADC level. ` +
+              `<strong>bright_clipping_fraction</strong> compares against the dtype ceiling and will not flag these.`,
+      });
+    }
   }
 }
 
@@ -495,7 +488,7 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicOverviewSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityOverviewSummary,
-    ['laplacian_variance', 'ringing_index', 'estimated_noise_std'], 'Image Quality', QUALITY_METRIC_BASES,
+    ['laplacian_variance'], 'Image Quality', QUALITY_METRIC_BASES,
     { fractionWarnings: true }),
 ];
 
