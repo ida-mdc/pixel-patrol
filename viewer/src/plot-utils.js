@@ -253,8 +253,8 @@ export function appendSideInfoRow(container, info) {
   if (hintUp && hintDown) {
     const badge = document.createElement('div');
     badge.className = 'plot-side-info-direction';
-    const upClass   = goodDirection === 'up'   ? 'plot-side-info-good' : 'plot-side-info-bad';
-    const downClass = goodDirection === 'down' ? 'plot-side-info-good' : 'plot-side-info-bad';
+    const upClass   = !goodDirection ? 'plot-side-info-neutral' : goodDirection === 'up'   ? 'plot-side-info-good' : 'plot-side-info-bad';
+    const downClass = !goodDirection ? 'plot-side-info-neutral' : goodDirection === 'down' ? 'plot-side-info-good' : 'plot-side-info-bad';
     badge.innerHTML =
       `<div class="${upClass}"><span aria-hidden="true">▲</span> ${escapeHtml(hintUp)}</div>` +
       `<div class="${downClass}"><span aria-hidden="true">▼</span> ${escapeHtml(hintDown)}</div>`;

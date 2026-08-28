@@ -72,10 +72,10 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("laplacian_variance", "noise_mad", "dark_clipping_fraction", "bright_clipping_fraction"):
+    for k in ("laplacian_variance", "dark_clipping_fraction", "bright_clipping_fraction"):
         assert k in row, f"Missing key: {k}"
     for removed in ("ringing_index", "jpeg_block_ratio", "estimated_noise_std",
-                    "min_value_pixel_fraction", "fraction_at_image_max"):
+                    "min_value_pixel_fraction", "fraction_at_image_max", "noise_mad"):
         assert removed not in row, f"Removed metric still present: {removed}"
 
 
@@ -114,7 +114,6 @@ def test_lowercase_dim_order(quality_proc):
     data = np.random.default_rng(0).integers(10, 200, (8, 8), dtype=np.uint8).astype(np.float32)
     row = _chunk(quality_proc, data, "yx")
     assert np.isfinite(row["laplacian_variance"])
-    assert np.isfinite(row["noise_mad"])
 
 
 # ---------------------------------------------------------------------------
@@ -201,45 +200,6 @@ def test_laplacian_variance_small_image_returns_nan(quality_proc):
 def test_laplacian_variance_flat_image_scores_zero(quality_proc):
     data = np.full((8, 8), 255, dtype=np.uint8)
     assert _chunk(quality_proc, data, "YX")["laplacian_variance"] == pytest.approx(0.0, abs=1e-6)
-
-
-# ---------------------------------------------------------------------------
-# noise_mad
-# ---------------------------------------------------------------------------
-
-def test_noise_mad_noisy_scores_higher_than_gradient(quality_proc):
-    # A linear gradient has no noise; the Haar diagonal subband is zero (or near zero).
-    # Random noise has large diagonal subband coefficients.
-    gradient = np.linspace(0, 255, 32 * 32, dtype=np.float32).reshape(32, 32)
-    noise = np.random.default_rng(0).integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    row_g = _chunk(quality_proc, gradient, "YX")
-    row_n = _chunk(quality_proc, noise, "YX")
-    assert row_n["noise_mad"] > row_g["noise_mad"]
-
-
-def test_noise_mad_small_image_returns_nan(quality_proc):
-    row = _chunk(quality_proc, np.ones((3, 3), dtype=np.float32), "YX")
-    assert np.isnan(row.get("noise_mad", np.nan))
-
-
-def test_noise_mad_finite_for_uint8(quality_proc):
-    data = np.random.default_rng(1).integers(0, 256, (32, 32), dtype=np.uint8)
-    assert np.isfinite(_chunk(quality_proc, data, "YX")["noise_mad"])
-
-
-def test_noise_mad_flat_image_near_zero(quality_proc):
-    # A perfectly flat image has no noise -- all HH coefficients are zero.
-    data = np.full((16, 16), 100, dtype=np.uint8)
-    assert _chunk(quality_proc, data, "YX")["noise_mad"] == pytest.approx(0.0, abs=1e-4)
-
-
-def test_noise_mad_blur_reduces_score(quality_proc):
-    # Blur smooths out noise, so a blurred random image should have lower noise_mad.
-    rng = np.random.default_rng(7)
-    noisy = rng.integers(0, 256, (64, 64), dtype=np.uint8).astype(np.float32)
-    row_n = _chunk(quality_proc, noisy, "YX")
-    row_b = _chunk(quality_proc, _blurred(noisy), "YX")
-    assert row_b["noise_mad"] < row_n["noise_mad"]
 
 
 # ---------------------------------------------------------------------------
