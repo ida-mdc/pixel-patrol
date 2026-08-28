@@ -72,7 +72,7 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("laplacian_variance", "dark_clipping_fraction", "bright_clipping_fraction"):
+    for k in ("laplacian_variance", "spectral_slope", "dark_clipping_fraction", "bright_clipping_fraction"):
         assert k in row, f"Missing key: {k}"
     for removed in ("ringing_index", "jpeg_block_ratio", "estimated_noise_std",
                     "min_value_pixel_fraction", "fraction_at_image_max", "noise_mad"):
@@ -244,6 +244,14 @@ def test_dark_clipping_fraction_counts_zero_pixels(quality_proc):
     assert _chunk(quality_proc, data, "YX")["dark_clipping_fraction"] == pytest.approx(3 / 8, rel=1e-5)
 
 
+def test_dark_clipping_fraction_signed_int(quality_proc):
+    # int16 min is -32768; pixels at that value should be counted.
+    data = np.zeros((8, 8), dtype=np.int16)
+    data[0, 0] = -32768
+    data[0, 1] = -32768
+    assert _chunk(quality_proc, data, "YX")["dark_clipping_fraction"] == pytest.approx(2 / 64, rel=1e-5)
+
+
 def test_dark_clipping_fraction_nan_for_float(quality_proc):
     data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
     assert np.isnan(_chunk(quality_proc, data, "YX")["dark_clipping_fraction"])
@@ -259,22 +267,24 @@ def test_bright_clipping_fraction_uint8(quality_proc):
 
 
 def test_bright_clipping_fraction_12bit_in_uint16(quality_proc):
-    # 12-bit data in uint16: image max is 4095, not 65535.
+    # 12-bit data in uint16: image max is 4095, not 65535 (dtype ceiling).
+    # bright_clipping_fraction uses dtype ceiling, so this should be 0.
     data = np.zeros((8, 8), dtype=np.uint16)
     data[0, 0] = 4095
     data[0, 1] = 4095
+    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(0.0, rel=1e-5)
+
+
+def test_bright_clipping_fraction_uint16_at_ceiling(quality_proc):
+    data = np.zeros((8, 8), dtype=np.uint16)
+    data[0, 0] = 65535
+    data[0, 1] = 65535
     assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(2 / 64, rel=1e-5)
 
 
-def test_bright_clipping_fraction_float32(quality_proc):
+def test_bright_clipping_fraction_nan_for_float(quality_proc):
     data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
-    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(1 / 64, rel=1e-4)
-
-
-def test_bright_clipping_fraction_float_nan_excluded(quality_proc):
-    data = np.ones((8, 8), dtype=np.float32)
-    data[0, 0] = np.nan  # 1 NaN pixel, 63 valid pixels all at value 1.0
-    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(63 / 63, rel=1e-5)
+    assert np.isnan(_chunk(quality_proc, data, "YX")["bright_clipping_fraction"])
 
 
 # ---------------------------------------------------------------------------
