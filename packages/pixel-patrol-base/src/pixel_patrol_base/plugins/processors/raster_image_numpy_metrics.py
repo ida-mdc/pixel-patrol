@@ -11,7 +11,7 @@ _XY_AXES = (-2, -1)
 
 def _float32_cached(arr: np.ndarray, cache: Optional[Dict]) -> np.ndarray:
     """Convert arr to float32 once per chunk and reuse across every metric."""
-    if np.issubdtype(arr.dtype, np.floating) and arr.dtype == np.float32:
+    if arr.dtype == np.float32:
         return arr
     if cache is not None and 'f32' in cache:
         return cache['f32']
@@ -80,7 +80,7 @@ def spectral_slope(arr: np.ndarray, cache: Optional[Dict] = None) -> np.ndarray:
            * np.hanning(w).astype(np.float32)[None, :])
     arr_windowed = arr_work * win  # broadcasts over leading dims
     # 2-D FFT → power spectrum.
-    fft = np.fft.fft2(arr_windowed.astype(np.float32), axes=(-2, -1))
+    fft = np.fft.fft2(arr_windowed, axes=(-2, -1))
     power = (fft.real ** 2 + fft.imag ** 2)  # (..., H, W), avoids complex abs
     # Radial frequency for every FFT bin (cycles/pixel; Nyquist = 0.5).
     fy = np.fft.fftfreq(h).astype(np.float32)
