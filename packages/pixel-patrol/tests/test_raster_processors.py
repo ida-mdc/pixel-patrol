@@ -236,6 +236,28 @@ def test_spectral_slope_negative_for_natural_content(quality_proc):
 
 
 # ---------------------------------------------------------------------------
+# Leading dims / edge cases
+# ---------------------------------------------------------------------------
+
+def test_quality_metrics_leading_dims_average(quality_proc):
+    # Two identical channels: nanmean over leading dim must equal the single-slice result.
+    rng = np.random.default_rng(7)
+    single = rng.integers(10, 245, (64, 64), dtype=np.uint8).astype(np.float32)
+    stack = np.stack([single, single])  # (2, 64, 64)
+    row_2d = _chunk(quality_proc, single, "YX")
+    row_3d = _chunk(quality_proc, stack, "CYX")
+    assert row_3d["laplacian_variance"] == pytest.approx(row_2d["laplacian_variance"], rel=1e-4)
+    assert row_3d["spectral_slope"] == pytest.approx(row_2d["spectral_slope"], rel=1e-4)
+
+
+def test_quality_metrics_all_nan_returns_nan(quality_proc):
+    data = np.full((64, 64), np.nan, dtype=np.float32)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isnan(row["laplacian_variance"])
+    assert np.isnan(row["spectral_slope"])
+
+
+# ---------------------------------------------------------------------------
 # dark_clipping_fraction
 # ---------------------------------------------------------------------------
 
