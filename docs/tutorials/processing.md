@@ -16,6 +16,9 @@ Answer the questions below and we'll walk you through each decision together, bu
     ```
     Not sure? Go through the [Installation tutorial](installation.md) first.
 
+!!! tip "Check what's installed"
+    Run `pixel-patrol list` to see which loaders and processors are available in your environment, including the file extensions each loader supports.
+
 !!! tip "Explore all options first"
     Before going through the questions, it's worth running `pixel-patrol process --help` to see every available flag and its default. The wizard covers all of them, but `--help` gives you the full picture at a glance.
 
