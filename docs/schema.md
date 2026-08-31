@@ -68,23 +68,20 @@ table is generated from the installed plugins.
 | `dim_<axis>` | `int` | Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis. | Aggregation | base processing | pixel-patrol-base |
 | `obs_level` | `int` | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. | Aggregation | base processing | pixel-patrol-base |
 | `bright_clipping_fraction` | `float32` | Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling. | raster-quality | raster-quality | pixel-patrol-base |
-| `dark_clipping_fraction` | `float32` | Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata. | raster-quality | raster-quality | pixel-patrol-base |
+| `dark_clipping_fraction` | `float32` | Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end. | raster-quality | raster-quality | pixel-patrol-base |
 | `finite_pixel_count` | `uint64` | Number of finite (non-NaN/Inf) pixels contributing to the statistics. | raster-basic | raster-basic | pixel-patrol-base |
 | `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins). | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_max` | `float32` | Upper bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_min` | `float32` | Lower bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_nan_count` | `uint64` | Number of NaN pixels excluded from the histogram. | raster-histogram | raster-histogram | pixel-patrol-base |
-| `laplacian_variance` | `float32` | High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries. | raster-quality | raster-quality | pixel-patrol-base |
+| `laplacian_variance` | `float32` | High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score. | raster-quality | raster-quality | pixel-patrol-base |
 | `max_intensity` | `float32` | Maximum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `mean_intensity` | `float32` | Pixel-count-weighted mean intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `min_intensity` | `float32` | Minimum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `nodata_count` | `int` | Number of pixels equal to the declared nodata value. | nodata-statistics | nodata-statistics | pixel-patrol-geospatial |
-<<<<<<< HEAD
 | `saturated_pixel_fraction` | `float32` | Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim. | raster-quality | raster-quality | pixel-patrol-base |
 | `sobel_gradient_sharpness` | `float32` | A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error. | raster-quality | raster-quality | pixel-patrol-base |
-=======
-| `spectral_slope` | `float32` | Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions. | raster-quality | raster-quality | pixel-patrol-base |
->>>>>>> 9f14fe91 (quality metrics: remove IS_MEMORY_HEAVY, fix bright_clipping_fraction (dtype ceiling), update docs, tests, viewer)
+| `spectral_slope` | `float32` | Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance. | raster-quality | raster-quality | pixel-patrol-base |
 | `std_intensity` | `float32` | Pooled standard deviation of intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `thumbnail` | `bytes` | Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size). | thumbnail | thumbnail | pixel-patrol-base |
 | `thumbnail_dtype` | `string` | Original pixel dtype of the source image the thumbnail was built from. | thumbnail | thumbnail | pixel-patrol-base |

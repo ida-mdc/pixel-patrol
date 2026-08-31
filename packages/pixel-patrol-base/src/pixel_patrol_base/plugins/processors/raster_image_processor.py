@@ -85,11 +85,11 @@ class QualityMetricsProcessor(RasterImageProcessor):
     # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries."),
+                         description="High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score."),
         RasterMetricSpec(name="spectral_slope", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions."),
+                         description="Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance."),
         RasterMetricSpec(name="dark_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata."),
+                         description="Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end."),
         RasterMetricSpec(name="bright_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
                          description="Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling."),
     )

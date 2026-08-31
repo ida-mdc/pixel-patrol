@@ -541,7 +541,8 @@ export default {
          `grouped into their own "${NULL_LABEL}" category (shown last). For scatter, rows where X or Y ` +
          `is null can't be placed on a numeric axis and are excluded — a warning shows how many.\n\n` +
          '**↓ Export plugin** downloads the plot as a standalone `plugin_*.js` file - ' +
-         'drop it into your own viewer extension folder to keep this exact plot as a permanent widget.\n\n' +
+         'if you have access to the source code, drop it into a viewer folder of a PixelPatrol package ' +
+         '(e.g. `pixel-patrol-base/src/pixel_patrol_base/viewer/`) to keep this exact plot as a permanent widget.\n\n' +
          '**＋ Add plot** adds an independent plot below.',
 
   requires(schema) {
