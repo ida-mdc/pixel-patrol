@@ -1,0 +1,2175 @@
+{
+  "producers": [
+    {
+      "id": "base",
+      "label": "Base processing",
+      "children": [
+        {
+          "id": "file",
+          "label": "File metadata",
+          "description": "Columns from the file-system scan: paths, sizes, extensions and timestamps."
+        },
+        {
+          "id": "image",
+          "label": "Image metadata",
+          "description": "Image properties the loaders extract into the shared raster-image schema.",
+          "loaders": [
+            "aqqua_lmdb",
+            "bioio",
+            "geospatial",
+            "tifffile",
+            "video",
+            "zarr"
+          ]
+        },
+        {
+          "id": "derived",
+          "label": "Derived metadata",
+          "description": "Columns the pipeline computes from image data: ndim and num_pixels are derived from dim_order and shape; size_<axis> columns are extracted from the actual array shape per dimension."
+        },
+        {
+          "id": "agg",
+          "label": "Aggregation",
+          "description": "Columns added when per-image rows are rolled up into the obs hierarchy (obs_level, per-dimension coordinates)."
+        }
+      ]
+    },
+    {
+      "id": "processors",
+      "label": "Processors",
+      "children": [
+        {
+          "id": "processor:nodata-statistics",
+          "label": "nodata-statistics",
+          "description": "Counts pixels matching the declared nodata value."
+        },
+        {
+          "id": "processor:raster-basic",
+          "label": "raster-basic",
+          "description": "Computes basic per-image intensity statistics (min, max, mean, std) and the finite-pixel count, aggregated across chunks and dimensions."
+        },
+        {
+          "id": "processor:raster-histogram",
+          "label": "raster-histogram",
+          "description": "Computes a per-image intensity histogram, merging per-chunk histograms onto a shared value range."
+        },
+        {
+          "id": "processor:raster-quality",
+          "label": "raster-quality",
+          "description": "Computes no-reference image quality metrics (sharpness, noise, spectral characteristics, clipping) over the 2D spatial extent of each image."
+        },
+        {
+          "id": "processor:thumbnail",
+          "label": "thumbnail",
+          "description": "Generates a small downsampled RGBA thumbnail of each image, assembled from per-chunk spatial patches."
+        }
+      ]
+    }
+  ],
+  "columns": [
+    {
+      "name": "common_base",
+      "dtype": "str",
+      "description": "Name of the longest path prefix shared by all import bases.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "depth",
+      "dtype": "int",
+      "description": "Depth of the path below the imported base directory.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "file_extension",
+      "dtype": "str",
+      "description": "Lower-cased file extension without the leading dot.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "imported_path",
+      "dtype": "str",
+      "description": "Path of the import base (the -p path or base directory) under which this file was found, relative to the project base directory ('.' when no -p paths were specified).",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "imported_path_short",
+      "dtype": "str",
+      "description": "Shortened, disambiguated label for the import base (only when several -p paths were used).",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "modification_date",
+      "dtype": "datetime",
+      "description": "Last modification timestamp of the file.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "name",
+      "dtype": "str",
+      "description": "File or folder name, including extension.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "parent",
+      "dtype": "str",
+      "description": "Path of the containing directory, relative to the project base directory ('.' for files directly in the base directory).",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "path",
+      "dtype": "str",
+      "description": "Path of the file (or folder), relative to the project base directory.",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "size_bytes",
+      "dtype": "int",
+      "description": "Size on disk in bytes (aggregated for folders).",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "type",
+      "dtype": "str",
+      "description": "Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container).",
+      "producer": "file",
+      "category": "file",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "channel_names",
+      "dtype": "list",
+      "description": "Names of the image channels, if available.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "child_id",
+      "dtype": "string",
+      "description": "Identifier of a sub-image within a container file (null for single-image files).",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "codec",
+      "dtype": "string",
+      "description": "",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "video"
+      ],
+      "packages": [
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "crs_epsg",
+      "dtype": "Optional",
+      "description": "EPSG code of the CRS; None if not EPSG-registered.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "crs_str",
+      "dtype": "Optional",
+      "description": "Coordinate reference system as a WKT string.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "dim_names",
+      "dtype": "list",
+      "description": "Human-readable names of the image axes.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "geospatial",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "dim_order",
+      "dtype": "string",
+      "description": "Axis order of the image, e.g. 'TCZYX'.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "geospatial",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "dtype",
+      "dtype": "string",
+      "description": "Pixel data type of the source image (e.g. 'uint8', 'float32').",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "geospatial",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "duration_seconds",
+      "dtype": "float",
+      "description": "",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "video"
+      ],
+      "packages": [
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "footprint",
+      "dtype": "Optional",
+      "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "fps",
+      "dtype": "float",
+      "description": "",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "video"
+      ],
+      "packages": [
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "latitude",
+      "dtype": "Optional",
+      "description": "Centroid latitude in WGS-84 degrees.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "longitude",
+      "dtype": "Optional",
+      "description": "Centroid longitude in WGS-84 degrees.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "n_channels",
+      "dtype": "int",
+      "description": "",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "video"
+      ],
+      "packages": [
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "n_frames",
+      "dtype": "int",
+      "description": "",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "video"
+      ],
+      "packages": [
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "n_images",
+      "dtype": "int",
+      "description": "Number of sub-images in the source (>1 for container formats).",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "geospatial",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ]
+    },
+    {
+      "name": "nodata_value",
+      "dtype": "Union",
+      "description": "Declared nodata/fill value from the file metadata.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "pixel_size_<axis>",
+      "dtype": "float",
+      "description": "Physical pixel size along the given axis, in the image's spatial unit.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "aqqua_lmdb",
+        "bioio",
+        "tifffile",
+        "video",
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-aqqua",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-video"
+      ],
+      "regex": "^pixel_size_[A-Za-z]$"
+    },
+    {
+      "name": "shape",
+      "dtype": "list",
+      "description": "Raster dimensions as [bands, height, width].",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "zarr_attributes",
+      "dtype": "dict",
+      "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "zarr"
+      ],
+      "packages": [
+        "pixel-patrol-loader-bio"
+      ]
+    },
+    {
+      "name": "ndim",
+      "dtype": "int",
+      "description": "Number of image dimensions, derived from dim_order.",
+      "producer": "derived",
+      "category": "derived",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "num_pixels",
+      "dtype": "int",
+      "description": "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels).",
+      "producer": "derived",
+      "category": "derived",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "size_<axis>",
+      "dtype": "int",
+      "description": "Extent (number of elements) of this row along the given axis.",
+      "producer": "derived",
+      "category": "derived",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ],
+      "regex": "^size_[A-Za-z]$"
+    },
+    {
+      "name": "dim_<axis>",
+      "dtype": "int",
+      "description": "Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis.",
+      "producer": "agg",
+      "category": "agg",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ],
+      "regex": "^dim_[A-Za-z]+$"
+    },
+    {
+      "name": "obs_level",
+      "dtype": "int",
+      "description": "Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns.",
+      "producer": "agg",
+      "category": "agg",
+      "creators": [
+        "base processing"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "bright_clipping_fraction",
+      "dtype": "float32",
+      "description": "Fraction of pixels at this image's own observed maximum value (all dtypes). Detects bright-end clipping regardless of storage format or bit depth.",
+      "producer": "processor:raster-quality",
+      "category": "metric",
+      "creators": [
+        "raster-quality"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "dark_clipping_fraction",
+      "dtype": "float32",
+      "description": "Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata.",
+      "producer": "processor:raster-quality",
+      "category": "metric",
+      "creators": [
+        "raster-quality"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "finite_pixel_count",
+      "dtype": "uint64",
+      "description": "Number of finite (non-NaN/Inf) pixels contributing to the statistics.",
+      "producer": "processor:raster-basic",
+      "category": "metric",
+      "creators": [
+        "raster-basic"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "histogram_counts",
+      "dtype": "array",
+      "description": "Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins).",
+      "producer": "processor:raster-histogram",
+      "category": "metric",
+      "creators": [
+        "raster-histogram"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "histogram_max",
+      "dtype": "float32",
+      "description": "Upper bound of the histogram's value range.",
+      "producer": "processor:raster-histogram",
+      "category": "metric",
+      "creators": [
+        "raster-histogram"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "histogram_min",
+      "dtype": "float32",
+      "description": "Lower bound of the histogram's value range.",
+      "producer": "processor:raster-histogram",
+      "category": "metric",
+      "creators": [
+        "raster-histogram"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "histogram_nan_count",
+      "dtype": "uint64",
+      "description": "Number of NaN pixels excluded from the histogram.",
+      "producer": "processor:raster-histogram",
+      "category": "metric",
+      "creators": [
+        "raster-histogram"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "laplacian_variance",
+      "dtype": "float32",
+      "description": "High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries.",
+      "producer": "processor:raster-quality",
+      "category": "metric",
+      "creators": [
+        "raster-quality"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "max_intensity",
+      "dtype": "float32",
+      "description": "Maximum pixel intensity over the covered extent (ignoring NaNs).",
+      "producer": "processor:raster-basic",
+      "category": "metric",
+      "creators": [
+        "raster-basic"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "mean_intensity",
+      "dtype": "float32",
+      "description": "Pixel-count-weighted mean intensity over the covered extent.",
+      "producer": "processor:raster-basic",
+      "category": "metric",
+      "creators": [
+        "raster-basic"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "min_intensity",
+      "dtype": "float32",
+      "description": "Minimum pixel intensity over the covered extent (ignoring NaNs).",
+      "producer": "processor:raster-basic",
+      "category": "metric",
+      "creators": [
+        "raster-basic"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "nodata_count",
+      "dtype": "int",
+      "description": "Number of pixels equal to the declared nodata value.",
+      "producer": "processor:nodata-statistics",
+      "category": "metric",
+      "creators": [
+        "nodata-statistics"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "noise_mad",
+      "dtype": "float32",
+      "description": "Noise standard deviation via Haar wavelet MAD estimator (Donoho & Johnstone 1994). Robust to image texture. Anscombe-transformed for integer dtypes to handle Poisson noise.",
+      "producer": "processor:raster-quality",
+      "category": "metric",
+      "creators": [
+        "raster-quality"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "spectral_slope",
+      "dtype": "float32",
+      "description": "Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions.",
+      "producer": "processor:raster-quality",
+      "category": "metric",
+      "creators": [
+        "raster-quality"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "std_intensity",
+      "dtype": "float32",
+      "description": "Pooled standard deviation of intensity over the covered extent.",
+      "producer": "processor:raster-basic",
+      "category": "metric",
+      "creators": [
+        "raster-basic"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "thumbnail",
+      "dtype": "bytes",
+      "description": "Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size).",
+      "producer": "processor:thumbnail",
+      "category": "metric",
+      "creators": [
+        "thumbnail"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "thumbnail_dtype",
+      "dtype": "string",
+      "description": "Original pixel dtype of the source image the thumbnail was built from.",
+      "producer": "processor:thumbnail",
+      "category": "metric",
+      "creators": [
+        "thumbnail"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "thumbnail_norm_max",
+      "dtype": "float",
+      "description": "Upper intensity bound used to normalize the thumbnail.",
+      "producer": "processor:thumbnail",
+      "category": "metric",
+      "creators": [
+        "thumbnail"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    },
+    {
+      "name": "thumbnail_norm_min",
+      "dtype": "float",
+      "description": "Lower intensity bound used to normalize the thumbnail.",
+      "producer": "processor:thumbnail",
+      "category": "metric",
+      "creators": [
+        "thumbnail"
+      ],
+      "packages": [
+        "pixel-patrol-base"
+      ]
+    }
+  ],
+  "loader_schemas": [
+    {
+      "id": "raster-image",
+      "label": "Raster Image Loaders",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'.",
+          "required": true
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32').",
+          "required": true
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats).",
+          "required": false
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes.",
+          "required": false
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available.",
+          "required": false
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files).",
+          "required": false
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "loaders": [
+        "aqqua_lmdb",
+        "bioio",
+        "geospatial",
+        "tifffile",
+        "video",
+        "zarr"
+      ]
+    }
+  ],
+  "loaders": [
+    {
+      "name": "aqqua_lmdb",
+      "description": "Loads images stored as records in an LMDB key-value database (Aqqua format), one sub-image per key.",
+      "package": "pixel-patrol-aqqua",
+      "extensions": [
+        "lmdb",
+        "mdb"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [],
+      "extra_patterns": []
+    },
+    {
+      "name": "bioio",
+      "description": "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes).",
+      "package": "pixel-patrol-loader-bio",
+      "extensions": [
+        "bmp",
+        "czi",
+        "jpeg",
+        "jpg",
+        "lif",
+        "nd2",
+        "ome.tif",
+        "ome.zarr",
+        "png",
+        "tif",
+        "tiff",
+        "zarr"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [],
+      "extra_patterns": []
+    },
+    {
+      "name": "geospatial",
+      "description": "Loads geospatial raster files (GeoTIFF, NetCDF) via rasterio, extracting CRS, spatial extent, and band metadata.",
+      "package": "pixel-patrol-geospatial",
+      "extensions": [
+        "nc",
+        "tif",
+        "tiff"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "crs_str",
+          "dtype": "Optional",
+          "description": "Coordinate reference system as a WKT string."
+        },
+        {
+          "name": "crs_epsg",
+          "dtype": "Optional",
+          "description": "EPSG code of the CRS; None if not EPSG-registered."
+        },
+        {
+          "name": "latitude",
+          "dtype": "Optional",
+          "description": "Centroid latitude in WGS-84 degrees."
+        },
+        {
+          "name": "longitude",
+          "dtype": "Optional",
+          "description": "Centroid longitude in WGS-84 degrees."
+        },
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "num_pixels",
+          "dtype": "int",
+          "description": "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels)."
+        },
+        {
+          "name": "shape",
+          "dtype": "list",
+          "description": "Raster dimensions as [bands, height, width]."
+        },
+        {
+          "name": "ndim",
+          "dtype": "int",
+          "description": "Number of image dimensions, derived from dim_order."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "footprint",
+          "dtype": "Optional",
+          "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326."
+        },
+        {
+          "name": "nodata_value",
+          "dtype": "Union",
+          "description": "Declared nodata/fill value from the file metadata."
+        }
+      ],
+      "patterns": [],
+      "extra_columns": [
+        {
+          "name": "crs_str",
+          "dtype": "Optional",
+          "description": "Coordinate reference system as a WKT string."
+        },
+        {
+          "name": "crs_epsg",
+          "dtype": "Optional",
+          "description": "EPSG code of the CRS; None if not EPSG-registered."
+        },
+        {
+          "name": "latitude",
+          "dtype": "Optional",
+          "description": "Centroid latitude in WGS-84 degrees."
+        },
+        {
+          "name": "longitude",
+          "dtype": "Optional",
+          "description": "Centroid longitude in WGS-84 degrees."
+        },
+        {
+          "name": "shape",
+          "dtype": "list",
+          "description": "Raster dimensions as [bands, height, width]."
+        },
+        {
+          "name": "footprint",
+          "dtype": "Optional",
+          "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326."
+        },
+        {
+          "name": "nodata_value",
+          "dtype": "Union",
+          "description": "Declared nodata/fill value from the file metadata."
+        }
+      ],
+      "extra_patterns": []
+    },
+    {
+      "name": "tifffile",
+      "description": "Loads TIFF and OME-TIFF images via tifffile, reading pixel data and OME image metadata.",
+      "package": "pixel-patrol-loader-bio",
+      "extensions": [
+        "ome.tif",
+        "tif",
+        "tiff"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [],
+      "extra_patterns": []
+    },
+    {
+      "name": "video",
+      "description": "",
+      "package": "pixel-patrol-loader-video",
+      "extensions": [
+        "apng",
+        "avi",
+        "flv",
+        "gif",
+        "m2ts",
+        "m4v",
+        "mkv",
+        "mov",
+        "mp4",
+        "mts",
+        "ts",
+        "webm",
+        "webp",
+        "wmv"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        },
+        {
+          "name": "n_frames",
+          "dtype": "int",
+          "description": ""
+        },
+        {
+          "name": "n_channels",
+          "dtype": "int",
+          "description": ""
+        },
+        {
+          "name": "fps",
+          "dtype": "float",
+          "description": ""
+        },
+        {
+          "name": "codec",
+          "dtype": "string",
+          "description": ""
+        },
+        {
+          "name": "duration_seconds",
+          "dtype": "float",
+          "description": ""
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        },
+        {
+          "pattern": "^[A-Za-z]_size$",
+          "dtype": "int",
+          "description": ""
+        }
+      ],
+      "extra_columns": [
+        {
+          "name": "n_frames",
+          "dtype": "int",
+          "description": ""
+        },
+        {
+          "name": "n_channels",
+          "dtype": "int",
+          "description": ""
+        },
+        {
+          "name": "fps",
+          "dtype": "float",
+          "description": ""
+        },
+        {
+          "name": "codec",
+          "dtype": "string",
+          "description": ""
+        },
+        {
+          "name": "duration_seconds",
+          "dtype": "float",
+          "description": ""
+        }
+      ],
+      "extra_patterns": [
+        {
+          "pattern": "^[A-Za-z]_size$",
+          "dtype": "int",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "zarr",
+      "description": "Loads Zarr / OME-Zarr stores, reading pixel data, image metadata, and the store's raw Zarr attributes.",
+      "package": "pixel-patrol-loader-bio",
+      "extensions": [
+        "ome.zarr",
+        "zarr"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "n_images",
+          "dtype": "int",
+          "description": "Number of sub-images in the source (>1 for container formats)."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        },
+        {
+          "name": "zarr_attributes",
+          "dtype": "dict",
+          "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [
+        {
+          "name": "zarr_attributes",
+          "dtype": "dict",
+          "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata."
+        }
+      ],
+      "extra_patterns": []
+    }
+  ],
+  "processors": [
+    {
+      "name": "nodata-statistics",
+      "description": "Counts pixels matching the declared nodata value.",
+      "package": "pixel-patrol-geospatial",
+      "input": {
+        "axes": [
+          "X",
+          "Y"
+        ],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": []
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "nodata_count",
+          "dtype": "int",
+          "description": "Number of pixels equal to the declared nodata value."
+        }
+      ]
+    },
+    {
+      "name": "raster-basic",
+      "description": "Computes basic per-image intensity statistics (min, max, mean, std) and the finite-pixel count, aggregated across chunks and dimensions.",
+      "package": "pixel-patrol-base",
+      "input": {
+        "axes": [],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": []
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "min_intensity",
+          "dtype": "float32",
+          "description": "Minimum pixel intensity over the covered extent (ignoring NaNs)."
+        },
+        {
+          "name": "max_intensity",
+          "dtype": "float32",
+          "description": "Maximum pixel intensity over the covered extent (ignoring NaNs)."
+        },
+        {
+          "name": "mean_intensity",
+          "dtype": "float32",
+          "description": "Pixel-count-weighted mean intensity over the covered extent."
+        },
+        {
+          "name": "std_intensity",
+          "dtype": "float32",
+          "description": "Pooled standard deviation of intensity over the covered extent."
+        },
+        {
+          "name": "finite_pixel_count",
+          "dtype": "uint64",
+          "description": "Number of finite (non-NaN/Inf) pixels contributing to the statistics."
+        }
+      ]
+    },
+    {
+      "name": "raster-histogram",
+      "description": "Computes a per-image intensity histogram, merging per-chunk histograms onto a shared value range.",
+      "package": "pixel-patrol-base",
+      "input": {
+        "axes": [],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": []
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "histogram_min",
+          "dtype": "float32",
+          "description": "Lower bound of the histogram's value range."
+        },
+        {
+          "name": "histogram_max",
+          "dtype": "float32",
+          "description": "Upper bound of the histogram's value range."
+        },
+        {
+          "name": "histogram_nan_count",
+          "dtype": "uint64",
+          "description": "Number of NaN pixels excluded from the histogram."
+        },
+        {
+          "name": "histogram_counts",
+          "dtype": "array",
+          "description": "Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins)."
+        }
+      ]
+    },
+    {
+      "name": "raster-quality",
+      "description": "Computes no-reference image quality metrics (sharpness, noise, spectral characteristics, clipping) over the 2D spatial extent of each image.",
+      "package": "pixel-patrol-base",
+      "input": {
+        "axes": [
+          "X",
+          "Y"
+        ],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": [
+          "spatial-2d"
+        ]
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "laplacian_variance",
+          "dtype": "float32",
+          "description": "High-frequency content measure. Low values indicate blur or heavy compression. High values are ambiguous (noise, quantization artifacts, and genuine sharpness all produce high scores). Inflated by clipping boundaries."
+        },
+        {
+          "name": "noise_mad",
+          "dtype": "float32",
+          "description": "Noise standard deviation via Haar wavelet MAD estimator (Donoho & Johnstone 1994). Robust to image texture. Anscombe-transformed for integer dtypes to handle Poisson noise."
+        },
+        {
+          "name": "spectral_slope",
+          "dtype": "float32",
+          "description": "Log-log slope of the radially averaged power spectrum (mid-frequency band). Blur steepens the slope (more negative); noise flattens it (toward zero). The only metric that maps blur and noise to opposite directions."
+        },
+        {
+          "name": "dark_clipping_fraction",
+          "dtype": "float32",
+          "description": "Fraction of pixels at the dtype's minimum representable value (integer types only; NaN for float). Indicates underexposure, background, or nodata."
+        },
+        {
+          "name": "bright_clipping_fraction",
+          "dtype": "float32",
+          "description": "Fraction of pixels at this image's own observed maximum value (all dtypes). Detects bright-end clipping regardless of storage format or bit depth."
+        }
+      ]
+    },
+    {
+      "name": "thumbnail",
+      "description": "Generates a small downsampled RGBA thumbnail of each image, assembled from per-chunk spatial patches.",
+      "package": "pixel-patrol-base",
+      "input": {
+        "axes": [
+          "X",
+          "Y"
+        ],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": []
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "thumbnail",
+          "dtype": "bytes",
+          "description": "Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size)."
+        },
+        {
+          "name": "thumbnail_norm_min",
+          "dtype": "float",
+          "description": "Lower intensity bound used to normalize the thumbnail."
+        },
+        {
+          "name": "thumbnail_norm_max",
+          "dtype": "float",
+          "description": "Upper intensity bound used to normalize the thumbnail."
+        },
+        {
+          "name": "thumbnail_dtype",
+          "dtype": "string",
+          "description": "Original pixel dtype of the source image the thumbnail was built from."
+        }
+      ]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "dim-size",
+      "group": "Metadata",
+      "scope": "image",
+      "label": "Dimensionality",
+      "info": "Shows how **image dimension sizes** (e.g. X, Y, Z, T, \u2026) vary across the dataset.\n\nIncludes an X/Y size scatter plot and per-dimension strip plots.\n\nIf a dimension has **no variance**, it is summarized in a table instead of a plot.\n\nUse this to identify **unexpected dimension sizes** and **mismatched shapes** within/between groupings.",
+      "inputs": [
+        "size_*"
+      ]
+    },
+    {
+      "id": "file-stats",
+      "group": "File Stats",
+      "scope": "file",
+      "label": "File Statistics",
+      "shortLabel": "File Metadata",
+      "info": "High-level **file statistics** for the dataset.\n\nIf a property has **no variance** (e.g. all files share the same extension), it is summarized in the table instead of a chart.",
+      "inputs": [
+        "modification_date"
+      ],
+      "required_inputs": [
+        "file_extension",
+        "size_bytes"
+      ]
+    },
+    {
+      "id": "histogram",
+      "group": "Dataset Stats",
+      "scope": "image",
+      "label": "Pixel Value Histograms",
+      "shortLabel": "Histograms",
+      "info": "Histograms are computed per image (256 bins) and averaged per group.\nEach image is area-normalized before averaging, so image size does not affect the result.\n\nIf the dataset mixes unsigned integer, signed integer, and/or floating-point images, each kind gets its own plot.\n\n**Display mode** (integer panels only)\n- **Actual values** \u2013 x-axis shows real pixel values.\n- **Dtype range** \u2013 x-axis normalized to the representable range of the pixel type (unsigned integers: 0 to 1, signed integers: -1 to 1). Useful for comparing images across bit depths.\n\nFloat images always show actual values.\n\n**Spread** \u2013 shaded +/-1 std band around the group mean.\nA wider band means more variation between images in that group.\n\n**Show individual images** \u2013 visible when one group is selected with 50 or fewer images.\nReplaces the group mean with one line per image.",
+      "inputs": [
+        "histogram_min",
+        "histogram_max",
+        "dtype",
+        "name"
+      ],
+      "required_inputs": [
+        "histogram_counts"
+      ]
+    },
+    {
+      "id": "image-table",
+      "group": "Summary",
+      "scope": "image",
+      "label": "Image Table",
+      "shortLabel": "Table",
+      "info": "Full-image statistics \u2014 one row per image file, no per-slice or per-channel rows. Click a column header to sort. Search (Enter): substring match across all columns for small datasets, path and child_id only for large ones (\u226510k images).",
+      "inputs": [
+        "*",
+        "!thumbnail",
+        "!histogram_counts",
+        "!channel_names",
+        "!obs_level",
+        "!histogram_min",
+        "!histogram_max",
+        "!histogram_nan_count",
+        "!file_row_number"
+      ]
+    },
+    {
+      "id": "map-points",
+      "group": "Geospatial extension",
+      "scope": "image",
+      "label": "Locations"
+    },
+    {
+      "id": "metadata",
+      "group": "Metadata",
+      "scope": "image",
+      "label": "Metadata",
+      "shortLabel": "Image Metadata",
+      "info": "Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nIf a property has **no variance** (e.g. every file has the same pixel dtype), it is summarized in a table instead of a chart.",
+      "inputs": [
+        "dim_order",
+        "dtype",
+        "ndim",
+        "pixel_size_X",
+        "pixel_size_Y",
+        "pixel_size_Z"
+      ]
+    },
+    {
+      "id": "metric-hist-basic",
+      "group": "Dataset Stats",
+      "scope": "image",
+      "label": "Pixel Value Statistics \u2014 Histograms"
+    },
+    {
+      "id": "metric-hist-quality",
+      "group": "Dataset Stats",
+      "scope": "image",
+      "label": "Image Quality Metrics \u2014 Histograms"
+    },
+    {
+      "id": "mosaic",
+      "group": "Visualization",
+      "scope": "image",
+      "label": "Image Thumbnails",
+      "shortLabel": "Thumbnails",
+      "info": "Displays a **thumbnail mosaic**, one thumbnail per file.\n\n- Thumbnails are generated from the central slice in all non-XY, non-RGB dimensions.\n- Sorting by a numeric column can reveal visual trends.\n- Border colors indicate the group of each image.\n- **Hover** over an image to see its filename.",
+      "inputs": [
+        "thumbnail_norm_min",
+        "thumbnail_norm_max",
+        "thumbnail_dtype",
+        "any metric column",
+        "name"
+      ],
+      "required_inputs": [
+        "thumbnail"
+      ]
+    },
+    {
+      "id": "nodata-value-count",
+      "group": "no-data",
+      "scope": "image",
+      "label": "NoData",
+      "info": "NoData value frequency, nodata-pixel percentage, and non-finite pixels (float images)."
+    },
+    {
+      "id": "stats-across-dims-basic",
+      "group": "Dataset Stats",
+      "scope": "slice",
+      "label": "Basic Statistics Across Dimensions",
+      "shortLabel": "Intensity across Slices",
+      "info": "Shows how image statistics (e.g., mean, std, min, max) change **across different dimension slices**.\n\nUseful for identifying drift, artifacts, or unexpected variation.\n\nThe dashed line shows the **% of images that still have a slice at this position**, per condition - useful for spotting datasets where images have different numbers of slices.",
+      "inputs": [
+        "mean_intensity",
+        "std_intensity",
+        "min_intensity",
+        "max_intensity"
+      ]
+    },
+    {
+      "id": "stats-across-dims-quality",
+      "group": "Dataset Stats",
+      "scope": "slice",
+      "label": "Quality Metrics Across Dimensions",
+      "shortLabel": "Quality across Slices",
+      "info": "Shows how **image quality metrics** change across different dimension slices.\n\nUseful to detect e.g. drift in focus or noise over time (T) and depth (Z) as well as channel (C) specific artifacts.\n\nThe dashed line shows the **% of images that still have a slice at this position**, per condition.",
+      "inputs": [
+        "laplacian_variance",
+        "noise_mad",
+        "spectral_slope",
+        "dark_clipping_fraction",
+        "bright_clipping_fraction"
+      ]
+    },
+    {
+      "id": "summary",
+      "group": "Summary",
+      "label": "File Data Summary",
+      "info": "High-level overview of the dataset: total number of files and images, total size, file extensions, and (when grouped) a per-group breakdown.",
+      "inputs": [
+        "path",
+        "n_images"
+      ],
+      "required_inputs": [
+        "size_bytes",
+        "file_extension"
+      ]
+    },
+    {
+      "id": "sunburst",
+      "group": "Summary",
+      "scope": "file",
+      "label": "File Structure Sunburst",
+      "shortLabel": "Folder Structure",
+      "info": "Sunburst view of the **file and folder hierarchy**.\n\nClick a slice to zoom in; click the center to zoom out.",
+      "inputs": [],
+      "required_inputs": [
+        "path",
+        "size_bytes"
+      ]
+    },
+    {
+      "id": "violin-basic",
+      "group": "Dataset Stats",
+      "scope": "image",
+      "label": "Pixel Value Statistics",
+      "shortLabel": "Intensity",
+      "info": "Shows **per-image intensity statistics** across groups.\n\nPlots with 5,000 or fewer datapoints show the actual distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, mean).\n\nUse the **Slice by** toggles to control whether each datapoint is a whole-image aggregate (**per image**) or one (image \u00d7 dimension) combination (**per slice**) - shown by the badge in the card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.\n\n**Statistical Comparisons**\n\nIf selected (side menu), pairwise group comparisons use the Mann\u2013Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.\n\nSignificance levels: `ns` not significant (p \u2265 0.05), `*` p < 0.05, `**` p < 0.01, `***` p < 0.001.",
+      "inputs": [
+        "mean_intensity",
+        "std_intensity",
+        "min_intensity",
+        "max_intensity"
+      ]
+    },
+    {
+      "id": "violin-quality",
+      "group": "Dataset Stats",
+      "scope": "image",
+      "label": "Image Quality Metrics",
+      "shortLabel": "Image Quality",
+      "info": "Visualizes **image quality metrics** across groups.\n\nPlots with 5,000 or fewer datapoints show the actual distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, mean).\n\nUse the **Slice by** toggles to control whether each datapoint is a whole-image aggregate (**per image**) or one (image \u00d7 dimension) combination (**per slice**) - shown by the badge in the card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.\n\n**Statistical Comparisons**\n\nIf selected (side menu), pairwise group comparisons use the Mann\u2013Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.\n\nSignificance levels: `ns` not significant (p \u2265 0.05), `*` p < 0.05, `**` p < 0.01, `***` p < 0.001.",
+      "inputs": [
+        "laplacian_variance",
+        "noise_mad",
+        "spectral_slope",
+        "dark_clipping_fraction",
+        "bright_clipping_fraction"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:video",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:video",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:video",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:video",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:video",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:video",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "derived",
+      "target": "widget:dim-size",
+      "via": "size_*"
+    },
+    {
+      "source": "file",
+      "target": "widget:file-stats",
+      "via": "size_bytes"
+    },
+    {
+      "source": "processor:raster-histogram",
+      "target": "widget:histogram",
+      "via": "histogram_min"
+    },
+    {
+      "source": "file",
+      "target": "widget:histogram",
+      "via": "name"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:video",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "file",
+      "target": "widget:image-table",
+      "via": "size_bytes"
+    },
+    {
+      "source": "loader:video",
+      "target": "widget:image-table",
+      "via": "duration_seconds"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:image-table",
+      "via": "thumbnail_dtype"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:image-table",
+      "via": "crs_str"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "derived",
+      "target": "widget:image-table",
+      "via": "ndim"
+    },
+    {
+      "source": "agg",
+      "target": "widget:image-table",
+      "via": "dim_<axis>"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:image-table",
+      "via": "mean_intensity"
+    },
+    {
+      "source": "processor:nodata-statistics",
+      "target": "widget:image-table",
+      "via": "nodata_count"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:image-table",
+      "via": "bright_clipping_fraction"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:video",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "derived",
+      "target": "widget:metadata",
+      "via": "ndim"
+    },
+    {
+      "source": "file",
+      "target": "widget:mosaic",
+      "via": "name"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:mosaic",
+      "via": "thumbnail_norm_max"
+    },
+    {
+      "source": "processor:nodata-statistics",
+      "target": "widget:mosaic",
+      "via": "metrics"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:mosaic",
+      "via": "metrics"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:mosaic",
+      "via": "metrics"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:stats-across-dims-basic",
+      "via": "min_intensity"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:stats-across-dims-quality",
+      "via": "noise_mad"
+    },
+    {
+      "source": "file",
+      "target": "widget:summary",
+      "via": "size_bytes"
+    },
+    {
+      "source": "loader:aqqua_lmdb",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "loader:video",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:summary",
+      "via": "n_images"
+    },
+    {
+      "source": "file",
+      "target": "widget:sunburst",
+      "via": "size_bytes"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:violin-basic",
+      "via": "min_intensity"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:violin-quality",
+      "via": "noise_mad"
+    }
+  ]
+}

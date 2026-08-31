@@ -42,14 +42,25 @@ table is generated from the installed plugins.
 | `path` | `str` | Path of the file (or folder), relative to the project base directory. | File system | base processing | pixel-patrol-base |
 | `size_bytes` | `int` | Size on disk in bytes (aggregated for folders). | File system | base processing | pixel-patrol-base |
 | `type` | `str` | Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container). | File system | base processing | pixel-patrol-base |
-| `channel_names` | `list` | Names of the image channels, if available. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `child_id` | `string` | Identifier of a sub-image within a container file (null for single-image files). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dim_names` | `list` | Human-readable names of the image axes. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dim_order` | `string` | Axis order of the image, e.g. 'TCZYX'. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `dtype` | `string` | Pixel data type of the source image (e.g. 'uint8', 'float32'). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
-| `shape` | `array` | Size of the image along each axis, in dim_order. | Loaders | bioio, tifffile, zarr | pixel-patrol-loader-bio |
+| `channel_names` | `list` | Names of the image channels, if available. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `child_id` | `string` | Identifier of a sub-image within a container file (null for single-image files). | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `codec` | `string` | Video codec name (e.g. 'h264', 'vp9'). | Loaders | video | pixel-patrol-loader-video |
+| `crs_epsg` | `Optional` | EPSG code of the CRS; None if not EPSG-registered. | Loaders | geospatial | pixel-patrol-geospatial |
+| `crs_str` | `Optional` | Coordinate reference system as a WKT string. | Loaders | geospatial | pixel-patrol-geospatial |
+| `dim_names` | `list` | Human-readable names of the image axes. | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `dim_order` | `string` | Axis order of the image, e.g. 'TCZYX'. | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `dtype` | `string` | Pixel data type of the source image (e.g. 'uint8', 'float32'). | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `duration_seconds` | `float` | Duration of the video in seconds. | Loaders | video | pixel-patrol-loader-video |
+| `footprint` | `Optional` | Bounding-box footprint as a GeoJSON polygon in EPSG:4326. | Loaders | geospatial | pixel-patrol-geospatial |
+| `fps` | `float` | Frames per second of the video stream. | Loaders | video | pixel-patrol-loader-video |
+| `latitude` | `Optional` | Centroid latitude in WGS-84 degrees. | Loaders | geospatial | pixel-patrol-geospatial |
+| `longitude` | `Optional` | Centroid longitude in WGS-84 degrees. | Loaders | geospatial | pixel-patrol-geospatial |
+| `n_channels` | `int` | Number of colour channels per frame. | Loaders | video | pixel-patrol-loader-video |
+| `n_frames` | `int` | Total number of frames in the video. | Loaders | video | pixel-patrol-loader-video |
+| `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `nodata_value` | `Union` | Declared nodata/fill value from the file metadata. | Loaders | geospatial | pixel-patrol-geospatial |
+| `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
+| `shape` | `list` | Raster dimensions as [bands, height, width]. | Loaders | geospatial | pixel-patrol-geospatial |
 | `zarr_attributes` | `dict` | Raw key-value attributes stored in the Zarr/OME-Zarr group metadata. | Loaders | zarr | pixel-patrol-loader-bio |
 | `ndim` | `int` | Number of image dimensions, derived from dim_order. | Pipeline | base processing | pixel-patrol-base |
 | `num_pixels` | `int` | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). | Pipeline | base processing | pixel-patrol-base |
@@ -58,7 +69,7 @@ table is generated from the installed plugins.
 | `obs_level` | `int` | Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns. | Aggregation | base processing | pixel-patrol-base |
 | `blocking_index` | `float32` | Strength of block-boundary discontinuities, indicating JPEG-style blocking artifacts. | raster-compression | raster-compression | pixel-patrol-image |
 | `finite_pixel_count` | `uint64` | Number of finite (non-NaN/Inf) pixels contributing to the statistics. | raster-basic | raster-basic | pixel-patrol-base |
-| `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins). | raster-histogram | raster-histogram | pixel-patrol-base |
+| `histogram_counts` | `array` | Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins). | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_max` | `float32` | Upper bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_min` | `float32` | Lower bound of the histogram's value range. | raster-histogram | raster-histogram | pixel-patrol-base |
 | `histogram_nan_count` | `uint64` | Number of NaN pixels excluded from the histogram. | raster-histogram | raster-histogram | pixel-patrol-base |
@@ -68,6 +79,7 @@ table is generated from the installed plugins.
 | `michelson_contrast` | `float32` | Michelson contrast: (max - min) / (max + min) of intensities. | raster-quality | raster-quality | pixel-patrol-image |
 | `min_intensity` | `float32` | Minimum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `mscn_variance` | `float32` | Variance of mean-subtracted contrast-normalized (MSCN) coefficients; a no-reference naturalness/quality cue. | raster-quality | raster-quality | pixel-patrol-image |
+| `nodata_count` | `int` | Number of pixels equal to the declared nodata value. | nodata-statistics | nodata-statistics | pixel-patrol-geospatial |
 | `ringing_index` | `float32` | Strength of ringing artifacts near high-contrast edges. | raster-compression | raster-compression | pixel-patrol-image |
 | `std_intensity` | `float32` | Pooled standard deviation of intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `texture_heterogeneity` | `float32` | Local texture heterogeneity of the image. | raster-quality | raster-quality | pixel-patrol-image |

@@ -338,9 +338,9 @@ class VideoLoader:
         "codec": "Video codec name (e.g. 'h264', 'vp9').",
         "duration_seconds": "Duration of the video in seconds.",
     }
-    OUTPUT_SCHEMA_PATTERN_DESCRIPTIONS: Dict[str, str] = {
-        r"^[A-Za-z]_size$": "Size of the named axis in pixels (e.g. X_size, Y_size, T_size).",
-    }
+    OUTPUT_SCHEMA_PATTERN_DESCRIPTIONS: List[tuple] = [
+        (r"^[A-Za-z]_size$", "Size of the named axis in pixels (e.g. X_size, Y_size, T_size)."),
+    ]
 
     SUPPORTED_EXTENSIONS: Set[str] = {
         # Common web / consumer formats
