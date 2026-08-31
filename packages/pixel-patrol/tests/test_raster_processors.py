@@ -72,11 +72,9 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("laplacian_variance", "spectral_slope", "dark_clipping_fraction", "bright_clipping_fraction"):
-        assert k in row, f"Missing key: {k}"
-    for removed in ("ringing_index", "jpeg_block_ratio", "estimated_noise_std",
-                    "min_value_pixel_fraction", "fraction_at_image_max", "noise_mad"):
-        assert removed not in row, f"Removed metric still present: {removed}"
+    keys = set(row.keys())
+    assert {"laplacian_variance", "spectral_slope", "dark_clipping_fraction", "bright_clipping_fraction"} <= keys
+    assert not keys & {"ringing_index", "jpeg_block_ratio", "estimated_noise_std", "min_value_pixel_fraction", "fraction_at_image_max", "noise_mad"}
 
 
 # ---------------------------------------------------------------------------

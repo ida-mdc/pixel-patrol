@@ -383,7 +383,7 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-metric">
 <div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">- high-frequency content</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">A blur detector - low values indicate blur or heavy compression. High values are ambiguous: sharpness, noise, and fine texture all push values up.</p>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Apply the discrete Laplacian at every pixel: <code>left + right + up + down − 4 × center</code>. This second-derivative filter fires strongly at edges and fine texture, near-zero in smooth regions. Variance of this response is the score. Clipped pixels create artificial high-frequency edges and inflate it - check clipping fractions when values seem unusually high.</div>
@@ -396,10 +396,10 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-metric">
 <div class="wc-metric-name">Spectral Slope <small style="font-weight:400;opacity:0.65">- blur vs noise distinction</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">The only metric that maps blur and noise to opposite directions. More negative = blur or structured content; toward zero = noise or uniform content. Typical range: −2 to −4.</p>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance. Most interpretable when comparing images of similar content type.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Apply a 2D Hanning window, compute the FFT, average power in radial frequency bins, then fit a line to log(power) vs log(frequency) over the mid-frequency band (5–40% of Nyquist). The slope of that line is the score. DC and the noise floor are excluded from the fit.</div>
+<div>Apply a 2D Hanning window, compute the FFT, average power in radial frequency bins, then fit a line to log(power) vs log(frequency) over the mid-frequency band (5–40% of Nyquist). The slope of that line is the score.</div>
 </details>
 <div class="wc-flags">
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Steeper (more negative) than expected for one condition: more blur or more structured/textured content than others - check laplacian_variance to tell them apart.</div></div>
@@ -410,7 +410,7 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-metric">
 <div class="wc-metric-name">Dark Clipping Fraction <small style="font-weight:400;opacity:0.65">- underexposure / background</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's minimum representable value. Integer types only - NaN for float (no fixed lower bound).</p>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
 <div>Count how many pixels equal <code>iinfo(dtype).min</code> (0 for unsigned integers, e.g. −32768 for int16) and divide by total pixel count.</div>
