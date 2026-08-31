@@ -3,11 +3,42 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA + CompressionMetricsProcessor.OUTPUT_SCHEMA
-const QUALITY_METRIC_BASES = new Set([
-  'michelson_contrast', 'mscn_variance', 'texture_heterogeneity', 'laplacian_variance',
-  'blocking_index', 'ringing_index',
-]);
+// Matches QualityMetricsProcessor.OUTPUT_SCHEMA.
+// One description per metric, used as each metric's own per-plot side note (and
+// by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
+// duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
+// reading is a well-established, monotonic one.
+export const QUALITY_METRIC_INFO = {
+  laplacian_variance: {
+    desc: 'High-frequency content measure. Values depend on both image quality and scene content: ' +
+          'blur and heavy compression push values down; sharpness, noise, and fine texture push ' +
+          'values up. A smooth, featureless scene will score low regardless ' +
+          'of focus quality. Clipped pixels create artificial edges at clip boundaries and inflate ' +
+          'the score.',
+    hintUp: 'more high-frequency content (sharpness, noise, or fine texture)',
+    hintDown: 'less high-frequency content (blur, compression, or smooth content)',
+  },
+  spectral_slope: {
+    desc: 'Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band ' +
+          '(5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform ' +
+          'content. More negative values indicate blur or stronger low-frequency dominance. ' +
+          'Most interpretable when comparing images of similar content type.',
+    hintUp: 'flatter spectrum (noise or uniform content)',
+    hintDown: 'steeper spectrum (blur or low-frequency dominance)',
+  },
+  dark_clipping_fraction: {
+    desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
+          'NaN for float, which has no fixed lower bound). Detects underexposure, background, and ' +
+          'nodata at the dark end.',
+    hintUp: 'more dark-clipped pixels', hintDown: 'fewer dark-clipped pixels', goodDirection: 'down',
+  },
+  bright_clipping_fraction: {
+    desc: 'Fraction of pixels at the dtype\'s maximum representable value (integer types only; NaN for float).',
+    hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
+  },
+};
+
+const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 function matchesBases(col, bases) {
   for (const base of bases) {
@@ -16,38 +47,55 @@ function matchesBases(col, bases) {
   return false;
 }
 
+/** Look up a quality metric's shared metadata by column name, stripping any per-channel suffix. */
+export function describeQualityMetric(col) {
+  for (const [base, info] of Object.entries(QUALITY_METRIC_INFO)) {
+    if (col === base || col.startsWith(base + '_')) return info;
+  }
+  return null;
+}
+
+// QUALITY_METRIC_INFO's key order is curated by generalization/importance (sharpness,
+// noise, exposure clipping, contrast/texture, then compression artifacts last - most
+// niche/situational). Parquet column order is alphabetical (an internal processing
+// detail unrelated to this), so widgets sort explicitly by this instead.
+const QUALITY_METRIC_ORDER = Object.keys(QUALITY_METRIC_INFO);
+
+/** Sort rank for a metric column by curated importance order; ties (e.g. non-quality
+ * columns) sort last and preserve their original relative order (stable sort). */
+export function qualityMetricRank(col) {
+  const idx = QUALITY_METRIC_ORDER.findIndex(base => col === base || col.startsWith(base + '_'));
+  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+}
+
+/** Build a renderDistribution `sideInfo` object for a quality metric column, or null. */
+function sideInfoFor(col) {
+  const info = describeQualityMetric(col);
+  return info && {
+    text: info.desc, hintUp: info.hintUp, hintDown: info.hintDown, goodDirection: info.goodDirection,
+  };
+}
+
 const SIGNIFICANCE_HELP = [
   '**Statistical Comparisons**',
   '',
-  'Pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
+  'If selected (side menu), pairwise group comparisons use the Mann–Whitney U test (a non-parametric test that makes no assumptions about the data distribution) with Bonferroni correction for multiple comparisons.',
   '',
-  '**Significance levels:**',
-  '- `ns`: not significant (p ≥ 0.05)',
-  '- `*`: p < 0.05',
-  '- `**`: p < 0.01',
-  '- `***`: p < 0.001',
+  'Significance levels: `ns` not significant (p ≥ 0.05), `*` p < 0.05, `**` p < 0.01, `***` p < 0.001.',
 ].join('\n');
 
 // Mirrors plot-engine.js MAX_VIOLIN_POINTS - kept here only for the help text.
 const MAX_VIOLIN_POINTS = 5000;
 
 const DISTRIBUTION_HELP = `Plots with ${MAX_VIOLIN_POINTS.toLocaleString()} or fewer datapoints show the actual ` +
-  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, ' +
-  'mean) computed directly in the database for performance.';
+  'distribution shape (a violin); larger plots switch to a summary box plot (quartiles, min/max, mean).';
 
-const GRANULARITY_HELP = 'For datasets with multiple dimensions (channels, Z-planes, timepoints, ' +
-  'spatial tiles, …), use the **Slice by** toggles above to control what one datapoint represents - ' +
-  'shown by the **per image** / **per slice** badge in the card header. With nothing toggled, each ' +
-  'point is one whole-image aggregate (**per image**). Switching a toggle on stops that dimension ' +
-  'from being aggregated away, so each point becomes one (image × that dimension) combination instead ' +
-  '(**per slice**) - e.g. switching on "C" gives one point per C-slice per image. Switching on ' +
-  'more dimensions multiplies the number of points, so check the sample size shown in the plot ' +
-  'subtitle before trusting significance results.';
+const GRANULARITY_HELP = 'Use the **Slice by** toggles to control whether each datapoint is a whole-image ' +
+  'aggregate (**per image**) or one (image × dimension) combination (**per slice**) - shown by the badge in the ' +
+  'card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
 
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
-  '', 'You can choose which statistic to plot and filter by image dimensions.',
-  '', 'Each plot shows the distribution per group: median, quartiles, min/max, and mean.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
   '', SIGNIFICANCE_HELP,
@@ -55,24 +103,178 @@ const BASIC_INFO = [
 
 const QUALITY_INFO = [
   'Visualizes **image quality metrics** across groups.',
-  '', 'Use these plots to quickly spot outliers, compare image sets, and detect quality differences.',
+  '', 'These metrics are **whole-image aggregates** — they detect global quality issues such as blur, ' +
+  'noise, or exposure problems that affect the image broadly. They are not sensitive to localized ' +
+  'defects or anomalies that cover only a small fraction of pixels.',
   '', DISTRIBUTION_HELP,
   '', GRANULARITY_HELP,
-  '', '**Metrics**',
-  '- **Michelson contrast** – Global contrast ratio; higher values indicate greater dynamic range.',
-  '- **MSCN variance** – Mean Subtracted Contrast Normalized variance; sensitive to noise and blur.',
-  '- **Texture heterogeneity** – Coefficient of variation of local standard deviations; captures spatial non-uniformity of texture.',
-  '- **Laplacian variance** – Variance of the discrete Laplacian; higher values indicate a sharper image. Scale-dependent: values vary with bit depth.',
-  '- **Blocking index** – Strength of blocky compression artifacts (e.g. JPEG blocking).',
-  '- **Ringing index** – Edge oscillation artifacts around sharp boundaries, often due to compression.',
   '', SIGNIFICANCE_HELP,
 ].join('\n');
 
-async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
+// Thresholds for fraction metrics where an absolute reading is meaningful - these
+// are normalized 0-1 regardless of dtype or image content, so the numbers mean
+// the same thing in every domain. Content-dependent metrics (laplacian_variance,
+// spectral_slope, etc.) deliberately get no thresholds.
+const FRACTION_WARNINGS = [
+  {
+    col: 'bright_clipping_fraction',
+    threshold: 0.01,
+    label: 'at the dtype ceiling',
+    consequence: 'This may indicate sensor saturation or insufficient dynamic range.',
+  },
+  {
+    col: 'dark_clipping_fraction',
+    threshold: 0.05,
+    // label/consequence used only as fallback when dtype column is absent.
+    label: 'at minimum value',
+    consequence: 'This may indicate background, missing values, or underexposure.',
+  },
+];
+
+/** Return the minimum representable integer value for a dtype string like 'uint8', 'int16'. */
+function dtypeMinValue(dtype) {
+  if (dtype.startsWith('uint')) return 0;
+  const bits = parseInt(dtype.replace(/^[a-z]+/, ''), 10);
+  return Number.isFinite(bits) ? -(2 ** (bits - 1)) : null;
+}
+
+/** Check fraction metrics against absolute thresholds and prepend inline warnings. */
+async function prependFractionWarnings(plotRoot, ctx) {
+  const { q, andWhere } = ctx.sql;
+  const cols = ctx.schema.allCols;
+
+  // Clipping inflates laplacian_variance via artificial clip-boundary edges.
+  if (cols.includes('laplacian_variance')) {
+    const clipParts = [];
+    if (cols.includes('bright_clipping_fraction')) clipParts.push(`"bright_clipping_fraction" > 0.01`);
+    if (cols.includes('dark_clipping_fraction')) clipParts.push(`"dark_clipping_fraction" > 0.05`);
+    if (clipParts.length) {
+      const clipWhere = andWhere(ctx.where, `(${clipParts.join(' OR ')})`);
+      const [clipRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${clipWhere}`);
+      const nClip = Number(clipRow?.n ?? 0);
+      if (nClip > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nClip.toLocaleString()} image${nClip === 1 ? '' : 's'}</strong> ` +
+                `have clipped pixels. <strong>laplacian_variance</strong> is inflated by ` +
+                `artificial edges at clip boundaries — interpret with caution for those images.`,
+        });
+      }
+    }
+  }
+
+  // Fraction metrics (saturated, min-value)
+  for (const { col, threshold, label, consequence } of FRACTION_WARNINGS) {
+    if (!cols.includes(col)) continue;
+    const pct = (threshold * 100).toLocaleString(undefined, { maximumSignificantDigits: 2 });
+    const where = andWhere(ctx.where, `${q(col)} > ${threshold}`);
+    // min_value_pixel_fraction: split unsigned (zero = background/void/underexposure) from
+    // signed (min = lower-bound clipping, signal loss) -- they mean different things.
+    if (col === 'dark_clipping_fraction' && cols.includes('dtype')) {
+      const uWhere = andWhere(where, `"dtype" LIKE 'uint%'`);
+      const sWhere = andWhere(where, `"dtype" NOT LIKE 'uint%' AND "dtype" LIKE '%int%'`);
+      const [[uRow], [sRow]] = await Promise.all([
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${uWhere}`),
+        ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${sWhere}`),
+      ]);
+      const nu = Number(uRow?.n ?? 0), ns = Number(sRow?.n ?? 0);
+      if (nu > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${nu.toLocaleString()} image${nu === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at value 0. ${consequence}`,
+        });
+      }
+      if (ns > 0) {
+        const dtypeRows = await ctx.queryRows(`SELECT DISTINCT "dtype" FROM pp_data ${sWhere}`);
+        const vals = [...new Set(dtypeRows.map(r => dtypeMinValue(r.dtype)).filter(v => v !== null))];
+        const valStr = vals.length ? ` (${vals.length === 1 ? 'value' : 'values'} ${vals.sort((a, b) => a - b).join(', ')})` : '';
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${ns.toLocaleString()} image${ns === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels clipped at the lower bound${valStr}. Signal in those pixels may have been lost.`,
+        });
+      }
+      continue;
+    }
+
+    // bright_clipping_fraction: integer only (float → NaN, never above threshold).
+    if (col === 'bright_clipping_fraction') {
+      const [row] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${where}`);
+      const n = Number(row?.n ?? 0);
+      if (n > 0) {
+        ctx.plot.prependWarning(plotRoot, {
+          level: 'yellow',
+          html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+                `have more than ${pct}% of pixels at the dtype's maximum value — sensor saturation. ` +
+                `Real signal there is lost.`,
+        });
+      }
+      continue;
+    }
+
+    const [row] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${where}`);
+    const n = Number(row?.n ?? 0);
+    if (n === 0) continue;
+    ctx.plot.prependWarning(plotRoot, {
+      level: 'yellow',
+      html: `<strong>${n.toLocaleString()} image${n === 1 ? '' : 's'}</strong> ` +
+            `have more than ${pct}% of pixels ${label}. ${consequence}`,
+    });
+  }
+
+  // Sub-dtype packing: uint images where max_intensity is a power-of-2-minus-1 below the dtype ceiling.
+  // E.g. uint16 peaking at 4095 → likely 12-bit data stored in a wider type.
+  // bright_clipping_fraction compares against the dtype ceiling and stays 0 for these images.
+  if (cols.includes('max_intensity') && cols.includes('dtype')) {
+    const ceilExpr = `CASE "dtype" WHEN 'uint8' THEN 255 WHEN 'uint16' THEN 65535 ` +
+                     `WHEN 'uint32' THEN 4294967295 ELSE NULL END`;
+    const subWhere = andWhere(ctx.where,
+      `"dtype" LIKE 'uint%' AND "max_intensity" IS NOT NULL AND "max_intensity" > 0 ` +
+      `AND (CAST("max_intensity" AS BIGINT) & (CAST("max_intensity" AS BIGINT) + 1)) = 0 ` +
+      `AND "max_intensity" < ${ceilExpr}`);
+    const subRows = await ctx.queryRows(
+      `SELECT COUNT(*) AS n, "max_intensity", "dtype" FROM pp_data ${subWhere} ` +
+      `GROUP BY "max_intensity", "dtype" ORDER BY n DESC`);
+    if (subRows.length > 0) {
+      const total = subRows.reduce((s, r) => s + Number(r.n), 0);
+      const details = subRows.map(r => {
+        const bits = Math.round(Math.log2(Number(r.max_intensity) + 1));
+        return `${r.dtype} peaking at ${Number(r.max_intensity).toLocaleString()} (${bits}-bit)`;
+      }).join('; ');
+      ctx.plot.prependWarning(plotRoot, {
+        level: 'yellow',
+        html: `<strong>${total.toLocaleString()} image${total === 1 ? '' : 's'}</strong> ` +
+              `appear stored in a wider type than acquired — ${details}. ` +
+              `The effective dynamic range is narrower than the dtype suggests. ` +
+              `<strong>bright_clipping_fraction</strong> will not flag clipping at the sub-dtype ceiling.`,
+      });
+    }
+  }
+
+  // Signed-as-unsigned: signed int images with no negative values — signed range is unused.
+  if (cols.includes('min_intensity') && cols.includes('dtype')) {
+    const signedWhere = andWhere(ctx.where,
+      `"dtype" LIKE '%int%' AND "dtype" NOT LIKE 'uint%' AND "min_intensity" IS NOT NULL AND "min_intensity" >= 0`);
+    const [signedRow] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${signedWhere}`);
+    const nSigned = Number(signedRow?.n ?? 0);
+    if (nSigned > 0) {
+      ctx.plot.prependWarning(plotRoot, {
+        level: 'blue',
+        html: `<strong>${nSigned.toLocaleString()} image${nSigned === 1 ? '' : 's'}</strong> ` +
+              `use a signed integer dtype but have no negative values — ` +
+              `data may have been acquired as unsigned but stored as signed.`,
+      });
+    }
+  }
+}
+
+async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
   const { q, groupExpr: geFn, groupCol: gcFn } = ctx.sql;
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
 
   const metrics = resolveMetrics(ctx.schema, ctx.state.dimensions).filter(filterMetric);
+  metrics.sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b));
   if (!metrics.length) {
     plotRoot.innerHTML = '<div class="no-data">No numeric metric columns.</div>';
     return;
@@ -85,6 +287,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   const tot = Number(availRow.total);
   const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
   dataAvailabilityWarning(plotRoot, counts, tot, { unit: splitDims.size ? 'slices' : 'images' });
+  if (fractionWarnings) await prependFractionWarnings(plotRoot, ctx);
 
   const fixed = {};
   for (const [letter, idxRaw] of Object.entries(ctx.state.dimensions ?? {})) {
@@ -144,8 +347,16 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
   }
 
   const numGroups   = groups.length;
-  const plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
+  let plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
   const showSignificance = !!ctx.state.showSignificance;
+
+  // Side-info text (description + optional direction badge) sits beside the
+  // chart when there's room, but wraps above it when the cell is too narrow
+  // (see appendSideInfoRow) - stacked across several narrow columns that looks
+  // cramped and uneven. Cap at 2 per row whenever it'll actually render, so
+  // each cell has enough width for text and chart side by side instead.
+  const anySideInfo = ctx.state.showInfo && toPlot.some(({ metric }) => sideInfoFor(metric));
+  if (anySideInfo) plotsPerRow = Math.min(plotsPerRow, 2);
 
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
@@ -175,6 +386,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
       cell.style.cssText = `flex:0 0 ${flexBasisPct}%;min-width:300px;margin-bottom:20px;box-sizing:border-box`;
       wrap.appendChild(cell);
 
+      const isClipping = metric === 'bright_clipping_fraction' || metric === 'dark_clipping_fraction';
       await engine.renderDistribution(cell, ctx, {
         numCol: metric,
         source: { table: sourceTable, where: combinedWhere },
@@ -188,6 +400,8 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims) {
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
+        sideInfo: sideInfoFor(metric),
+        ...(isClipping ? { layout: { yaxis: { tickformat: '.2%', title: label } } } : {}),
       });
     }
   }
@@ -220,10 +434,12 @@ async function violinOverviewPlot(ctx, container, metric) {
   });
 }
 
-function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics) {
+function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metricPref = [], shortLabel, inputMetrics, { fractionWarnings = false } = {}) {
   const pickMetric = (ctx) =>
     metricPref.find(m => ctx.schema.allCols.includes(m)) ??
-    ctx.schema.metricCols.find(m => filterMetric(m) && ctx.schema.allCols.includes(m)) ??
+    ctx.schema.metricCols
+      .filter(m => filterMetric(m) && ctx.schema.allCols.includes(m))
+      .sort((a, b) => qualityMetricRank(a) - qualityMetricRank(b))[0] ??
     null;
   return {
     id, label, info, shortLabel, group: 'Dataset Stats', scope: 'image', multiPlot: true,
@@ -252,7 +468,7 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
       const draw = async () => {
         plotRoot.innerHTML = '';
         try {
-          await renderViolins(plotRoot, ctx, filterMetric, splitDims);
+          await renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings);
         } catch {
           plotRoot.innerHTML = '<div class="no-data">Failed to load data.</div>';
         }
@@ -294,7 +510,8 @@ export default [
   makeViolinPlugin('violin-basic',   'Pixel Value Statistics', BASIC_INFO,   m => matchesBases(m, BASIC_METRIC_BASES), basicOverviewSummary,
     ['mean_intensity'], 'Intensity', BASIC_METRIC_BASES),
   makeViolinPlugin('violin-quality', 'Image Quality Metrics',  QUALITY_INFO, m => matchesBases(m, QUALITY_METRIC_BASES), qualityOverviewSummary,
-    ['laplacian_variance', 'michelson_contrast', 'mscn_variance', 'texture_heterogeneity'], 'Image Quality', QUALITY_METRIC_BASES),
+    ['laplacian_variance'], 'Image Quality', QUALITY_METRIC_BASES,
+    { fractionWarnings: true }),
 ];
 
 function resolveMetrics(schema, dimensions) {

@@ -313,6 +313,7 @@ function afterLoad(options = {}) {
   if (urlParams.dimensions)       state.dimensions       = urlParams.dimensions;
   if ('showSignificance' in urlParams) state.showSignificance = urlParams.showSignificance;
   if ('overviewMode' in urlParams)     state.overviewMode     = urlParams.overviewMode;
+  if ('showInfo' in urlParams)          state.showInfo          = urlParams.showInfo;
   if (urlParams.hiddenWidgets)    state.hiddenWidgets    = urlParams.hiddenWidgets;
   if (urlParams.openedWidgets)    state.openedWidgets    = urlParams.openedWidgets;
 

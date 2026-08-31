@@ -83,7 +83,6 @@ class PixelPatrolProcessor(Protocol):
     INPUT: RecordSpec
     OUTPUT: ProcessorOutput            # "features" or "record"
     OUTPUT_SCHEMA: Dict[str, Any]
-    IS_MEMORY_HEAVY: bool              # needs much more than the default per-chunk memory budget
     def run_chunk(self, record: Record) -> Dict[str, Any]: ...
     def get_aggregation(self, name: str) -> Optional[Any]: ...
 

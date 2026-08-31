@@ -1,6 +1,9 @@
 const MAX_XY_BUBBLE = 50_000;  // above this many files, switch the X/Y scatter to a heatmap
 const HEATMAP_BINS  = 70;      // target bin count per axis for the X/Y heatmap
 
+// Matches size_X/size_Y/size_Z/... (one axis letter) - not e.g. size_bytes.
+const SIZE_DIM_RE = /^size_[A-Za-z]$/;
+
 export default {
   id: 'dim-size',
   inputs: ['size_*'],
@@ -9,23 +12,23 @@ export default {
   multiPlot: true,
   label: 'Dimensionality',
   info: [
-    'Shows how **image dimensions** (X, Y, Z, T, …) vary across the dataset.',
+    'Shows how **image dimension sizes** (e.g. X, Y, Z, T, …) vary across the dataset.',
     '',
     'Includes an X/Y size scatter plot and per-dimension strip plots.',
     '',
-    '**Use this to identify**',
-    '- unexpected dimension sizes',
-    '- mismatched shapes between groupings',
+    'If a dimension has **no variance**, it is summarized in a table instead of a plot.',
+    '',
+    'Use this to identify **unexpected dimension sizes** and **mismatched shapes** within/between groupings.',
   ].join('\n'),
 
   requires(schema) {
-    return schema.allCols.some(c => c.startsWith('size_') && !c.startsWith('__'));
+    return schema.allCols.some(c => SIZE_DIM_RE.test(c));
   },
 
   async overviewMessage(ctx) {
     try {
       const { q, andWhere } = ctx.sql;
-      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
+      const sizeCols = ctx.schema.allCols.filter(c => SIZE_DIM_RE.test(c));
       const hasXY    = sizeCols.includes('size_X') && sizeCols.includes('size_Y');
       const KNOWN_DIMS = { size_Z: 'Z slices', size_T: 'timepoints', size_C: 'channels', size_S: 'series/tiles' };
       const extraDimCols = sizeCols.filter(c => c !== 'size_X' && c !== 'size_Y' && c !== 'num_pixels');
@@ -67,7 +70,7 @@ export default {
 
   async overviewPlot(container, ctx) {
     const { andWhere, sample, groupCol: gcFn } = ctx.sql;
-    const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
+    const sizeCols = ctx.schema.allCols.filter(c => SIZE_DIM_RE.test(c));
     if (!(sizeCols.includes('size_X') && sizeCols.includes('size_Y'))) return false;
 
     const rows = await ctx.queryRows(`
@@ -93,7 +96,7 @@ export default {
 
   async render(container, ctx) {
     try {
-      const sizeCols = ctx.schema.allCols.filter(c => c.startsWith('size_') && !c.startsWith('__'));
+      const sizeCols = ctx.schema.allCols.filter(c => SIZE_DIM_RE.test(c));
       await renderSizeAvailability(container, ctx, sizeCols);
       await renderXYDistribution(container, ctx, sizeCols);
       await renderDimDistributions(container, ctx, sizeCols);

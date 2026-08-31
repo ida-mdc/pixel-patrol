@@ -48,7 +48,7 @@ def test_processor_schemata():
 
     output_path = tmp_path / "output.parquet"
 
-    generate_image_dataset(images_dir, 1, 1, 3, 1, 10, 10)
+    generate_image_dataset(images_dir, 1, 1, 3, 1, 64, 64)
 
     project_name = "project"
     project = api.create_project(project_name, base_dir=images_dir, loader="bioio", output_path=output_path)
@@ -98,7 +98,7 @@ def test_all_processors_return_dict():
     tmp_path = Path(tempfile.mkdtemp())
 
     # Create a small 5-D TIFF that satisfies most processor input specs
-    t, c, z, y, x = 1, 2, 1, 10, 10
+    t, c, z, y, x = 1, 2, 1, 64, 64
     data = np.random.randint(0, 256, size=(t, c, z, y, x), dtype=np.uint8)
     tif_path = tmp_path / "probe.tif"
     tifffile.imwrite(str(tif_path), data, photometric='minisblack')

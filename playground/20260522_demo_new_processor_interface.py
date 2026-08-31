@@ -28,8 +28,7 @@ import tifffile
 
 from pixel_patrol_base.core.record import record_from, Record
 from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
-from pixel_patrol_image.plugins.processors.raster_image_processor import (
-    CompressionMetricsProcessor,
+from pixel_patrol_base.plugins.processors.raster_image_processor import (
     QualityMetricsProcessor,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
@@ -360,7 +359,6 @@ def main():
         BasicMetricsProcessor(),
         RasterHistogramProcessor(),
         QualityMetricsProcessor(),
-        CompressionMetricsProcessor(),
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:

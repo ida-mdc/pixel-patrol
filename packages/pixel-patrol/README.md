@@ -35,7 +35,6 @@ For a modular install (core only + selected add-ons):
 ```bash
 uv pip install pixel-patrol-base
 uv pip install pixel-patrol-loader-bio   # BioIO, Zarr, Tifffile loaders
-uv pip install pixel-patrol-image        # image quality metrics and extra widgets
 ```
 
 ---

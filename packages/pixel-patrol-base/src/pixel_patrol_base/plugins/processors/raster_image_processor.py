@@ -4,24 +4,22 @@ that require Y and X axes (transposed to last before kernel computation).
 """
 
 import warnings
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 
 from pixel_patrol_base.core.contracts import ChunkKind
 from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.core.specs import RecordSpec
-from pixel_patrol_image.plugins.processors.raster_image_numpy_metrics import (
-    MetricContext,
+from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
     _XY_AXES,
-    calc_blocking,
-    calc_ringing,
+    bright_clipping_fraction,
+    dark_clipping_fraction,
     laplacian_variance,
-    texture_heterogeneity,
-    michelson_contrast,
-    mscn_variance,
+    spectral_slope,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
+    MetricContext,
     RasterMetricSpec,
     _weighted_mean_agg,
 )
@@ -37,14 +35,13 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
          warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
         warnings.filterwarnings('ignore', 'All-NaN slice encountered', RuntimeWarning)
+        warnings.filterwarnings('ignore', 'Degrees of freedom <= 0', RuntimeWarning)
         match spec.name:
-            case "michelson_contrast": return float(np.nanmean(michelson_contrast(arr, _XY_AXES)))
-            case "mscn_variance":      return float(np.nanmean(mscn_variance(arr, _XY_AXES, ctx.cache)))
-            case "texture_heterogeneity": return float(np.nanmean(texture_heterogeneity(arr, _XY_AXES, ctx.cache)))
-            case "laplacian_variance": return float(np.nanmean(laplacian_variance(arr)))
-            case "blocking_index":     return float(np.nanmean(calc_blocking(arr)))
-            case "ringing_index":      return float(np.nanmean(calc_ringing(arr)))
-            case _:                    return None
+            case "laplacian_variance":       return float(np.nanmean(laplacian_variance(arr, ctx.cache)))
+            case "spectral_slope":           return float(np.nanmean(spectral_slope(arr, ctx.cache)))
+            case "dark_clipping_fraction":   return float(np.nanmean(dark_clipping_fraction(arr, _XY_AXES, ctx.cache)))
+            case "bright_clipping_fraction": return float(np.nanmean(bright_clipping_fraction(arr, _XY_AXES, ctx.cache)))
+            case _:                          return None
 
 
 class RasterImageProcessor:
@@ -67,7 +64,7 @@ class RasterImageProcessor:
         if y_ax != len(dim_order_out) - 2 or x_ax != len(dim_order_out) - 1:
             other = [i for i in range(chunk.ndim) if i not in (y_ax, x_ax)]
             chunk = chunk.transpose(other + [y_ax, x_ax])
-        ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+        ctx = MetricContext()
         return {
             spec.name: val
             for spec in self.METRICS
@@ -83,29 +80,18 @@ class RasterImageProcessor:
 
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
-    DESCRIPTION = "Computes no-reference image quality metrics (contrast, sharpness, texture) over the 2D spatial extent of each image."
+    DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, spectral characteristics, clipping) over the 2D spatial extent of each image."
+    # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
+    # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
-        RasterMetricSpec(name="michelson_contrast", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Michelson contrast: (max - min) / (max + min) of intensities."),
-        RasterMetricSpec(name="mscn_variance",      data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Variance of mean-subtracted contrast-normalized (MSCN) coefficients; a no-reference naturalness/quality cue."),
-        RasterMetricSpec(name="texture_heterogeneity", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Local texture heterogeneity of the image."),
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Variance of the Laplacian; a focus/sharpness measure (higher = sharper)."),
-    )
-    OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
-    OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
-
-
-class CompressionMetricsProcessor(RasterImageProcessor):
-    NAME        = "raster-compression"
-    DESCRIPTION = "Computes metrics that detect lossy-compression artifacts (block edges and ringing) in each image."
-    METRICS = (
-        RasterMetricSpec(name="blocking_index", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Strength of block-boundary discontinuities, indicating JPEG-style blocking artifacts."),
-        RasterMetricSpec(name="ringing_index",  data_type=np.float32, aggregate_rows=_weighted_mean_agg,
-                         description="Strength of ringing artifacts near high-contrast edges."),
+                         description="High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score."),
+        RasterMetricSpec(name="spectral_slope", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance."),
+        RasterMetricSpec(name="dark_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end."),
+        RasterMetricSpec(name="bright_clipping_fraction", data_type=np.float32, aggregate_rows=_weighted_mean_agg,
+                         description="Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

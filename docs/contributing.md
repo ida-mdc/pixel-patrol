@@ -11,7 +11,7 @@ Fork the repository on GitHub and open a pull request with your changes.
 **Monorepo with multiple packages.** The repository contains several independently installable packages under `packages/`. Install the ones you need in editable mode:
 
 ```bash
-uv pip install -e packages/pixel-patrol-base -e packages/pixel-patrol-image -e packages/pixel-patrol-loader-bio
+uv pip install -e packages/pixel-patrol-base -e packages/pixel-patrol-loader-bio
 ```
 
 **The viewer build syncs to the Python package.** The viewer is a separate Vite app in `viewer/`. Running `npm run build` in that directory compiles it and automatically copies the output into `pixel-patrol-base`, so `pixel-patrol view` always picks up your latest changes. For local development with hot reload use `npm run dev`.

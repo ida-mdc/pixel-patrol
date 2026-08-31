@@ -200,9 +200,11 @@ body { background: #f8f9fa; }
 .widget-info-btn {
   background: none; border: none; cursor: pointer; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  color: #6c757d; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  color: #6c757d; width: 20px; height: 20px; padding: 0; border-radius: 50%;
 }
 .widget-info-btn:hover { color: #0d6efd; background: #eef4ff; }
+.widget-info-btn[aria-pressed="true"] { background: #6c757d; color: #fff; }
+.widget-info-btn[aria-pressed="true"]:hover { background: #5c636a; color: #fff; }
 .widget-info-icon { font-size: 19px; line-height: 1; }
 .widget-info-panel {
   padding: 12px 16px; background: #f0f7ff;
@@ -212,6 +214,26 @@ body { background: #f8f9fa; }
 .widget-info-panel ul   { margin: 0 0 4px; padding-left: 20px; }
 .widget-info-panel li   { margin-bottom: 2px; }
 .widget-info-panel code { background: #dceeff; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+
+/* ── Per-plot side info (short note beside one plot in a multi-plot widget) ── */
+.plot-side-info {
+  flex: 1 1 140px; max-width: 160px; align-self: center; color: #495057;
+  font-size: 12px; line-height: 1.4; padding-left: 4px;
+}
+.plot-side-info p  { margin: 0 0 4px; }
+.plot-side-info code { background: #eef1f4; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+/* Same note, inline variant for row-header layouts (e.g. stats-across-dims). */
+.plot-side-info-inline { font-weight: 400; font-size: 12px; color: #495057; }
+
+/* Direction badge (▲/▼ + short hint per direction) - only shown for metrics with
+   a well-established, monotonic reading. Green = the "good" direction, red = the
+   direction that indicates a quality issue. */
+.plot-side-info-direction { font-weight: 600; font-size: 12px; margin-bottom: 3px; }
+.plot-side-info-good    { color: #198754; }
+.plot-side-info-bad     { color: #dc3545; }
+.plot-side-info-neutral { color: #0d6efd; }
+
 .widget-card-body { padding: 16px; }
 
 /* ── Shared widget styles ── */
@@ -445,6 +467,17 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   #row-count-badge { display: none !important; }
   .across-dims-wrap { max-width: 100% !important; }
 }
+
+/* ── Info panels master toggle ── */
+.info-toggle-btn {
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #6c757d; width: 26px; height: 26px; padding: 0; border-radius: 50%;
+  font-size: 24px; line-height: 1;
+}
+.info-toggle-btn:hover { color: #0d6efd; background: #eef4ff; }
+.info-toggle-btn[aria-pressed="true"] { background: #6c757d; color: #fff; }
+.info-toggle-btn[aria-pressed="true"]:hover { background: #5c636a; color: #fff; }
 
 /* ── Topbar icon + brand ── */
 .topbar-icon  { height: 28px; width: auto; }

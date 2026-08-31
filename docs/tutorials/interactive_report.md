@@ -15,7 +15,6 @@ A few things to know before you start:
 <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.75rem 0 1.5rem;font-size:0.82rem;align-items:center">
   <span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every interactive report &nbsp;&nbsp;
   <span class="wc-pill wc-pill-loader">needs loader</span> &nbsp;requires an image loader (e.g. <code>pixel-patrol-loader-bio</code>) &nbsp;&nbsp;
-  <span class="wc-pill wc-pill-image">needs pixel-patrol-image</span> &nbsp;quality metrics package &nbsp;&nbsp;
   <span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice
 </div>
 
@@ -67,13 +66,6 @@ pixel-patrol view results.parquet --significance              # show stat bracke
     <span class="wc-setup-btns">
       <button class="wc-setup-btn" data-key="loader" data-val="yes" onclick="wcSetup(this)">Yes</button>
       <button class="wc-setup-btn" data-key="loader" data-val="no"  onclick="wcSetup(this)">No</button>
-    </span>
-  </div>
-  <div class="wc-setup-row">
-    <span class="wc-setup-q">Did you have <code>pixel-patrol-image</code> installed at processing time?</span>
-    <span class="wc-setup-btns">
-      <button class="wc-setup-btn" data-key="image" data-val="yes" onclick="wcSetup(this)">Yes</button>
-      <button class="wc-setup-btn" data-key="image" data-val="no"  onclick="wcSetup(this)">No</button>
     </span>
   </div>
   <div class="wc-setup-row">
@@ -293,7 +285,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Sort by <code>laplacian_variance</code> ascending</strong> → blurriest images appear first. If they look visually out-of-focus, they are. This is the fastest path to finding focus-drift candidates for exclusion.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Sort by <code>blocking_index</code> descending to surface JPEG-artifact images. Sort by <code>max_intensity</code> descending to surface potentially saturated ones.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Sort by <code>bright_clipping_fraction</code> descending to surface overexposed images. Sort by <code>dark_clipping_fraction</code> descending to surface images with heavy background or underexposure.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Hover over any thumbnail to see the exact file path.</div></div>
 </div>
 
@@ -377,99 +369,67 @@ NaN pixels are excluded from all calculations.
 
 ---
 
-<div class="wc" data-wc-req="loader,image" id="wc-violin-quality">
+<div class="wc" data-wc-req="loader" id="wc-violin-quality">
 <div class="wc-head">
 <span class="wc-icon">🎯</span>
 <span class="wc-name">Image Quality Metrics</span>
 <span class="wc-scope" title="Switch with the Slice by toggle">🖼️/🧩 per image / slice</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
-<span class="wc-pill wc-pill-image" style="margin-left:4px">needs pixel-patrol-image</span>
 <button class="wc-check" data-wc="violin-quality" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
 <div class="wc-body">
 
-<p>Five quality metrics computed per leaf slice, aggregated by pixel-count-weighted mean. Together they surface a wide range of issues - focus problems, low contrast, sensor noise, uneven texture, and compression artifacts - not just one of these. <strong>Only compare images at the same magnification and pixel size</strong> - all these metrics are scale-dependent.</p>
+<p>Four quality metrics computed per leaf slice, aggregated by pixel-count-weighted mean. They surface blur, noise, and exposure clipping at the whole-image level - not localized defects. <strong>Only compare images at the same magnification and pixel size</strong> - laplacian_variance and spectral_slope are scale-dependent.</p>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">- sharpness / focus quality</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">The go-to blur detector. High = sharp; low = blurry or out-of-focus.</p>
+<div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">- high-frequency content</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Apply the discrete Laplacian at every pixel: <code>left + right + up + down − 4 × center</code>. This second-derivative filter fires strongly at edges and fine texture, near-zero in smooth regions. Blurry image → small response → low variance. Sharp image → large response → high variance.</div>
+<div>Apply the discrete Laplacian at every pixel: <code>left + right + up + down − 4 × center</code>. This second-derivative filter fires strongly at edges and fine texture, near-zero in smooth regions. Variance of this response is the score. Clipped pixels create artificial high-frequency edges and inflate it - check clipping fractions when values seem unusually high.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Low outliers in the violin → go to the mosaic, sort by <code>laplacian_variance</code> ascending, and confirm visually. If they look out-of-focus, maybe you want to exclude them.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition consistently blurrier: different imaging days, focus protocols, or objective settings?</div></div>
-</div>
-</div>
-
-<div class="wc-metric">
-<div class="wc-metric-name">Michelson Contrast <small style="font-weight:400;opacity:0.65">- local dynamic range</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">How much local contrast the image has - whether pixel values vary substantially within small neighborhoods.</p>
-<details class="wc-how">
-<summary>🔬 How it's computed</summary>
-<div>For every 3×3 window, compute <code>max − min</code> (local intensity range). Average all local ranges across the image. Divide by the global spatial standard deviation. Higher = more local contrast relative to overall spread.</div>
-</details>
-<div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low Michelson contrast: image is "flat" - possible underexposure, oversaturation, or genuinely low-contrast sample. Compare with the histogram to distinguish.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Low outliers → go to the mosaic, sort by <code>laplacian_variance</code> ascending, and confirm visually. If they look out-of-focus, you may want to exclude them.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition consistently lower: different imaging days, focus protocols, or objective settings?</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">MSCN Variance <small style="font-weight:400;opacity:0.65">- noise sensitivity (BRISQUE)</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">A no-reference quality metric sensitive to both noise and blur.</p>
+<div class="wc-metric-name">Spectral Slope <small style="font-weight:400;opacity:0.65">- blur vs noise distinction</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance. Most interpretable when comparing images of similar content type.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Normalize each pixel by subtracting its 3×3 local mean and dividing by local std (+ small stabilizer). In a well-structured image this normalized map approaches zero everywhere. The variance of that map measures residual complexity: noisy → high; blurry → low.</div>
+<div>Apply a 2D Hanning window, compute the FFT, average power in radial frequency bins, then fit a line to log(power) vs log(frequency) over the mid-frequency band (5–40% of Nyquist). The slope of that line is the score.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Abnormally high: pixel-level noise - possibly high sensor gain or short exposure.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Very low: smooth and featureless - blur, low signal, or a genuinely uniform sample.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Steeper (more negative) than expected for one condition: more blur or more structured/textured content than others - check laplacian_variance to tell them apart.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Flatter (toward zero) than expected: noise or low-signal images. NaN for images smaller than 32×32 pixels.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Most interpretable when comparing images of similar content type. Differences between conditions with very different subjects (e.g. cells vs tissue) may reflect content, not quality.</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Texture Heterogeneity <small style="font-weight:400;opacity:0.65">- spatial uniformity of texture</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">How unevenly texture is distributed - high means some regions are rich while others are flat.</p>
+<div class="wc-metric-name">Dark Clipping Fraction <small style="font-weight:400;opacity:0.65">- underexposure / background</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end.</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Compute local std in every 3×3 window. Then compute the coefficient of variation (std / mean) of all those local stds. High = texture concentrated in patches; low = texture uniformly distributed.</div>
+<div>Count how many pixels equal <code>iinfo(dtype).min</code> (0 for unsigned integers, e.g. −32768 for int16) and divide by total pixel count.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>High heterogeneity is expected for sparse fluorescence images (textured cells on flat background). Interesting only when it differs unexpectedly between conditions.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>High fraction in unsigned-integer images: heavy dark background, underexposure, or nodata regions. In signed-integer images: signal clipped at the lower bound - real values there are lost.</div></div>
 </div>
 </div>
 
 <div class="wc-metric">
-<div class="wc-metric-name">Blocking Index <small style="font-weight:400;opacity:0.65">- JPEG compression artifacts</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">Detects 8×8-pixel block boundaries - the hallmark signature of JPEG compression.</p>
+<div class="wc-metric-name">Bright Clipping Fraction <small style="font-weight:400;opacity:0.65">- bright-end clipping</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float, which has no fixed upper bound).</p>
 <details class="wc-how">
 <summary>🔬 How it's computed</summary>
-<div>Measure the average absolute pixel jump across every 8-pixel grid boundary (horizontal and vertical). JPEG encodes in 8×8 blocks, creating subtle discontinuities at those boundaries.</div>
-</details>
-
-<div class="wc-shots">
-  <div class="wc-shot">
-    <img src="../../assets/screenshots/blocking.png" alt="Blocking Index violin">
-    <figcaption><code>condition3_comp</code> (JPEG) has the highest blocking index - confirming what the file extension chart already hinted at. <code>condition2_bl</code> (blurred) has the lowest, because blurring smooths the block edges.</figcaption>
-  </div>
-</div>
-
-<div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero blocking in data that should be lossless (TIFF, ND2, CZI): the data likely went through lossy compression somewhere - an export, upload, or storage step. Lossy compression should generally be avoided for scientific data: it can't be undone, and it distorts quantitative measurements.</div></div>
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>High blocking in one condition but not another: they were processed differently. A systematic artifact that will skew any comparison between them.</div></div>
-</div>
-</div>
-
-<div class="wc-metric">
-<div class="wc-metric-name">Ringing Index <small style="font-weight:400;opacity:0.65">- edge oscillation artifacts</small></div>
-<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency oscillations near edges - ringing from lossy compression or aggressive filtering.</p>
-<details class="wc-how">
-<summary>🔬 How it's computed</summary>
-<div>Subtract a 3×3 box-average from each pixel (high-pass filter). Compute variance of the residual. High variance = fine oscillations on top of the main image structure.</div>
+<div>Count how many pixels equal <code>iinfo(dtype).max</code> (e.g. 255 for uint8, 65535 for uint16) and divide by total pixel count. Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095, not 65535) is flagged by a separate warning below if <code>max_intensity</code> is below the dtype ceiling.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>High ringing + high blocking = strong evidence of lossy compression. High ringing alone can also come from aggressive spatial filtering (e.g. unsharp masking) applied during acquisition or export.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling — sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) — data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
 </div>
 </div>
 
@@ -509,13 +469,12 @@ NaN pixels are excluded from all calculations.
 
 ---
 
-<div class="wc" data-wc-req="loader,image,dim" id="wc-stats-quality">
+<div class="wc" data-wc-req="loader,dim" id="wc-stats-quality">
 <div class="wc-head">
 <span class="wc-icon">🎨</span>
 <span class="wc-name">Quality Metrics Across Dimensions</span>
 <span class="wc-scope" title="One point = one dimension slice, averaged across images">🧩 per slice</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
-<span class="wc-pill wc-pill-image" style="margin-left:4px">needs pixel-patrol-image</span>
 <span class="wc-pill wc-pill-dim" style="margin-left:4px">multidim only</span>
 <button class="wc-check" data-wc="stats-quality" onclick="wcCheck(this)" title="Mark as reviewed"></button>
 </div>
@@ -523,17 +482,10 @@ NaN pixels are excluded from all calculations.
 
 <p>How quality metrics change across your non-spatial dimensions (e.g. Z, T, C, or S - names depend on your loader). Best for detecting focus drift across a Z-like dimension or photobleaching effects on contrast over a T-like one.</p>
 
-<div class="wc-shots compact">
-  <div class="wc-shot">
-    <img src="../../assets/screenshots/blocking_per_s_slice.png" alt="Blocking index per S slice">
-    <figcaption>Blocking index across S (channel) slices - <code>condition4_nois</code> (noisy, dark green) increases sharply at slice 2, while <code>condition2_bl</code> (blurred, orange) stays near zero across all slices.</figcaption>
-  </div>
-</div>
-
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Laplacian variance dropping across Z:</strong> focus is unstable across the stack. Find the Z range where sharpness peaks and limit your analysis to that range.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Michelson contrast dropping over T: signal-to-background shrinking - consistent with photobleaching.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>MSCN variance spiking at one specific T frame: sample motion, a bubble, or a transient autofluorescence event.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Spectral slope becoming flatter (toward zero) over T: noise increasing over the time course - possible sample degradation or instrument drift.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Dark or bright clipping fraction rising in one condition across C: channel-specific exposure problem or a detector offset artifact.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Find the Z of peak Laplacian variance here, then set that Z in the sidebar dimension selector - all widgets update to show your data at its sharpest.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>As with Basic Statistics Across Dimensions, the dashed line shows the per-group percentage of images that still have a slice at that position - check it before reading too much into a quality metric at the far end of a dimension.</div></div>
 </div>
@@ -632,7 +584,7 @@ NaN pixels are excluded from all calculations.
 
 <script>
 /* ── Setup toggle ─────────────────────────────────────────── */
-const wcState = { loader: null, image: null, dim: null };
+const wcState = { loader: null, dim: null };
 
 function wcSetup(btn) {
   const key = btn.dataset.key;
@@ -649,7 +601,6 @@ function wcApply() {
     const req = card.dataset.wcReq;
     let unavail = false;
     if (req.includes('loader') && wcState.loader === 'no') unavail = true;
-    if (req.includes('image')  && (wcState.image === 'no' || wcState.loader === 'no')) unavail = true;
     if (req.includes('dim')    && wcState.dim    === 'no') unavail = true;
     card.classList.toggle('wc-unavailable', unavail);
   });
