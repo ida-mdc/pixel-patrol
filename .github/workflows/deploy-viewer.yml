@@ -64,6 +64,11 @@ jobs:
       - name: Generate schema reference
         run: python docs/gen_schema_docs.py
 
+      # 3b. Inject the supported-extensions list into the landing page
+      #     (parses SUPPORTED_EXTENSIONS from source, no extra installs needed).
+      - name: Generate extensions list
+        run: python docs/gen_extensions_docs.py
+
       # 4. Build the MkDocs documentation.
       - name: Build docs
         run: mkdocs build --site-dir gh-pages-site/docs
