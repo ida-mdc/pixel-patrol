@@ -169,6 +169,25 @@ pixel-patrol schema --print
 
 ---
 
+## `pixel-patrol list`
+
+Lists available loaders and processors from installed plugins, including the file extensions each loader supports.
+
+```bash
+pixel-patrol list [--loaders] [--processors]
+```
+
+With no flags, lists both. Use `--loaders` or `--processors` to narrow down.
+
+**Example output**
+
+```
+Loaders:    bioio (czi, jpeg, jpg, lif, nd2, ome.tif, ome.zarr, png, tif, tiff, zarr), tifffile (ome.tif, tif, tiff), zarr (ome.zarr, zarr)
+Processors: raster-basic, raster-histogram, raster-quality, raster-compression
+```
+
+---
+
 ## `pixel-patrol launch`
 
 Opens the web-based processing dashboard for configuring and monitoring processing interactively.

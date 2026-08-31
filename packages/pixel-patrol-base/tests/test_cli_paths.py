@@ -183,3 +183,7 @@ def test_process_view_flag_corrects_missing_extension(monkeypatch, tmp_path):
     assert view_calls == [output_corrected]
 
 
+def test_list():
+    result = CliRunner().invoke(cli_module.cli, ["list"])
+    assert result.exit_code == 0
+    assert "raster-basic" in result.output  # always registered by pixel-patrol-base

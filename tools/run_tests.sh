@@ -35,6 +35,25 @@ for pkg in "$ROOT"/packages/*/; do
 done
 
 echo ""
+echo "=== Example scripts ==="
+for script in "$ROOT"/examples/0{1,2,3}_*.py; do
+  name=$(basename "$script")
+  echo "--- $name ---"
+  output=$(cd "$ROOT/examples" && uv run python - "$(basename "$script")" 2>&1 <<'PYEOF'
+import sys, runpy
+import pixel_patrol_base.api as api
+api.view = lambda *a, **kw: None
+runpy.run_path(sys.argv[1], run_name="__main__")
+PYEOF
+  )
+  code=$?
+  echo "$output"
+  if [ $code -ne 0 ]; then
+    FAILED+=("$name (example)")
+  fi
+done
+
+echo ""
 if [ ${#SKIPPED[@]} -gt 0 ]; then
   echo "SKIPPED:"
   for s in "${SKIPPED[@]}"; do echo "  - $s"; done
