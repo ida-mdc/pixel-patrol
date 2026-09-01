@@ -138,3 +138,38 @@ export function groupCol(state) {
 export function groupExpr(state) {
   return `${groupCol(state)} AS ${GROUP_COL_ALIAS}`;
 }
+
+/**
+ * Count files, not rows: a container file has one row per sub-image.
+ * Falls back to `COUNT(*)` when there is no `path` column.
+ */
+export function fileCount(allCols = []) {
+  return allCols.includes('path') ? `COUNT(DISTINCT ${q('path')})` : 'COUNT(*)';
+}
+
+// Columns the file-system scan copies onto every row of a file; constant per path.
+const FILE_LEVEL_COLS = [
+  'path', 'name', 'type', 'parent', 'depth', 'size_bytes',
+  'file_extension', 'modification_date', 'imported_path', 'imported_path_short',
+  'common_base',
+];
+
+/**
+ * One row per file, to FROM instead of `pp_data` when summing a file-level
+ * measure like `size_bytes` - a container's size sits on each sub-image row.
+ * Counting doesn't need it; see fileCount.
+ * Filters before collapsing, so a file survives if any of its images pass.
+ * `grouped` keys by `__group__` too - leave it off for dataset-wide totals.
+ */
+export function perFile({ where = '', grouped = true, groupCol: gcExpr, allCols = [] }) {
+  if (!allCols.includes('path')) {
+    const group = grouped ? `${gcExpr} AS ${GROUP_COL_ALIAS}, ` : '';
+    return `(SELECT ${group}1 AS __n_images__, * FROM pp_data ${where}) AS pp_file`;
+  }
+  const keys = [
+    ...(grouped ? [`${gcExpr} AS ${GROUP_COL_ALIAS}`] : []),
+    ...FILE_LEVEL_COLS.filter(c => allCols.includes(c)).map(q),
+  ];
+  return `(SELECT ${keys.join(', ')}, COUNT(*) AS __n_images__
+           FROM pp_data ${where} GROUP BY ALL) AS pp_file`;
+}

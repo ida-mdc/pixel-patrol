@@ -121,15 +121,16 @@ export default {
 };
 
 // One row per folder (with file count + size) when rolled up, else one per file.
+// The rolled-up branch sums size_bytes, so it reads one row per file.
 function fetchSunburstRows(ctx, { foldersOnly, pathWhere }) {
   const gcExpr = ctx.sql.groupCol();
   return foldersOnly
     ? ctx.queryRows(`
         SELECT regexp_extract("path"::VARCHAR, '^(.*)/[^/]+$', 1) AS path,
-               ${gcExpr} AS __group__,
+               __group__,
                COUNT(DISTINCT "path")::INTEGER AS __n__,
                SUM("size_bytes")::BIGINT AS __size__
-        FROM pp_data ${pathWhere}
+        FROM ${ctx.sql.perFile({ where: pathWhere })}
         GROUP BY 1, 2
       `)
     : ctx.queryRows(`

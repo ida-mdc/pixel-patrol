@@ -1,7 +1,7 @@
 export default {
   id: 'summary',
   required_inputs: ['size_bytes', 'file_extension'],
-  inputs: ['path', 'n_images'],
+  inputs: ['path'],
   label: 'File Data Summary',
   group: 'Summary',
   info: 'High-level overview of the dataset: total number of files and images, total size, ' +
@@ -14,17 +14,14 @@ export default {
 
   async overviewMessage(ctx) {
     try {
-      const hasNImages = ctx.schema.allCols.includes('n_images');
-      const [row] = await ctx.queryRows(`
-        SELECT COUNT(*) AS file_count
-               ${hasNImages ? ', SUM("n_images") AS n_images_sum' : ''}
-        FROM pp_data ${ctx.where}
+      const [row = {}] = await ctx.queryRows(`
+        SELECT ${TOTALS} FROM ${ctx.sql.perFile({ where: ctx.where, grouped: false })}
       `);
       const fileCount  = Number(row.file_count ?? 0);
-      const imageCount = hasNImages ? Number(row.n_images_sum ?? 0) : null;
+      const imageCount = Number(row.image_count ?? 0);
 
       let text = `Pixel Patrol scanned <strong>${fileCount.toLocaleString()} file${fileCount === 1 ? '' : 's'}</strong>`;
-      if (imageCount != null && imageCount > 0 && imageCount !== fileCount) {
+      if (imageCount > 0 && imageCount !== fileCount) {
         text += ` containing <strong>${imageCount.toLocaleString()} image${imageCount === 1 ? '' : 's'}</strong> in total.`;
       } else {
         text += ` - one image per file.`;
@@ -35,12 +32,12 @@ export default {
 
   async render(container, ctx) {
     try {
-      const [rows, pathRow] = await fetchSummary(ctx);
+      const [rows, totals] = await fetchSummary(ctx);
       if (!rows.length) {
         container.innerHTML = '<div class="no-data">No data available after filtering.</div>';
         return;
       }
-      const summary = summarize(ctx, rows, pathRow);
+      const summary = summarize(ctx, rows, totals);
 
       // In overview mode the summary is a bare header; the uneven-group warning
       // is surfaced in the File Metadata tile instead.
@@ -54,30 +51,26 @@ export default {
   },
 };
 
-// Per-group totals, plus distinct-path probe for the file count.
+const TOTALS = `COUNT(*) AS file_count, SUM(__n_images__) AS image_count,
+                SUM("size_bytes") AS total_bytes`;
+
+// Per-group totals, plus the same totals dataset-wide for the headline numbers.
+// Both read one row per file, so a container's size is counted once.
 function fetchSummary(ctx) {
-  const { groupCol: gcFn } = ctx.sql;
-  const gcExpr     = gcFn();
-  const hasPath    = ctx.schema.allCols.includes('path');
-  const nImagesSql = ctx.schema.allCols.includes('n_images') ? ', SUM("n_images") AS n_images_sum' : '';
   return Promise.all([
     ctx.queryRows(`
-      SELECT ${gcExpr} AS __group__, COUNT(*) AS file_count, SUM("size_bytes") AS total_bytes,
-             LIST(DISTINCT "file_extension") AS file_types ${nImagesSql}
-      FROM pp_data ${ctx.where} GROUP BY 1 ORDER BY 1
+      SELECT __group__, ${TOTALS}, LIST(DISTINCT "file_extension") AS file_types
+      FROM ${ctx.sql.perFile({ where: ctx.where })} GROUP BY 1 ORDER BY 1
     `),
-    hasPath
-      ? ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${ctx.where}`)
-      : Promise.resolve([{ n: null }]),
+    ctx.queryRows(`
+      SELECT ${TOTALS} FROM ${ctx.sql.perFile({ where: ctx.where, grouped: false })}
+    `),
   ]);
 }
 
-// Derive the headline numbers and labels the view needs from the grouped rows.
-function summarize(ctx, rows, pathRow) {
-  const hasNImages   = ctx.schema.allCols.includes('n_images');
-  const totalRecords = rows.reduce((s, r) => s + Number(r.file_count), 0);
-  const totalBytes   = rows.reduce((s, r) => s + Number(r.total_bytes ?? 0), 0);
-  const extensions   = new Set();
+// Derive the headline numbers and labels the view needs.
+function summarize(ctx, rows, [totals = {}]) {
+  const extensions = new Set();
   for (const r of rows) for (const ext of (r.file_types ?? [])) if (ext) extensions.add(ext);
 
   const groupCol            = ctx.state.groupCol ?? 'group';
@@ -85,11 +78,10 @@ function summarize(ctx, rows, pathRow) {
 
   return {
     nGroups:       rows.length,
-    totalRecords,
-    totalBytes,
     extensions,
-    totalFiles:    pathRow[0]?.n != null ? Number(pathRow[0].n) : null,
-    totalImages:   hasNImages ? rows.reduce((s, r) => s + Number(r.n_images_sum ?? 0), 0) : null,
+    totalFiles:    Number(totals.file_count ?? 0),
+    totalImages:   Number(totals.image_count ?? 0),
+    totalBytes:    Number(totals.total_bytes ?? 0),
     isImportedPathShort,
     groupColLabel: isImportedPathShort ? groupCol : ctx.plot.niceName(groupCol),
   };
@@ -114,12 +106,11 @@ function prependUnevenGroupWarning(container, ctx, rows) {
 // The Files / Images / Total Size / Extensions tiles.
 function renderKpis(container, ctx, s) {
   const { escapeHtml, formatBytes } = ctx.plot;
-  const fileCount = s.totalFiles ?? s.totalRecords;
-  const kpis = [{ label: 'Files', value: fileCount.toLocaleString() }];
+  const kpis = [{ label: 'Files', value: s.totalFiles.toLocaleString() }];
   // Show the image count alongside the file count whenever the two differ
   // (e.g. multi-image stacks/series); when it's one-image-per-file the extra
   // tile would just repeat the file count, so it's omitted.
-  if (s.totalImages > 0 && s.totalImages !== fileCount) {
+  if (s.totalImages > 0 && s.totalImages !== s.totalFiles) {
     kpis.push({ label: 'Images', value: s.totalImages.toLocaleString() });
   }
   kpis.push({ label: 'Total Size', value: formatBytes(s.totalBytes) });

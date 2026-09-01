@@ -30,11 +30,11 @@ export default {
 
   async overviewMessage(ctx) {
     try {
-      const { andWhere, groupCol: gcFn } = ctx.sql;
+      const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
       const { escapeHtml } = ctx.plot;
       const [extRows, groupRows] = await Promise.all([
         ctx.queryRows(`SELECT DISTINCT "file_extension" AS ext FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}`),
-        ctx.queryRows(`SELECT ${gcFn()} AS g, COUNT(*) AS c FROM pp_data ${ctx.where} GROUP BY 1`),
+        ctx.queryRows(`SELECT ${gcFn()} AS g, ${fileCount()} AS c FROM pp_data ${ctx.where} GROUP BY 1`),
       ]);
       const exts   = [...new Set(extRows.map(r => String(r.ext)))];
       const counts = groupRows.map(r => Number(r.c)).filter(n => n > 0);
@@ -49,16 +49,16 @@ export default {
   },
 
   async overviewPlot(container, ctx) {
-    const { andWhere, groupCol: gcFn } = ctx.sql;
+    const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
     const gcExpr = gcFn();
 
     const [extRows, groupRows] = await Promise.all([
       ctx.queryRows(`
-        SELECT "file_extension" AS ext, ${gcExpr} AS __group__, COUNT(*) AS c
+        SELECT "file_extension" AS ext, ${gcExpr} AS __group__, ${fileCount()} AS c
         FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}
         GROUP BY 1, 2
       `),
-      ctx.queryRows(`SELECT ${gcExpr} AS g, COUNT(*) AS c FROM pp_data ${ctx.where} GROUP BY 1`),
+      ctx.queryRows(`SELECT ${gcExpr} AS g, ${fileCount()} AS c FROM pp_data ${ctx.where} GROUP BY 1`),
     ]);
 
     const exts   = [...new Set(extRows.map(r => String(r.ext)))];
@@ -167,14 +167,13 @@ export default {
 
 // The three datasets the full view needs, fetched in parallel.
 function fetchFileStats(ctx) {
-  const { groupCol: gcFn, andWhere } = ctx.sql;
-  const gcExpr  = gcFn();
+  const { perFile, andWhere } = ctx.sql;
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
     ctx.queryRows(`
-      SELECT "file_extension" AS ext, ${gcExpr} AS __group__,
+      SELECT "file_extension" AS ext, __group__,
              COUNT(*) AS count, SUM("size_bytes") AS total_bytes
-      FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}
+      FROM ${perFile({ where: andWhere(ctx.where, '"file_extension" IS NOT NULL') })}
       GROUP BY 1, 2 ORDER BY 1, 2
     `),
     ctx.queryRows(`
@@ -227,7 +226,7 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
   const { breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
   if (!breaks.length) return;
   const rows = await ctx.queryRows(`
-    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
+    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
     GROUP BY 1, 2
   `);
@@ -282,7 +281,7 @@ export async function renderModificationDates(container, ctx, dateRange, invaria
 async function bucketByDateFmt(ctx, fmt) {
   const rows = await ctx.queryRows(`
     SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '${fmt}') AS bucket,
-           ${ctx.sql.groupCol()} AS __group__, COUNT(*) AS count
+           ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"modification_date" IS NOT NULL')}
     GROUP BY 1, 2 ORDER BY 1, 2
   `);

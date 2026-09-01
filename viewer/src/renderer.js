@@ -1,6 +1,6 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
-import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere } from './sql.js';
+import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere, perFile, fileCount }  from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
 import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
@@ -117,6 +117,14 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       sample,
       groupCol:  () => _groupCol(state),
       groupExpr: () => _groupExpr(state),
+
+      fileCount: () => fileCount(schema.allCols ?? []),
+
+      perFile: (opts = {}) => perFile({
+        groupCol: _groupCol(state),
+        allCols:  schema.allCols ?? [],
+        ...opts,
+      }),
 
       /**
        * WHERE parts pinning one long-format aggregation subset. `q`, `dimCols`
