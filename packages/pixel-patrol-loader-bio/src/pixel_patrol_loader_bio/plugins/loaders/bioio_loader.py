@@ -43,8 +43,6 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
     if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
         metadata["dim_names"] = list(dim_names)
 
-    metadata["n_images"] = len(img.scenes) if hasattr(img, "scenes") else 1
-
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
             val = getattr(img.physical_pixel_sizes, ax, None)

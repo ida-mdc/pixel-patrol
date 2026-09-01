@@ -35,7 +35,7 @@ class FileInfo:
     shape:         Tuple[int, ...]
     dtype:         Any                # numpy dtype or compatible
     dim_order:     str                # e.g. 'ZYX', specifying 'X' and 'Y' is important for many processors
-    n_images:      int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …)
+    n_images:      int = 1            # >1 for container formats (LMDB, multi-series OME-TIFF, …); task routing only, not an output column
     deferred_dims: Optional[str] = None  # dims to defer in memory-chunk splitting (after primary dims, before spatial fallback); optional
 
 

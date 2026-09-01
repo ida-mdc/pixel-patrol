@@ -73,7 +73,6 @@ class GeospatialLoader:
         "longitude": Optional[float],
         "dim_order": str,
         "dim_names": list,
-        "n_images": int,
         "num_pixels": int,
         "shape": list,
         "ndim": int,
@@ -135,7 +134,6 @@ class GeospatialLoader:
             metadata["shape"] = shape
             metadata["dtype"] = dtype
             metadata["dim_names"] = ["band", "height", "width"]
-            metadata["n_images"] = 1
             metadata["num_pixels"] = np.prod(img.shape) * img.count
             metadata["ndim"] = len(shape)
             metadata["nodata_value"] = nodata_value

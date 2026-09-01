@@ -125,7 +125,6 @@ def _extract_metadata(
         "ndim": len(shape),
         "num_pixels": math.prod(shape) if shape else 0,
         "dtype": str(np.dtype(series.dtype)),
-        "n_images": len(tf.series),
         "channel_names": _channel_names(tf, series, axes_u),
     }
     meta.update(_physical_pixel_sizes(tf, axes_u))

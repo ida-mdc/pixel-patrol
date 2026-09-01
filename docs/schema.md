@@ -57,7 +57,6 @@ table is generated from the installed plugins.
 | `longitude` | `Optional` | Centroid longitude in WGS-84 degrees. | Loaders | geospatial | pixel-patrol-geospatial |
 | `n_channels` | `int` | Number of colour channels per frame. | Loaders | video | pixel-patrol-loader-video |
 | `n_frames` | `int` | Total number of frames in the video. | Loaders | video | pixel-patrol-loader-video |
-| `n_images` | `int` | Number of sub-images in the source (>1 for container formats). | Loaders | aqqua_lmdb, bioio, geospatial, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-video |
 | `nodata_value` | `Union` | Declared nodata/fill value from the file metadata. | Loaders | geospatial | pixel-patrol-geospatial |
 | `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
 | `shape` | `list` | Raster dimensions as [bands, height, width]. | Loaders | geospatial | pixel-patrol-geospatial |
@@ -79,8 +78,6 @@ table is generated from the installed plugins.
 | `mean_intensity` | `float32` | Pixel-count-weighted mean intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `min_intensity` | `float32` | Minimum pixel intensity over the covered extent (ignoring NaNs). | raster-basic | raster-basic | pixel-patrol-base |
 | `nodata_count` | `int` | Number of pixels equal to the declared nodata value. | nodata-statistics | nodata-statistics | pixel-patrol-geospatial |
-| `saturated_pixel_fraction` | `float32` | Fraction of pixels fully overexposed (blown out). Any real detail there is lost, not just dim. | raster-quality | raster-quality | pixel-patrol-base |
-| `sobel_gradient_sharpness` | `float32` | A second sharpness score. Use alongside laplacian_variance; when the two disagree it's usually about edge orientation in the image, not a measurement error. | raster-quality | raster-quality | pixel-patrol-base |
 | `spectral_slope` | `float32` | Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance. | raster-quality | raster-quality | pixel-patrol-base |
 | `std_intensity` | `float32` | Pooled standard deviation of intensity over the covered extent. | raster-basic | raster-basic | pixel-patrol-base |
 | `thumbnail` | `bytes` | Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size). | thumbnail | thumbnail | pixel-patrol-base |
