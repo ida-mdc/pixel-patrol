@@ -54,7 +54,6 @@ jobs:
         run: |
           uv pip install --system -e packages/pixel-patrol-base
           uv pip install --system \
-            -e packages/pixel-patrol-image \
             -e packages/pixel-patrol-loader-bio \
             mkdocs-material
 
