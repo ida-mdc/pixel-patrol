@@ -277,10 +277,18 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const container = document.getElementById(WIDGET_CONTAINER_ID);
   container.innerHTML = '';
 
-  const activePlugins = plugins.filter(p => {
+  const candidates = plugins.filter(p => {
     try { return p.requires(schema) && !state.hiddenWidgets.has(p.id); }
     catch { return false; }
   });
+
+  // Optional second gate, for widgets that only know they have nothing to show
+  // once they can query.
+  const applies = await Promise.all(candidates.map(async p => {
+    try { return p.requiresData ? await p.requiresData(ctx) : true; }
+    catch { return true; }
+  }));
+  const activePlugins = candidates.filter((_, i) => applies[i]);
 
   // Always reset the collapse-all button before rendering; renderOverviewGallery
   // will re-wire it if tiles are expanded.

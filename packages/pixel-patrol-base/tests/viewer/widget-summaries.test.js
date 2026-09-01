@@ -143,7 +143,7 @@ describe('file-stats widget · overviewMessage', () => {
   });
 });
 
-describe('sunburst widget · overviewMessage', () => {
+describe('sunburst widget', () => {
   const sunburst = widget('sunburst');
 
   it('describes the folder structure by file count', async () => {
@@ -151,9 +151,9 @@ describe('sunburst widget · overviewMessage', () => {
     expect(out).toBe('Folder structure of <strong>7 files</strong>.');
   });
 
-  it('uses the singular for one file', async () => {
-    const out = await sunburst.overviewMessage(makeCtx({ rows: [{ n: 1 }] }));
-    expect(out).toContain('<strong>1 file</strong>');
+  it('hides itself when the dataset is a single file', async () => {
+    expect(await sunburst.requiresData(makeCtx({ rows: [{ n: 1 }] }))).toBe(false);
+    expect(await sunburst.requiresData(makeCtx({ rows: [{ n: 2 }] }))).toBe(true);
   });
 });
 

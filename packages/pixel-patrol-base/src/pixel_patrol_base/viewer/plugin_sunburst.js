@@ -15,23 +15,24 @@ export default {
     return schema.allCols.includes('path') && schema.allCols.includes('size_bytes');
   },
 
+  // A single file is not a hierarchy.
+  async requiresData(ctx) {
+    return await countFiles(ctx) > 1;
+  },
+
   async overviewMessage(ctx) {
     try {
-      const { andWhere } = ctx.sql;
-      const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path") AS n FROM pp_data ${andWhere(ctx.where, '"path" IS NOT NULL')}`);
-      const count = Number(n ?? 0);
-      return `Folder structure of <strong>${count.toLocaleString()} file${count === 1 ? '' : 's'}</strong>.`;
+      const count = await countFiles(ctx);
+      return `Folder structure of <strong>${count.toLocaleString()} files</strong>.`;
     } catch { return null; }
   },
 
   async overviewPlot(container, ctx) {
     const pathWhere = ctx.sql.andWhere(ctx.where, '"path" IS NOT NULL');
-    const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path")::BIGINT AS n FROM pp_data ${pathWhere}`);
-    if (!Number(n ?? 0)) return false;
 
     // Match the full view's depth: show individual files for small datasets,
     // roll up to folders only when there are too many to draw individually.
-    const foldersOnly = Number(n) > MAX_FILES_FOR_SUNBURST;
+    const foldersOnly = await countFiles(ctx) > MAX_FILES_FOR_SUNBURST;
     const rows = await fetchSunburstRows(ctx, { foldersOnly, pathWhere });
     if (!rows.length) return false;
 
@@ -52,17 +53,8 @@ export default {
       const { andWhere } = ctx.sql;
       const pathWhere = andWhere(ctx.where, '"path" IS NOT NULL');
 
-      const [{ n }] = await ctx.queryRows(`SELECT COUNT(DISTINCT "path")::BIGINT AS n FROM pp_data ${pathWhere}`);
-      const numFiles = Number(n ?? 0);
-
-      if (numFiles === 1) {
-        const [pathRow] = await ctx.queryRows(`SELECT "path"::VARCHAR AS p FROM pp_data ${pathWhere} LIMIT 1`);
-        container.innerHTML = `<div class="p-2 text-break"><strong>File:</strong> ${ctx.plot.escapeHtml(pathRow?.p ?? '')}</div>`;
-        return;
-      }
-
       // Above the threshold, roll files up to their folders so the chart stays legible.
-      const foldersOnly = numFiles > MAX_FILES_FOR_SUNBURST;
+      const foldersOnly = await countFiles(ctx) > MAX_FILES_FOR_SUNBURST;
       const rows = await fetchSunburstRows(ctx, { foldersOnly, pathWhere });
 
       if (!rows.length) {
@@ -120,22 +112,30 @@ export default {
   },
 };
 
+async function countFiles(ctx) {
+  const [{ n }] = await ctx.queryRows(
+    `SELECT COUNT(DISTINCT "path")::BIGINT AS n
+     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"path" IS NOT NULL')}`);
+  return Number(n ?? 0);
+}
+
 // One row per folder (with file count + size) when rolled up, else one per file.
-// The rolled-up branch sums size_bytes, so it reads one row per file.
+// Both read the per-file relation, so a container counts and sizes once.
 function fetchSunburstRows(ctx, { foldersOnly, pathWhere }) {
   const gcExpr = ctx.sql.groupCol();
+  const src    = ctx.sql.perFile(pathWhere);
   return foldersOnly
     ? ctx.queryRows(`
         SELECT regexp_extract("path"::VARCHAR, '^(.*)/[^/]+$', 1) AS path,
                ${gcExpr} AS __group__,
                COUNT(DISTINCT "path")::INTEGER AS __n__,
                SUM("size_bytes")::BIGINT AS __size__
-        FROM ${ctx.sql.perFile(pathWhere)}
+        FROM ${src}
         GROUP BY 1, 2
       `)
     : ctx.queryRows(`
-        SELECT DISTINCT "path" AS path, ${gcExpr} AS __group__, "size_bytes"::BIGINT AS __size__
-        FROM pp_data ${pathWhere}
+        SELECT "path", ${gcExpr} AS __group__, "size_bytes"::BIGINT AS __size__
+        FROM ${src}
       `);
 }
 
