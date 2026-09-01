@@ -133,11 +133,7 @@ class Project:
         )
         self.metadata = config.metadata.populate_from_project(self)
 
-        processors = discover_processor_plugins()
-        if config.processors_included:
-            processors = [p for p in processors if p.NAME in config.processors_included]
-        elif config.processors_excluded:
-            processors = [p for p in processors if p.NAME not in config.processors_excluded]
+        processors = _filter_processors(discover_processor_plugins(), config)
 
         logger.info("Input:      %s", ", ".join(str(p) for p in self.paths))
         logger.info("Output:     %s", self.output_path)
@@ -194,6 +190,8 @@ class Project:
         if config.parquet_row_group_size is not None:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
 
+        expected_parts = [Path(p) for p in stats.pop("part_paths", [])]  # not persisted metadata
+
         if stats:
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
@@ -206,14 +204,23 @@ class Project:
         saved = False
 
         if records_df is None:
-            parts_on_disk = sorted(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else []
-            if not parts_on_disk:
+            parts_on_disk = set(parts_dir.glob("part_*.parquet")) if parts_dir.exists() else set()
+            stale = parts_on_disk - set(expected_parts)
+            missing = set(expected_parts) - parts_on_disk
+            if stale:
+                logger.warning("Project Core: ignoring %d unexpected leftover part file(s) in '%s'",
+                               len(stale), parts_dir)
+            if missing:
+                logger.warning("Project Core: %d expected part file(s) are missing from '%s'; output may be incomplete",
+                               len(missing), parts_dir)
+            parts_to_save = sorted(p for p in expected_parts if p in parts_on_disk)
+            if not parts_to_save:
                 logger.warning("Project Core: No files found/processed.")
                 return
-            logger.info("Project Core: streaming %d parts → '%s'", len(parts_on_disk), self.output_path)
+            logger.info("Project Core: streaming %d parts → '%s'", len(parts_to_save), self.output_path)
             try:
                 processing.save_parquet_from_parts(
-                    parts_on_disk, self.output_path, self.metadata, **rgs_kwargs
+                    parts_to_save, self.output_path, self.metadata, **rgs_kwargs
                 )
                 processing.cleanup_chunks_dir(parts_dir)
                 saved = True
@@ -234,6 +241,13 @@ class Project:
         if saved:
             _log_privacy_disclosure(self.metadata.privacy_summary)
             logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
+            n_failed = stats.get("n_images_failed", 0)
+            if n_failed:
+                logger.warning(_output_log_style(
+                    "%d image(s) failed and are missing from the table - see errors/warnings "
+                    "above; try raising --mb-per-task or lowering --max-workers.",
+                    fg="red", bold=True,
+                ), n_failed)
 
 
     def get_name(self) -> str:
@@ -311,7 +325,12 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
         return f"{m}m {sec:02d}s" if m < 60 else f"{m // 60}h {m % 60:02d}m"
 
     throughput = n_files / wall_s if wall_s > 0 else 0.0
-    logger.info("Done:       %d files in %s  ·  %.1f files/s", n_files, _fmt_s(wall_s), throughput)
+    n_images = stats.get("n_images_processed", 0) + stats.get("n_images_failed", 0)
+    if n_images > n_files:
+        logger.info("Done:       %d files x %d images in %s  ·  %.1f files/s",
+                    n_files, n_images, _fmt_s(wall_s), throughput)
+    else:
+        logger.info("Done:       %d files in %s  ·  %.1f files/s", n_files, _fmt_s(wall_s), throughput)
 
     total_cpu = load_s + sum(proc_s.values())
     logger.debug("processing stats: wall=%s cpu=%s tasks=%d workers=%d",
@@ -319,6 +338,15 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
     for stage, cpu_s in ([("loading", load_s)] + list(proc_s.items())):
         logger.debug("  %-20s %s  (%.1f s/file)", stage, _fmt_s(cpu_s),
                      cpu_s / n_files if n_files else 0)
+
+
+def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
+    """Apply config.processors_included/excluded; included takes precedence over excluded."""
+    if config.processors_included:
+        return [p for p in processors if p.NAME in config.processors_included]
+    if config.processors_excluded:
+        return [p for p in processors if p.NAME not in config.processors_excluded]
+    return processors
 
 
 def _resolve_extensions(

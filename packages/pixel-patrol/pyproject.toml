@@ -12,7 +12,6 @@ requires-python = ">=3.11"
 
 dependencies = [
     "pixel-patrol-base==0.8.0",
-    "pixel-patrol-image==0.8.0",
     "pixel-patrol-loader-bio==0.8.0",
 ]
 
@@ -35,7 +34,6 @@ dev = [
 
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }
-pixel-patrol-image = { path = "../pixel-patrol-image" }
 pixel-patrol-loader-bio = { path = "../pixel-patrol-loader-bio" }
 
 [tool.setuptools.package-data]

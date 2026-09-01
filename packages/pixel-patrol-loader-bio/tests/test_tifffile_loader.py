@@ -1,5 +1,6 @@
 """Tests for :class:`TifffileLoader`."""
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +60,19 @@ def test_read_header_multi_series(tmp_path: Path, loader):
     assert info.n_images == 2
 
 
+def test_read_header_multi_series_varying_size_uses_largest(tmp_path: Path, loader):
+    path = tmp_path / "multi_varying.tif"
+    small = np.zeros((2, 4, 4), dtype=np.uint8)
+    big = np.zeros((2, 16, 16), dtype=np.uint8)
+    with tifffile.TiffWriter(path) as tw:
+        tw.write(small, metadata={"axes": "CYX"})
+        tw.write(big, metadata={"axes": "CYX"})
+
+    info = loader.read_header(path)
+    assert info.shape == (2, 16, 16)
+    assert info.n_images == 2
+
+
 def test_load_multi_series_load_range(tmp_path: Path, loader):
     path = tmp_path / "multi.tif"
     a = np.zeros((2, 4, 4), dtype=np.uint8)
@@ -71,6 +85,32 @@ def test_load_multi_series_load_range(tmp_path: Path, loader):
     assert set(results.keys()) == {"0", "1"}
     np.testing.assert_array_equal(results["0"].data.compute(), a)
     np.testing.assert_array_equal(results["1"].data.compute(), b)
+
+
+def test_load_range_one_bad_series_does_not_lose_its_siblings(tmp_path: Path, loader, monkeypatch):
+    path = tmp_path / "multi3.tif"
+    a = np.zeros((2, 4, 4), dtype=np.uint8)
+    b = np.ones((2, 4, 4), dtype=np.uint8)
+    c = np.full((2, 4, 4), 2, dtype=np.uint8)
+    with tifffile.TiffWriter(path) as tw:
+        tw.write(a, metadata={"axes": "CYX"})
+        tw.write(b, metadata={"axes": "CYX"})
+        tw.write(c, metadata={"axes": "CYX"})
+
+    real_build_record = TifffileLoader._build_record
+
+    def flaky_build_record(tf, series_index):
+        if series_index == 1:
+            raise RuntimeError("simulated decode failure")
+        return real_build_record(tf, series_index)
+
+    monkeypatch.setattr(TifffileLoader, "_build_record", staticmethod(flaky_build_record))
+
+    results = dict(loader.load_range(path, 0, 3))
+    assert set(results.keys()) == {"0", "1", "2"}
+    assert results["1"] is None
+    np.testing.assert_array_equal(results["0"].data.compute(), a)
+    np.testing.assert_array_equal(results["2"].data.compute(), c)
 
 
 def test_dask_chunks_reasonable(tmp_path: Path, loader):
@@ -100,7 +140,7 @@ def test_load_2d_no_axes_metadata(tmp_path: Path, loader):
     assert "Y" in rec.dim_order or len(rec.dim_order) == 2
 
 
-def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader):
+def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader, caplog):
     """Regression test: da.from_zarr fails for zarr arrays extracted from a Group
     (multiscale OME-TIFF store), silently falling back to series.asarray() which
     loads the entire array into memory.  da.from_array must be used instead."""
@@ -114,23 +154,14 @@ def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader):
         tif.write(im, subifds=1, tile=(tile, tile), **opts)
         tif.write(im[:, ::2, ::2], subfiletype=1, tile=(tile, tile), **opts)
 
-    # Confirm the TIFF has multiple resolution levels (triggers the multiscale
-    # zarr store, which is the path that previously caused the failure).
     with tifffile.TiffFile(path) as tf:
         assert len(tf.series[0].levels) > 1, "fixture must produce a multiscale series"
 
-    rec = loader.load(path)
+    with caplog.at_level(logging.WARNING):
+        rec = loader.load(path)
 
-    # Result must be a lazy dask array, not an in-memory numpy array.
+    assert "aszarr/Zarr failed" not in caplog.text, "must not silently fall back to eager load"
+
     import dask.array as da
     assert isinstance(rec.data, da.Array), "load() must return a lazy dask array"
-
-    # Chunks should reflect tiling: one chunk per channel, one tile per spatial chunk.
-    # A single-chunk array (shape == chunk shape) means the fallback fired and the
-    # entire image was loaded into memory.
-    assert rec.data.chunks[0] == (1,) * n_channels, "channel dim must be chunked per page"
-    assert rec.data.chunks[1][0] == tile, "Y dim must be chunked at tile size"
-    assert rec.data.chunks[2][0] == tile, "X dim must be chunked at tile size"
-
-    # Data must round-trip correctly.
     np.testing.assert_array_equal(rec.data.compute(), im)

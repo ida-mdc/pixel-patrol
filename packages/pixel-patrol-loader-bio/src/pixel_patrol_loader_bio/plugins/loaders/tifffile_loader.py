@@ -142,10 +142,8 @@ def _dask_from_series(series: tifffile.TiffPageSeries) -> da.Array:
         if isinstance(za, zarr.Group):
             # OME-TIFFs expose a multiscale group; '0' is the full-resolution array.
             za = za['0']
-        # da.from_zarr re-opens za.store via zarr.open(), which returns the Group root
-        # for multiscale stores rather than the level-0 array, causing a failure.
-        # da.from_array avoids this by using the zarr array's __getitem__ directly.
-        return da.from_array(za, chunks=za.chunks)
+        # da.from_array avoids zarr.open() re-resolving the store to a Group; "auto" regroups tiny chunks.
+        return da.from_array(za, chunks="auto")
     except Exception as e:
         logger.warning(
             "tifffile aszarr/Zarr failed (%s); falling back to in-memory array + Dask auto chunks.",
@@ -172,7 +170,7 @@ class TifffileLoader:
         return False
 
     def read_header(self, file_path: Path) -> FileInfo:
-        """Read file header; return shape/dtype/dim_order of the first series plus total series count."""
+        """Read file header; return shape/dtype/dim_order of the largest of the first few series, plus total series count."""
         try:
             tf = tifffile.TiffFile(file_path)
         except Exception as e:
@@ -181,11 +179,17 @@ class TifffileLoader:
             if not tf.series:
                 raise ValueError(f"No series found in TIFF file: {file_path}")
             n_images = len(tf.series)
-            meta = _extract_metadata(tf, tf.series[0], 0)
-            meta = _normalize_metadata(meta)
-            shape = tuple(int(x) for x in meta["shape"])
-            dtype = np.dtype(meta.get("dtype", "float32"))
-            return FileInfo(shape=shape, dtype=dtype, dim_order=meta["dim_order"], n_images=n_images)
+            best_nbytes = -1
+            shape = dtype = dim_order = None
+            for i in range(min(3, n_images)):
+                meta = _normalize_metadata(_extract_metadata(tf, tf.series[i], i))
+                candidate_shape = tuple(int(x) for x in meta["shape"])
+                candidate_dtype = np.dtype(meta.get("dtype", "float32"))
+                nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
+                if nbytes > best_nbytes:
+                    best_nbytes = nbytes
+                    shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+            return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
         finally:
             tf.close()
 
@@ -212,7 +216,11 @@ class TifffileLoader:
             if not tf.series:
                 raise ValueError(f"No series found in TIFF file: {file_path}")
             for i in range(start, min(stop, len(tf.series))):
-                yield str(i), self._build_record(tf, i)
+                try:
+                    yield str(i), self._build_record(tf, i)
+                except Exception as e:
+                    logger.warning("TifffileLoader: failed to read series %d in '%s': %s", i, file_path, e)
+                    yield str(i), None
         finally:
             tf.close()
 

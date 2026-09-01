@@ -12,8 +12,7 @@ from typing import Dict
 import numpy as np
 
 from pixel_patrol_base.core.record import record_from
-from pixel_patrol_image.plugins.processors.raster_image_processor import (
-    CompressionMetricsProcessor,
+from pixel_patrol_base.plugins.processors.raster_image_processor import (
     QualityMetricsProcessor,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
@@ -30,7 +29,6 @@ _PROCESSOR_GROUPS = [
     BasicMetricsProcessor(),
     QualityMetricsProcessor(),
     HistogramProcessor(),
-    CompressionMetricsProcessor(),
 ]
 
 

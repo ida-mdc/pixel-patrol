@@ -5,8 +5,7 @@ import pytest
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.record import record_from
-from pixel_patrol_image.plugins.processors.raster_image_processor import (
-    CompressionMetricsProcessor,
+from pixel_patrol_base.plugins.processors.raster_image_processor import (
     QualityMetricsProcessor,
 )
 from pixel_patrol_base.plugins.processors.raster_processor import (
@@ -43,6 +42,18 @@ def _chunk(proc, np_arr, dim_order_str, origin=None):
     return row
 
 
+def _blurred(sharp):
+    """Box-blur a 2-D float32 array 8 times to produce a heavily blurred version."""
+    b = sharp.copy()
+    for _ in range(8):
+        b[1:-1, 1:-1] = (
+            b[:-2, :-2] + b[:-2, 1:-1] + b[:-2, 2:] +
+            b[1:-1, :-2] + b[1:-1, 1:-1] + b[1:-1, 2:] +
+            b[2:, :-2]  + b[2:, 1:-1]  + b[2:, 2:]
+        ) / 9.0
+    return b
+
+
 # ---------------------------------------------------------------------------
 # Output keys
 # ---------------------------------------------------------------------------
@@ -61,8 +72,9 @@ def test_histogram_processor_keys(hist_proc):
 
 def test_quality_processor_keys(quality_proc):
     row = _chunk(quality_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("michelson_contrast", "mscn_variance", "texture_heterogeneity", "laplacian_variance"):
-        assert k in row, f"Missing key: {k}"
+    keys = set(row.keys())
+    assert {"laplacian_variance", "spectral_slope", "dark_clipping_fraction", "bright_clipping_fraction"} <= keys
+    assert not keys & {"ringing_index", "jpeg_block_ratio", "estimated_noise_std", "min_value_pixel_fraction", "fraction_at_image_max", "noise_mad"}
 
 
 # ---------------------------------------------------------------------------
@@ -99,9 +111,7 @@ def test_multi_dim_chunk_reduces_over_all_dims(proc):
 def test_lowercase_dim_order(quality_proc):
     data = np.random.default_rng(0).integers(10, 200, (8, 8), dtype=np.uint8).astype(np.float32)
     row = _chunk(quality_proc, data, "yx")
-    assert np.isfinite(row["michelson_contrast"])
-    assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["texture_heterogeneity"])
+    assert np.isfinite(row["laplacian_variance"])
 
 
 # ---------------------------------------------------------------------------
@@ -129,8 +139,6 @@ def test_histogram_uint8_bins(hist_proc):
     counts = row["histogram_counts"]
     assert len(counts) == HISTOGRAM_BINS
     assert int(counts.sum()) == 6
-    # Integer span (255) < bin count, so the range widens to exactly HISTOGRAM_BINS:
-    # bins are one intensity level wide and each value lands in its own bin (no comb).
     assert row["histogram_min"] == 0.0
     assert row["histogram_max"] == float(HISTOGRAM_BINS)
     for v in (0, 50, 100, 128, 200, 255):
@@ -138,8 +146,6 @@ def test_histogram_uint8_bins(hist_proc):
 
 
 def test_histogram_uint8_narrow_span_anchors_to_dtype(hist_proc):
-    # Narrow uint8 span (10..20) widens to the dtype range [0, 256), not [10, 266) -
-    # bin edges stay inside the data type, and each value still lands in its own bin.
     data = np.array([[10, 15, 20], [12, 18, 11]], dtype=np.uint8)
     row = _chunk(hist_proc, data, "YX")
     assert row["histogram_min"] == 0.0
@@ -149,8 +155,6 @@ def test_histogram_uint8_narrow_span_anchors_to_dtype(hist_proc):
 
 
 def test_histogram_uint16_narrow_span_stays_tight(hist_proc):
-    # A narrow span in a wide dtype widens by exactly HISTOGRAM_BINS from s_min and
-    # stays well inside the dtype, so it is not forced back to 0.
     data = np.array([[100, 110, 120], [105, 115, 101]], dtype=np.uint16)
     row = _chunk(hist_proc, data, "YX")
     assert row["histogram_min"] == 100.0
@@ -158,7 +162,6 @@ def test_histogram_uint16_narrow_span_stays_tight(hist_proc):
 
 
 def test_histogram_int_wide_span_keeps_true_range(hist_proc):
-    # Integer span ≥ bin count: bins are already ≥ 1 wide, so the true range is kept.
     data = np.arange(HISTOGRAM_BINS * 4, dtype=np.uint16).reshape(2, -1)
     row = _chunk(hist_proc, data, "YX")
     assert row["histogram_min"] == 0.0
@@ -171,49 +174,19 @@ def test_histogram_nan_count(hist_proc):
 
 
 # ---------------------------------------------------------------------------
-# Compression metrics
+# laplacian_variance
 # ---------------------------------------------------------------------------
 
-def test_compression_absent_from_basic(proc):
-    data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
-    row = _chunk(proc, data, "YX")
-    assert "blocking_index" not in row
-    assert "ringing_index" not in row
-
-
-def test_compression_finite_when_enabled():
-    data = np.linspace(0, 1, 64 * 64, dtype=np.float32).reshape(64, 64)
-    row = _chunk(CompressionMetricsProcessor(), data, "YX")
-    assert np.isfinite(row["blocking_index"])
-    assert np.isfinite(row["ringing_index"])
-
-
-# ---------------------------------------------------------------------------
-# Quality metrics
-# ---------------------------------------------------------------------------
-
-def test_quality_metrics_finite(quality_proc):
+def test_laplacian_variance_finite(quality_proc):
     data = np.linspace(0, 1, 40 * 40, dtype=np.float32).reshape(40, 40)
-    row = _chunk(quality_proc, data, "YX")
-    assert np.isfinite(row["michelson_contrast"])
-    assert np.isfinite(row["mscn_variance"])
-    assert np.isfinite(row["texture_heterogeneity"])
-    assert np.isfinite(row["laplacian_variance"])
+    assert np.isfinite(_chunk(quality_proc, data, "YX")["laplacian_variance"])
 
 
-def test_laplacian_variance_sharper_image_scores_higher(quality_proc):
+def test_laplacian_variance_sharper_scores_higher(quality_proc):
     rng = np.random.default_rng(42)
     sharp = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    # Blur by repeated box-averaging - reduces second-derivative energy.
-    blurred = sharp.copy()
-    for _ in range(8):
-        blurred[1:-1, 1:-1] = (
-            blurred[:-2, :-2] + blurred[:-2, 1:-1] + blurred[:-2, 2:] +
-            blurred[1:-1, :-2] + blurred[1:-1, 1:-1] + blurred[1:-1, 2:] +
-            blurred[2:, :-2]  + blurred[2:, 1:-1]  + blurred[2:, 2:]
-        ) / 9.0
-    row_sharp   = _chunk(quality_proc, sharp,   "YX")
-    row_blurred = _chunk(quality_proc, blurred, "YX")
+    row_sharp   = _chunk(quality_proc, sharp,          "YX")
+    row_blurred = _chunk(quality_proc, _blurred(sharp), "YX")
     assert row_sharp["laplacian_variance"] > row_blurred["laplacian_variance"]
 
 
@@ -222,36 +195,116 @@ def test_laplacian_variance_small_image_returns_nan(quality_proc):
     assert np.isnan(row.get("laplacian_variance", np.nan))
 
 
-def test_michelson_contrast_high_frequency_scores_higher(quality_proc):
-    # Checkerboard has local range = 1 in every 3×3 window; a smooth gradient
-    # has tiny local range per window, so the ratio to global std is much smaller.
-    checker = (np.indices((32, 32), dtype=np.float32).sum(axis=0) % 2)
-    smooth  = np.linspace(0, 1, 32 * 32, dtype=np.float32).reshape(32, 32)
-    row_checker = _chunk(quality_proc, checker, "YX")
-    row_smooth  = _chunk(quality_proc, smooth,  "YX")
-    assert row_checker["michelson_contrast"] > row_smooth["michelson_contrast"]
+def test_laplacian_variance_flat_image_scores_zero(quality_proc):
+    data = np.full((8, 8), 255, dtype=np.uint8)
+    assert _chunk(quality_proc, data, "YX")["laplacian_variance"] == pytest.approx(0.0, abs=1e-6)
 
 
-def test_mscn_variance_noise_scores_higher_than_gradient(quality_proc):
-    # For a linear gradient each pixel equals its 3×3 local mean exactly, so
-    # every MSCN coefficient is zero and variance is exactly zero.
-    gradient = np.linspace(0, 255, 32 * 32, dtype=np.float32).reshape(32, 32)
-    noise    = np.random.default_rng(0).integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    row_gradient = _chunk(quality_proc, gradient, "YX")
-    row_noise    = _chunk(quality_proc, noise,    "YX")
-    assert row_noise["mscn_variance"] > row_gradient["mscn_variance"]
+# ---------------------------------------------------------------------------
+# spectral_slope
+# ---------------------------------------------------------------------------
+
+def test_spectral_slope_finite(quality_proc):
+    data = np.random.default_rng(0).integers(10, 200, (64, 64), dtype=np.uint8).astype(np.float32)
+    assert np.isfinite(_chunk(quality_proc, data, "YX")["spectral_slope"])
 
 
-def test_texture_heterogeneity_patchy_scores_higher(quality_proc):
-    # Patchy image: flat top half (local std = 0) + noisy bottom half (local std > 0)
-    # → wide spread of local stds → high CoV. Uniform noise → consistent local stds → low CoV.
-    rng  = np.random.default_rng(1)
-    noise = rng.integers(0, 256, (32, 32), dtype=np.uint8).astype(np.float32)
-    patchy = noise.copy()
-    patchy[:16, :] = 0.0
-    row_patchy  = _chunk(quality_proc, patchy, "YX")
-    row_uniform = _chunk(quality_proc, noise,  "YX")
-    assert row_patchy["texture_heterogeneity"] > row_uniform["texture_heterogeneity"]
+def test_spectral_slope_small_image_returns_nan(quality_proc):
+    row = _chunk(quality_proc, np.ones((16, 16), dtype=np.float32), "YX")
+    assert np.isnan(row.get("spectral_slope", np.nan))
+
+
+def test_spectral_slope_blur_steepens(quality_proc):
+    # Blur concentrates power at low frequencies -> more negative slope.
+    rng = np.random.default_rng(3)
+    sharp = rng.integers(0, 256, (64, 64), dtype=np.uint8).astype(np.float32)
+    row_s = _chunk(quality_proc, sharp,          "YX")
+    row_b = _chunk(quality_proc, _blurred(sharp), "YX")
+    assert row_b["spectral_slope"] < row_s["spectral_slope"]
+
+
+def test_spectral_slope_negative_for_natural_content(quality_proc):
+    # Natural images have 1/f^alpha spectra with alpha > 0, so slope is negative.
+    rng = np.random.default_rng(5)
+    data = rng.integers(0, 256, (64, 64), dtype=np.uint8).astype(np.float32)
+    # Even random noise has slope close to 0 (white), so blur it slightly to
+    # get a realistic image-like spectrum that's clearly negative.
+    blurred = _blurred(data)
+    assert _chunk(quality_proc, blurred, "YX")["spectral_slope"] < 0
+
+
+# ---------------------------------------------------------------------------
+# Leading dims / edge cases
+# ---------------------------------------------------------------------------
+
+def test_quality_metrics_leading_dims_average(quality_proc):
+    # Two identical channels: nanmean over leading dim must equal the single-slice result.
+    rng = np.random.default_rng(7)
+    single = rng.integers(10, 245, (64, 64), dtype=np.uint8).astype(np.float32)
+    stack = np.stack([single, single])  # (2, 64, 64)
+    row_2d = _chunk(quality_proc, single, "YX")
+    row_3d = _chunk(quality_proc, stack, "CYX")
+    assert row_3d["laplacian_variance"] == pytest.approx(row_2d["laplacian_variance"], rel=1e-4)
+    assert row_3d["spectral_slope"] == pytest.approx(row_2d["spectral_slope"], rel=1e-4)
+
+
+def test_quality_metrics_all_nan_returns_nan(quality_proc):
+    data = np.full((64, 64), np.nan, dtype=np.float32)
+    row = _chunk(quality_proc, data, "YX")
+    assert np.isnan(row["laplacian_variance"])
+    assert np.isnan(row["spectral_slope"])
+
+
+# ---------------------------------------------------------------------------
+# dark_clipping_fraction
+# ---------------------------------------------------------------------------
+
+def test_dark_clipping_fraction_counts_zero_pixels(quality_proc):
+    data = np.array([[0, 0, 255, 255], [0, 255, 255, 255]], dtype=np.uint8)
+    assert _chunk(quality_proc, data, "YX")["dark_clipping_fraction"] == pytest.approx(3 / 8, rel=1e-5)
+
+
+def test_dark_clipping_fraction_signed_int(quality_proc):
+    # int16 min is -32768; pixels at that value should be counted.
+    data = np.zeros((8, 8), dtype=np.int16)
+    data[0, 0] = -32768
+    data[0, 1] = -32768
+    assert _chunk(quality_proc, data, "YX")["dark_clipping_fraction"] == pytest.approx(2 / 64, rel=1e-5)
+
+
+def test_dark_clipping_fraction_nan_for_float(quality_proc):
+    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
+    assert np.isnan(_chunk(quality_proc, data, "YX")["dark_clipping_fraction"])
+
+
+# ---------------------------------------------------------------------------
+# bright_clipping_fraction
+# ---------------------------------------------------------------------------
+
+def test_bright_clipping_fraction_uint8(quality_proc):
+    data = np.array([[255, 255, 0, 0], [255, 0, 0, 0]], dtype=np.uint8)
+    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(3 / 8, rel=1e-5)
+
+
+def test_bright_clipping_fraction_12bit_in_uint16(quality_proc):
+    # 12-bit data in uint16: image max is 4095, not 65535 (dtype ceiling).
+    # bright_clipping_fraction uses dtype ceiling, so this should be 0.
+    data = np.zeros((8, 8), dtype=np.uint16)
+    data[0, 0] = 4095
+    data[0, 1] = 4095
+    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(0.0, rel=1e-5)
+
+
+def test_bright_clipping_fraction_uint16_at_ceiling(quality_proc):
+    data = np.zeros((8, 8), dtype=np.uint16)
+    data[0, 0] = 65535
+    data[0, 1] = 65535
+    assert _chunk(quality_proc, data, "YX")["bright_clipping_fraction"] == pytest.approx(2 / 64, rel=1e-5)
+
+
+def test_bright_clipping_fraction_nan_for_float(quality_proc):
+    data = np.linspace(0, 1, 8 * 8, dtype=np.float32).reshape(8, 8)
+    assert np.isnan(_chunk(quality_proc, data, "YX")["bright_clipping_fraction"])
 
 
 # ---------------------------------------------------------------------------
@@ -276,5 +329,3 @@ def test_get_aggregation_mean_is_correct(proc):
 
 def test_get_aggregation_histogram_callable(hist_proc):
     assert callable(hist_proc.get_aggregation("histogram_counts"))
-
-

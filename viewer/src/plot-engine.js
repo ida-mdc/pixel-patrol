@@ -17,7 +17,7 @@
 
 // plot-utils is bundled into the same app chunk (not a plugin), so importing it
 // here is safe in offline mode - only package plugins can't use sibling imports.
-import { statTable } from './plot-utils.js';
+import { statTable, appendSideInfoRow } from './plot-utils.js';
 export { statTable };
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -231,6 +231,12 @@ const STAT_SELECT = (q, num) => `
  *   layout?           extra Plotly layout merged over the computed one (height,
  *                     margin, title font, …) - for compact grid cells
  *   divStyle?         wrapper element style string (e.g. flex sizing in a grid)
+ *   sideInfo?         short markdown note specific to this one plot (e.g. what this
+ *                     metric means) - rendered in a column beside the plot, always
+ *                     visible. Distinct from the widget-level ⓘ panel, which explains
+ *                     the widget as a whole and can't say something different per plot.
+ *                     Pass a string, or an object to also show a ▲/▼ direction
+ *                     badge - see appendSideInfoRow in plot-utils.js.
  *
  * Returns true if anything was drawn, false otherwise.
  */
@@ -242,6 +248,7 @@ export async function renderDistribution(container, ctx, spec) {
     maxRawPoints = MAX_VIOLIN_POINTS, series, categoriesOrder = null,
     catLabelFn = (v) => v, stats: precomputed = null, isStale = () => false,
     allPointsBelow = VIOLIN_ALL_POINTS_BELOW, layout: layoutOverride = {}, divStyle = '',
+    sideInfo = null,
   } = spec;
   const { table, where } = source;
 
@@ -311,7 +318,8 @@ export async function renderDistribution(container, ctx, spec) {
   };
   // Keep the computed title text when the caller only overrides its styling (font, …).
   if (title && layoutOverride.title) finalLayout.title = { text: title, ...layoutOverride.title };
-  const plotDiv = ctx.plot.append(container, traces, finalLayout, divStyle);
+  const plotContainer = (sideInfo && ctx.state.showInfo) ? appendSideInfoRow(container, sideInfo) : container;
+  const plotDiv = ctx.plot.append(plotContainer, traces, finalLayout, divStyle);
 
   // Significance only makes sense with one violin/box per X category: either
   // category mode, or a single color series. Keyed on raw category values;

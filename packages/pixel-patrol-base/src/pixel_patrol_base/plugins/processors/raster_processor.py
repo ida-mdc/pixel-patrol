@@ -20,8 +20,8 @@ from pixel_patrol_base.core.specs import RecordSpec
 @dataclass
 class MetricContext:
     """Per-chunk compute context shared across all metrics for one run_chunk call."""
-    s_min: float
-    s_max: float
+    s_min: float = 0.0
+    s_max: float = 0.0
     cache: Dict = field(default_factory=dict)
 
 

@@ -2,13 +2,13 @@ import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPale
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
 import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
-import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, LEGEND, LAYOUT } from './plot-utils.js';
+import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
 import { META_COLS } from './schema.js';
 import { updateFilteredInfo } from './controls.js';
 import { state } from './state.js';
 import { writeUrlParams } from './url-params.js';
-import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
 
@@ -307,12 +307,7 @@ async function renderPluginBody(plugin, body, ctx) {
  * rendered as a full, always-expanded card.
  */
 async function renderClassic(container, activePlugins, ctx) {
-  const grouped = new Map();
-  for (const plugin of activePlugins) {
-    const grp = pluginGroup(plugin);
-    if (!grouped.has(grp)) grouped.set(grp, []);
-    grouped.get(grp).push(plugin);
-  }
+  const grouped = groupPlugins(activePlugins);
   const orderedGroups = orderedGroupNames(activePlugins);
 
   for (const groupName of orderedGroups) {
@@ -332,12 +327,7 @@ async function renderClassic(container, activePlugins, ctx) {
 // Plugins ordered by their group's canonical order, so related tiles cluster
 // in the gallery even though the section headers are dropped.
 function orderActivePlugins(activePlugins) {
-  const grouped = new Map();
-  for (const p of activePlugins) {
-    const g = pluginGroup(p);
-    if (!grouped.has(g)) grouped.set(g, []);
-    grouped.get(g).push(p);
-  }
+  const grouped = groupPlugins(activePlugins);
   const ordered = [];
   for (const g of orderedGroupNames(activePlugins)) ordered.push(...grouped.get(g));
   return ordered;
@@ -563,7 +553,7 @@ function createCard(label, info, scope) {
   if (info) {
     panel = document.createElement('div');
     panel.className = 'widget-info-panel';
-    panel.hidden = true;
+    panel.hidden = !state.showInfo;
     panel.innerHTML = renderInfoHtml(info);
 
     const btn = document.createElement('button');
@@ -571,8 +561,12 @@ function createCard(label, info, scope) {
     btn.className = 'widget-info-btn';
     btn.title = 'About this widget';
     btn.setAttribute('aria-label', 'About this widget');
+    btn.setAttribute('aria-pressed', String(!panel.hidden));
     btn.innerHTML = '<span class="widget-info-icon" aria-hidden="true">ⓘ</span>';
-    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    btn.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      btn.setAttribute('aria-pressed', String(!panel.hidden));
+    });
     titleWrap.appendChild(btn);
   }
 
@@ -591,28 +585,8 @@ function createCard(label, info, scope) {
   return div;
 }
 
-/** Minimal markdown → HTML converter for info panel text. */
-function renderInfoHtml(text) {
-  let html = '';
-  for (const para of text.trim().split(/\n\n+/)) {
-    const lines = para.split('\n');
-    const bullets = lines.filter(l => /^\s*-\s/.test(l));
-    const prose   = lines.filter(l => !/^\s*-\s/.test(l));
-    if (prose.length)   html += `<p>${prose.map(mdInline).join('<br>')}</p>`;
-    if (bullets.length) html += `<ul>${bullets.map(l => `<li>${mdInline(l.replace(/^\s*-\s*/, ''))}</li>`).join('')}</ul>`;
-  }
-  return html;
-}
-
 function sortGroups(groups) {
   const allNumeric = groups.length > 0 && groups.every(g => g !== '' && !isNaN(Number(g)));
   if (allNumeric) return [...groups].sort((a, b) => Number(a) - Number(b));
   return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-}
-
-function mdInline(t) {
-  return t
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>');
 }

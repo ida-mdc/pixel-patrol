@@ -8,10 +8,13 @@ from tqdm import tqdm as _tqdm
 # numcodecs/checksum32.py prepends its own 'once' filter right before warning,
 # so filterwarnings("ignore") can't win. Patching showwarning is the only fix.
 _sw = warnings.showwarning
-warnings.showwarning = lambda m, c, f, l, *a, **kw: (
-    None if c is DeprecationWarning and "numcodecs" in str(f)
-    else _sw(m, c, f, l, *a, **kw)
-)
+def _filtered_showwarning(m, c, f, l, *a, **kw):
+    if c is DeprecationWarning and "numcodecs" in str(f):
+        return
+    if c is UserWarning and "Could not parse tiff pixel size" in str(m):
+        return
+    _sw(m, c, f, l, *a, **kw)
+warnings.showwarning = _filtered_showwarning
 
 
 class _TqdmHandler(logging.StreamHandler):

@@ -1,7 +1,7 @@
 import { state, setState, resetState, emit } from './state.js';
 import { BLOB_COLS } from './schema.js';
 import { getPaletteNames } from './colors.js';
-import { pluginGroup, orderedGroupNames } from './plugin-groups.js';
+import { orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { formatFrozenSidebarHtml } from './export-snapshot.js';
 import { escapeHtml } from './plot-utils.js';
 
@@ -25,21 +25,44 @@ let syncViewToggle = () => {};
 export function initStaticUi() {
   const viewBtnOverview = el('view-btn-overview');
   const viewBtnFull     = el('view-btn-full');
+  // Master info switch only makes sense in Full view - Overview shows tiles,
+  // not cards, so there are no info panels to toggle by default.
+  const infoBtn = el('info-toggle-btn');
   syncViewToggle = () => {
     viewBtnOverview?.setAttribute('aria-pressed', String(state.overviewMode));
     viewBtnFull?.setAttribute('aria-pressed',     String(!state.overviewMode));
+    if (infoBtn) {
+      infoBtn.hidden = state.overviewMode;
+      infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+    }
   };
   if (viewBtnOverview && viewBtnFull) {
     syncViewToggle();
     viewBtnOverview.onclick = () => { if (state.overviewMode) return; state.overviewMode = true;  syncViewToggle(); emit('render'); };
     viewBtnFull.onclick     = () => { if (!state.overviewMode) return; state.overviewMode = false; syncViewToggle(); emit('render'); };
   }
+
+  // Master switch for widget info panels' default open/closed state. Each
+  // card's own ⓘ button still lets a user override this per widget.
+  if (infoBtn) {
+    infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+    infoBtn.onclick = () => {
+      state.showInfo = !state.showInfo;
+      infoBtn.setAttribute('aria-pressed', String(state.showInfo));
+      emit('render');
+    };
+  }
+
   initCollapseToggle('appearance-section-header', 'appearance-section');
   initHeaderPopover('export-menu-btn', 'export-menu-panel');
   initHeaderPopover('feedback-menu-btn', 'feedback-menu-panel');
 }
 
 export function initControls(schema, totalRows, plugins, onExport, canParquet, opts = {}) {
+  // View mode / info toggle may have been overridden by URL params after
+  // initStaticUi() ran with defaults - resync their DOM now.
+  syncViewToggle();
+
   // ── Palette ──────────────────────────────────────────────────────────
   const paletteEl = el('palette-selector');
   paletteEl.innerHTML = getPaletteNames().map(p => opt(p, p)).join('');
@@ -195,12 +218,7 @@ function buildWidgetToggles(plugins, schema) {
     return;
   }
 
-  const grouped = new Map();
-  for (const p of applicable) {
-    const grp = pluginGroup(p);
-    if (!grouped.has(grp)) grouped.set(grp, []);
-    grouped.get(grp).push(p);
-  }
+  const grouped = groupPlugins(applicable);
   const orderedGroups = orderedGroupNames(applicable);
 
   container.innerHTML = orderedGroups.map(g => {
