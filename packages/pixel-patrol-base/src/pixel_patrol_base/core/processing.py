@@ -1258,10 +1258,13 @@ def _coordinate_pipeline(
         "peak_worker_rss_mb":        round(peak_worker_rss_mb, 1),
         "n_memory_pressure_events":  _pause_handler.count,
         "load_cpu_s":                all_timing.get("load", 0.0),
-        "part_paths":                [str(p) for p in writer._part_paths],
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
     result_df = writer.finalize()
+    # After finalize(): it flushes the remaining buffer as one last part, so a
+    # snapshot taken before this point misses that part - and the caller, which
+    # treats anything not listed here as a stale leftover, would discard it.
+    stats["part_paths"] = [str(p) for p in writer._part_paths]
     if result_df is None:
         return None, stats  # parts on disk; caller uses save_parquet_from_parts
     return (result_df if len(result_df) > 0 else None), stats
