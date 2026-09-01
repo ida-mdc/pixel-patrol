@@ -270,14 +270,27 @@ async function prependFractionWarnings(plotRoot, ctx) {
   }
 }
 
-// Dimensions pinned in the sidebar, as display labels: { c: 1 } -> ['C=1'].
-// A pinned dim narrows every point to one slice, exactly like a Slice by toggle.
+// Dimensions pinned in the sidebar. A pinned dim narrows every point to one
+// slice, exactly like a Slice by toggle.
+function fixedDims(ctx) {
+  return Object.fromEntries(
+    Object.entries(ctx.state.dimensions ?? {})
+      .map(([letter, idx]) => [letter, Number(idx)])
+      .filter(([, idx]) => Number.isFinite(idx)));
+}
+
+/** Pinned dims as display labels: { c: 1 } -> ['C=1']. */
 function pinnedDims(ctx) {
-  return Object.entries(ctx.state.dimensions ?? {})
-    .map(([letter, idx]) => [letter, Number(idx)])
-    .filter(([, idx]) => Number.isFinite(idx))
+  return Object.entries(fixedDims(ctx))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([letter, idx]) => `${letter.toUpperCase()}=${idx}`);
+}
+
+// Rows one point is drawn from. The tile preview and the full card share it, so
+// a pinned dimension moves both to the same slice.
+function violinSource(ctx, splitDims) {
+  const parts = ctx.sql.dimSubsetWhere({ fixed: fixedDims(ctx), split: splitDims });
+  return { table: 'pp_all', where: parts.length ? `WHERE ${parts.join(' AND ')}` : '' };
 }
 
 async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
@@ -302,17 +315,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
     { unit: (splitDims.size || pinned.length) ? 'slices' : 'images' });
   if (fractionWarnings) await prependFractionWarnings(plotRoot, ctx);
 
-  const fixed = {};
-  for (const [letter, idxRaw] of Object.entries(ctx.state.dimensions ?? {})) {
-    const idx = Number(idxRaw);
-    if (Number.isFinite(idx)) fixed[letter] = idx;
-  }
-
-  const sourceTable = 'pp_all';
-  // Pin the (fixed ∪ split) aggregation subset: each violin point is one image
-  // aggregate, or one (image × split dim) when slicing is toggled on.
-  const whereParts = ctx.sql.dimSubsetWhere({ fixed, split: splitDims });
-  const combinedWhere = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const { table: sourceTable, where: combinedWhere } = violinSource(ctx, splitDims);
   const gc = gcFn();
 
   // Per-group summary stats (quartiles, min/max, mean) computed entirely in SQL,
@@ -437,7 +440,7 @@ async function violinOverviewPlot(ctx, container, metric) {
   if (!metric) return false;
   return ctx.plot.engine.renderDistribution(container, ctx, {
     numCol: metric,
-    source: { table: 'pp_data', where: ctx.where },
+    source: violinSource(ctx, new Set()),
     catSql: ctx.sql.groupCol(),
     yLabel: ctx.plot.niceName(metric),
     series: { isCategory: true },
