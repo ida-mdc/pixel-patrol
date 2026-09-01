@@ -45,10 +45,7 @@ def _discover_files(
       (e.g. {"zarr"}).  Matching directories are yielded as files and their contents
       are not descended into.
 
-    is_folder_dataset: loader.is_folder_supported - consulted for every directory, so
-      datasets that are plain directories with no telltale suffix are discovered too.
-      A directory it claims is yielded whatever accepted_extensions says, having no
-      meaningful suffix to filter on.
+    is_folder_dataset: callable that returns True for directories that are one dataset.
 
     file_metadata contains all filesystem attributes compatible with the original
     processing output: path, name, type, parent, depth, size_bytes, file_extension,

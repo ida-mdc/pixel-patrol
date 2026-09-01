@@ -48,11 +48,7 @@ class PixelPatrolLoader(Protocol):
     CONTAINER_EXTENSIONS: Set[str]  # always call read_header (n_images > 1, or on-disk size understates uncompressed size)
 
     def is_folder_supported(self, path: Path) -> bool:
-        """True when this directory is one dataset (and must not be descended into).
-
-        Called for every directory scanned - so datasets recognised by their contents,
-        not by a '.zarr'-style suffix, work too. Keep it cheap: no pixel data.
-        """
+        """True when this directory is one dataset (and must not be descended into)."""
         ...
 
     def read_header(self, file_path: Path) -> FileInfo:
