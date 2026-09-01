@@ -1261,9 +1261,7 @@ def _coordinate_pipeline(
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
     result_df = writer.finalize()
-    # After finalize(): it flushes the remaining buffer as one last part, so a
-    # snapshot taken before this point misses that part - and the caller, which
-    # treats anything not listed here as a stale leftover, would discard it.
+    # Snapshot after finalize() so the final flushed part is included.
     stats["part_paths"] = [str(p) for p in writer._part_paths]
     if result_df is None:
         return None, stats  # parts on disk; caller uses save_parquet_from_parts
