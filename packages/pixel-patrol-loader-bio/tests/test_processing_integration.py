@@ -45,6 +45,7 @@ from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.processing import build_records_df, save_parquet_from_parts
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.plugins.processors.raster_processor import BasicMetricsProcessor, HistogramProcessor
 from pixel_patrol_loader_bio.plugins.loaders.tifffile_loader import TifffileLoader
 from pixel_patrol_base.plugins.processors.thumbnail_processor import ThumbnailProcessor
@@ -464,3 +465,42 @@ def test_real_parts_written_and_merged_with_correct_metadata(shared_client, tmp_
     mean_field = schema.field("mean_intensity")
     field_meta = mean_field.metadata or {}
     assert b"description" in field_meta
+
+
+def test_part_paths_lists_every_part_written(shared_client, tmp_path: Path):
+    """stats['part_paths'] must name every part on disk, including the last one.
+
+    The caller discards any part not listed here as a stale leftover, so a
+    missing entry silently drops that part's rows - with no failure reported.
+    The final part is the one at risk: it is flushed by finalize(), after the
+    rest of the stats have been gathered.
+    """
+    images = tmp_path / "images"
+    images.mkdir()
+    rng = np.random.default_rng(0)
+    # Plain 2D frames so each image contributes exactly one row, which makes the
+    # flush arithmetic below exact.
+    n_images = 6
+    for i in range(n_images):
+        tifffile.imwrite(images / f"img_{i}.tif",
+                         rng.integers(0, 255, size=(32, 32), dtype=np.uint8),
+                         photometric="minisblack")
+
+    parts_dir = tmp_path / "parts"
+    # 6 rows at 4 per part: one part spills mid-run and 2 rows are left in the
+    # buffer, so finalize() has a final part to flush. Without that remainder the
+    # bug cannot appear, because there is no last part to omit.
+    config = ProcessingConfig(rows_per_part=4)
+    df, stats = _build([images], config, images, parts_dir=parts_dir)
+
+    assert df is None, "expected the run to spill to parts, not stay in memory"
+    on_disk = set(parts_dir.glob("part_*.parquet"))
+    assert len(on_disk) > 1, "test needs a final part flushed by finalize()"
+    listed = {Path(p) for p in stats["part_paths"]}
+    assert listed == on_disk, f"parts on disk not listed in stats: {sorted(on_disk - listed)}"
+
+    # And the merged output keeps every row those parts hold.
+    out = tmp_path / "out.parquet"
+    written = save_parquet_from_parts(sorted(on_disk), out, ProjectMetadata(project_name="t"))
+    expected = sum(pl.read_parquet(p).height for p in sorted(on_disk))
+    assert written == expected == pl.read_parquet(out).height
