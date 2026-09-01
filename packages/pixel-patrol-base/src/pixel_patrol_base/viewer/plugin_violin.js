@@ -92,7 +92,8 @@ const DISTRIBUTION_HELP = `Plots with ${MAX_VIOLIN_POINTS.toLocaleString()} or f
 
 const GRANULARITY_HELP = 'Use the **Slice by** toggles to control whether each datapoint is a whole-image ' +
   'aggregate (**per image**) or one (image × dimension) combination (**per slice**) - shown by the badge in the ' +
-  'card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
+  'card header. Pinning a dimension in the sidebar does the same, for that one slice. ' +
+  'More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
 
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
@@ -269,6 +270,16 @@ async function prependFractionWarnings(plotRoot, ctx) {
   }
 }
 
+// Dimensions pinned in the sidebar, as display labels: { c: 1 } -> ['C=1'].
+// A pinned dim narrows every point to one slice, exactly like a Slice by toggle.
+function pinnedDims(ctx) {
+  return Object.entries(ctx.state.dimensions ?? {})
+    .map(([letter, idx]) => [letter, Number(idx)])
+    .filter(([, idx]) => Number.isFinite(idx))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([letter, idx]) => `${letter.toUpperCase()}=${idx}`);
+}
+
 async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
   const { q, groupExpr: geFn, groupCol: gcFn } = ctx.sql;
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
@@ -286,7 +297,9 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
   );
   const tot = Number(availRow.total);
   const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
-  dataAvailabilityWarning(plotRoot, counts, tot, { unit: splitDims.size ? 'slices' : 'images' });
+  const pinned = pinnedDims(ctx);
+  dataAvailabilityWarning(plotRoot, counts, tot,
+    { unit: (splitDims.size || pinned.length) ? 'slices' : 'images' });
   if (fractionWarnings) await prependFractionWarnings(plotRoot, ctx);
 
   const fixed = {};
@@ -361,9 +374,10 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
 
-    const granularityDesc = splitDims.size
+    const perPoint = splitDims.size
       ? `one point per (image × ${[...splitDims].map(l => l.toUpperCase()).join(' × ')})`
       : 'one point per image';
+    const granularityDesc = pinned.length ? `${perPoint} at ${pinned.join(', ')}` : perPoint;
 
     for (const { metric, total } of toPlot) {
       const label = niceName(metric);
@@ -462,7 +476,9 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
       // The card header already carries a "🖼️ per image" badge (from `scope: 'image'`
       // above) - keep it in sync with the toggles instead of adding a second badge.
       const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
-      const syncBadge = () => ctx.plot.setScopeBadge(headerBadge, splitDims.size ? 'slice' : 'image');
+      const pinned = pinnedDims(ctx);
+      const syncBadge = () =>
+        ctx.plot.setScopeBadge(headerBadge, (splitDims.size || pinned.length) ? 'slice' : 'image');
       syncBadge();
 
       const draw = async () => {
