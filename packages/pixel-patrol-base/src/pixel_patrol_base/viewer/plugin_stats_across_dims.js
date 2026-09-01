@@ -1,5 +1,9 @@
 import { QUALITY_METRIC_INFO, describeQualityMetric, qualityMetricRank } from './plugin_violin.js';
 
+const MAX_MARKER_POINTS = 300;
+
+const lineMode = (n) => (n > MAX_MARKER_POINTS ? 'lines' : 'lines+markers');
+
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
@@ -271,7 +275,7 @@ async function acrossDimsOverviewPlot(ctx, container, filterMetric, metricPref) 
         { type: 'scatter', mode: 'lines', x: xs, y: ym.map((m, i) => m - ys[i]),
           line: { width: 0 }, fill: 'tonexty', fillcolor: ctx.color.hexToRgba(color, 0.2),
           showlegend: false, hoverinfo: 'skip' },
-        { type: 'scatter', mode: 'lines+markers', name: ctx.groupLabel(g), x: xs, y: ym,
+        { type: 'scatter', mode: lineMode(xs.length), name: ctx.groupLabel(g), x: xs, y: ym,
           line: { color, width: 1.5 }, marker: { size: 3, color }, hoverinfo: 'skip' },
       );
     }
@@ -344,7 +348,7 @@ function renderAggScatter(container, agg, ctx, STATS_DIMS_LAYOUT, appendPlot) {
     traces.push(
       { type:'scatter', x:xVals, y:yUpper, mode:'lines', line:{width:0}, showlegend:false, hoverinfo:'skip' },
       { type:'scatter', x:xVals, y:yLower, mode:'lines', line:{width:0}, fill:'tonexty', fillcolor:rgba, showlegend:false, hoverinfo:'skip' },
-      { type:'scatter', mode:'lines+markers', name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
+      { type:'scatter', mode:lineMode(xVals.length), name:ctx.groupLabel(g), x:xVals, y:yMean, line:{width:2, color}, marker:{size:sizes, color, line:{width:1, color:'white'}}, hovertemplate:'%{text}<extra></extra>', text:hover },
     );
     const retentionHover = gRows.map((r, i) =>
       `<b>${ctx.groupLabel(g)}</b><br>Slice: ${r.x}<br>${ns[i]} of ${nMax} images (${retention[i].toFixed(0)}%)`);
