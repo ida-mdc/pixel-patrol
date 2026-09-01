@@ -205,7 +205,7 @@ function buildToolbar({ view, searchCols, searchHint, isSearching, total }, { on
   clearBtn.addEventListener('click', onClear);
 
   const countLabel = Object.assign(document.createElement('span'), {
-    textContent: `${total.toLocaleString()} ${isSearching ? 'match' : 'image'}${total !== 1 ? 'es' : ''}`,
+    textContent: `${total.toLocaleString()} ${isSearching ? 'match' : 'image'}${total !== 1 ? 's' : ''}`,
   });
   countLabel.style.cssText = 'font-size:13px;color:#6c757d';
 
