@@ -1,5 +1,3 @@
-"""A sub-image that fails to load inside an otherwise-good container must be
-counted as failed, not silently dropped from every count."""
 from __future__ import annotations
 
 from pathlib import Path
