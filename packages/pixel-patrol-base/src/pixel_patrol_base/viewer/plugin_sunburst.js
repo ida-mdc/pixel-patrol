@@ -158,25 +158,12 @@ function buildHierarchy(rows, colorMap, { foldersOnly, sizeMode }) {
     return { path: rel, group: String(r.__group__), n: Number.isFinite(n) ? n : 0 };
   });
 
-  const rootName    = commonRoot ? commonRoot.split(/[/\\]/).filter(Boolean).pop() ?? 'Root' : 'Root';
-  const displayRoot = 'Root';
+  const rootName = commonRoot ? commonRoot.split(/[/\\]/).filter(Boolean).pop() ?? 'Root' : 'Root';
 
-  const nodeCount  = {};
-  const nodeGroups = {};
-  const nodeParent = {};
-  const nodeLabel  = {};
-
-  nodeCount['']  = 0;
-  nodeGroups[''] = new Set();
-  nodeParent[''] = '';
-  nodeLabel['']  = displayRoot;
-
-  if (rootName) {
-    nodeCount[rootName]  = 0;
-    nodeGroups[rootName] = new Set();
-    nodeParent[rootName] = '';
-    nodeLabel[rootName]  = rootName;
-  }
+  const nodeCount  = { [rootName]: 0 };
+  const nodeGroups = { [rootName]: new Set() };
+  const nodeParent = { [rootName]: '' };
+  const nodeLabel  = { [rootName]: rootName };
 
   for (const { path, group, n } of normalised) {
     if (!n) continue;
@@ -203,7 +190,7 @@ function buildHierarchy(rows, colorMap, { foldersOnly, sizeMode }) {
         while (true) {
           nodeCount[p] += n;
           nodeGroups[p].add(group);
-          if (p === '' || p === rootName) break;
+          if (p === rootName) break;
           p = nodeParent[p];
         }
         break;
@@ -214,7 +201,7 @@ function buildHierarchy(rows, colorMap, { foldersOnly, sizeMode }) {
         nodeParent[cur] = parentId;
         const nameParts = cur.split(sep);
         nodeLabel[cur]  = nameParts[nameParts.length - 1] || cur;
-        if (cur === '' || cur === rootName) break;
+        if (cur === rootName) break;
         cur = parentId;
       }
     }
@@ -222,10 +209,10 @@ function buildHierarchy(rows, colorMap, { foldersOnly, sizeMode }) {
 
   const ids = [], labels = [], parents = [], values = [], colors = [];
   for (const [id, count] of Object.entries(nodeCount)) {
-    if (count === 0 && id !== '') continue;
+    if (count === 0) continue;
     ids.push(id);
     labels.push(nodeLabel[id] ?? id);
-    parents.push(id === '' ? '' : (nodeParent[id] ?? ''));
+    parents.push(nodeParent[id] ?? '');
     values.push(count);
     const uniqueGroups = nodeGroups[id] ?? new Set();
     colors.push(uniqueGroups.size === 1 ? groupColor([...uniqueGroups][0]) : MIXED_COLOR);
