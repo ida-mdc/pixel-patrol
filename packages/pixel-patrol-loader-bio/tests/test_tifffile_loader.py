@@ -154,21 +154,14 @@ def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader, cap
         tif.write(im, subifds=1, tile=(tile, tile), **opts)
         tif.write(im[:, ::2, ::2], subfiletype=1, tile=(tile, tile), **opts)
 
-    # Confirm the TIFF has multiple resolution levels (triggers the multiscale
-    # zarr store, which is the path that previously caused the failure).
     with tifffile.TiffFile(path) as tf:
         assert len(tf.series[0].levels) > 1, "fixture must produce a multiscale series"
 
     with caplog.at_level(logging.WARNING):
         rec = loader.load(path)
 
-    # The zarr/aszarr path must have succeeded directly; the exception fallback
-    # (series.asarray() + da.from_array) logs this warning when it fires.
     assert "aszarr/Zarr failed" not in caplog.text, "must not silently fall back to eager load"
 
-    # Result must be a lazy dask array, not an in-memory numpy array.
     import dask.array as da
     assert isinstance(rec.data, da.Array), "load() must return a lazy dask array"
-
-    # Data must round-trip correctly.
     np.testing.assert_array_equal(rec.data.compute(), im)
