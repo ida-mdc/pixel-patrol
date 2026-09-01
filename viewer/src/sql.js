@@ -138,3 +138,26 @@ export function groupCol(state) {
 export function groupExpr(state) {
   return `${groupCol(state)} AS ${GROUP_COL_ALIAS}`;
 }
+
+/**
+ * Count files, not rows: a container file has one row per sub-image.
+ * Falls back to `COUNT(*)` when there is no `path` column.
+ */
+export function fileCount(allCols = []) {
+  return allCols.includes('path') ? `COUNT(DISTINCT ${q('path')})` : 'COUNT(*)';
+}
+
+/**
+ * One row per file, to FROM instead of `pp_data` when summing a file-level
+ * measure like `size_bytes` - a container's size sits on each sub-image row.
+ * Counting doesn't need it; see fileCount.
+ * Filters before collapsing, so a file survives if any of its images pass.
+ */
+export function perFile(where = '', allCols = []) {
+  if (!allCols.includes('path')) {
+    return `(SELECT *, 1 AS __n_images__ FROM pp_data ${where}) AS pp_file`;
+  }
+  return `(SELECT *, COUNT(*) OVER (PARTITION BY ${q('path')}) AS __n_images__
+           FROM pp_data ${where}
+           QUALIFY ROW_NUMBER() OVER (PARTITION BY ${q('path')}) = 1) AS pp_file`;
+}
