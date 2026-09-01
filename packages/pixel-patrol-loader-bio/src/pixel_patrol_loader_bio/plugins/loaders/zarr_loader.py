@@ -18,6 +18,15 @@ from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 logger = logging.getLogger(__name__)
 
 
+def _resolve_bf2raw_group(root: zarr.Group) -> Tuple[zarr.Group, str]:
+    """Return (group, component_prefix) unwrapping the bioformats2raw layout 3 container."""
+    if "bioformats2raw.layout" in dict(root.attrs) and "0" in root:
+        sub = root["0"]
+        if isinstance(sub, zarr.Group):
+            return sub, "0/"
+    return root, ""
+
+
 def _load_zarr_array(path: Path) -> Optional[da.Array]:
     try:
         # 1) Try as a direct array path
@@ -29,21 +38,21 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
             candidates = []
 
             if isinstance(root, zarr.Group):
-                attrs = dict(root.attrs)
+                group, prefix = _resolve_bf2raw_group(root)
+                attrs = dict(group.attrs)
                 # NGFF: multiscales[0].datasets[*].path  (often "0")
                 for d in attrs.get("multiscales", [{}])[0].get("datasets", []):
                     p = d.get("path")
                     if p:
-                        candidates.append(p)
+                        candidates.append(prefix + p)
 
-                # Common fallbacks
-                candidates += ["0", "data"]
-
-                # Single-array group: use that array’s name
+                # Common fallbacks relative to the resolved group
                 if not candidates:
-                    arrays = list(root.arrays())
+                    arrays = list(group.arrays())
                     if len(arrays) == 1:
-                        candidates.append(arrays[0][0])
+                        candidates.append(prefix + arrays[0][0])
+                    else:
+                        candidates += [prefix + "0", prefix + "data"]
 
                 for comp in candidates:
                     try:
@@ -56,7 +65,7 @@ def _load_zarr_array(path: Path) -> Optional[da.Array]:
             return da.from_array(arr, chunks=arr.chunks)
         except Exception as e2:
             logger.warning(
-                f"Could not load '{path}' as a Zarr array (tried as array/group): {e1}; {e2}"
+                f"Could not load ‘{path}’ as a Zarr array (tried as array/group): {e1}; {e2}"
             )
             return None
 
@@ -73,16 +82,17 @@ def _infer_dim_order(n: int) -> str:
 
 def _read_zarr_root_and_primary_attrs(path: Path) -> Dict[str, Any]:
     """
-    Read merged attributes from the Zarr root AND the primary child array
-    (first of "0" or "data" if present). Returns a flat dict.
+    Read merged attributes from the effective NGFF group AND the primary child array.
+    Resolves bioformats2raw layout 3 indirection (root -> 0/ subgroup).
     """
     attrs: Dict[str, Any] = {}
     try:
         root = zarr.open(str(path), mode="r")
-        attrs.update(dict(getattr(root, "attrs", {}) or {}))
+        group, _ = _resolve_bf2raw_group(root) if isinstance(root, zarr.Group) else (root, "")
+        attrs.update(dict(getattr(group, "attrs", {}) or {}))
         try:
-            if hasattr(root, "arrays"):
-                for name, item in root.arrays():
+            if hasattr(group, "arrays"):
+                for name, item in group.arrays():
                     if name in ("data", "0"):
                         attrs.update(dict(getattr(item, "attrs", {}) or {}))
                         break
