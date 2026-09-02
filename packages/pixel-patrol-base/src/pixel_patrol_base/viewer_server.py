@@ -18,8 +18,11 @@ also be used.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import socket
+import subprocess
+import sys
 import threading
 import warnings
 import webbrowser
@@ -216,6 +219,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path == "/api/query":
             self._serve_query()
+        elif self.path == "/api/open-napari":
+            self._serve_open_napari()
         else:
             self.send_error(404)
 
@@ -258,6 +263,72 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_error_text(400, str(exc))
 
+
+    # ------------------------------------------------------------------
+    # /api/open-napari  - open the source image (slice/tile/chunk) in napari
+    # ------------------------------------------------------------------
+
+    def _serve_open_napari(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body   = json.loads(self.rfile.read(length))
+            frn    = int(body["file_row_number"])
+        except Exception as exc:
+            self._send_error_text(400, f"Bad request: {exc}")
+            return
+
+        if importlib.util.find_spec("napari") is None:
+            self._send_error_text(501, "napari is not installed in the viewer's Python environment.")
+            return
+
+        base_dir = self.parquet_meta.get("pp_base_dir")
+        if not base_dir:
+            self._send_error_text(
+                409, "This parquet has no recorded base directory, so source images can't be located."
+            )
+            return
+
+        row = self._fetch_row(frn)
+        if row is None:
+            self._send_error_text(404, f"No row with file_row_number={frn}.")
+            return
+
+        source_path = (Path(base_dir) / row["path"]).resolve()
+        if not source_path.exists():
+            self._send_error_text(404, f"Source image not found: {source_path}")
+            return
+
+        cmd = [
+            sys.executable, "-m", "pixel_patrol_base.napari_launcher",
+            "--path",   str(source_path),
+            "--loader", self.parquet_meta.get("pp_loader") or "",
+            "--slices", json.dumps(_axis_slices_for_row(row)),
+            "--name",   str(row.get("name") or source_path.name),
+        ]
+        child_id = row.get("child_id")
+        if child_id not in (None, ""):
+            cmd += ["--child-id", str(child_id)]
+
+        try:
+            subprocess.Popen(cmd)  # detached; its Qt loop must not block the server
+        except Exception as exc:
+            self._send_error_text(500, f"Failed to launch napari: {exc}")
+            return
+
+        payload = json.dumps({"ok": True, "path": str(source_path)}).encode()
+        self.send_response(200)
+        self._common_headers("application/json", len(payload))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _fetch_row(self, file_row_number: int) -> Optional[dict]:
+        """Return the full obs row for a file_row_number as a plain dict, or None."""
+        with self.query_lock:
+            table = self.duck_conn.execute(
+                f"SELECT * FROM pp_all WHERE file_row_number = {file_row_number} LIMIT 1"
+            ).fetch_arrow_table()
+        rows = table.to_pylist()
+        return rows[0] if rows else None
 
     # ------------------------------------------------------------------
     # /api/export-parquet  - filtered parquet download with metadata
@@ -593,6 +664,24 @@ def serve_viewer(
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
+def _axis_slices_for_row(row: dict) -> dict:
+    """Map a row's obs coordinates to {AXIS: [start, stop]} for the axes it pins.
+
+    An axis is pinned when its ``dim_<a>`` origin is non-null; the row then covers
+    ``[origin, origin + size_<A>)`` along it. Axes left null span their full extent
+    and are omitted, so a whole-image row yields ``{}`` (open the whole image).
+    """
+    dim_order = row.get("dim_order") or ""
+    slices: dict = {}
+    for axis in dim_order:
+        origin = row.get(f"dim_{axis.lower()}")
+        if origin is None:
+            continue
+        extent = row.get(f"size_{axis.upper()}") or 1
+        slices[axis.upper()] = [int(origin), int(origin) + int(extent)]
+    return slices
+
 
 def _parse_range(header: str, total: int) -> tuple[int, int]:
     """Parse ``Range: bytes=start-end`` and clamp to file size."""

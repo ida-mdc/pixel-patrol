@@ -4,6 +4,7 @@ import { SERVER_MODE, makeServerConn } from './query.js';
 import { initControls, initStaticUi } from './controls.js';
 import { renderAll } from './renderer.js';
 import { registry } from './plugin-registry.js';
+import { napariInspector } from './napari.js';
 import { state, on } from './state.js';
 import { buildWhere } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
@@ -86,6 +87,16 @@ async function boot() {
   on('query',  doRender);
   on('render', doRender);
   registry.onAdd(doRender);
+
+  // Public hook for extensions to contribute point-inspector sections / widgets,
+  // mirroring how they already register via extension.json plugin modules.
+  window.PixelPatrol = {
+    registerInspector: (c) => registry.registerInspector(c),
+    registerPlugin:    (p) => registry.register(p),
+  };
+  // Built-in contributor: "Open in napari" (self-gates to server mode).
+  registry.registerInspector(napariInspector);
+
   initStaticUi();
 
   // ── Server mode: native DuckDB via local Python server ──────────────────────
