@@ -10,6 +10,10 @@ dependencies = [
     "pixel-patrol-base==0.9.0",
 ]
 
+[build-system]
+requires = ["hatchling<1.27"]
+build-backend = "hatchling.build"
+
 [tool.uv]
 package = true
 

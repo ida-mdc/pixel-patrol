@@ -19,7 +19,7 @@ dev = [
 testpaths = ["tests"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling<1.27"]
 build-backend = "hatchling.build"
 
 [tool.uv]

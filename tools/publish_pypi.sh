@@ -78,10 +78,15 @@ for pkg in "${PACKAGES[@]}"; do
     cd "$REPO_ROOT"
 done
 
+# ── regenerate example parquet ────────────────────────────────────────────────
+echo ""
+echo "=== Regenerating example parquet ==="
+uv run python "$REPO_ROOT/examples/datasets/WHOI_processed_color/generate_example_parquet.py"
+
 # ── commit, tag, push ─────────────────────────────────────────────────────────
 echo ""
 echo "=== Committing and tagging v$VERSION ==="
-git add packages/*/pyproject.toml deploy/launcher/launcher.py
+git add packages/*/pyproject.toml deploy/launcher/launcher.py docs/example.parquet
 git commit -m "release v$VERSION"
 git tag -a "v$VERSION" -m "v$VERSION"
 git push origin main

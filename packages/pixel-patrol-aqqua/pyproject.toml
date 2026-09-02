@@ -21,7 +21,7 @@ Homepage = "https://ida-mdc.github.io/pixel-patrol/"
 Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling<1.27"]
 build-backend = "hatchling.build"
 
 [tool.uv]
