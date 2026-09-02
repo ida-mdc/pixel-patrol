@@ -16,7 +16,7 @@ Image datasets are rarely as clean or consistent as they appear. PixelPatrol sca
 
 ## Installation
 
-Requires Python 3.11+. We recommend [uv](https://docs.astral.sh/uv/):
+Requires Python 3.12+. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv venv --python 3.12 .venv

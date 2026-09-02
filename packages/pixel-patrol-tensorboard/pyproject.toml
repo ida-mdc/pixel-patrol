@@ -5,7 +5,7 @@ description = "TensorBoard Embedding Projector CLI for Pixel Patrol"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "click>=8.0",
     "numpy>=1.24",

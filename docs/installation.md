@@ -1,6 +1,6 @@
 # Installation
 
-PixelPatrol requires Python 3.11 or higher.
+PixelPatrol requires Python 3.12 or higher.
 
 ---
 

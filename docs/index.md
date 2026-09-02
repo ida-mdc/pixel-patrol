@@ -19,7 +19,7 @@ Or with pip:
 pip install pixel-patrol
 ```
 
-Requires Python 3.11+. See [Installation](installation.md) for more options.
+Requires Python 3.12+. See [Installation](installation.md) for more options.
 
 ---
 

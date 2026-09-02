@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol"
-version = "0.8.0"
+version = "0.9.0"
 description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
 license = "MIT"
@@ -8,11 +8,12 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
-    "pixel-patrol-base==0.8.0",
-    "pixel-patrol-loader-bio==0.8.0",
+    "pixel-patrol-base==0.9.0",
+    "pixel-patrol-loader-bio==0.9.0",
+    "pixel-patrol-geospatial==0.9.0",
 ]
 
 [project.urls]
@@ -35,6 +36,7 @@ dev = [
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }
 pixel-patrol-loader-bio = { path = "../pixel-patrol-loader-bio" }
+pixel-patrol-geospatial = { path = "../pixel-patrol-geospatial" }
 
 [tool.setuptools.package-data]
 "*" = ["readme_assets/*"]

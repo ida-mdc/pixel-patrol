@@ -1,11 +1,11 @@
 [project]
 name = "pixel-patrol-geospatial"
-version = "0.8.0"
+version = "0.9.0"
 description = "Extension for geospatial data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pixel-patrol-base==0.8.0",
+    "pixel-patrol-base==0.9.0",
     "rasterio==1.5.0",
     "shapely==2.1.2",
 ]
@@ -38,4 +38,4 @@ geospatial_processors = "pixel_patrol_geospatial.plugin_registry:register_proces
 geospatial_viewer = "pixel_patrol_geospatial.plugin_registry:get_viewer_extension_dir"
 
 [tool.uv.sources]
-pixel-patrol-base = { path = "../../packages/pixel-patrol-base", editable = true }
+pixel-patrol-base = { path = "../pixel-patrol-base" }
