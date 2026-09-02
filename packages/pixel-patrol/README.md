@@ -16,7 +16,7 @@ Image datasets are rarely as clean or consistent as they appear. PixelPatrol sca
 
 ## Installation
 
-Requires Python 3.11+. We recommend [uv](https://docs.astral.sh/uv/):
+Requires Python 3.12+. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv venv --python 3.12 .venv
@@ -33,7 +33,7 @@ pip install pixel-patrol
 For a modular install (core only + selected add-ons):
 
 ```bash
-uv pip install pixel-patrol-base
+uv pip install pixel-patrol-base         # includes image quality metrics
 uv pip install pixel-patrol-loader-bio   # BioIO, Zarr, Tifffile loaders
 ```
 
@@ -58,6 +58,18 @@ pixel-patrol process path/to/images/ -o results.parquet --loader bioio \
 
 ```bash
 pixel-patrol view results.parquet
+```
+
+Or combine both steps with `--view`:
+
+```bash
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio --view
+```
+
+To use viewer parameters, run the two commands sequentially:
+
+```bash
+pixel-patrol process path/to/images/ -o results.parquet --loader bioio && pixel-patrol view results.parquet
 ```
 
 **Or use the processing dashboard** for a visual interface:
