@@ -223,7 +223,7 @@ async function renderDimDistributions(container, ctx, sizeCols) {
 
   if (variant.length) await renderDimViolins(container, ctx, variant);
   if (invariant.length) ctx.plot.invariantTable(container, {
-    title: 'Dimension Sizes - same across all files that report it',
+    title: 'Dimension Sizes - same across all images that report it',
     headers: ['Dimension', 'Size (pixels)'],
     rows: invariant.map(d => [ctx.plot.niceName(d.col), String(d.val)]),
     hr: true,

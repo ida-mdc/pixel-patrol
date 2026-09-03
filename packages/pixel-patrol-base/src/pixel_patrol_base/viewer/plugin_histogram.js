@@ -1,8 +1,8 @@
 const NBINS           = 256;
 const DEFAULT_SAMPLES = 2000;
-const MAX_FILE_OPTIONS = 500;
+const MAX_IMAGE_OPTIONS = 500;
 const GROUP_SEL_ID    = 'hist-group-select';
-const FILE_SEL_ID     = 'hist-file-select';
+const IMAGE_SEL_ID    = 'hist-image-select';
 const SAMPLE_INPUT_ID = 'hist-sample-input';
 const SPREAD_ID       = 'hist-spread-cb';
 const INDIV_ID        = 'hist-indiv-cb';
@@ -300,6 +300,7 @@ export default {
     const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
     const hasDtype = ctx.schema.allCols.includes('dtype');
     const hasNames = ctx.schema.allCols.includes('name');
+    const hasPath  = ctx.schema.allCols.includes('path');
     const hasNanCount = ctx.schema.allCols.includes('histogram_nan_count');
 
     try {
@@ -313,14 +314,16 @@ export default {
       const { groupExpr: geFn } = ctx.sql;
 
       // Parallel setup queries.
-      const [dtypeRows, nameRows] = await Promise.all([
+      const [dtypeRows, imageRows] = await Promise.all([
         hasDtype ? ctx.queryRows(`SELECT DISTINCT "dtype" FROM pp_data ${ctx.where}`) : [],
-        hasNames ? ctx.queryRows(`SELECT DISTINCT "name" FROM pp_data ${ctx.where} ORDER BY 1 LIMIT ${MAX_FILE_OPTIONS}`) : [],
+        hasPath ? ctx.queryRows(
+          `SELECT ${imageKey(ctx)} AS key, ${imageLabelSql(ctx)} AS label
+           FROM pp_data ${ctx.where} ORDER BY 2 LIMIT ${MAX_IMAGE_OPTIONS}`) : [],
       ]);
 
       const { presentKinds, multiKind, unsupportedDtypes } = classifyDtypes(dtypeRows, hasDtype);
 
-      container.appendChild(buildControls(ctx, { hasNames, nameRows }));
+      container.appendChild(buildControls(ctx, { hasPath, imageRows }));
 
       const samplingWarning = warningBanner('', 16);
       samplingWarning.style.display = 'none';
@@ -402,8 +405,8 @@ export default {
 
       // Cached across mode/spread toggles — re-populated on every other control change.
       let kindData      = null; // { [kind]: { [group]: { sums, sumSq, sumsNorm, sumSqNorm, count, aMin, aMax, nMin, nMax } } }
-      let fileOverlay   = null; // { ys, aMin, aMax, nMin, nMax, kind, label }
-      let indivFiles    = null; // { rows: [...], overflow: bool } | null
+      let imageOverlay  = null; // { ys, aMin, aMax, nMin, nMax, kind, label }
+      let indivImages   = null; // { rows: [...], overflow: bool } | null
 
       const fetchAndAccumulate = async () => {
         const { q } = ctx.sql;
@@ -464,8 +467,8 @@ export default {
           samplingWarning.style.display = '';
         }
 
-        // Individual file overlay — only when exactly one group is active and few enough files.
-        indivFiles = null;
+        // Individual-image lines — only when one group is active and few enough images.
+        indivImages = null;
         const isSingleGroup = ctrl.selectedGroups.length === 1 ||
           (ctrl.selectedGroups.length === 0 && ctx.groups.length === 1);
         let singleGroupCount = 0;
@@ -477,7 +480,7 @@ export default {
         if (indivWrap) indivWrap.style.display = (isSingleGroup && singleGroupCount <= INDIV_LIMIT) ? '' : 'none';
 
         if (container.querySelector(`#${INDIV_ID}`)?.checked && isSingleGroup && singleGroupCount <= INDIV_LIMIT) {
-          const nameSel2  = hasNames ? ', "name"' : '';
+          const nameSel2  = hasNames ? `, ${imageLabelSql(ctx)} AS __label__` : '';
           const iResult   = await ctx.query(
             `SELECT "histogram_counts"${rangeSel}${dtypeSel}${nanSel}${nameSel2}
              FROM pp_data ${where}
@@ -485,7 +488,7 @@ export default {
           );
           const iRows    = iResult.toArray();
           const overflow = iRows.length > INDIV_LIMIT;
-          indivFiles     = { rows: [], overflow };
+          indivImages    = { rows: [], overflow };
           for (const row of iRows.slice(0, INDIV_LIMIT)) {
             const counts = extractBinary(row.histogram_counts);
             if (!counts?.length) continue;
@@ -496,28 +499,28 @@ export default {
             const aMax   = hasRange ? Number(row.histogram_max) : NBINS - 1;
             const dNorm  = DTYPE_NORM[row.dtype];
             const inv    = 1 / (total + nanCount);
-            indivFiles.rows.push({
+            indivImages.rows.push({
               ys: Array.from(counts, c => c * inv),
               nanFrac: nanCount * inv,
               aMin, aMax,
               nMin: dNorm != null ? aMin / dNorm : aMin,
               nMax: dNorm != null ? aMax / dNorm : aMax,
               kind: hasDtype ? dtypeKind(row.dtype) : 'uint',
-              label: hasNames ? String(row.name ?? '').split('/').pop() : '',
+              label: hasNames ? String(row.__label__ ?? '') : '',
             });
           }
         }
 
-        // File overlay — separate query, doesn't pollute the group sample.
-        fileOverlay = null;
-        if (ctrl.selectedFile && hasRange) {
-          const safe       = ctrl.selectedFile.replace(/'/g, "''");
-          const fileWhere  = ctx.where ? `${ctx.where} AND "name" = '${safe}'` : `WHERE "name" = '${safe}'`;
-          const fileResult = await ctx.query(
+        // Single-image overlay — separate query, doesn't pollute the group sample.
+        imageOverlay = null;
+        if (ctrl.selectedImage && hasRange) {
+          const safe        = ctrl.selectedImage.replace(/'/g, "''");
+          const imageWhere  = ctx.sql.andWhere(ctx.where, `${imageKey(ctx)} = '${safe}'`);
+          const imageResult = await ctx.query(
             `SELECT "histogram_counts", "histogram_min", "histogram_max"${dtypeSel}${nanSel}
-             FROM pp_data ${fileWhere} LIMIT 1`
+             FROM pp_data ${imageWhere} LIMIT 1`
           );
-          const fr = fileResult.toArray()[0];
+          const fr = imageResult.toArray()[0];
           if (fr) {
             const counts = extractBinary(fr.histogram_counts);
             if (counts?.length) {
@@ -526,14 +529,14 @@ export default {
               const dNorm = DTYPE_NORM[fr.dtype];
               const nanCount = hasNanCount ? Number(fr.histogram_nan_count ?? 0) : 0;
               const inv   = total + nanCount > 0 ? 1 / (total + nanCount) : 0;
-              fileOverlay = {
+              imageOverlay = {
                 ys:    Array.from(counts, v => v * inv),
                 nanFrac: nanCount * inv,
                 aMin,  aMax,
                 nMin:  dNorm != null ? aMin / dNorm : aMin,
                 nMax:  dNorm != null ? aMax / dNorm : aMax,
                 kind:  hasDtype ? dtypeKind(fr.dtype) : 'uint',
-                label: ctrl.selectedFile.split('/').pop(),
+                label: ctrl.selectedImageLabel,
               };
             }
           }
@@ -557,7 +560,7 @@ export default {
         plotDiv.innerHTML = '';
         const kd         = kindData[kind] ?? {};
         const visGroups  = activeGroups.filter(g => kd[g]?.count);
-        const hasOverlay = fileOverlay?.kind === kind;
+        const hasOverlay = imageOverlay?.kind === kind;
 
         if (!visGroups.length && !hasOverlay) {
           plotDiv.innerHTML = '<div class="no-data" style="color:#aaa;padding:8px 0">No data for the current filter.</div>';
@@ -575,9 +578,9 @@ export default {
           if (ext[1] > xHi) xHi = ext[1];
         };
 
-        // Individual file traces replace the group mean when active.
-        const kindRows  = (indivFiles && visGroups.length === 1)
-          ? indivFiles.rows.filter(r => r.kind === kind)
+        // Individual image traces replace the group mean when active.
+        const kindRows  = (indivImages && visGroups.length === 1)
+          ? indivImages.rows.filter(r => r.kind === kind)
           : [];
         const showIndiv = kindRows.length > 0;
 
@@ -630,11 +633,11 @@ export default {
             const hi = useNorm ? row.nMax : row.aMax;
             for (let i = 0; i < row.ys.length; i++) if (row.ys[i] > yMax) yMax = row.ys[i];
             trackExtent(lo, hi, row.ys);
-            nanSeries.push({ frac: row.nanFrac || 0, color, label: row.label || 'file' });
+            nanSeries.push({ frac: row.nanFrac || 0, color, label: row.label || 'image' });
             traces.push({
               type: 'scatter', mode: 'lines',
               x: binXs(lo, hi), y: row.ys,
-              name: row.label || 'file',
+              name: row.label || 'image',
               line: { color, width: 1.5 },
               opacity: 0.6,
               showlegend: false,
@@ -644,8 +647,8 @@ export default {
         }
 
         if (hasOverlay) {
-          const fo = fileOverlay;
-          const label = `File: ${fo.label}`;
+          const fo = imageOverlay;
+          const label = `Image: ${fo.label}`;
           const lo = useNorm ? fo.nMin : fo.aMin;
           const hi = useNorm ? fo.nMax : fo.aMax;
           const xs = binXs(lo, hi);
@@ -737,20 +740,34 @@ export default {
   },
 };
 
-function buildControls(ctx, { hasNames, nameRows }) {
+// Unique key per image: path + child_id when present, path alone otherwise.
+function imageKey(ctx) {
+  return ctx.schema.allCols.includes('child_id')
+    ? `("path" || COALESCE(' \u2022 ' || "child_id", ''))`
+    : '"path"';
+}
+
+function imageLabelSql(ctx) {
+  const base = ctx.schema.allCols.includes('name') ? '"name"' : '"path"';
+  return ctx.schema.allCols.includes('child_id')
+    ? `(${base} || COALESCE(' \u2022 ' || "child_id", ''))`
+    : base;
+}
+
+function buildControls(ctx, { hasPath, imageRows }) {
   const { escapeHtml } = ctx.plot;
 
   const groupOpts = ctx.groups.map(g =>
     `<option value="${escapeHtml(String(g))}">${escapeHtml(ctx.groupLabel(g))}</option>`).join('');
 
-  const fileBlock = hasNames ? `
+  const imageBlock = hasPath ? `
     <div style="max-width:400px;flex:1 1 240px">
-      <div style="font-weight:600;margin-bottom:6px">Overlay specific file (optional):</div>
-      <select id="${FILE_SEL_ID}" class="form-select form-select-sm">
+      <div style="font-weight:600;margin-bottom:6px">Overlay specific image (optional):</div>
+      <select id="${IMAGE_SEL_ID}" class="form-select form-select-sm">
         <option value="">- none -</option>
-        ${nameRows.map(r => `<option value="${escapeHtml(String(r.name))}">${escapeHtml(String(r.name))}</option>`).join('')}
+        ${imageRows.map(r => `<option value="${escapeHtml(String(r.key))}">${escapeHtml(String(r.label))}</option>`).join('')}
       </select>
-      ${nameRows.length === MAX_FILE_OPTIONS ? `<small class="text-muted">Showing first ${MAX_FILE_OPTIONS} files.</small>` : ''}
+      ${imageRows.length === MAX_IMAGE_OPTIONS ? `<small class="text-muted">Showing first ${MAX_IMAGE_OPTIONS} images.</small>` : ''}
     </div>` : '';
 
   const el = document.createElement('div');
@@ -764,7 +781,7 @@ function buildControls(ctx, { hasNames, nameRows }) {
       </select>
       <small class="text-muted">Ctrl/Cmd to multi-select.</small>
     </div>
-    ${fileBlock}
+    ${imageBlock}
     <div style="align-self:flex-start">
       <div class="form-check" style="margin-bottom:6px">
         <input class="form-check-input" type="checkbox" id="${SPREAD_ID}">
@@ -791,6 +808,7 @@ function buildControls(ctx, { hasNames, nameRows }) {
 
 function readControls(container) {
   const groupSel  = container.querySelector(`#${GROUP_SEL_ID}`);
+  const imageSel  = container.querySelector(`#${IMAGE_SEL_ID}`);
   const sampleRaw = container.querySelector(`#${SAMPLE_INPUT_ID}`)?.value ?? DEFAULT_SAMPLES;
   // value='' is the "All groups" option — filter(Boolean) drops it, leaving [] = all groups.
   const selectedGroups = groupSel
@@ -798,7 +816,8 @@ function readControls(container) {
     : [];
   return {
     selectedGroups,
-    selectedFile:    container.querySelector(`#${FILE_SEL_ID}`)?.value ?? '',
+    selectedImage:      imageSel?.value ?? '',
+    selectedImageLabel: imageSel?.selectedOptions[0]?.textContent?.trim() ?? '',
     samplesPerGroup: Math.max(50, parseInt(sampleRaw, 10) || DEFAULT_SAMPLES),
   };
 }
@@ -818,7 +837,7 @@ function wireControls(container, onDraw) {
       onDraw();
     });
   }
-  for (const id of [FILE_SEL_ID, SAMPLE_INPUT_ID])
+  for (const id of [IMAGE_SEL_ID, SAMPLE_INPUT_ID])
     container.querySelector(`#${id}`)?.addEventListener('change', onDraw);
 
   // Individual-image lines replace the group mean, so "spread around the mean" is meaningless then.

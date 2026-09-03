@@ -1,6 +1,6 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
-import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere } from './sql.js';
+import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere, perFile, fileCount }  from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
 import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
@@ -117,6 +117,10 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       sample,
       groupCol:  () => _groupCol(state),
       groupExpr: () => _groupExpr(state),
+
+      fileCount: () => fileCount(schema.allCols ?? []),
+
+      perFile: (where = '') => perFile(where, schema.allCols ?? []),
 
       /**
        * WHERE parts pinning one long-format aggregation subset. `q`, `dimCols`
@@ -273,10 +277,18 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const container = document.getElementById(WIDGET_CONTAINER_ID);
   container.innerHTML = '';
 
-  const activePlugins = plugins.filter(p => {
+  const candidates = plugins.filter(p => {
     try { return p.requires(schema) && !state.hiddenWidgets.has(p.id); }
     catch { return false; }
   });
+
+  // Optional second gate, for widgets that only know they have nothing to show
+  // once they can query.
+  const applies = await Promise.all(candidates.map(async p => {
+    try { return p.requiresData ? await p.requiresData(ctx) : true; }
+    catch { return true; }
+  }));
+  const activePlugins = candidates.filter((_, i) => applies[i]);
 
   // Always reset the collapse-all button before rendering; renderOverviewGallery
   // will re-wire it if tiles are expanded.

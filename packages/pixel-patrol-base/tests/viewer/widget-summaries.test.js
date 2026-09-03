@@ -38,6 +38,11 @@ const andWhere = (where, condition) =>
   !condition ? where : (where ? `${where} AND ${condition}` : `WHERE ${condition}`);
 const groupCol = state => (state.groupCol ? q(state.groupCol) : `'__ALL__'`);
 const groupExpr = state => `${groupCol(state)} AS __group__`;
+const fileCount = allCols => (allCols.includes('path') ? `COUNT(DISTINCT ${q('path')})` : 'COUNT(*)');
+const perFile = allCols => (where = '') => (allCols.includes('path')
+  ? `(SELECT *, COUNT(*) OVER (PARTITION BY ${q('path')}) AS __n_images__ FROM pp_data ${where}
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY ${q('path')}) = 1) AS pp_file`
+  : `(SELECT *, 1 AS __n_images__ FROM pp_data ${where}) AS pp_file`);
 
 // overviewMessage() only ever reaches for ctx.queryRows plus the pure string
 // helpers above, so a thin fake ctx is enough to drive it deterministically.
@@ -49,7 +54,13 @@ function makeCtx({ allCols = [], metricCols = [], blobCols = [], where = '', row
     state: { groupCol: null, ...state },
     schema: { allCols, metricCols, blobCols, dimensionInfo: {} },
     queryRows,
-    sql: { q, andWhere, groupCol: () => groupCol(state), groupExpr: () => groupExpr(state) },
+    sql: {
+      q, andWhere,
+      groupCol:  () => groupCol(state),
+      groupExpr: () => groupExpr(state),
+      fileCount: () => fileCount(allCols),
+      perFile:   perFile(allCols),
+    },
     plot: { escapeHtml, niceName, humanList, formatBytes },
   };
 }
@@ -59,8 +70,8 @@ describe('summary widget · overviewMessage', () => {
 
   it('reports a plain file count when there is one image per file', async () => {
     const out = await summary.overviewMessage(makeCtx({
-      allCols: ['size_bytes', 'file_extension'],
-      rows: [{ file_count: 42 }],
+      allCols: ['size_bytes', 'file_extension', 'path'],
+      rows: [{ file_count: 42, image_count: 42 }],
     }));
     expect(out).toContain('<strong>42 files</strong>');
     expect(out).toContain('one image per file');
@@ -68,8 +79,8 @@ describe('summary widget · overviewMessage', () => {
 
   it('reports the image total when files contain multiple images', async () => {
     const out = await summary.overviewMessage(makeCtx({
-      allCols: ['size_bytes', 'file_extension', 'n_images'],
-      rows: [{ file_count: 10, n_images_sum: 30 }],
+      allCols: ['size_bytes', 'file_extension', 'path'],
+      rows: [{ file_count: 10, image_count: 30 }],
     }));
     expect(out).toContain('<strong>10 files</strong>');
     expect(out).toContain('<strong>30 images</strong>');
@@ -77,10 +88,22 @@ describe('summary widget · overviewMessage', () => {
 
   it('uses the singular for a single file', async () => {
     const out = await summary.overviewMessage(makeCtx({
-      allCols: ['size_bytes', 'file_extension'],
-      rows: [{ file_count: 1 }],
+      allCols: ['size_bytes', 'file_extension', 'path'],
+      rows: [{ file_count: 1, image_count: 1 }],
     }));
     expect(out).toContain('<strong>1 file</strong>');
+  });
+
+  // Never from a per-row n_images column - that squares the sub-image count.
+  it('counts a multi-series container once per file, not once per row', async () => {
+    const seen = [];
+    const out = await summary.overviewMessage(makeCtx({
+      allCols: ['size_bytes', 'file_extension', 'path', 'n_images'],
+      rows: (sql) => { seen.push(sql); return [{ file_count: 1, image_count: 11 }]; },
+    }));
+    expect(out).toContain('<strong>1 file</strong>');
+    expect(out).toContain('<strong>11 images</strong>');
+    expect(seen.join('\n')).not.toMatch(/"n_images"/);
   });
 });
 
@@ -120,7 +143,7 @@ describe('file-stats widget · overviewMessage', () => {
   });
 });
 
-describe('sunburst widget · overviewMessage', () => {
+describe('sunburst widget', () => {
   const sunburst = widget('sunburst');
 
   it('describes the folder structure by file count', async () => {
@@ -128,9 +151,9 @@ describe('sunburst widget · overviewMessage', () => {
     expect(out).toBe('Folder structure of <strong>7 files</strong>.');
   });
 
-  it('uses the singular for one file', async () => {
-    const out = await sunburst.overviewMessage(makeCtx({ rows: [{ n: 1 }] }));
-    expect(out).toContain('<strong>1 file</strong>');
+  it('hides itself when the dataset is a single file', async () => {
+    expect(await sunburst.requiresData(makeCtx({ rows: [{ n: 1 }] }))).toBe(false);
+    expect(await sunburst.requiresData(makeCtx({ rows: [{ n: 2 }] }))).toBe(true);
   });
 });
 

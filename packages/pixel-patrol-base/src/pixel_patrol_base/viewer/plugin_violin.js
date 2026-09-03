@@ -92,7 +92,8 @@ const DISTRIBUTION_HELP = `Plots with ${MAX_VIOLIN_POINTS.toLocaleString()} or f
 
 const GRANULARITY_HELP = 'Use the **Slice by** toggles to control whether each datapoint is a whole-image ' +
   'aggregate (**per image**) or one (image × dimension) combination (**per slice**) - shown by the badge in the ' +
-  'card header. More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
+  'card header. Pinning a dimension in the sidebar does the same, for that one slice. ' +
+  'More toggles mean more datapoints, so check the sample size in the plot subtitle before trusting significance.';
 
 const BASIC_INFO = [
   'Shows **per-image intensity statistics** across groups.',
@@ -269,6 +270,29 @@ async function prependFractionWarnings(plotRoot, ctx) {
   }
 }
 
+// Dimensions pinned in the sidebar. A pinned dim narrows every point to one
+// slice, exactly like a Slice by toggle.
+function fixedDims(ctx) {
+  return Object.fromEntries(
+    Object.entries(ctx.state.dimensions ?? {})
+      .map(([letter, idx]) => [letter, Number(idx)])
+      .filter(([, idx]) => Number.isFinite(idx)));
+}
+
+/** Pinned dims as display labels: { c: 1 } -> ['C=1']. */
+function pinnedDims(ctx) {
+  return Object.entries(fixedDims(ctx))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([letter, idx]) => `${letter.toUpperCase()}=${idx}`);
+}
+
+// Rows one point is drawn from. The tile preview and the full card share it, so
+// a pinned dimension moves both to the same slice.
+function violinSource(ctx, splitDims) {
+  const parts = ctx.sql.dimSubsetWhere({ fixed: fixedDims(ctx), split: splitDims });
+  return { table: 'pp_all', where: parts.length ? `WHERE ${parts.join(' AND ')}` : '' };
+}
+
 async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWarnings = false) {
   const { q, groupExpr: geFn, groupCol: gcFn } = ctx.sql;
   const { flexGrid: createFlexGrid, niceName, dataAvailabilityWarning, groupingLabel, engine } = ctx.plot;
@@ -286,20 +310,12 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
   );
   const tot = Number(availRow.total);
   const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
-  dataAvailabilityWarning(plotRoot, counts, tot, { unit: splitDims.size ? 'slices' : 'images' });
+  const pinned = pinnedDims(ctx);
+  dataAvailabilityWarning(plotRoot, counts, tot,
+    { unit: (splitDims.size || pinned.length) ? 'slices' : 'images' });
   if (fractionWarnings) await prependFractionWarnings(plotRoot, ctx);
 
-  const fixed = {};
-  for (const [letter, idxRaw] of Object.entries(ctx.state.dimensions ?? {})) {
-    const idx = Number(idxRaw);
-    if (Number.isFinite(idx)) fixed[letter] = idx;
-  }
-
-  const sourceTable = 'pp_all';
-  // Pin the (fixed ∪ split) aggregation subset: each violin point is one image
-  // aggregate, or one (image × split dim) when slicing is toggled on.
-  const whereParts = ctx.sql.dimSubsetWhere({ fixed, split: splitDims });
-  const combinedWhere = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const { table: sourceTable, where: combinedWhere } = violinSource(ctx, splitDims);
   const gc = gcFn();
 
   // Per-group summary stats (quartiles, min/max, mean) computed entirely in SQL,
@@ -361,9 +377,10 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
   if (toPlot.length) {
     const { wrap, flexBasisPct } = createFlexGrid(plotRoot, plotsPerRow);
 
-    const granularityDesc = splitDims.size
+    const perPoint = splitDims.size
       ? `one point per (image × ${[...splitDims].map(l => l.toUpperCase()).join(' × ')})`
       : 'one point per image';
+    const granularityDesc = pinned.length ? `${perPoint} at ${pinned.join(', ')}` : perPoint;
 
     for (const { metric, total } of toPlot) {
       const label = niceName(metric);
@@ -408,7 +425,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
 
   if (noVariance.length) {
     ctx.plot.invariantTable(plotRoot, {
-      title: 'Metrics with No Variance across all files that report it',
+      title: 'Metrics with No Variance across all images that report it',
       headers: ['Metric', 'Value'],
       rows: noVariance.map(({ metric, value }) => [niceName(metric), Number(value).toFixed(4)]),
       hr: true,
@@ -423,7 +440,7 @@ async function violinOverviewPlot(ctx, container, metric) {
   if (!metric) return false;
   return ctx.plot.engine.renderDistribution(container, ctx, {
     numCol: metric,
-    source: { table: 'pp_data', where: ctx.where },
+    source: violinSource(ctx, new Set()),
     catSql: ctx.sql.groupCol(),
     yLabel: ctx.plot.niceName(metric),
     series: { isCategory: true },
@@ -462,7 +479,9 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
       // The card header already carries a "🖼️ per image" badge (from `scope: 'image'`
       // above) - keep it in sync with the toggles instead of adding a second badge.
       const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
-      const syncBadge = () => ctx.plot.setScopeBadge(headerBadge, splitDims.size ? 'slice' : 'image');
+      const pinned = pinnedDims(ctx);
+      const syncBadge = () =>
+        ctx.plot.setScopeBadge(headerBadge, (splitDims.size || pinned.length) ? 'slice' : 'image');
       syncBadge();
 
       const draw = async () => {

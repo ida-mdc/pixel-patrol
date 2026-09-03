@@ -22,7 +22,7 @@ export default {
   label: 'Image Thumbnails',
   shortLabel: 'Thumbnails',
   info: [
-    'Displays a **thumbnail mosaic**, one thumbnail per file.',
+    'Displays a **thumbnail mosaic**, one thumbnail per image.',
     '',
     '- Thumbnails are generated from the central slice in all non-XY, non-RGB dimensions.',
     '- Sorting by a numeric column can reveal visual trends.',

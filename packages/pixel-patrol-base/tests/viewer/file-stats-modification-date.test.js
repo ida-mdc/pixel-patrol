@@ -14,6 +14,7 @@ function makeCtx(byFmt = {}) {
       sql: {
         andWhere: (where, cond) => (cond ? `WHERE ${cond}` : where),
         groupCol: () => `'__ALL__'`,
+        fileCount: () => 'COUNT(DISTINCT "path")',
       },
       queryRows: async sql => {
         const fmt = sql.match(/STRFTIME\([^,]+,\s*'([^']+)'\)/)?.[1];

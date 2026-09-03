@@ -35,7 +35,7 @@ export default {
   shortLabel: 'Table',
   group: 'Summary',
   scope: 'image',
-  info: 'Full-image statistics — one row per image file, no per-slice or per-channel rows. ' +
+  info: 'Full-image statistics — one row per image, no per-slice or per-channel rows. ' +
         'Click a column header to sort. ' +
         'Search (Enter): substring match across all columns for small datasets, ' +
         'path and child_id only for large ones (≥10k images).',
