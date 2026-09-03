@@ -141,7 +141,16 @@ def _extract_blosc2_user_meta(array: blosc2.NDArray) -> Dict[str, Any]:
     """Extract the blosc2 user-metadata fields (no numpy conversion needed)."""
     metadata: Dict[str, Any] = {}
     if hasattr(array, "meta") and array.meta is not None:
-        for key, value in dict(array.meta).items():
+        try:
+            items = dict(array.meta).items()
+        except Exception:
+            items = []
+            for key in array.meta:
+                try:
+                    items.append((key, array.meta[key]))
+                except Exception:
+                    logger.debug("LmdbLoader: skipping undecodable meta key '%s'", key)
+        for key, value in items:
             if key in SKIP_KEYS or value is None:
                 continue
             if isinstance(value, np.generic):
