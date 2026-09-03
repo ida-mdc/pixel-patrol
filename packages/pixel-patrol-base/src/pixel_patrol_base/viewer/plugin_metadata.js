@@ -76,7 +76,7 @@ export default {
   multiPlot: true,
   label: 'Metadata',
   shortLabel: 'Image Metadata',
-  info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nIf a property has **no variance** (e.g. every file has the same pixel dtype), it is summarized in a table instead of a chart.',
+  info: 'Shows the distribution of **pixel data types** and **dimension ordering** across groupings.\n\nIf a property has **no variance** (e.g. every image has the same pixel dtype), it is summarized in a table instead of a chart.',
 
   requires(schema) {
     const hasDist = DIST_COLS.some(c => schema.allCols.includes(c));
@@ -188,7 +188,7 @@ export default {
       if (varied.length) prependInconsistencyWarning(container, ctx, varied);
       await collectScalarInvariants(ctx, invariants);
       if (invariants.length) ctx.plot.invariantTable(container, {
-        title: 'Properties shared by all files that report it',
+        title: 'Properties shared by all images that report it',
         headers: ['Property', 'Value'],
         rows: invariants,
       });

@@ -148,9 +148,8 @@ export function fileCount(allCols = []) {
 }
 
 /**
- * One row per file, to FROM instead of `pp_data` when summing a file-level
- * measure like `size_bytes` - a container's size sits on each sub-image row.
- * Counting doesn't need it; see fileCount.
+ * Subquery with one row per file. Use in FROM when aggregating file-level
+ * measures (size_bytes, modification_date). Exposes __n_images__ per file.
  * Filters before collapsing, so a file survives if any of its images pass.
  */
 export function perFile(where = '', allCols = []) {

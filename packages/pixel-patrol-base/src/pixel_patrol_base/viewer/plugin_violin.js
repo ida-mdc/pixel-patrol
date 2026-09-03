@@ -425,7 +425,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
 
   if (noVariance.length) {
     ctx.plot.invariantTable(plotRoot, {
-      title: 'Metrics with No Variance across all files that report it',
+      title: 'Metrics with No Variance across all images that report it',
       headers: ['Metric', 'Value'],
       rows: noVariance.map(({ metric, value }) => [niceName(metric), Number(value).toFixed(4)]),
       hr: true,

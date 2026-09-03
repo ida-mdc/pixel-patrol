@@ -132,7 +132,6 @@ async function countFiles(ctx) {
 }
 
 // One row per folder (with file count + size) when rolled up, else one per file.
-// Both read the per-file relation, so a container counts and sizes once.
 function fetchSunburstRows(ctx, { foldersOnly, pathWhere }) {
   const gcExpr = ctx.sql.groupCol();
   const src    = ctx.sql.perFile(pathWhere);

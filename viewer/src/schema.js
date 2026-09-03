@@ -7,7 +7,6 @@ export const BLOB_COLS = new Set([
 ]);
 
 export const SKIP_METRIC_COLS = new Set([
-  // n_images is no longer written; kept for parquet files that still carry it.
   'row_index', FILE_ROW_NUMBER, 'depth', 'modification_month', 'n_images', 'ndim', 'num_pixels',
   'size_bytes',
   'histogram_min', 'histogram_max',  // range scalars, not user-facing metrics

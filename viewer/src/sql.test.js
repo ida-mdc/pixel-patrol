@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fileCount, perFile } from './sql.js';
 
-// A container file contributes one pp_data row per sub-image, all carrying the
-// same file-level facts. These two helpers keep widgets at file grain.
 const ALL = ['path', 'size_bytes', 'file_extension', 'dtype'];
 
 describe('fileCount', () => {

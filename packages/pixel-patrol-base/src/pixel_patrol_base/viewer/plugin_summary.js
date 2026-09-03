@@ -55,7 +55,6 @@ const TOTALS = `COUNT(*) AS file_count, SUM(__n_images__) AS image_count,
                 SUM("size_bytes") AS total_bytes`;
 
 // Per-group totals, plus the same totals dataset-wide for the headline numbers.
-// Both read one row per file, so a container's size is counted once.
 function fetchSummary(ctx) {
   const src = ctx.sql.perFile(ctx.where);
   return Promise.all([

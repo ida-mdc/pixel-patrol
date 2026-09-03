@@ -578,7 +578,7 @@ export default {
           if (ext[1] > xHi) xHi = ext[1];
         };
 
-        // Individual file traces replace the group mean when active.
+        // Individual image traces replace the group mean when active.
         const kindRows  = (indivImages && visGroups.length === 1)
           ? indivImages.rows.filter(r => r.kind === kind)
           : [];
@@ -633,11 +633,11 @@ export default {
             const hi = useNorm ? row.nMax : row.aMax;
             for (let i = 0; i < row.ys.length; i++) if (row.ys[i] > yMax) yMax = row.ys[i];
             trackExtent(lo, hi, row.ys);
-            nanSeries.push({ frac: row.nanFrac || 0, color, label: row.label || 'file' });
+            nanSeries.push({ frac: row.nanFrac || 0, color, label: row.label || 'image' });
             traces.push({
               type: 'scatter', mode: 'lines',
               x: binXs(lo, hi), y: row.ys,
-              name: row.label || 'file',
+              name: row.label || 'image',
               line: { color, width: 1.5 },
               opacity: 0.6,
               showlegend: false,
@@ -740,8 +740,7 @@ export default {
   },
 };
 
-// One image, not one file: a container contributes one row per sub-image and they
-// all share a path and a name, so child_id is what tells them apart.
+// Unique key per image: path + child_id when present, path alone otherwise.
 function imageKey(ctx) {
   return ctx.schema.allCols.includes('child_id')
     ? `("path" || COALESCE(' \u2022 ' || "child_id", ''))`
