@@ -426,16 +426,17 @@ export function dataAvailabilityWarning(container, items, total, { unit = 'files
   const pct = n => (total > 0 ? ((n / total) * 100).toFixed(2) : '0.00');
 
   if (incomplete.length === 1) {
-    const { label, present } = incomplete[0];
+    const { label, present, reason } = incomplete[0];
+    const reasonHtml = reason ? ` ${escapeHtml(reason)}` : '';
     return prependWarning(container, {
       level,
-      html: `Only ${present.toLocaleString()} of ${total.toLocaleString()} ${unit} (${pct(present)}%) have <code>${escapeHtml(label)}</code> information.`,
+      html: `Only ${present.toLocaleString()} of ${total.toLocaleString()} ${unit} (${pct(present)}%) have <code>${escapeHtml(label)}</code> information.${reasonHtml}`,
     });
   }
 
-  const rows = incomplete.map(({ label, present }) => `
+  const rows = incomplete.map(({ label, present, reason }) => `
     <li style="display:flex;justify-content:space-between;gap:16px;max-width:320px">
-      <span><code>${escapeHtml(label)}</code></span>
+      <span><code>${escapeHtml(label)}</code>${reason ? `<br><small style="opacity:.7">${escapeHtml(reason)}</small>` : ''}</span>
       <span style="font-variant-numeric:tabular-nums;white-space:nowrap">${present.toLocaleString()} of ${total.toLocaleString()} (${pct(present)}%)</span>
     </li>`).join('');
 

@@ -25,6 +25,7 @@ export const QUALITY_METRIC_INFO = {
           'Most interpretable when comparing images of similar content type.',
     hintUp: 'flatter spectrum (noise or uniform content)',
     hintDown: 'steeper spectrum (blur or low-frequency dominance)',
+    nullReason: 'Requires a minimum spatial extent of 32 × 32 px.',
   },
   dark_clipping_fraction: {
     desc: 'Fraction of pixels at the dtype\'s minimum representable value (0 for unsigned integers; ' +
@@ -309,7 +310,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
     `SELECT COUNT(*) AS total, ${metricSelects} FROM pp_data ${ctx.where}`
   );
   const tot = Number(availRow.total);
-  const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]) }));
+  const counts = metrics.map((m, i) => ({ label: niceName(m), present: Number(availRow[`c${i}`]), reason: describeQualityMetric(m)?.nullReason }));
   const pinned = pinnedDims(ctx);
   dataAvailabilityWarning(plotRoot, counts, tot,
     { unit: (splitDims.size || pinned.length) ? 'slices' : 'images' });
