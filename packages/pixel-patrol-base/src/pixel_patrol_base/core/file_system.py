@@ -48,7 +48,7 @@ def _discover_files(
     is_folder_dataset: callable that returns True for directories that are one dataset.
 
     file_metadata contains all filesystem attributes compatible with the original
-    processing output: path, name, type, parent, depth, size_bytes, file_extension,
+    processing output: path, name, type, depth, size_bytes, file_extension,
     modification_date, imported_path, common_base, and
     imported_path_short (only when len(bases) > 1).  Folder datasets are sized by their
     contents and marked with FOLDER_DATASET_KEY, so planning can route them by header.
@@ -76,13 +76,11 @@ def _discover_files(
             ext = path.suffix.lower().lstrip(".")
             anchor = base_dir if base_dir is not None else None
             path_val   = str(path.relative_to(anchor))   if anchor else str(path)
-            parent_val = str(path.parent.relative_to(anchor)) if anchor else str(path.parent)
             import_val = str(base_path.relative_to(anchor)) if anchor else base_str
             m: Dict[str, Any] = {
                 "path":              path_val,
                 "name":              path.name,
                 "type":              "file",
-                "parent":            parent_val,
                 "depth":             depth,
                 "size_bytes":        stat.st_size,
                 "file_extension":    ext,

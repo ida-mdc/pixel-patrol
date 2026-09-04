@@ -59,19 +59,16 @@ def _discover_by_name(bases: list[Path], base_dir: Path | None = None) -> dict[s
 
 
 def test_discover_files_paths_relative_to_base_dir(complex_temp_dir: Path):
-    """With base_dir set, path/parent/imported_path are stored relative to it."""
+    """With base_dir set, path/imported_path are stored relative to it."""
     root = complex_temp_dir.resolve()
     meta = _discover_by_name([root], base_dir=root)
 
     assert meta["file1.txt"]["path"] == "file1.txt"
-    assert meta["file1.txt"]["parent"] == "."
     assert meta["file1.txt"]["imported_path"] == "."
 
     assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
-    assert meta["fileA.jpg"]["parent"] == "subdir_a"
 
     assert meta["fileAA.csv"]["path"] == os.path.join("subdir_a", "subdir_aa", "fileAA.csv")
-    assert meta["fileAA.csv"]["parent"] == os.path.join("subdir_a", "subdir_aa")
 
 
 def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
@@ -82,17 +79,15 @@ def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
     meta = _discover_by_name([subdir], base_dir=root)
 
     assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
-    assert meta["fileA.jpg"]["parent"] == "subdir_a"
     assert meta["fileA.jpg"]["imported_path"] == "subdir_a"
 
 
 def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
-    """Without base_dir, path/parent/imported_path remain absolute (default behavior)."""
+    """Without base_dir, path/imported_path remain absolute (default behavior)."""
     root = complex_temp_dir.resolve()
     meta = _discover_by_name([root])
 
     assert meta["file1.txt"]["path"] == str(root / "file1.txt")
-    assert meta["file1.txt"]["parent"] == str(root)
     assert meta["file1.txt"]["imported_path"] == str(root)
 
 
