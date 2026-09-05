@@ -355,6 +355,11 @@ def _column_view(loaders: List[Dict], processors: List[Dict]) -> List[Dict[str, 
     put("dim_<axis>", "int", column_docs.base_column_description("dim_z") or "",
         "agg", "agg", _BASE, _BASE_PKG, regex=r"^dim_[A-Za-z]+$")
 
+    # file-system column family: one column per directory level, so how many exist
+    # depends on how deep the scanned tree is.
+    put("parent<N>", "str", column_docs.base_column_description("parent0") or "",
+        "file", "file", _BASE, _BASE_PKG, regex=r"^parent\d+$")
+
     # remaining base columns (file-system scan + obs rollup)
     for name, desc in column_docs.BASE_COLUMN_DESCRIPTIONS.items():
         if name in cols:

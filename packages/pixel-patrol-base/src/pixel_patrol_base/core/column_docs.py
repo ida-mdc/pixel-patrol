@@ -6,7 +6,8 @@ Two groups are covered here:
 - ``BASE_COLUMN_DESCRIPTIONS`` - file-system columns (from ``core.file_system``)
   and pipeline-generated columns (from ``core.processing``: obs rows, sizes, ...).
 - ``PATTERN_COLUMN_DESCRIPTIONS`` - regex-keyed descriptions for pipeline column
-  families whose concrete names depend on the data (per-dimension coordinates).
+  families whose concrete names depend on the data (directory levels,
+  per-dimension coordinates).
 
 The shared raster-image loader columns are described where their types are
 declared, in :mod:`pixel_patrol_base.core.loader_schema`.
@@ -31,7 +32,6 @@ BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
     "path":                "Path of the file (or folder), relative to the project base directory.",
     "name":                "File or folder name, including extension.",
     "type":                "Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container).",
-    "parent":              "Path of the containing directory, relative to the project base directory ('.' for files directly in the base directory).",
     "depth":               "Depth of the path below the imported base directory.",
     "size_bytes":          "Size on disk in bytes (aggregated for folders).",
     "file_extension":      "Lower-cased file extension without the leading dot.",
@@ -49,7 +49,6 @@ BASE_COLUMN_DTYPES: Dict[str, str] = {
     "path":                "str",
     "name":                "str",
     "type":                "str",
-    "parent":              "str",
     "depth":               "int",
     "size_bytes":          "int",
     "file_extension":      "str",
@@ -64,6 +63,7 @@ BASE_COLUMN_DTYPES: Dict[str, str] = {
 # the data. (Per-axis size / pixel-size families are described with the loader
 # schema in loader_schema.py.)
 PATTERN_COLUMN_DESCRIPTIONS: List[Tuple[str, str]] = [
+    (r"^parent\d+$", "Name of one directory level of the containing directory, counted from the top: parent0 is the first directory below the base directory, parent1 the one below that; null when the file is not that deep."),
     (r"^dim_[A-Za-z]+$", "Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis."),
     (r"^size_[A-Za-z]$", "Extent (number of elements) of this row along the given axis."),
 ]

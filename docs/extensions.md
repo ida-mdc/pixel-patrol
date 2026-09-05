@@ -63,7 +63,7 @@ If your format stores certain dims in a way that makes spatial splitting ineffic
 
 `dim_order` is the only metadata field that must be correct. `shape` and `dtype` are always derived from the pixel array, not from `meta`. If `dim_order`/`dim_names` doesn't match the array's `ndim`, it's silently dropped and replaced with generic `A`/`B`/`C`… labels - check the length matches.
 
-The pipeline overwrites these after loading, so don't bother setting them: `shape`, `ndim`, `num_pixels`, `size_<axis>`, `dim_<axis>`, `dtype`, and the filesystem columns (`path`, `name`, `type`, `parent`, `depth`, `size_bytes`, `file_extension`, `modification_date`, `imported_path`, `common_base`, `child_id`).
+The pipeline overwrites these after loading, so don't bother setting them: `shape`, `ndim`, `num_pixels`, `size_<axis>`, `dim_<axis>`, `dtype`, and the filesystem columns (`path`, `name`, `type`, `parent<N>`, `depth`, `size_bytes`, `file_extension`, `modification_date`, `imported_path`, `common_base`, `child_id`).
 
 Any other field in `meta` is passed through to the table as-is, whether or not it's declared in `OUTPUT_SCHEMA` - a loader can dump every field it read from a file's metadata without knowing what each one means. `OUTPUT_SCHEMA` is only for the schema catalog/docs (see [schema doc](schema.md)): undeclared columns still work, they just won't show up there. Exception: loaders using the shared `RASTER_IMAGE_LOADER_SCHEMA` (BioIO/tifffile/Zarr-style), where `dim_order` and `dtype` are marked required in that schema's "Required columns".
 

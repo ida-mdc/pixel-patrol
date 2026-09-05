@@ -56,6 +56,7 @@ from tqdm.auto import tqdm
 from pixel_patrol_base.config import HISTOGRAM_BINS
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
+from pixel_patrol_base.utils.df_utils import add_parent_level_columns
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
@@ -911,6 +912,8 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
     if casts:
         df = df.with_columns(casts)
 
+    df = add_parent_level_columns(df)
+
     # Column reorder
     dim_cols    = sorted(c for c in df.columns if c.startswith("dim_") and len(c) == len("dim_") + 1)
     blob_cols   = [c for c in df.columns if _is_blob_dtype(df.schema[c])]
@@ -991,7 +994,8 @@ class _ResultsWriter:
         if self._row_group_size is not None:
             write_kwargs["row_group_size"] = self._row_group_size
         rows_this_part = self._buffer_rows
-        pl.concat(self._buffer, how="diagonal_relaxed").write_parquet(part_path, **write_kwargs)
+        part_df = add_parent_level_columns(pl.concat(self._buffer, how="diagonal_relaxed"))
+        part_df.write_parquet(part_path, **write_kwargs)
         self._part_paths.append(part_path)
         self._total_rows  += rows_this_part
         self._buffer      = []
