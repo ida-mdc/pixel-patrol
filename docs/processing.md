@@ -166,9 +166,7 @@ Key columns that are always present:
 
 ### Paths in the table
 
-All path columns (`path`, `parent`, `imported_path`) are stored **relative to the base directory**, so the table does not contain absolute filesystem paths. A file at `/data/images/condition_a/img01.tif` processed with base directory `/data/images/` is stored as `condition_a/img01.tif`.
-
-The directory levels of `parent` are additionally split into one column each, numbered from the top. So `root/subdir1/subdir2/subdir3` will result in `parent0=""subdir1"`, `parent1="subdir2"`, and so on.
+All path columns (`path`, `imported_path`) are stored **relative to the base directory**, so the table does not contain absolute filesystem paths. A file at `/data/images/condition_a/img01.tif` processed with base directory `/data/images/` is stored as `condition_a/img01.tif`. Each directory level of the path is also available as a separate `parent0`, `parent1`, … column (null for files not that deep).
 
 ### Project metadata
 

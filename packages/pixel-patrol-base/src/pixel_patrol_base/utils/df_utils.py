@@ -1,4 +1,3 @@
-import os
 import polars as pl
 from pixel_patrol_base.utils.path_utils import find_common_base
 from pathlib import PurePath
@@ -10,7 +9,7 @@ def add_parent_level_columns(df: pl.DataFrame) -> pl.DataFrame:
         return df
     df = df.with_columns(
         pl.col("path")
-        .str.split(os.sep)
+        .str.replace_all("\\\\", "/").str.split("/")
         .list.eval(pl.element().filter(pl.element().str.len_chars() > 0))
         .alias("_parts")
     ).with_columns(
