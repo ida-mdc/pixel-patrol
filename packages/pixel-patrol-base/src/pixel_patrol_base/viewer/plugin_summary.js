@@ -1,3 +1,5 @@
+import { MIXED_GROUP_WARNING } from './plugin_file_stats.js';
+
 export default {
   id: 'summary',
   required_inputs: ['size_bytes', 'file_extension'],
@@ -41,10 +43,20 @@ export default {
 
       // In overview mode the summary is a bare header; the uneven-group warning
       // is surfaced in the File Metadata tile instead.
-      if (summary.nGroups > 1 && !ctx.state.overviewMode) prependUnevenGroupWarning(container, ctx, rows);
+      if (summary.nGroups > 1 && !ctx.state.overviewMode && !ctx.withinFileGroupVariation) prependUnevenGroupWarning(container, ctx, rows);
       renderKpis(container, ctx, summary);
       renderMetaLines(container, ctx, summary);
-      if (summary.nGroups > 1) renderGroupTable(container, ctx, rows, summary);
+      if (ctx.withinFileGroupVariation && summary.nGroups > 1) {
+        ctx.plot.prependWarning(container, { level: 'yellow', html: MIXED_GROUP_WARNING });
+        container.appendChild(container.firstChild); // move from top to after KPI/meta lines
+      }
+      if (summary.nGroups > 1) {
+        const mixed = ctx.withinFileGroupVariation;
+        const imageCounts = (mixed && summary.hasContainerFiles)
+          ? await fetchImageCountsPerGroup(ctx)
+          : null;
+        renderGroupTable(container, ctx, rows, summary, { mixed, imageCounts });
+      }
     } catch {
       container.innerHTML = '<div class="no-data">Failed to load data.</div>';
     }
@@ -67,6 +79,14 @@ function fetchSummary(ctx) {
   ]);
 }
 
+// Image count per group queried directly from pp_data (accurate even for mixed-group files).
+async function fetchImageCountsPerGroup(ctx) {
+  const rows = await ctx.queryRows(
+    `SELECT ${ctx.sql.groupCol()} AS g, COUNT(*) AS n FROM pp_data ${ctx.where} GROUP BY 1`
+  );
+  return Object.fromEntries(rows.map(r => [String(r.g), Number(r.n)]));
+}
+
 // Derive the headline numbers and labels the view needs.
 function summarize(ctx, rows, [totals = {}]) {
   const extensions = new Set();
@@ -74,13 +94,16 @@ function summarize(ctx, rows, [totals = {}]) {
 
   const groupCol            = ctx.state.groupCol ?? 'group';
   const isImportedPathShort = groupCol === 'imported_path_short';
+  const totalFiles          = Number(totals.file_count ?? 0);
+  const totalImages         = Number(totals.image_count ?? 0);
 
   return {
     nGroups:       rows.length,
     extensions,
-    totalFiles:    Number(totals.file_count ?? 0),
-    totalImages:   Number(totals.image_count ?? 0),
+    totalFiles,
+    totalImages,
     totalBytes:    Number(totals.total_bytes ?? 0),
+    hasContainerFiles: totalImages > totalFiles,
     isImportedPathShort,
     groupColLabel: isImportedPathShort ? groupCol : ctx.plot.niceName(groupCol),
   };
@@ -140,34 +163,45 @@ function renderMetaLines(container, ctx, s) {
   }
 }
 
-// Per-group breakdown table with inline bar cells for file count and size.
-function renderGroupTable(container, ctx, rows, s) {
+// Per-group breakdown table with inline bar cells for file count, images, and size.
+// When mixed=true (files span multiple groups), Files and Size columns are hidden.
+// imageCounts, if provided, overrides the per-row image_count with accurate pp_data counts.
+function renderGroupTable(container, ctx, rows, s, { mixed = false, imageCounts = null } = {}) {
   const { escapeHtml, formatBytes } = ctx.plot;
-  const showExtCol   = s.extensions.size > 1;
-  const maxFileCount = Math.max(...rows.map(r => Number(r.file_count)));
-  const maxBytes     = Math.max(...rows.map(r => Number(r.total_bytes ?? 0)));
+  const showExtCol    = s.extensions.size > 1;
+  const showImages    = s.hasContainerFiles;
+  const showFilesSize = !mixed;
+  const getImageCount = r => imageCounts ? (imageCounts[String(r.__group__)] ?? 0) : Number(r.image_count ?? 0);
+
+  const maxFileCount  = showFilesSize ? Math.max(...rows.map(r => Number(r.file_count))) : 0;
+  const maxBytes      = showFilesSize ? Math.max(...rows.map(r => Number(r.total_bytes ?? 0))) : 0;
+  const maxImageCount = showImages    ? Math.max(...rows.map(getImageCount)) : 0;
+
   const table = document.createElement('table');
   table.className = 'stat-table';
   table.innerHTML = `
     <thead>
       <tr>
         <th>${escapeHtml(s.groupColLabel)}</th>
-        <th>Files</th>
-        <th>Size</th>
-        ${showExtCol ? '<th>File Extension</th>' : ''}
+        ${showFilesSize ? '<th>Files</th>' : ''}
+        ${showImages    ? '<th>Images</th>' : ''}
+        ${showFilesSize ? '<th>Size</th>' : ''}
+        ${showExtCol    ? '<th>File Extension</th>' : ''}
       </tr>
     </thead>
     <tbody>
       ${rows.map(r => {
-        const color     = ctx.color.group(String(r.__group__));
-        const fileCount = Number(r.file_count);
-        const bytes     = Number(r.total_bytes ?? 0);
+        const color      = ctx.color.group(String(r.__group__));
+        const fileCount  = Number(r.file_count);
+        const imageCount = getImageCount(r);
+        const bytes      = Number(r.total_bytes ?? 0);
         return `
         <tr>
           <td><span class="group-color-dot" style="background:${color}"></span>${escapeHtml(ctx.groupLabel(String(r.__group__)))}</td>
-          <td>${barCell(fileCount, maxFileCount, color, fileCount.toLocaleString())}</td>
-          <td>${barCell(bytes, maxBytes, color, formatBytes(bytes))}</td>
-          ${showExtCol ? `<td>${escapeHtml(formatFileTypes(r.file_types))}</td>` : ''}
+          ${showFilesSize ? `<td>${barCell(fileCount, maxFileCount, color, fileCount.toLocaleString())}</td>` : ''}
+          ${showImages    ? `<td>${barCell(imageCount, maxImageCount, color, imageCount.toLocaleString())}</td>` : ''}
+          ${showFilesSize ? `<td>${barCell(bytes, maxBytes, color, formatBytes(bytes))}</td>` : ''}
+          ${showExtCol    ? `<td>${escapeHtml(formatFileTypes(r.file_types))}</td>` : ''}
         </tr>
       `;
       }).join('')}

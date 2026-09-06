@@ -42,7 +42,7 @@ import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
  * @property {() => string[]} color.getPaletteNames  lists the available
  *   palette names accepted by color.getColors.
  */
-function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows) {
+function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows, { withinFileGroupVariation = false } = {}) {
   const legend = legendWithGrouping(LEGEND, state, '');
   const groupLabels = buildGroupLabels(groups);
   plotEngine.setDateCols(schema.dateCols ?? []);
@@ -55,6 +55,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
     userWhere,
     groups,
     groupLabels,
+    withinFileGroupVariation,
     groupLabel: (g) => groupLabels[g] ?? String(g),
     filteredCount,
     totalRows,
@@ -255,23 +256,31 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const userWhere = buildWhere(state.filter);
   const where = buildScopedWhere(schema, state);
 
-  // Fetch distinct groups and filtered count in parallel.
+  // Fetch distinct groups, filtered count, and within-file group variation in parallel.
   const gcExpr = state.groupCol ? _q(state.groupCol) : `'${GROUP_ALL}'`;
-  const [groupResult, countResult] = await Promise.all([
+  const hasPaths = schema.allCols.includes('path');
+  const [groupResult, countResult, mixedResult] = await Promise.all([
     conn.query(
       `SELECT DISTINCT ${gcExpr} AS g FROM pp_data ${where} ORDER BY 1 LIMIT 50`,
     ),
     conn.query(`SELECT COUNT(*) AS n FROM pp_data ${where}`),
+    hasPaths && state.groupCol
+      ? conn.query(`SELECT COUNT(*) AS n FROM (SELECT "path" FROM pp_data ${where} GROUP BY "path" HAVING COUNT(DISTINCT ${_q(state.groupCol)}) > 1)`)
+      : Promise.resolve(null),
   ]);
 
   const groups = sortGroups(groupResult.toArray().map(r => String(r.g)));
   const filteredCount = Number(countResult.toArray()[0].n);
   const colorMap     = buildColorMap(groups, state.palette);
+  const withinFileGroupVariation = mixedResult
+    ? Number(mixedResult.toArray()[0]?.n ?? 0) > 0
+    : false;
 
   updateFilteredInfo(filteredCount, totalRows);
 
   const ctx = buildCtx(
     conn, schema, state, colorMap, where, userWhere, groups, filteredCount, totalRows,
+    { withinFileGroupVariation },
   );
 
   const container = document.getElementById(WIDGET_CONTAINER_ID);
