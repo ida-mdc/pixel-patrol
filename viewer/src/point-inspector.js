@@ -20,6 +20,7 @@ const NON_ACQUISITION_COLS = new Set([
 const MUTED = '#898781';
 
 let drawer = null, bodyEl = null;
+let _seq = 0; // incremented on each openInspector call; stale async paths bail out early
 const DRAWER_W = 432;
 
 // Clicking any registered plot point (see point-selection.js) opens the drawer.
@@ -320,6 +321,7 @@ function histogramsSection(ctx, row, wholeHist, wholeMin, wholeMax, channels) {
  * @param {object} ctx  plugin ctx (needs ctx.query / ctx.queryRows).
  */
 export async function openInspector(fileRowNumber, ctx, opts = {}) {
+  const seq = ++_seq;
   ensureDrawer();
   drawer.style.transform = 'translateX(0)';
   pushMain(true);
@@ -330,14 +332,29 @@ export async function openInspector(fileRowNumber, ctx, opts = {}) {
   try {
     [row] = await ctx.queryRows(`SELECT ${rowSelect(ctx)} FROM pp_all WHERE file_row_number = ${Number(fileRowNumber)} LIMIT 1`);
   } catch (err) { bodyEl.textContent = `Could not load point: ${err.message}`; return; }
+  if (seq !== _seq) return;
   if (!row) { bodyEl.textContent = 'Point not found.'; return; }
 
-  // Subtitle stays a plain "what does this row cover" label; the dimensions and
-  // dtype live once in the Acquisition block below, not repeated here.
+  // Subtitle: what this row covers. Dimensions and dtype live in Acquisition, not repeated.
   const kind = row.type === 'sub_file' ? 'sub-image' : 'image';
   const pinned = String(row.dim_order || '').split('')
     .map(a => ({ axis: a.toUpperCase(), o: row[`dim_${a.toLowerCase()}`] })).filter(d => d.o != null);
-  const sub = pinned.length ? `${pinned.map(d => `${d.axis}=${d.o}`).join(', ')} slice of ${kind}` : `Whole ${kind}`;
+  const isSlice = pinned.length > 0;
+  const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
+  const childLabel = (row.type === 'sub_file' && row.child_id != null) ? ` · ${row.child_id}` : '';
+  const sub = isSlice
+    ? `${pinned.map(d => `${d.axis}=${d.o}`).join(', ')} slice of ${kind}${childLabel}`
+    : `${kindCap}${childLabel}`;
+
+  const groupVal = ctx.state?.groupCol && row[ctx.state.groupCol] != null
+    ? String(row[ctx.state.groupCol]) : null;
+  const groupColor = groupVal ? ctx.color.group(groupVal) : null;
+  const groupChip = groupVal
+    ? `<div style="margin-top:5px"><span style="font:10px ui-monospace,monospace;padding:2px 8px;border-radius:10px;` +
+      `background:color-mix(in srgb,${groupColor} 15%,transparent);color:${groupColor};` +
+      `border:1px solid color-mix(in srgb,${groupColor} 30%,transparent)">group: ${escapeHtml(groupVal)}</span></div>`
+    : '';
+
   const titleEl = document.getElementById('pi-title');
   titleEl.style.cssText = 'display:flex;gap:12px;align-items:flex-start;flex:1 1 auto;min-width:0';
   titleEl.innerHTML =
@@ -345,27 +362,48 @@ export async function openInspector(fileRowNumber, ctx, opts = {}) {
     '<div style="flex:1 1 auto;min-width:0">' +
       `<div style="font-size:16px;font-weight:640;letter-spacing:-.01em;word-break:break-word">${escapeHtml(String(row.name ?? row.path ?? ''))}</div>` +
       `<div style="color:${MUTED};font:11.5px ui-monospace,monospace;margin-top:3px;letter-spacing:.03em">${escapeHtml(sub)}</div>` +
+      groupChip +
     '</div>';
 
   const clickedMetric = opts.metric || null;
   const wthumb = ctx.schema?.blobCols?.includes('thumbnail');
-  const blobQ = wthumb
-    ? ctx.query(`SELECT "thumbnail" FROM pp_all WHERE file_row_number = ${Number(fileRowNumber)} LIMIT 1`)
-    : Promise.resolve(null);
+  // For slices, fetch the thumbnail from the whole-image row (same path, obs_level=0).
+  const thumbSql = wthumb
+    ? (isSlice
+        ? `SELECT "thumbnail" FROM pp_all WHERE path = ${sqlStr(row.path)} AND obs_level = 0 LIMIT 1`
+        : `SELECT "thumbnail" FROM pp_all WHERE file_row_number = ${Number(fileRowNumber)} LIMIT 1`)
+    : null;
   const wsql = `SELECT histogram_counts, histogram_min, histogram_max FROM pp_all WHERE file_row_number = ${Number(fileRowNumber)} LIMIT 1`;
 
-  let blobTable = null, channels = [], refs = {}, whole = { table: null, values: [null] }, wmin, wmax;
-  try {
-    [blobTable, channels, refs, whole] = await Promise.all([
-      blobQ, fetchChannelHists(ctx, row), fetchRefs(ctx, row), fetchArrayCol(ctx, wsql, 'histogram_counts'),
-    ]);
-    wmin = getCol(whole.table, 'histogram_min')?.get(0);
-    wmax = getCol(whole.table, 'histogram_max')?.get(0);
-  } catch (err) { console.warn('[viewer] inspector data load failed:', err); }
+  const results = await Promise.allSettled([
+    thumbSql ? ctx.query(thumbSql) : Promise.resolve(null),
+    fetchChannelHists(ctx, row),
+    fetchRefs(ctx, row),
+    fetchArrayCol(ctx, wsql, 'histogram_counts'),
+  ]);
+  if (seq !== _seq) return;
+
+  const [blobRes, chRes, refsRes, wholeRes] = results;
+  results.forEach((r, i) => { if (r.status === 'rejected') console.warn('[viewer] inspector data load failed:', r.reason); });
+  const blobTable = blobRes.status === 'fulfilled' ? blobRes.value : null;
+  const channels  = chRes.status === 'fulfilled'   ? chRes.value   : [];
+  const refs      = refsRes.status === 'fulfilled' ? refsRes.value : {};
+  const whole     = wholeRes.status === 'fulfilled' ? wholeRes.value : { table: null, values: [null] };
+  const wmin = getCol(whole.table, 'histogram_min')?.get(0);
+  const wmax = getCol(whole.table, 'histogram_max')?.get(0);
 
   const thumbBytes = blobTable ? ctx.data.extractBinary(getCol(blobTable, 'thumbnail')?.get(0) ?? null) : null;
   const thumb = headerThumb(thumbBytes);
-  if (thumb) document.getElementById('pi-thumb').appendChild(thumb);
+  if (thumb) {
+    const thumbContainer = document.getElementById('pi-thumb');
+    if (isSlice) {
+      const lbl = document.createElement('div');
+      lbl.innerHTML = 'whole image<br>thumbnail';
+      lbl.style.cssText = `font:9px ui-monospace,monospace;color:${MUTED};text-align:center;margin-bottom:3px`;
+      thumbContainer.appendChild(lbl);
+    }
+    thumbContainer.appendChild(thumb);
+  }
 
   bodyEl.textContent = '';
   bodyEl.insertAdjacentHTML('beforeend', acquisitionSection(row, ctx));

@@ -67,17 +67,8 @@ export const registry = {
   get plugins() { return _plugins; },
 
   /**
-   * Point-inspector contributors: extra sections shown in the point-detail
-   * drawer when a plot point is clicked. Same spirit as widget plugins, but
-   * they receive one clicked row instead of the whole dataset.
-   *
-   * Contributor contract:
-   *   {
-   *     id:     string                          - unique identifier
-   *     label:  string                          - section header (optional)
-   *     requires?(row, ctx) → bool              - return false to skip this row
-   *     render(container, row, ctx) → void|Promise - draw into the given element
-   *   }
+   * Point-inspector contributors: sections injected into the drawer on point click.
+   * Each entry: { id, label?, requires?(row,ctx)→bool, render(container,row,ctx)→void|Promise }
    */
   get inspectors() { return _inspectors; },
 

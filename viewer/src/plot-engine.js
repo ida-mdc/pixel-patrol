@@ -323,10 +323,7 @@ export async function renderDistribution(container, ctx, spec) {
   const plotContainer = (sideInfo && ctx.state.showInfo) ? appendSideInfoRow(container, sideInfo) : container;
   const plotDiv = ctx.plot.append(plotContainer, traces, finalLayout, divStyle);
 
-  // Raw violins draw one point per row (all points or outliers); wire them so a
-  // click opens the point inspector. Box mode has no per-row points to click.
-  // Violins draw their own outlier points; box mode gets an outlier overlay
-  // (buildCategoryTraces) - both carry customdata, so both are click-to-inspect.
+  // Both violin and box carry customdata (outlier overlay for box), so both are click-to-inspect.
   if (mode === 'violin' || mode === 'box') registerPointPlot(plotDiv, ctx, numCol);
 
   // Significance only makes sense with one violin/box per X category: either
@@ -387,9 +384,7 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
     name: catLabelFn(g), x: catLabelFn(g), color: ctx.color.group(g), mode,
   }));
 
-  // Box mode has no raw points, so overlay each group's most extreme values as
-  // clickable dots - the distribution's outliers stay inspectable and linkable
-  // even when the full point cloud is too large to draw.
+  // Box mode: overlay extreme values per group as clickable outlier dots.
   if (mode === 'box') {
     try {
       const outs = await fetchCategoryOutliers(ctx, { numCol, table, where, catSql });
