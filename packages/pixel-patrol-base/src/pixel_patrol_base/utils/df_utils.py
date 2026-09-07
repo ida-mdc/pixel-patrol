@@ -9,7 +9,7 @@ def add_parent_level_columns(df: pl.DataFrame) -> pl.DataFrame:
         return df
     df = df.with_columns(
         pl.col("path")
-        .str.replace_all("\\\\", "/").str.split("/")
+        .str.replace_all(r"\\", "/").str.split("/")
         .list.eval(pl.element().filter(pl.element().str.len_chars() > 0))
         .alias("_parts")
     ).with_columns(
