@@ -1,7 +1,6 @@
 """Shared fixtures for pixel-patrol-aqqua tests."""
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
@@ -9,6 +8,14 @@ import blosc2
 import lmdb
 import numpy as np
 import pytest
+
+
+_RGB_CHANNELS = [
+    {"name": "red",   "kind": "brightfield"},
+    {"name": "green", "kind": "brightfield"},
+    {"name": "blue",  "kind": "brightfield"},
+]
+_GRAY_CHANNELS = [{"name": "grayscale", "kind": "brightfield"}]
 
 
 def _write_lmdb(path: Path, images: List[Tuple[np.ndarray, Dict[str, Any]]]) -> None:
@@ -30,17 +37,17 @@ def _write_lmdb(path: Path, images: List[Tuple[np.ndarray, Dict[str, Any]]]) -> 
 
 @pytest.fixture()
 def rgb_lmdb(tmp_path: Path) -> Path:
-    """Single LMDB with two small RGB (HxWxC) images."""
+    """LMDB with two RGB images in CYX layout (3, H, W), uint16."""
     lmdb_path = tmp_path / "test.lmdb"
     rng = np.random.default_rng(42)
     images = [
         (
-            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
-            {"image-uuid": "uuid-0", "class": "diatom"},
+            rng.integers(0, 65535, (3, 48, 84), dtype=np.uint16),
+            {"image-uuid": "uuid-0", "class": "diatom", "image-channels": _RGB_CHANNELS},
         ),
         (
-            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
-            {"image-uuid": "uuid-1", "class": "copepod"},
+            rng.integers(0, 65535, (3, 48, 84), dtype=np.uint16),
+            {"image-uuid": "uuid-1", "class": "copepod", "image-channels": _RGB_CHANNELS},
         ),
     ]
     _write_lmdb(lmdb_path, images)
@@ -49,12 +56,18 @@ def rgb_lmdb(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def grayscale_lmdb(tmp_path: Path) -> Path:
-    """Single LMDB with two grayscale (HxW) images."""
+    """LMDB with two grayscale images in CYX layout (1, H, W), uint16."""
     lmdb_path = tmp_path / "gray.lmdb"
     rng = np.random.default_rng(7)
     images = [
-        (rng.integers(0, 255, (32, 64), dtype=np.uint8), {"image-uuid": "gray-0"}),
-        (rng.integers(0, 255, (32, 64), dtype=np.uint8), {"image-uuid": "gray-1"}),
+        (
+            rng.integers(0, 65535, (1, 32, 64), dtype=np.uint16),
+            {"image-uuid": "gray-0", "image-channels": _GRAY_CHANNELS},
+        ),
+        (
+            rng.integers(0, 65535, (1, 32, 64), dtype=np.uint16),
+            {"image-uuid": "gray-1", "image-channels": _GRAY_CHANNELS},
+        ),
     ]
     _write_lmdb(lmdb_path, images)
     return lmdb_path
@@ -62,7 +75,7 @@ def grayscale_lmdb(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def varying_size_lmdb(tmp_path: Path) -> Path:
-    """LMDB whose first image is smaller than its second."""
+    """LMDB with 2D (YX) images of different sizes - no channel dim."""
     lmdb_path = tmp_path / "varying.lmdb"
     rng = np.random.default_rng(3)
     images = [
@@ -75,11 +88,14 @@ def varying_size_lmdb(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def five_image_lmdb(tmp_path: Path) -> Path:
-    """LMDB with five grayscale images, keyed uuid-0..uuid-4 in order."""
+    """LMDB with five grayscale CYX images, uuid-0..uuid-4 in order."""
     lmdb_path = tmp_path / "five.lmdb"
     rng = np.random.default_rng(11)
     images = [
-        (rng.integers(0, 255, (8, 8), dtype=np.uint8), {"image-uuid": f"uuid-{i}"})
+        (
+            rng.integers(0, 65535, (1, 8, 8), dtype=np.uint16),
+            {"image-uuid": f"uuid-{i}", "image-channels": _GRAY_CHANNELS},
+        )
         for i in range(5)
     ]
     _write_lmdb(lmdb_path, images)
@@ -88,24 +104,19 @@ def five_image_lmdb(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def rgb_lmdb_with_meta_parquet(tmp_path: Path) -> Path:
-    """LMDB named with a numeric ID suffix, plus a matching '-meta-{ID}.parquet'
-    sidecar, mirroring the AqQua dataset naming convention:
-        *-images-{ID}.lmdb  +  *-meta-{ID}.parquet
-    Metadata columns and values mirror a real AqQua meta parquet (see
-    ankita-cpics-cpics-6mp-phytodive-data-meta-1125909056990340.parquet).
-    """
+    """LMDB with numeric ID suffix + matching parquet sidecar."""
     import polars as pl
 
     lmdb_path = tmp_path / "sample-images-42.lmdb"
     rng = np.random.default_rng(42)
     images = [
         (
-            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
-            {"image-uuid": "uuid-0"},
+            rng.integers(0, 65535, (3, 48, 84), dtype=np.uint16),
+            {"image-uuid": "uuid-0", "image-channels": _RGB_CHANNELS},
         ),
         (
-            rng.integers(0, 255, (48, 84, 3), dtype=np.uint8),
-            {"image-uuid": "uuid-1"},
+            rng.integers(0, 65535, (3, 48, 84), dtype=np.uint16),
+            {"image-uuid": "uuid-1", "image-channels": _RGB_CHANNELS},
         ),
     ]
     _write_lmdb(lmdb_path, images)
@@ -117,4 +128,41 @@ def rgb_lmdb_with_meta_parquet(tmp_path: Path) -> Path:
         "image-altitude-meters": [0, 0],
     }).write_parquet(parquet_path)
 
+    return lmdb_path
+
+
+@pytest.fixture()
+def lmdb_with_toml(tmp_path: Path) -> Path:
+    """LMDB with a sibling image-set.toml providing dataset metadata and defaults."""
+    lmdb_path = tmp_path / "dataset.lmdb"
+    rng = np.random.default_rng(99)
+    images = [
+        (
+            rng.integers(0, 65535, (1, 32, 64), dtype=np.uint16),
+            {"image-uuid": "toml-0", "image-channels": _GRAY_CHANNELS},
+        ),
+    ]
+    _write_lmdb(lmdb_path, images)
+
+    toml_content = """\
+[meta]
+image-set-name = "Test Dataset"
+image-set-sensor = "TestSensor"
+image-set-sensor-family = "TestFamily"
+image-set-spectral-resolution = "grayscale"
+image-set-uuid = "test-uuid-1234"
+image-set-region = "North Sea"
+image-set-ifdo-version = "v2.1.0"
+
+[[meta.image-set-channel]]
+name = "grayscale"
+kind = "brightfield"
+
+[image-defaults]
+image-pixel-magnitude = 0.5
+image-latitude = 54.0
+image-longitude = 8.0
+image-altitude-meters = -10
+"""
+    (tmp_path / "image-set.toml").write_text(toml_content)
     return lmdb_path
