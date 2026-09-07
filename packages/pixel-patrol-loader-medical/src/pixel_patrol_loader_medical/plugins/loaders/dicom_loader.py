@@ -180,17 +180,13 @@ def _build_series_record(files: List[Path], ref_ds: pydicom.Dataset) -> Record:
 
 
 class DicomLoader:
-    """Load DICOM images (.dcm, .dicom) via pydicom.
-
-    # TODO: pipeline currently processes individual .dcm slices rather than assembling
-    # series into 3D volumes; folder-based series assembly requires a discovery fix.
-    """
+    """Load DICOM images (.dcm, .dicom) via pydicom, assembling multi-slice series into 3D volumes."""
 
     NAME = "dicom"
     DESCRIPTION = "Loads DICOM images (.dcm, .dicom), assembling multi-slice series from folders into 3D volumes."
 
     SUPPORTED_EXTENSIONS: Set[str] = {"dcm", "dicom"}
-    FOLDER_EXTENSIONS:    Set[str] = {"dcm", "dicom"}
+    FOLDER_EXTENSIONS:    Set[str] = set()
     CONTAINER_EXTENSIONS: Set[str] = set()
 
     OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA}
@@ -217,7 +213,7 @@ class DicomLoader:
     def _folder_header(self, folder: Path) -> FileInfo:
         series = _scan_series(folder)
         if not series:
-            raise ValueError(f"No DICOM series found in: {folder}")
+            raise SkipFile(f"no image DICOM series in folder: {folder.name}")
         n_images = len(series)
         first_files = next(iter(series.values()))
         ds = pydicom.dcmread(str(first_files[0]), stop_before_pixels=True)

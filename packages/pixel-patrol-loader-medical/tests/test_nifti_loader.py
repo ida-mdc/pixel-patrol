@@ -1,11 +1,14 @@
 """Tests for NiftiLoader."""
 
+import json
 from pathlib import Path
 
+import dask.array as da
 import nibabel as nib
 import numpy as np
 import pytest
 
+from pixel_patrol_base.core.contracts import SkipFile
 from pixel_patrol_loader_medical.plugins.loaders.nifti_loader import NiftiLoader
 
 
@@ -49,6 +52,13 @@ def test_read_header_4d(tmp_path, loader):
     assert info.n_images == 1
 
 
+def test_read_header_non_nifti_gz_skips(tmp_path, loader):
+    path = tmp_path / "data.gz"
+    path.write_bytes(b"not a nifti file at all")
+    with pytest.raises(SkipFile):
+        loader.read_header(path)
+
+
 def test_load_3d_roundtrip(tmp_path, loader):
     rng = np.random.default_rng(0)
     arr = rng.integers(-1000, 3000, (10, 20, 30), dtype=np.int16)
@@ -57,7 +67,9 @@ def test_load_3d_roundtrip(tmp_path, loader):
     rec = loader.load(path)
     assert rec.dim_order == "XYZ"
     assert tuple(rec.data.shape) == (10, 20, 30)
+    assert "spatial-2d" in rec.capabilities
     assert "spatial-3d" in rec.capabilities
+    assert isinstance(rec.data, da.Array)
     np.testing.assert_array_equal(rec.data.compute(), arr)
 
 
@@ -89,27 +101,24 @@ def test_pixel_sizes_4d_with_tr(tmp_path, loader):
     assert rec.meta["pixel_size_T"] == pytest.approx(1.5)
 
 
-def test_non_nifti_gz_raises(tmp_path, loader):
+def test_non_nifti_gz_skips(tmp_path, loader):
     path = tmp_path / "data.gz"
     path.write_bytes(b"not a nifti file at all")
-    with pytest.raises(ValueError, match="Not a NIfTI"):
+    with pytest.raises(SkipFile):
         loader.load(path)
 
 
-def test_load_returns_lazy_dask_array(tmp_path, loader):
-    import dask.array as da
-    path = tmp_path / "vol.nii"
-    _write_nifti(path, np.zeros((10, 10, 10), dtype=np.float32))
+def test_bids_sidecar(tmp_path, loader):
+    arr = np.zeros((4, 4, 4), dtype=np.float32)
+    path = tmp_path / "sub-01_T1w.nii"
+    _write_nifti(path, arr)
+    (tmp_path / "sub-01_T1w.json").write_text(
+        json.dumps({"RepetitionTime": 2.0, "EchoTime": 0.03, "nested": {"key": "val"}})
+    )
     rec = loader.load(path)
-    assert isinstance(rec.data, da.Array)
-
-
-def test_capabilities_3d(tmp_path, loader):
-    path = tmp_path / "vol.nii"
-    _write_nifti(path, np.zeros((4, 5, 6), dtype=np.int16))
-    rec = loader.load(path)
-    assert "spatial-2d" in rec.capabilities
-    assert "spatial-3d" in rec.capabilities
+    assert rec.meta["RepetitionTime"] == pytest.approx(2.0)
+    assert rec.meta["EchoTime"] == pytest.approx(0.03)
+    assert "nested" not in rec.meta  # nested objects are excluded
 
 
 def test_capabilities_4d(tmp_path, loader):

@@ -1,14 +1,13 @@
 """Tests for DicomLoader."""
 
 from pathlib import Path
-from typing import List
 
+import dask.array as da
 import numpy as np
 import pydicom
 import pydicom.uid
 import pytest
-from pydicom.dataset import Dataset, FileDataset
-from pydicom.sequence import Sequence
+from pydicom.dataset import FileDataset
 
 from pixel_patrol_base.core.contracts import SkipFile
 from pixel_patrol_loader_medical.plugins.loaders.dicom_loader import DicomLoader
@@ -110,23 +109,17 @@ def test_load_single_file_roundtrip(tmp_path, loader):
     assert rec.dim_order == "YX"
     assert tuple(rec.data.shape) == (16, 16)
     assert "spatial-2d" in rec.capabilities
+    assert isinstance(rec.data, da.Array)
     np.testing.assert_array_equal(rec.data.compute(), arr)
 
 
-def test_load_single_file_modality_and_description(tmp_path, loader):
+def test_load_single_file_metadata(tmp_path, loader):
     path = tmp_path / "slice.dcm"
     series_uid = pydicom.uid.generate_uid()
     _write_dicom_slice(path, np.zeros((8, 8), dtype=np.uint16), series_uid=series_uid, modality="CT")
     rec = loader.load(path)
     assert rec.meta["Modality"] == "CT"
     assert rec.meta["SeriesDescription"] == "Test Series"
-
-
-def test_load_single_file_pixel_sizes(tmp_path, loader):
-    path = tmp_path / "slice.dcm"
-    series_uid = pydicom.uid.generate_uid()
-    _write_dicom_slice(path, np.zeros((8, 8), dtype=np.uint16), series_uid=series_uid)
-    rec = loader.load(path)
     assert rec.meta["pixel_size_X"] == pytest.approx(1.0)
     assert rec.meta["pixel_size_Y"] == pytest.approx(1.0)
     assert rec.meta["pixel_size_Z"] == pytest.approx(1.0)
@@ -203,6 +196,9 @@ def test_load_range_multi_series(tmp_path, loader):
     assert set(results.keys()) == {uid1, uid2}
     for rec in results.values():
         assert tuple(rec.data.shape) == (3, 4, 4)
+    # Verify series pixel data is not swapped
+    assert results[uid1].data.compute().sum() == 0
+    assert results[uid2].data.compute().sum() > 0
 
 
 def test_rescale_applied(tmp_path, loader):
@@ -214,14 +210,6 @@ def test_rescale_applied(tmp_path, loader):
     rec = loader.load(path)
     assert rec.data.dtype == np.dtype("float32")
     np.testing.assert_array_equal(rec.data.compute(), arr.astype(np.float32) - 1024.0)
-
-
-def test_load_returns_lazy_dask_array(tmp_path, loader):
-    import dask.array as da
-    path = tmp_path / "slice.dcm"
-    _write_dicom_slice(path, np.zeros((8, 8), dtype=np.uint16), pydicom.uid.generate_uid())
-    rec = loader.load(path)
-    assert isinstance(rec.data, da.Array)
 
 
 def test_sr_file_raises_skip_file(tmp_path, loader):
@@ -241,11 +229,31 @@ def test_sr_file_raises_skip_file(tmp_path, loader):
         loader.read_header(tmp_path / "sr.dcm")
 
 
+def test_folder_with_only_sr_raises_skip_file(tmp_path, loader):
+    # A folder that contains only non-image DICOM (SR) files should be silently skipped.
+    sr_dir = tmp_path / "sr_only"
+    sr_dir.mkdir()
+    sop_uid = pydicom.uid.generate_uid()
+    file_meta = pydicom.dataset.FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.88.22"
+    file_meta.MediaStorageSOPInstanceUID = sop_uid
+    file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+    ds = FileDataset(str(sr_dir / "sr.dcm"), {}, file_meta=file_meta, preamble=b"\x00" * 128)
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.88.22"
+    ds.SOPInstanceUID = sop_uid
+    ds.Modality = "SR"
+    pydicom.dcmwrite(str(sr_dir / "sr.dcm"), ds)
+
+    assert loader.is_folder_supported(sr_dir)
+    with pytest.raises(SkipFile):
+        loader.read_header(sr_dir)
+
+
 def test_scan_series_nested_directories(tmp_path, loader):
     # Series files nested two levels deep, as in typical DICOM exports.
     nested = tmp_path / "patient" / "study" / "series"
     nested.mkdir(parents=True)
-    series_uid = _write_series(nested, n_slices=3, rows=8, cols=8)
+    _write_series(nested, n_slices=3, rows=8, cols=8)
 
     # is_folder_supported finds them recursively
     assert loader.is_folder_supported(tmp_path)

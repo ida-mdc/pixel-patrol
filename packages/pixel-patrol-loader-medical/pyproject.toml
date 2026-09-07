@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol-loader-medical"
-version = "0.8.0"
+version = "0.9.0"
 description = "PixelPatrol add-on package for loading medical images (NIfTI, DICOM)"
 readme = "README.md"
 license = "MIT"
@@ -15,7 +15,7 @@ dependencies = [
     "pydicom==3.0.1",
     "pylibjpeg==2.1.0",
     "pylibjpeg-libjpeg==2.4.0",
-    "pixel-patrol-base==0.8.0",
+    "pixel-patrol-base==0.9.0",
 ]
 
 [project.urls]

@@ -12,7 +12,7 @@ import dask.array as da
 import nibabel as nib
 import numpy as np
 
-from pixel_patrol_base.core.contracts import FileInfo
+from pixel_patrol_base.core.contracts import FileInfo, SkipFile
 from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA,
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
@@ -126,7 +126,7 @@ class NiftiLoader:
 
     def read_header(self, file_path: Path) -> FileInfo:
         if not _is_nifti(file_path):
-            raise ValueError(f"Not a NIfTI file: {file_path}")
+            raise SkipFile(f"not a NIfTI file: {file_path.name}")
         img = nib.load(str(file_path))
         shape = img.shape
         dtype = np.dtype(img.get_data_dtype())
@@ -135,7 +135,7 @@ class NiftiLoader:
 
     def load(self, file_path: Path) -> Record:
         if not _is_nifti(file_path):
-            raise ValueError(f"Not a NIfTI file: {file_path}")
+            raise SkipFile(f"not a NIfTI file: {file_path.name}")
         img = nib.load(str(file_path))
         shape = img.shape
         dtype = np.dtype(img.get_data_dtype())

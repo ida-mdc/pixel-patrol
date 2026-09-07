@@ -13,6 +13,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pixel-patrol-base==0.9.0",
     "pixel-patrol-loader-bio==0.9.0",
+    "pixel-patrol-loader-medical==0.9.0",
     "pixel-patrol-geospatial==0.9.0",
 ]
 
@@ -36,6 +37,7 @@ dev = [
 [tool.uv.sources]
 pixel-patrol-base = { path = "../pixel-patrol-base" }
 pixel-patrol-loader-bio = { path = "../pixel-patrol-loader-bio" }
+pixel-patrol-loader-medical = { path = "../pixel-patrol-loader-medical" }
 pixel-patrol-geospatial = { path = "../pixel-patrol-geospatial" }
 
 [tool.setuptools.package-data]
