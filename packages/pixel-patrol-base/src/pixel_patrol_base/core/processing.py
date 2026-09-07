@@ -1589,7 +1589,8 @@ def build_records_df(
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
             _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir,
-                            is_folder_dataset=getattr(loader, "is_folder_supported", None)),
+                            is_folder_dataset=getattr(loader, "is_folder_supported", None),
+                            folder_file_extension=getattr(loader, "FOLDER_FILE_EXTENSION", None)),
             config=cfg,
             loader=loader,
             files_meta=files_meta,

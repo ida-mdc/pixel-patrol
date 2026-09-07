@@ -185,9 +185,11 @@ class DicomLoader:
     NAME = "dicom"
     DESCRIPTION = "Loads DICOM images (.dcm, .dicom), assembling multi-slice series from folders into 3D volumes."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"dcm", "dicom"}
-    FOLDER_EXTENSIONS:    Set[str] = set()
-    CONTAINER_EXTENSIONS: Set[str] = set()
+    SUPPORTED_EXTENSIONS:  Set[str] = {"dcm", "dicom"}
+    FOLDER_EXTENSIONS:     Set[str] = set()
+    CONTAINER_EXTENSIONS:  Set[str] = set()
+    # Extension reported in file_extension for folder datasets (study/series dirs have no suffix).
+    FOLDER_FILE_EXTENSION: str      = "dcm"
 
     OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA}
     OUTPUT_SCHEMA_PATTERNS: List[tuple] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
