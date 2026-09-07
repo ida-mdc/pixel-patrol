@@ -153,7 +153,13 @@ def _load_series_array(file_strs: List[str]) -> np.ndarray:
     slices = []
     for path_str in file_strs:
         ds = pydicom.dcmread(path_str)
-        slices.append(_apply_rescale(ds.pixel_array, ds))
+        arr = _apply_rescale(ds.pixel_array, ds)
+        # Enhanced DICOM (SamplesPerPixel=1) returns (n_frames, rows, cols); unpack as Z slices.
+        if arr.ndim == 3 and int(getattr(ds, "SamplesPerPixel", 1)) == 1:
+            for i in range(arr.shape[0]):
+                slices.append(arr[i])
+        else:
+            slices.append(arr)
     if len(slices) == 1:
         return slices[0]
     return np.stack(slices, axis=0)
@@ -167,8 +173,10 @@ def _load_single_dicom(path_str: str) -> np.ndarray:
 def _build_series_record(files: List[Path], ref_ds: pydicom.Dataset) -> Record:
     n = len(files)
     rows, cols = int(ref_ds.Rows), int(ref_ds.Columns)
-    shape = (n, rows, cols) if n > 1 else (rows, cols)
-    dim_order = "ZYX" if n > 1 else "YX"
+    n_frames_per_file = int(getattr(ref_ds, "NumberOfFrames", 1) or 1)
+    n_total = n * n_frames_per_file
+    shape = (n_total, rows, cols) if n_total > 1 else (rows, cols)
+    dim_order = "ZYX" if n_total > 1 else "YX"
     dtype = _output_dtype(ref_ds)
     meta = _series_meta(ref_ds, dim_order)
     data = da.from_delayed(
@@ -221,8 +229,10 @@ class DicomLoader:
         ds = pydicom.dcmread(str(first_files[0]), stop_before_pixels=True)
         rows, cols = int(ds.Rows), int(ds.Columns)
         n = len(first_files)
-        shape = (n, rows, cols) if n > 1 else (rows, cols)
-        dim_order = "ZYX" if n > 1 else "YX"
+        n_frames_per_file = int(getattr(ds, "NumberOfFrames", 1) or 1)
+        n_total = n * n_frames_per_file
+        shape = (n_total, rows, cols) if n_total > 1 else (rows, cols)
+        dim_order = "ZYX" if n_total > 1 else "YX"
         return FileInfo(shape=shape, dtype=_output_dtype(ds), dim_order=dim_order, n_images=n_images)
 
     def load(self, file_path: Path) -> Record:

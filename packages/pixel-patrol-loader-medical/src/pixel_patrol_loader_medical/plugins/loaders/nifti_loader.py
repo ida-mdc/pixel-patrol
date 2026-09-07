@@ -130,6 +130,8 @@ class NiftiLoader:
         img = nib.load(str(file_path))
         shape = img.shape
         dtype = np.dtype(img.get_data_dtype())
+        if np.issubdtype(dtype, np.complexfloating):
+            raise SkipFile(f"complex dtype ({dtype}): NIfTI-MRS spectroscopy data is not supported")
         dim_order = _dim_order(len(shape))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
 
@@ -139,6 +141,8 @@ class NiftiLoader:
         img = nib.load(str(file_path))
         shape = img.shape
         dtype = np.dtype(img.get_data_dtype())
+        if np.issubdtype(dtype, np.complexfloating):
+            raise SkipFile(f"complex dtype ({dtype}): NIfTI-MRS spectroscopy data is not supported")
         dim_order = _dim_order(len(shape))
         # sidecar merged first so header values take precedence on any key conflict
         meta = {**_load_bids_sidecar(file_path), **_extract_meta(img, dim_order)}

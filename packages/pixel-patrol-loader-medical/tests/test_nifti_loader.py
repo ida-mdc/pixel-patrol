@@ -126,3 +126,13 @@ def test_capabilities_4d(tmp_path, loader):
     _write_nifti(path, np.zeros((4, 5, 6, 20), dtype=np.float32))
     rec = loader.load(path)
     assert "temporal" in rec.capabilities
+
+
+def test_complex_dtype_raises_skip_file(tmp_path, loader):
+    arr = np.zeros((4, 4, 4), dtype=np.complex64)
+    path = tmp_path / "mrs.nii"
+    _write_nifti(path, arr)
+    with pytest.raises(SkipFile, match="complex"):
+        loader.read_header(path)
+    with pytest.raises(SkipFile, match="complex"):
+        loader.load(path)

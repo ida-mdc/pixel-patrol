@@ -249,6 +249,68 @@ def test_folder_with_only_sr_raises_skip_file(tmp_path, loader):
         loader.read_header(sr_dir)
 
 
+def _write_multiframe_dicom_slice(
+    path: Path,
+    frames: np.ndarray,  # shape: (n_frames, rows, cols)
+    series_uid: str,
+    instance_number: int = 1,
+    z_pos: float = 0.0,
+) -> None:
+    n_frames, rows, cols = frames.shape
+    sop_uid = pydicom.uid.generate_uid()
+
+    file_meta = pydicom.dataset.FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.2.1"  # Enhanced CT
+    file_meta.MediaStorageSOPInstanceUID = sop_uid
+    file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+
+    ds = FileDataset(str(path), {}, file_meta=file_meta, preamble=b"\x00" * 128)
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2.1"
+    ds.SOPInstanceUID = sop_uid
+    ds.StudyInstanceUID = pydicom.uid.generate_uid()
+    ds.SeriesInstanceUID = series_uid
+    ds.Modality = "CT"
+    ds.SeriesDescription = "Enhanced Test"
+    ds.InstanceNumber = instance_number
+    ds.ImagePositionPatient = [0.0, 0.0, z_pos]
+    ds.PixelSpacing = [1.0, 1.0]
+    ds.SliceThickness = 1.0
+
+    ds.Rows = rows
+    ds.Columns = cols
+    ds.NumberOfFrames = n_frames
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 0
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.PixelData = frames.astype(np.uint16).tobytes()
+
+    pydicom.dcmwrite(str(path), ds)
+
+
+def test_load_folder_enhanced_multiframe(tmp_path, loader):
+    # Each file in the series is a multi-frame enhanced DICOM (NumberOfFrames=2).
+    # _load_series_array must unpack frames so the result is (N_total, rows, cols), not 4D.
+    series_dir = tmp_path / "series"
+    series_dir.mkdir()
+    series_uid = pydicom.uid.generate_uid()
+    rng = np.random.default_rng(99)
+    n_files, n_frames, rows, cols = 3, 2, 8, 8
+    all_frames = []
+    for i in range(n_files):
+        frames = rng.integers(0, 4096, (n_frames, rows, cols), dtype=np.uint16)
+        all_frames.append(frames)
+        _write_multiframe_dicom_slice(series_dir / f"s{i}.dcm", frames, series_uid, instance_number=i + 1, z_pos=float(i * n_frames))
+
+    rec = loader.load(series_dir)
+    assert tuple(rec.data.shape) == (n_files * n_frames, rows, cols), "must not inflate to 4D"
+    assert rec.dim_order == "ZYX"
+    vol = rec.data.compute()
+    assert vol.ndim == 3
+
+
 def test_scan_series_nested_directories(tmp_path, loader):
     # Series files nested two levels deep, as in typical DICOM exports.
     nested = tmp_path / "patient" / "study" / "series"
