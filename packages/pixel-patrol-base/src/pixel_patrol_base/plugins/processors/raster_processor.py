@@ -204,7 +204,10 @@ class RasterProcessor:
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
-        ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+        try:
+            ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+        except (TypeError, ValueError):
+            return {}
         return {
             spec.name: val
             for spec in self.METRICS
