@@ -19,6 +19,7 @@ PACKAGES=(
     "pixel-patrol-base"
     "pixel-patrol"
     "pixel-patrol-loader-bio"
+    "pixel-patrol-loader-medical"
     "pixel-patrol-loader-video"
     "pixel-patrol-geospatial"
     "pixel-patrol-aqqua"
