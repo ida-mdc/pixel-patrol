@@ -37,7 +37,7 @@ pixel_patrol_loader_medical_builtins = "pixel_patrol_loader_medical.plugin_regis
 
 [dependency-groups]
 dev = [
-    "pytest==9.0.2",
+    "pytest==9.0.3",
 ]
 
 [tool.uv.sources]
