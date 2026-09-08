@@ -11,6 +11,8 @@ import { writeUrlParams } from './url-params.js';
 import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
+import { openInspector } from './point-inspector.js';
+import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 
 /**
  * Build a plugin context object.
@@ -47,7 +49,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
   const groupLabels = buildGroupLabels(groups);
   plotEngine.setDateCols(schema.dateCols ?? []);
 
-  return {
+  const ctx = {
     schema,
     state,
     colorMap,
@@ -201,8 +203,12 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
     META_COLS,
 
     /** Data utilities shared across plugins. */
-    data: { extractBinary },
+    data: { extractBinary, drawThumbnailRGBA, SPRITE },
   };
+
+  // Open the single-file point inspector for a row; plots and the mosaic call this.
+  ctx.openInspector = (fileRowNumber, opts) => openInspector(fileRowNumber, ctx, opts);
+  return ctx;
 }
 
 /**

@@ -58,12 +58,33 @@ const BUILTIN_PLUGINS = [];
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
-const _plugins   = [...BUILTIN_PLUGINS];
-const _listeners = new Set();
+const _plugins    = [...BUILTIN_PLUGINS];
+const _inspectors = [];
+const _listeners  = new Set();
 
 export const registry = {
   /** Current list of registered plugins (built-ins + runtime additions). */
   get plugins() { return _plugins; },
+
+  /**
+   * Point-inspector contributors: sections injected into the drawer on point click.
+   * Each entry: { id, label?, requires?(row,ctx)→bool, render(container,row,ctx)→void|Promise }
+   */
+  get inspectors() { return _inspectors; },
+
+  /**
+   * Register a point-inspector contributor (replacing any with the same id).
+   * Exposed to extensions as window.PixelPatrol.registerInspector.
+   */
+  registerInspector(contributor) {
+    if (!contributor || typeof contributor.id !== 'string' || typeof contributor.render !== 'function') {
+      console.warn('[PixelPatrol] registerInspector: needs id (string) and render (function):', contributor);
+      return false;
+    }
+    const idx = _inspectors.findIndex(c => c.id === contributor.id);
+    if (idx >= 0) _inspectors[idx] = contributor; else _inspectors.push(contributor);
+    return true;
+  },
 
   /**
    * Register a plugin object directly.

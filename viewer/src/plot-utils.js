@@ -187,6 +187,13 @@ export function niceName(col) {
   return col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** The report's accent color for the current (light/dark) theme. */
+export function accent() {
+  const attr = document.documentElement.dataset.theme;
+  const dark = attr ? attr === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  return dark ? '#3987e5' : '#2a78d6';
+}
+
 /** Escape a string for safe insertion into HTML content or attributes. */
 export function escapeHtml(s) {
   return String(s)

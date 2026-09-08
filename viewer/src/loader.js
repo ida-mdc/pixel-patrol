@@ -199,6 +199,7 @@ export async function finishLoad(conn, parquetPath = null) {
   const reportMeta = parquetPath
     ? await _readParquetMeta(conn, parquetPath)
     : _emptyReportMeta();
+  schema.producerByCol = reportMeta.columnProducers || {};
 
   return { schema, totalRows, projectName: reportMeta.projectName, description: reportMeta.description, reportMeta };
 }
@@ -230,6 +231,8 @@ function _parseRawMeta(raw) {
   try { processingStats = JSON.parse(raw.pp_processing_stats || '{}'); } catch {}
   let privacySummary = [];
   try { privacySummary = JSON.parse(raw.pp_privacy_summary || '[]'); } catch {}
+  let columnProducers = {};
+  try { columnProducers = JSON.parse(raw.pp_column_producers || '{}'); } catch {}
   return {
     projectName:     raw.pp_project_name || null,
     description:     raw.pp_description  || null,
@@ -241,12 +244,13 @@ function _parseRawMeta(raw) {
     paths,
     processingStats,
     privacySummary,
+    columnProducers,
   };
 }
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
-           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [] };
+           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
 }
 
 async function filterGroupColsByCardinality(conn, cols) {
