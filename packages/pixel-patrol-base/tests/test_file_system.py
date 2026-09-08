@@ -159,3 +159,61 @@ def test_extension_matched_folder_datasets_are_marked_and_sized_too(tmp_path: Pa
 
     assert found["store.zarr"][FOLDER_DATASET_KEY] is True
     assert found["store.zarr"]["size_bytes"] == 501  # .zarray (1 byte) + chunk (500)
+
+
+# --- Tests for compound extension support ---
+
+def test_compound_extension_file_is_matched(tmp_path: Path):
+    """Files with compound extensions are matched when the compound is in the accepted set."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+    (tmp_path / "archive.tar.gz").write_bytes(b"x" * 10)  # not in accepted set
+    (tmp_path / "plain.nii").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"nii", "nii.gz", "tif", "ome.tif"})
+    }
+
+    assert set(found) == {"brain.nii.gz", "scan.ome.tif", "plain.nii"}
+    assert "archive.tar.gz" not in found
+
+
+def test_compound_extension_reported_in_file_extension(tmp_path: Path):
+    """file_extension for compound-matched files is the full compound, not just the last suffix."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"nii", "nii.gz", "tif", "ome.tif"})
+    }
+
+    assert found["brain.nii.gz"]["file_extension"] == "nii.gz"
+    assert found["scan.ome.tif"]["file_extension"] == "ome.tif"
+
+
+def test_single_suffix_tif_not_promoted_to_compound(tmp_path: Path):
+    """A plain .tif file is matched by 'tif' but file_extension stays 'tif', not 'ome.tif'."""
+    (tmp_path / "plain.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"tif", "ome.tif"})
+    }
+
+    assert found["plain.tif"]["file_extension"] == "tif"
+
+
+def test_compound_not_applied_in_all_mode(tmp_path: Path):
+    """In 'all' mode (extensions=None) compound detection does not run; file_extension is the last suffix."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], "all")
+    }
+
+    assert found["brain.nii.gz"]["file_extension"] == "gz"
+    assert found["scan.ome.tif"]["file_extension"] == "tif"

@@ -29,23 +29,27 @@ def _folder_dataset_size(path: Path) -> int:
 
 
 def _discover_files(
-    bases:               List[Path],
-    accepted_extensions: Union[Set[str], str],
-    folder_extensions:   Optional[Set[str]] = None,
-    base_dir:            Optional[Path] = None,
-    is_folder_dataset:   Optional[Callable[[Path], bool]] = None,
+    bases:                 List[Path],
+    accepted_extensions:   Union[Set[str], str],
+    folder_extensions:     Optional[Set[str]] = None,
+    base_dir:              Optional[Path] = None,
+    is_folder_dataset:     Optional[Callable[[Path], bool]] = None,
+    folder_file_extension: Optional[str] = None,
 ) -> Iterator[Tuple[Path, dict]]:
     """Yield (file_path, file_metadata) for every matching file under bases, one at a time.
 
     accepted_extensions:
       "all"     → accept every file regardless of extension
-      Set[str]  → accept only files whose suffix is in the set (dot-prefixed, lowercase)
+      Set[str]  → accept only files whose suffix is in the set (dot-prefixed, lowercase);
+                  compound extensions like "nii.gz" are supported and matched against the
+                  joined last two suffixes (e.g. ".nii.gz").
 
     folder_extensions: dot-stripped lowercase extensions that identify folder datasets
       (e.g. {"zarr"}).  Matching directories are yielded as files and their contents
       are not descended into.
 
     is_folder_dataset: callable that returns True for directories that are one dataset.
+    folder_file_extension: file_extension to report for is_folder_dataset hits (folders have no suffix).
 
     file_metadata contains all filesystem attributes compatible with the original
     processing output: path, name, type, depth, size_bytes, file_extension,
@@ -74,6 +78,11 @@ def _discover_files(
 
         def _make_meta(path: Path, stat, depth: int) -> Dict[str, Any]:
             ext = path.suffix.lower().lstrip(".")
+            # Prefer compound extension (e.g. "nii.gz") when it is in the accepted set.
+            if extensions is not None and len(path.suffixes) >= 2:
+                compound = "".join(path.suffixes[-2:]).lower().lstrip(".")
+                if ("." + compound) in extensions:
+                    ext = compound
             anchor = base_dir if base_dir is not None else None
             path_val   = str(path.relative_to(anchor))   if anchor else str(path)
             import_val = str(base_path.relative_to(anchor)) if anchor else base_str
@@ -102,16 +111,20 @@ def _discover_files(
                     sub = dir_path / dname
                     ext_raw = sub.suffix.lower().lstrip(".")
                     by_ext = ext_raw in folder_exts and (extensions is None or ("." + ext_raw) in extensions)
-                    if by_ext or (is_folder_dataset is not None and is_folder_dataset(sub)):
+                    by_callback = not by_ext and is_folder_dataset is not None and is_folder_dataset(sub)
+                    if by_ext or by_callback:
                         try:
                             stat = sub.stat()
                         except OSError:
                             continue
-                        yield sub, {
+                        meta = {
                             **_make_meta(sub, stat, depth + 1),
                             "size_bytes": _folder_dataset_size(sub),
                             FOLDER_DATASET_KEY: True,
                         }
+                        if by_callback and folder_file_extension is not None:
+                            meta["file_extension"] = folder_file_extension
+                        yield sub, meta
                     else:
                         keep_dirs.append(dname)
                 dirnames[:] = keep_dirs
@@ -121,8 +134,10 @@ def _discover_files(
             for fname in sorted(filenames):
                 path = dir_path / fname
                 ext  = path.suffix.lower()
-                if extensions is not None and ext not in extensions:
-                    continue
+                if extensions is not None:
+                    compound = "".join(path.suffixes[-2:]).lower() if len(path.suffixes) >= 2 else ext
+                    if ext not in extensions and compound not in extensions:
+                        continue
                 try:
                     stat = path.stat()
                 except OSError:
