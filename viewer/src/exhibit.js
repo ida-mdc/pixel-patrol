@@ -6,8 +6,8 @@
 
 export const SPRITE = 64;
 
-/** Draw RGBA (len ≥ SPRITE²·4) or grayscale (len SPRITE²) thumbnail bytes at 0,0. */
-export function drawThumbnailRGBA(ctx2d, pixels) {
+/** Draw RGBA (len ≥ SPRITE²·4) or grayscale (len SPRITE²) thumbnail bytes at (x, y). */
+export function drawThumbnailRGBA(ctx2d, pixels, x = 0, y = 0) {
   const iData = ctx2d.createImageData(SPRITE, SPRITE);
   const d = iData.data;
   const isRGBA = pixels.length >= SPRITE * SPRITE * 4;
@@ -22,5 +22,5 @@ export function drawThumbnailRGBA(ctx2d, pixels) {
       d[o] = d[o + 1] = d[o + 2] = v; d[o + 3] = 255;
     }
   }
-  ctx2d.putImageData(iData, 0, 0);
+  ctx2d.putImageData(iData, x, y);
 }

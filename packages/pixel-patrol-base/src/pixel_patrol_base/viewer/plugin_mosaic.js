@@ -71,7 +71,7 @@ export default {
       c2d.fillStyle = ctx.color.group(items[i].group);
       c2d.fillRect(x, y, tile, tile);
       c2d.clearRect(x + BORDER, y + BORDER, SPRITE, SPRITE);
-      if (items[i].thumb?.kind === 'raw') drawThumbnailRGBA(c2d, items[i].thumb.data, x + BORDER, y + BORDER);
+      if (items[i].thumb?.kind === 'raw') ctx.data.drawThumbnailRGBA(c2d, items[i].thumb.data, x + BORDER, y + BORDER);
     }
     container.style.display = 'flex';
     container.style.alignItems = 'center';
@@ -252,7 +252,7 @@ function drawMosaicCanvas(items, ctx, displayMode) {
       const raw = (displayMode === DISPLAY_DENORM && it.tnMin != null && it.tnMax != null && it.tnDtype)
         ? denormalizeThumbnailRGBA(it.thumb.data, it.tnMin, it.tnMax, it.tnDtype)
         : it.thumb.data;
-      drawThumbnailRGBA(c2d, raw, x + BORDER, y + BORDER);
+      ctx.data.drawThumbnailRGBA(c2d, raw, x + BORDER, y + BORDER);
     }
   });
   return { canvas, perRow };
@@ -315,24 +315,6 @@ function extractBytes(val) {
   if (Array.isArray(val)) return Uint8Array.from(val, v => Number(v) & 0xff);
   if (val.values instanceof Uint8Array) return val.values;
   return null;
-}
-
-function drawThumbnailRGBA(ctx2d, pixels, x, y) {
-  const iData = ctx2d.createImageData(SPRITE, SPRITE);
-  const d     = iData.data;
-  const isRGBA = pixels.length >= SPRITE * SPRITE * 4;
-  for (let i = 0; i < SPRITE * SPRITE; i++) {
-    const idx = i * 4;
-    if (isRGBA) {
-      const a = pixels[i * 4 + 3] ?? 255;
-      if (a < 128) { d[idx] = 0; d[idx+1] = 0; d[idx+2] = 0; d[idx+3] = 0; }
-      else { d[idx] = pixels[i*4]; d[idx+1] = pixels[i*4+1]; d[idx+2] = pixels[i*4+2]; d[idx+3] = 255; }
-    } else {
-      const v = pixels[i] ?? 0;
-      d[idx] = d[idx+1] = d[idx+2] = v; d[idx+3] = 255;
-    }
-  }
-  ctx2d.putImageData(iData, x, y);
 }
 
 function extractThumbnail(val) {
