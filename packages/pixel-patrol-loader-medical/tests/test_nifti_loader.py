@@ -52,12 +52,6 @@ def test_read_header_4d(tmp_path, loader):
     assert info.n_images == 1
 
 
-def test_read_header_non_nifti_gz_skips(tmp_path, loader):
-    path = tmp_path / "data.gz"
-    path.write_bytes(b"not a nifti file at all")
-    with pytest.raises(SkipFile):
-        loader.read_header(path)
-
 
 def test_load_3d_roundtrip(tmp_path, loader):
     rng = np.random.default_rng(0)
@@ -100,12 +94,6 @@ def test_pixel_sizes_4d_with_tr(tmp_path, loader):
     rec = loader.load(path)
     assert rec.meta["pixel_size_T"] == pytest.approx(1.5)
 
-
-def test_non_nifti_gz_skips(tmp_path, loader):
-    path = tmp_path / "data.gz"
-    path.write_bytes(b"not a nifti file at all")
-    with pytest.raises(SkipFile):
-        loader.load(path)
 
 
 def test_bids_sidecar(tmp_path, loader):

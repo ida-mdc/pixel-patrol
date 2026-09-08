@@ -137,7 +137,7 @@ def _series_meta(ds: pydicom.Dataset, dim_order: str) -> Dict[str, Any]:
         if isinstance(val, (int, float, bool, str)):
             meta[tag] = val
         elif isinstance(val, pydicom.multival.MultiValue):
-            meta[tag] = "\\".join(str(v) for v in val)
+            meta[tag] = r"\".join(str(v) for v in val)
         elif hasattr(val, "__float__"):
             meta[tag] = float(val)
         elif hasattr(val, "__int__"):
@@ -256,6 +256,8 @@ class DicomLoader:
 
     def _load_single_file(self, file_path: Path) -> Record:
         ds = pydicom.dcmread(str(file_path), stop_before_pixels=True)
+        if not hasattr(ds, "Rows") or not hasattr(ds, "Columns"):
+            raise SkipFile(f"non-image DICOM (SR/RT/PR): {file_path.name}")
         n_frames = int(getattr(ds, "NumberOfFrames", 1) or 1)
         rows, cols = int(ds.Rows), int(ds.Columns)
         shape = (n_frames, rows, cols) if n_frames > 1 else (rows, cols)

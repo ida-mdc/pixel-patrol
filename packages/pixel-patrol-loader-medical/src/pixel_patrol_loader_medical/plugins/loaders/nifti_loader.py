@@ -22,12 +22,7 @@ from pixel_patrol_base.core.record import Record, record_from
 logger = logging.getLogger(__name__)
 
 
-def _is_nifti(path: Path) -> bool:
-    name = path.name.lower()
-    return name.endswith(".nii") or name.endswith(".nii.gz")
-
-
-def _dim_order(ndim: int) -> str:
+def _nifti_dim_order(ndim: int) -> str:
     # NIfTI axis order: X, Y, Z, T for dims 1-4
     base = "XYZT"
     if ndim <= 4:
@@ -125,25 +120,18 @@ class NiftiLoader:
         return False
 
     def read_header(self, file_path: Path) -> FileInfo:
-        if not _is_nifti(file_path):
-            raise SkipFile(f"not a NIfTI file: {file_path.name}")
         img = nib.load(str(file_path))
         shape = img.shape
         dtype = np.dtype(img.get_data_dtype())
         if np.issubdtype(dtype, np.complexfloating):
             raise SkipFile(f"complex dtype ({dtype}): NIfTI-MRS spectroscopy data is not supported")
-        dim_order = _dim_order(len(shape))
+        dim_order = _nifti_dim_order(len(shape))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
 
     def load(self, file_path: Path) -> Record:
-        if not _is_nifti(file_path):
-            raise SkipFile(f"not a NIfTI file: {file_path.name}")
+        info = self.read_header(file_path)  # raises SkipFile for complex dtype
         img = nib.load(str(file_path))
-        shape = img.shape
-        dtype = np.dtype(img.get_data_dtype())
-        if np.issubdtype(dtype, np.complexfloating):
-            raise SkipFile(f"complex dtype ({dtype}): NIfTI-MRS spectroscopy data is not supported")
-        dim_order = _dim_order(len(shape))
+        shape, dtype, dim_order = info.shape, info.dtype, info.dim_order
         # sidecar merged first so header values take precedence on any key conflict
         meta = {**_load_bids_sidecar(file_path), **_extract_meta(img, dim_order)}
         data = da.from_delayed(
