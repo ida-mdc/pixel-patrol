@@ -103,12 +103,9 @@ class NiftiLoader:
     NAME = "nifti"
     DESCRIPTION = "Loads NIfTI images (.nii, .nii.gz), reading voxel data and header metadata."
 
-    # "gz" covers .nii.gz files (path.suffix == ".gz"); read_header/load validate _is_nifti.
-    # gz is in CONTAINER_EXTENSIONS because .nii.gz on-disk size is much smaller than
-    # uncompressed; without this the pipeline underestimates memory for small compressed files.
-    SUPPORTED_EXTENSIONS: Set[str] = {"nii", "gz"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"nii", "nii.gz"}
     FOLDER_EXTENSIONS:    Set[str] = set()
-    CONTAINER_EXTENSIONS: Set[str] = {"gz"}
+    CONTAINER_EXTENSIONS: Set[str] = {"nii.gz"}  # compressed; on-disk size understates uncompressed
 
     OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA, "nifti_intent": str}
     OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {

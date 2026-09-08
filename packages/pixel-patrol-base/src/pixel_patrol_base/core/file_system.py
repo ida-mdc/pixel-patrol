@@ -40,7 +40,9 @@ def _discover_files(
 
     accepted_extensions:
       "all"     → accept every file regardless of extension
-      Set[str]  → accept only files whose suffix is in the set (dot-prefixed, lowercase)
+      Set[str]  → accept only files whose suffix is in the set (dot-prefixed, lowercase);
+                  compound extensions like "nii.gz" are supported and matched against the
+                  joined last two suffixes (e.g. ".nii.gz").
 
     folder_extensions: dot-stripped lowercase extensions that identify folder datasets
       (e.g. {"zarr"}).  Matching directories are yielded as files and their contents
@@ -76,6 +78,11 @@ def _discover_files(
 
         def _make_meta(path: Path, stat, depth: int) -> Dict[str, Any]:
             ext = path.suffix.lower().lstrip(".")
+            # Prefer compound extension (e.g. "nii.gz") when it is in the accepted set.
+            if extensions is not None and len(path.suffixes) >= 2:
+                compound = "".join(path.suffixes[-2:]).lower().lstrip(".")
+                if ("." + compound) in extensions:
+                    ext = compound
             anchor = base_dir if base_dir is not None else None
             path_val   = str(path.relative_to(anchor))   if anchor else str(path)
             parent_val = str(path.parent.relative_to(anchor)) if anchor else str(path.parent)
@@ -129,8 +136,10 @@ def _discover_files(
             for fname in sorted(filenames):
                 path = dir_path / fname
                 ext  = path.suffix.lower()
-                if extensions is not None and ext not in extensions:
-                    continue
+                if extensions is not None:
+                    compound = "".join(path.suffixes[-2:]).lower() if len(path.suffixes) >= 2 else ext
+                    if ext not in extensions and compound not in extensions:
+                        continue
                 try:
                     stat = path.stat()
                 except OSError:

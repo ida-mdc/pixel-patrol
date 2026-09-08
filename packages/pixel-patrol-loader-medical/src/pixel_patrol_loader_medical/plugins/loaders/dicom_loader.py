@@ -137,7 +137,7 @@ def _series_meta(ds: pydicom.Dataset, dim_order: str) -> Dict[str, Any]:
         if isinstance(val, (int, float, bool, str)):
             meta[tag] = val
         elif isinstance(val, pydicom.multival.MultiValue):
-            meta[tag] = r"\".join(str(v) for v in val)
+            meta[tag] = "\\".join(str(v) for v in val)
         elif hasattr(val, "__float__"):
             meta[tag] = float(val)
         elif hasattr(val, "__int__"):

@@ -29,7 +29,7 @@ def _write_nifti(path: Path, arr: np.ndarray, zooms=None) -> Path:
 def test_name_and_extensions(loader):
     assert loader.NAME == "nifti"
     assert "nii" in loader.SUPPORTED_EXTENSIONS
-    assert "gz" in loader.SUPPORTED_EXTENSIONS
+    assert "nii.gz" in loader.SUPPORTED_EXTENSIONS
     assert not loader.is_folder_supported(Path("."))
 
 
