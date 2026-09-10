@@ -179,6 +179,16 @@ export function accumulateGroupHistograms(records, { computeNormalized = true } 
   return result;
 }
 
+// Source table + WHERE respecting pinned dims (pp_all at the right obs_level).
+function histSource(ctx) {
+  const fixed = Object.fromEntries(
+    Object.entries(ctx.state.dimensions ?? {})
+      .map(([letter, idx]) => [letter, Number(idx)])
+      .filter(([, idx]) => Number.isFinite(idx)));
+  const parts = ctx.sql.dimSubsetWhere({ fixed });
+  return { table: 'pp_all', where: parts.length ? `WHERE ${parts.join(' AND ')}` : '' };
+}
+
 export default {
   id: 'histogram',
   required_inputs: ['histogram_counts'],
@@ -413,10 +423,12 @@ export default {
         const { extractBinary } = ctx.data;
         const ctrl = readControls(container);
 
-        let where = ctx.where;
+        const { table: srcTable, where: srcWhere } = histSource(ctx);
+        let where = srcWhere;
         if (ctrl.selectedGroups.length && ctx.state.groupCol) {
           const list = ctrl.selectedGroups.map(g => `'${g.replace(/'/g, "''")}'`).join(', ');
-          where += ` ${where ? 'AND' : 'WHERE'} ${q(ctx.state.groupCol)} IN (${list})`;
+          const extra = `${q(ctx.state.groupCol)} IN (${list})`;
+          where = where ? `${where} AND ${extra}` : `WHERE ${extra}`;
         }
 
         const rangeSel = hasRange    ? ', "histogram_min", "histogram_max"' : '';
@@ -424,7 +436,7 @@ export default {
         const nanSel   = hasNanCount ? ', "histogram_nan_count"'           : '';
         const result   = await ctx.query(
           `SELECT ${geFn()}, "histogram_counts"${rangeSel}${dtypeSel}${nanSel}
-           FROM pp_data ${where}
+           FROM ${srcTable} ${where}
            QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= ${ctrl.samplesPerGroup}`
         );
         const rows = result.toArray();
@@ -483,7 +495,7 @@ export default {
           const nameSel2  = hasNames ? `, ${imageLabelSql(ctx)} AS __label__` : '';
           const iResult   = await ctx.query(
             `SELECT "histogram_counts"${rangeSel}${dtypeSel}${nanSel}${nameSel2}
-             FROM pp_data ${where}
+             FROM ${srcTable} ${where}
              LIMIT ${INDIV_LIMIT + 1}`
           );
           const iRows    = iResult.toArray();
@@ -515,10 +527,10 @@ export default {
         imageOverlay = null;
         if (ctrl.selectedImage && hasRange) {
           const safe        = ctrl.selectedImage.replace(/'/g, "''");
-          const imageWhere  = ctx.sql.andWhere(ctx.where, `${imageKey(ctx)} = '${safe}'`);
+          const imageWhere  = ctx.sql.andWhere(srcWhere, `${imageKey(ctx)} = '${safe}'`);
           const imageResult = await ctx.query(
             `SELECT "histogram_counts", "histogram_min", "histogram_max"${dtypeSel}${nanSel}
-             FROM pp_data ${imageWhere} LIMIT 1`
+             FROM ${srcTable} ${imageWhere} LIMIT 1`
           );
           const fr = imageResult.toArray()[0];
           if (fr) {
