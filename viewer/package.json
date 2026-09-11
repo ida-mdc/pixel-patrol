@@ -19,6 +19,6 @@
     "@vitest/coverage-v8": "^4.1.5",
     "happy-dom": "^20.9.0",
     "vite": "^8.0.0",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }
