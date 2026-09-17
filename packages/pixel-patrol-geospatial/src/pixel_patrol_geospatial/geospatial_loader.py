@@ -62,7 +62,7 @@ class GeospatialLoader:
     NAME = "geospatial"
     DESCRIPTION = "Loads geospatial raster files (GeoTIFF, NetCDF) via rasterio, extracting CRS, spatial extent, and band metadata."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "nc"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "nc", "txt", "xyz", "xyz.gz"}
     FOLDER_EXTENSIONS:    Set[str] = set()
     CONTAINER_EXTENSIONS: Set[str] = set()
 
