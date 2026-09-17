@@ -44,36 +44,18 @@ def test_is_folder_supported_rejects_file(tmp_path: Path, loader) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_dim_order_2d_no_channels() -> None:
-    assert _resolve_dim_order((64, 64), []) == "YX"
-
-
-def test_resolve_dim_order_rgb_channels() -> None:
-    channels = [{"name": "red", "kind": "brightfield"}, {"name": "green", "kind": "brightfield"}, {"name": "blue", "kind": "brightfield"}]
-    assert _resolve_dim_order((3, 64, 64), channels) == "SYX"
-
-
-def test_resolve_dim_order_gray_channel() -> None:
-    channels = [{"name": "grayscale", "kind": "brightfield"}]
-    assert _resolve_dim_order((1, 64, 64), channels) == "CYX"
-
-
-def test_resolve_dim_order_multichannel_non_color() -> None:
-    channels = [{"name": "DAPI", "kind": "fluorescence"}, {"name": "GFP", "kind": "fluorescence"}]
-    assert _resolve_dim_order((2, 64, 64), channels) == "CYX"
-
-
-def test_resolve_dim_order_heuristic_3d_first_dim_3() -> None:
-    assert _resolve_dim_order((3, 64, 64), []) == "SYX"
-
-
-def test_resolve_dim_order_heuristic_3d_first_dim_not_3() -> None:
-    assert _resolve_dim_order((1, 64, 64), []) == "CYX"
-    assert _resolve_dim_order((4, 64, 64), []) == "CYX"
-
-
-def test_resolve_dim_order_nd() -> None:
-    assert _resolve_dim_order((2, 3, 64, 64), []) == "D0D1D2D3"
+@pytest.mark.parametrize("shape,channels,expected", [
+    ((64, 64),     [],                                                                                              "YX"),
+    ((3, 64, 64),  [{"name": "red"}, {"name": "green"}, {"name": "blue"}],                                         "SYX"),
+    ((1, 64, 64),  [{"name": "grayscale"}],                                                                         "CYX"),
+    ((2, 64, 64),  [{"name": "DAPI"}, {"name": "GFP"}],                                                            "CYX"),
+    ((3, 64, 64),  [],                                                                                              "SYX"),
+    ((1, 64, 64),  [],                                                                                              "CYX"),
+    ((4, 64, 64),  [],                                                                                              "CYX"),
+    ((2, 3, 64, 64), [],                                                                                            "D0D1D2D3"),
+])
+def test_resolve_dim_order(shape, channels, expected) -> None:
+    assert _resolve_dim_order(shape, channels) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +168,7 @@ def test_load_returns_record(rgb_lmdb: Path, loader) -> None:
 
 def test_load_data_is_numpy(rgb_lmdb: Path, loader) -> None:
     record = loader.load(rgb_lmdb)
-    assert isinstance(np.asarray(record.data), np.ndarray)
+    assert isinstance(record.data, np.ndarray)
 
 
 def test_load_shape(rgb_lmdb: Path, loader) -> None:

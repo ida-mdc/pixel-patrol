@@ -11,9 +11,9 @@ import pytest
 
 
 _RGB_CHANNELS = [
-    {"name": "red",   "kind": "brightfield"},
-    {"name": "green", "kind": "brightfield"},
-    {"name": "blue",  "kind": "brightfield"},
+    {"name": "Red",   "kind": "brightfield"},
+    {"name": "Green", "kind": "brightfield"},
+    {"name": "Blue",  "kind": "brightfield"},
 ]
 _GRAY_CHANNELS = [{"name": "grayscale", "kind": "brightfield"}]
 

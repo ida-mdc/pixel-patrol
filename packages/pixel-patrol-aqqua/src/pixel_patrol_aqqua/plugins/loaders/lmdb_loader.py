@@ -177,9 +177,14 @@ def _resolve_dim_order(shape: tuple, channels: List[Dict]) -> str:
     """
     ndim = len(shape)
     if channels:
-        is_color = all(ch.get("name", "").lower() in _COLOR_CHANNEL_NAMES for ch in channels)
-        return "SYX" if is_color else "CYX"
-    # No channel info: heuristic
+        if shape[0] != len(channels):
+            logger.warning(
+                "LmdbLoader: channel count (%d) does not match shape[0] (%d), ignoring channel metadata",
+                len(channels), shape[0],
+            )
+        else:
+            is_color = all(ch.get("name", "").lower() in _COLOR_CHANNEL_NAMES for ch in channels)
+            return "SYX" if is_color else "CYX"
     if ndim == 2:
         return "YX"
     if ndim == 3:
