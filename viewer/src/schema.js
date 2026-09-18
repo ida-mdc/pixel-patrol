@@ -109,7 +109,7 @@ export function detectSchema(columns) {
     if (!isSkipped) {
       if (KNOWN_GROUP_COLS.has(name)) {
         groupCols.push(name);
-      } else if (isString) {
+      } else if (isString || isDate) {
         groupCols.push(name);
       }
     }

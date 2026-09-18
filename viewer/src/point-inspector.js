@@ -192,7 +192,14 @@ async function fetchRefs(ctx, row) {
   // Compare within the image's own group when a grouping is active, else the whole set.
   let where = 'obs_level = 0';
   if (ctx.state?.groupCol && row[ctx.state.groupCol] != null) {
-    where += ` AND ${q(ctx.state.groupCol)} = ${sqlStr(row[ctx.state.groupCol])}`;
+    const gcIsDate = (ctx.schema?.dateCols ?? []).includes(ctx.state.groupCol);
+    if (gcIsDate) {
+      // rowSelect already STRFTIMEs datetime cols; slice to date part for day-level match.
+      const dateStr = String(row[ctx.state.groupCol]).slice(0, 10);
+      where += ` AND STRFTIME(${q(ctx.state.groupCol)}, '%Y-%m-%d') = ${sqlStr(dateStr)}`;
+    } else {
+      where += ` AND ${q(ctx.state.groupCol)} = ${sqlStr(row[ctx.state.groupCol])}`;
+    }
   }
   const [r] = await ctx.queryRows(`SELECT ${sel} FROM pp_all WHERE ${where}`);
   const refs = {};
@@ -346,8 +353,10 @@ export async function openInspector(fileRowNumber, ctx, opts = {}) {
     ? `${pinned.map(d => `${d.axis}=${d.o}`).join(', ')} slice of ${kind}${childLabel}`
     : `${kindCap}${childLabel}`;
 
+  const gcIsDate = ctx.state?.groupCol && (ctx.schema?.dateCols ?? []).includes(ctx.state.groupCol);
   const groupVal = ctx.state?.groupCol && row[ctx.state.groupCol] != null
-    ? String(row[ctx.state.groupCol]) : null;
+    ? (gcIsDate ? String(row[ctx.state.groupCol]).slice(0, 10) : String(row[ctx.state.groupCol]))
+    : null;
   const groupColor = groupVal ? ctx.color.group(groupVal) : null;
   const groupChip = groupVal
     ? `<div style="margin-top:5px"><span style="font:10px ui-monospace,monospace;padding:2px 8px;border-radius:10px;` +

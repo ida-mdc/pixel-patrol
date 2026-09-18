@@ -181,7 +181,7 @@ export async function finishLoad(conn, parquetPath = null) {
   }
 
   // Cardinality-filter the schema-heuristic group candidates.
-  schema.groupCols = await filterGroupColsByCardinality(conn, schema.groupCols);
+  schema.groupCols = await filterGroupColsByCardinality(conn, schema.groupCols, schema.dateCols);
 
   // Always include any URL-param group col if it exists in the parquet.
   const urlGroup = new URLSearchParams(window.location.search).get('group');
@@ -253,11 +253,18 @@ function _emptyReportMeta() {
            createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
 }
 
-async function filterGroupColsByCardinality(conn, cols) {
+async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
   if (!cols.length) return [];
   // Sample 10 000 rows - enough to reliably detect 2–12 unique values without
   // fetching every column chunk from a remote file.
-  const exprs = cols.map(c => `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`).join(', ');
+  // Datetime columns are counted at day granularity so a batch of files with
+  // unique timestamps can still group into a handful of distinct days.
+  const dateColSet = new Set(dateCols);
+  const exprs = cols.map(c =>
+    dateColSet.has(c)
+      ? `COUNT(DISTINCT STRFTIME(${q(c)}, '%Y-%m-%d')) AS ${q(c)}`
+      : `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`,
+  ).join(', ');
   try {
     const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data LIMIT 10000)`);
     const first = res.toArray()[0];

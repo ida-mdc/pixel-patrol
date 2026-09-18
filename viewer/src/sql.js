@@ -1,4 +1,4 @@
-import { GROUP_ALL, GROUP_COL_ALIAS } from './constants.js';
+import { GROUP_ALL, GROUP_COL_ALIAS, DATE_GROUP_FMT } from './constants.js';
 
 /**
  * SQL helpers.
@@ -124,10 +124,14 @@ export function stripWhere(where) {
 /**
  * Bare SQL expression for the active group column.
  * Returns `"col"` when grouping is active, or `'all'` when not.
- * Use this when you write ` AS __group__` yourself in the query.
+ * For datetime columns (listed in dateCols), returns STRFTIME(col, '%Y-%m-%d')
+ * so groups are day-level rather than unique per timestamp.
  */
-export function groupCol(state) {
-  return state.groupCol ? q(state.groupCol) : `'${GROUP_ALL}'`;
+export function groupCol(state, dateCols = []) {
+  if (!state.groupCol) return `'${GROUP_ALL}'`;
+  return dateCols.includes(state.groupCol)
+    ? `STRFTIME(${q(state.groupCol)}, ${DATE_GROUP_FMT})`
+    : q(state.groupCol);
 }
 
 /**
@@ -135,8 +139,8 @@ export function groupCol(state) {
  * Returns `"col" AS __group__` or `'all' AS __group__`.
  * Use this in SELECT lists directly.
  */
-export function groupExpr(state) {
-  return `${groupCol(state)} AS ${GROUP_COL_ALIAS}`;
+export function groupExpr(state, dateCols = []) {
+  return `${groupCol(state, dateCols)} AS ${GROUP_COL_ALIAS}`;
 }
 
 /**
