@@ -9,7 +9,7 @@ import { escapeHtml, niceName, accent } from './plot-utils.js';
 import { onPointClick, setSelectedPoint } from './point-selection.js';
 import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 import { META_COLS, NON_USER_FACING_NUMERIC_COLS } from './schema.js';
-import { DATE_COLS, DATE_FMT } from './constants.js';
+import { DATE_FMT } from './constants.js';
 
 // Kept out of the Acquisition block: header fields, long-format infra, and the
 // shared non-user-facing numeric columns. Everything else scalar is metadata.
@@ -104,7 +104,7 @@ const sqlStr = (s) => `'${String(s).replace(/'/g, "''")}'`;
 // Row SELECT that STRFTIMEs date columns to strings (like the rest of the report),
 // passing everything else through.
 function rowSelect(ctx) {
-  const dateCols = (ctx.schema?.allCols ?? []).filter(c => DATE_COLS.has(c));
+  const dateCols = ctx.schema?.dateCols ?? [];
   if (!dateCols.length) return '*';
   const excluded = dateCols.map(c => `"${c}"`).join(', ');
   const formatted = dateCols.map(c => `STRFTIME("${c}", ${DATE_FMT}) AS "${c}"`).join(', ');
