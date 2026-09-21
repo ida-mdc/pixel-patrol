@@ -69,8 +69,7 @@ export default {
         ? ctx.queryRows(`
             SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
                    EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
-                     - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms,
-                   COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique
+                     - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms
             FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
           `)
         : Promise.resolve([]),
@@ -78,8 +77,9 @@ export default {
 
     const exts   = [...new Set(extRows.map(r => String(r.ext)))].sort();
     const nSizes = Number(sizeRange[0]?.n_unique ?? 0);
+    // span > 0 means >= 1 timestamp; span === 0 means exactly one
     const spanMs = Number(dateRange[0]?.span_ms ?? 0);
-    const nDates = Number(dateRange[0]?.n_unique ?? 0);
+    const onlyOneDateOccurring = spanMs === 0;
 
     // Show one mini-plot: the most informative varying property (ext > date > size).
     if (exts.length > 1) {
@@ -89,7 +89,7 @@ export default {
       return true;
     }
 
-    if (nDates > 1 && spanMs >= MS_SECOND) {
+    if (spanMs >= MS_SECOND) {
       const fmt = spanMs >= MS_DAY    ? '%Y-%m-%d'
                 : spanMs >= MS_HOUR   ? '%Y-%m-%d %H:00'
                 : spanMs >= MS_MINUTE ? '%Y-%m-%d %H:%M'
@@ -124,7 +124,7 @@ export default {
     const invariants = [];
     if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
     if (nSizes <= 1) invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
-    if (hasDate && nDates <= 1 && dateRange[0]?.min_fmt) invariants.push(['Modification Date', dateRange[0].min_fmt]);
+    if (onlyOneDateOccurring && dateRange[0]?.min_fmt) invariants.push(['Modification Date', dateRange[0].min_fmt]);
     if (!invariants.length) return false;
     ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
     return true;
@@ -133,9 +133,13 @@ export default {
   async render(container, ctx) {
     try {
       const invariants = [];
-      const [extRows, sizeRange, dateRange, groupRows] = await fetchFileStats(ctx);
+      const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx);
 
-      const counts = groupRows.map(r => Number(r.c)).filter(n => n > 0);
+      // Files per group, summed over extensions - the same numbers a separate
+      // per-group count query returns, without the extra query.
+      const byGroup = new Map();
+      for (const r of extRows) byGroup.set(r.__group__, (byGroup.get(r.__group__) ?? 0) + Number(r.count));
+      const counts = [...byGroup.values()].filter(n => n > 0);
       if (counts.length > 1 && Math.max(...counts) / Math.min(...counts) >= 1.5) {
         ctx.plot.prependWarning(container, {
           level: 'yellow',
@@ -164,9 +168,9 @@ export default {
   },
 };
 
-// The four datasets the full view needs, fetched in parallel.
+// The three datasets the full view needs, fetched in parallel.
 function fetchFileStats(ctx) {
-  const { perFile, andWhere, groupCol: gcFn, fileCount } = ctx.sql;
+  const { perFile, andWhere, groupCol: gcFn } = ctx.sql;
   const gcExpr  = gcFn();
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
@@ -191,7 +195,6 @@ function fetchFileStats(ctx) {
           FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
         `)
       : Promise.resolve([]),
-    ctx.queryRows(`SELECT ${gcExpr} AS g, ${fileCount()} AS c FROM pp_data ${ctx.where} GROUP BY 1`),
   ]);
 }
 
