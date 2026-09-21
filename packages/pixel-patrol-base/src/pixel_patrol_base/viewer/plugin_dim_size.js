@@ -40,7 +40,7 @@ export default {
       if (hasXY) {
         const [row] = await ctx.queryRows(`
           SELECT COUNT(DISTINCT "size_X") AS ndx, COUNT(DISTINCT "size_Y") AS ndy
-          FROM pp_data ${andWhere(ctx.where, '"size_X" > 1 AND "size_Y" > 1')}
+          FROM pp_data ${andWhere(ctx.where, '"size_X" IS NOT NULL AND "size_Y" IS NOT NULL')}
         `);
         xySizeVaries = Number(row?.ndx ?? 0) > 1 || Number(row?.ndy ?? 0) > 1;
       }
@@ -48,9 +48,9 @@ export default {
       const present     = [];
       const raggedDims  = [];
       for (const col of extraDimCols) {
-        const [r] = await ctx.queryRows(`SELECT MAX(${q(col)}) AS m, COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} > 1`)}`);
+        const [r] = await ctx.queryRows(`SELECT MAX(${q(col)}) AS m, COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} IS NOT NULL`)}`);
         const m = Number(r?.m ?? 0);
-        if (m <= 1) continue;
+        if (!m) continue;
         const label = KNOWN_DIMS[col] ?? col;
         present.push(label);
         if (Number(r?.n ?? 0) < totalN) raggedDims.push(label);
@@ -75,7 +75,7 @@ export default {
 
     const rows = await ctx.queryRows(`
       SELECT "size_X" AS x, "size_Y" AS y, ${gcFn()} AS __group__
-      FROM pp_data ${andWhere(ctx.where, '"size_X" > 1 AND "size_Y" > 1')} ${sample(3000)}
+      FROM pp_data ${andWhere(ctx.where, '"size_X" IS NOT NULL AND "size_Y" IS NOT NULL')} ${sample(3000)}
     `);
     if (!rows.length) return false;
 
@@ -111,7 +111,7 @@ async function renderSizeAvailability(container, ctx, sizeCols) {
   const { q, andWhere } = ctx.sql;
   const [{ n: total }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${ctx.where}`);
   const availability = await Promise.all(sizeCols.map(async col => {
-    const [{ n }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} > 1`)}`);
+    const [{ n }] = await ctx.queryRows(`SELECT COUNT(*) AS n FROM pp_data ${andWhere(ctx.where, `${q(col)} IS NOT NULL`)}`);
     return { label: ctx.plot.niceName(col), present: Number(n ?? 0) };
   }));
   ctx.plot.dataAvailabilityWarning(container, availability, Number(total ?? 0), { unit: 'images' });
@@ -121,7 +121,7 @@ async function renderSizeAvailability(container, ctx, sizeCols) {
 // too many files to show individually. Skipped when X and Y are both constant.
 async function renderXYDistribution(container, ctx, sizeCols) {
   if (!(sizeCols.includes('size_X') && sizeCols.includes('size_Y'))) return;
-  const xyWhere = ctx.sql.andWhere(ctx.where, '"size_X" > 1 AND "size_Y" > 1');
+  const xyWhere = ctx.sql.andWhere(ctx.where, '"size_X" IS NOT NULL AND "size_Y" IS NOT NULL');
 
   const [{ ndx, ndy }] = await ctx.queryRows(`
     SELECT COUNT(DISTINCT "size_X") AS ndx, COUNT(DISTINCT "size_Y") AS ndy FROM pp_data ${xyWhere}
@@ -214,7 +214,7 @@ async function renderDimDistributions(container, ctx, sizeCols) {
   const dimStats = await Promise.all(dims.map(async col => {
     const [{ nd, val }] = await ctx.queryRows(`
       SELECT COUNT(DISTINCT ${q(col)}) AS nd, MIN(${q(col)}) AS val
-      FROM pp_data ${ctx.sql.andWhere(ctx.where, `${q(col)} > 1`)}
+      FROM pp_data ${ctx.sql.andWhere(ctx.where, `${q(col)} IS NOT NULL`)}
     `);
     return { col, nd: Number(nd ?? 0), val };
   }));
@@ -248,7 +248,7 @@ async function renderDimViolins(container, ctx, dims) {
   for (const col of dims) {
     await ctx.plot.engine.renderDistribution(wrap, ctx, {
       numCol:          col,
-      source:          { table: 'pp_data', where: andWhere(ctx.where, `${q(col)} > 1`) },
+      source:          { table: 'pp_data', where: andWhere(ctx.where, `${q(col)} IS NOT NULL`) },
       catSql:          gcFn(),
       catLabel:        ctx.plot.groupingLabel(''),
       yLabel:          'pixels',
