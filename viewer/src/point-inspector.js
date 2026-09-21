@@ -10,6 +10,7 @@ import { onPointClick, setSelectedPoint } from './point-selection.js';
 import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 import { META_COLS, NON_USER_FACING_NUMERIC_COLS } from './schema.js';
 import { DATE_FMT } from './constants.js';
+import { dateGroupExpr } from './sql.js';
 
 // Kept out of the Acquisition block: header fields, long-format infra, and the
 // shared non-user-facing numeric columns. Everything else scalar is metadata.
@@ -196,7 +197,7 @@ async function fetchRefs(ctx, row) {
     if (gcIsDate) {
       // rowSelect already STRFTIMEs datetime cols; slice to date part for day-level match.
       const dateStr = String(row[ctx.state.groupCol]).slice(0, 10);
-      where += ` AND STRFTIME(${q(ctx.state.groupCol)}, '%Y-%m-%d') = ${sqlStr(dateStr)}`;
+      where += ` AND ${dateGroupExpr(ctx.state.groupCol)} = ${sqlStr(dateStr)}`;
     } else {
       where += ` AND ${q(ctx.state.groupCol)} = ${sqlStr(row[ctx.state.groupCol])}`;
     }

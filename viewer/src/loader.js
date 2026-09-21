@@ -2,7 +2,7 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import { detectSchema, pickDefaultGroupCol } from './schema.js';
-import { q } from './sql.js';
+import { q, dateGroupExpr } from './sql.js';
 import { FILE_ROW_NUMBER } from './constants.js';
 
 const MAX_UNIQUE_GROUP = 12; // Match Dash app (pixel-patrol-base)
@@ -262,7 +262,7 @@ async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
   const dateColSet = new Set(dateCols);
   const exprs = cols.map(c =>
     dateColSet.has(c)
-      ? `COUNT(DISTINCT STRFTIME(${q(c)}, '%Y-%m-%d')) AS ${q(c)}`
+      ? `COUNT(DISTINCT ${dateGroupExpr(c)}) AS ${q(c)}`
       : `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`,
   ).join(', ');
   try {

@@ -121,16 +121,21 @@ export function stripWhere(where) {
   return where ? where.replace(/^\s*WHERE\s+/i, '') : '';
 }
 
+/** Day-bucketed SQL expression for a datetime column. */
+export function dateGroupExpr(col) {
+  return `STRFTIME(${q(col)}, ${DATE_GROUP_FMT})`;
+}
+
 /**
  * Bare SQL expression for the active group column.
  * Returns `"col"` when grouping is active, or `'all'` when not.
- * For datetime columns (listed in dateCols), returns STRFTIME(col, '%Y-%m-%d')
- * so groups are day-level rather than unique per timestamp.
+ * Datetime columns (listed in dateCols) are bucketed via dateGroupExpr(), so
+ * groups are day-level rather than one per distinct timestamp.
  */
 export function groupCol(state, dateCols = []) {
   if (!state.groupCol) return `'${GROUP_ALL}'`;
   return dateCols.includes(state.groupCol)
-    ? `STRFTIME(${q(state.groupCol)}, ${DATE_GROUP_FMT})`
+    ? dateGroupExpr(state.groupCol)
     : q(state.groupCol);
 }
 
