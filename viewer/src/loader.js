@@ -2,7 +2,7 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import { detectSchema, pickDefaultGroupCol } from './schema.js';
-import { q, dateGroupExpr } from './sql.js';
+import { q, dateGroupExpr, sample } from './sql.js';
 import { FILE_ROW_NUMBER } from './constants.js';
 
 const MAX_UNIQUE_GROUP = 12; // Match Dash app (pixel-patrol-base)
@@ -255,8 +255,7 @@ function _emptyReportMeta() {
 
 async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
   if (!cols.length) return [];
-  // Sample 10 000 rows - enough to reliably detect 2–12 unique values without
-  // fetching every column chunk from a remote file.
+  // Sample 10 000 rows. Randomly, to get more groups with reports written sequentially in path order.
   // Datetime columns are counted at day granularity so a batch of files with
   // unique timestamps can still group into a handful of distinct days.
   const dateColSet = new Set(dateCols);
@@ -266,7 +265,7 @@ async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
       : `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`,
   ).join(', ');
   try {
-    const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data LIMIT 10000)`);
+    const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data ${sample(10000)})`);
     const first = res.toArray()[0];
     if (!first) return [];
 
