@@ -147,9 +147,10 @@ def _infer_rgb_capability(dim_order: str, meta: Mapping[str, Any]) -> str | None
     if 'C' in dim_order:
         c_size = shape[dim_order.index('C')]
         channel_names = meta.get('channel_names', [])
-        _rgb_names = {'R', 'G', 'B', 'A', 'RED', 'GREEN', 'BLUE', 'ALPHA'}
+        _rgb_order = [{'R', 'RED'}, {'G', 'GREEN'}, {'B', 'BLUE'}, {'A', 'ALPHA'}]
         if c_size in (3, 4) and channel_names and all(
-            str(n).upper() in _rgb_names for n in channel_names
+            str(n).upper() in expected
+            for n, expected in zip(channel_names, _rgb_order)
         ):
             return 'rgb:C'
 
