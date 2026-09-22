@@ -260,7 +260,7 @@ class LmdbLoader:
                     array = _uncompress_blosc2(cursor.value())
                     b2_meta = _extract_blosc2_user_meta(array)
                     channels = _get_channels(b2_meta, toml_channels)
-                    candidate_shape = tuple(int(x) for x in array.shape)
+                    candidate_shape = array.shape
                     candidate_dtype = np.dtype(array.dtype)
                     candidate_dim_order = _resolve_dim_order(candidate_shape, channels)
                     nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
@@ -286,7 +286,7 @@ class LmdbLoader:
             env.close()
         b2_meta = _extract_blosc2_user_meta(array)
         channels = _get_channels(b2_meta, toml_channels)
-        shape = tuple(int(x) for x in array.shape)
+        shape = array.shape
         dim_order = _resolve_dim_order(shape, channels)
         np_array = np.asarray(array)
         arr_meta = _extract_array_meta(np_array, dim_order)
@@ -319,7 +319,7 @@ class LmdbLoader:
                         array = _uncompress_blosc2(cursor.value())
                         b2_meta = _extract_blosc2_user_meta(array)
                         channels = _get_channels(b2_meta, toml_channels)
-                        shape = tuple(int(x) for x in array.shape)
+                        shape = array.shape
                         dim_order = _resolve_dim_order(shape, channels)
                         # Convert to numpy once; reuse for both metadata and Record payload.
                         np_array = np.asarray(array)
