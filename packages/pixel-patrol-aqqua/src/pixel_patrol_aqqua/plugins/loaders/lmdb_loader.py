@@ -25,7 +25,6 @@ from pixel_patrol_base.core.record import record_from, Record
 logger = logging.getLogger(__name__)
 
 SKIP_KEYS = {"b2nd", "b2frame"}
-_COLOR_CHANNEL_NAMES = {"red", "green", "blue"}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -172,24 +171,26 @@ def _get_channels(blosc2_user_meta: Dict[str, Any], toml_channels: List[Dict]) -
 def _resolve_dim_order(shape: tuple, channels: List[Dict]) -> str:
     """Determine dim_order from the stored shape and channel list.
 
-    AqQua arrays are stored in CYX (or SYX) order: channels first.
-    With no channel info a heuristic is applied.
+    AqQua arrays are stored in CYX order: channels first.
     """
     ndim = len(shape)
-    if channels:
-        if shape[0] != len(channels):
-            logger.warning(
-                "LmdbLoader: channel count (%d) does not match shape[0] (%d), ignoring channel metadata",
-                len(channels), shape[0],
-            )
-        else:
-            is_color = all(ch.get("name", "").lower() in _COLOR_CHANNEL_NAMES for ch in channels)
-            return "SYX" if is_color else "CYX"
+    if channels and shape[0] != len(channels):
+        logger.warning(
+            "LmdbLoader: channel count (%d) does not match shape[0] (%d), ignoring channel metadata",
+            len(channels), shape[0],
+        )
     if ndim == 2:
         return "YX"
     if ndim == 3:
-        return "SYX" if shape[0] == 3 else "CYX"
+        return "CYX"
     return "".join(f"D{i}" for i in range(ndim))
+
+
+def _extract_channel_names(shape: tuple, channels: List[Dict]) -> List[str] | None:
+    """Return channel name strings if channels match shape[0], else None."""
+    if channels and shape[0] == len(channels):
+        return [ch.get("name", "") for ch in channels]
+    return None
 
 
 def _extract_array_meta(np_arr: np.ndarray, dim_order: str) -> Dict[str, Any]:
@@ -259,7 +260,7 @@ class LmdbLoader:
                     array = _uncompress_blosc2(cursor.value())
                     b2_meta = _extract_blosc2_user_meta(array)
                     channels = _get_channels(b2_meta, toml_channels)
-                    candidate_shape = tuple(int(x) for x in array.shape)
+                    candidate_shape = array.shape
                     candidate_dtype = np.dtype(array.dtype)
                     candidate_dim_order = _resolve_dim_order(candidate_shape, channels)
                     nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
@@ -285,9 +286,13 @@ class LmdbLoader:
             env.close()
         b2_meta = _extract_blosc2_user_meta(array)
         channels = _get_channels(b2_meta, toml_channels)
-        dim_order = _resolve_dim_order(tuple(int(x) for x in array.shape), channels)
+        shape = array.shape
+        dim_order = _resolve_dim_order(shape, channels)
         np_array = np.asarray(array)
         arr_meta = _extract_array_meta(np_array, dim_order)
+        channel_names = _extract_channel_names(shape, channels)
+        if channel_names is not None:
+            arr_meta["channel_names"] = channel_names
         uuid = b2_meta.get("image-uuid")
         pq_meta = parquet_meta.get(str(uuid), {}) if uuid else {}
         meta = {**toml_defaults, **dataset_meta, **pq_meta, **b2_meta, **arr_meta}
@@ -314,10 +319,14 @@ class LmdbLoader:
                         array = _uncompress_blosc2(cursor.value())
                         b2_meta = _extract_blosc2_user_meta(array)
                         channels = _get_channels(b2_meta, toml_channels)
-                        dim_order = _resolve_dim_order(tuple(int(x) for x in array.shape), channels)
+                        shape = array.shape
+                        dim_order = _resolve_dim_order(shape, channels)
                         # Convert to numpy once; reuse for both metadata and Record payload.
                         np_array = np.asarray(array)
                         arr_meta = _extract_array_meta(np_array, dim_order)
+                        channel_names = _extract_channel_names(shape, channels)
+                        if channel_names is not None:
+                            arr_meta["channel_names"] = channel_names
                         uuid = b2_meta.get("image-uuid")
                         pq_meta = parquet_meta.get(str(uuid), {}) if uuid else {}
                         meta = {**toml_defaults, **dataset_meta, **pq_meta, **b2_meta, **arr_meta}

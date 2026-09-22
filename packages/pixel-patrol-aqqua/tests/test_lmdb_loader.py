@@ -46,10 +46,10 @@ def test_is_folder_supported_rejects_file(tmp_path: Path, loader) -> None:
 
 @pytest.mark.parametrize("shape,channels,expected", [
     ((64, 64),     [],                                                                                              "YX"),
-    ((3, 64, 64),  [{"name": "red"}, {"name": "green"}, {"name": "blue"}],                                         "SYX"),
+    ((3, 64, 64),  [{"name": "red"}, {"name": "green"}, {"name": "blue"}],                                         "CYX"),
     ((1, 64, 64),  [{"name": "grayscale"}],                                                                         "CYX"),
     ((2, 64, 64),  [{"name": "DAPI"}, {"name": "GFP"}],                                                            "CYX"),
-    ((3, 64, 64),  [],                                                                                              "SYX"),
+    ((3, 64, 64),  [],                                                                                              "CYX"),
     ((1, 64, 64),  [],                                                                                              "CYX"),
     ((4, 64, 64),  [],                                                                                              "CYX"),
     ((2, 3, 64, 64), [],                                                                                            "D0D1D2D3"),
@@ -142,7 +142,7 @@ def test_read_header_dtype(rgb_lmdb: Path, loader) -> None:
 
 def test_read_header_dim_order_rgb(rgb_lmdb: Path, loader) -> None:
     info = loader.read_header(rgb_lmdb)
-    assert info.dim_order == "SYX"
+    assert info.dim_order == "CYX"
 
 
 def test_read_header_grayscale_dim_order(grayscale_lmdb: Path, loader) -> None:
@@ -178,7 +178,7 @@ def test_load_shape(rgb_lmdb: Path, loader) -> None:
 
 def test_load_dim_order(rgb_lmdb: Path, loader) -> None:
     record = loader.load(rgb_lmdb)
-    assert record.dim_order == "SYX"
+    assert record.dim_order == "CYX"
 
 
 def test_load_meta_contains_uuid(rgb_lmdb: Path, loader) -> None:
@@ -188,9 +188,15 @@ def test_load_meta_contains_uuid(rgb_lmdb: Path, loader) -> None:
 
 def test_load_meta_contains_dim_sizes(rgb_lmdb: Path, loader) -> None:
     record = loader.load(rgb_lmdb)
-    assert record.meta.get("size_S") == 3
+    assert record.meta.get("size_C") == 3
     assert record.meta.get("size_Y") == 48
     assert record.meta.get("size_X") == 84
+
+
+def test_load_rgb_channel_names_and_capability(rgb_lmdb: Path, loader) -> None:
+    record = loader.load(rgb_lmdb)
+    assert record.meta.get("channel_names") == ["Red", "Green", "Blue"]
+    assert "rgb:C" in record.capabilities
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +241,7 @@ def test_load_range_all_records_have_correct_shape(rgb_lmdb: Path, loader) -> No
 
 def test_load_range_dim_order_rgb(rgb_lmdb: Path, loader) -> None:
     for _, record in loader.load_range(rgb_lmdb, start=0, stop=2):
-        assert record.dim_order == "SYX"
+        assert record.dim_order == "CYX"
 
 
 # ---------------------------------------------------------------------------
