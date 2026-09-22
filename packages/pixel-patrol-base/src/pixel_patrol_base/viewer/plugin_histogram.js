@@ -427,8 +427,7 @@ export default {
         let where = srcWhere;
         if (ctrl.selectedGroups.length && ctx.state.groupCol) {
           const list = ctrl.selectedGroups.map(g => `'${g.replace(/'/g, "''")}'`).join(', ');
-          const extra = `${q(ctx.state.groupCol)} IN (${list})`;
-          // NEW: const extra = `${ctx.sql.groupCol()} IN (${list})`;
+          const extra = `${ctx.sql.groupCol()} IN (${list})`;
           where = where ? `${where} AND ${extra}` : `WHERE ${extra}`;
         }
 
