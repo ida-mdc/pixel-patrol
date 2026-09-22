@@ -39,10 +39,10 @@ export default {
       const exts   = [...new Set(extRows.map(r => String(r.ext)))];
       const counts = groupRows.map(r => Number(r.c)).filter(n => n > 0);
 
-      const issues = [];
-      if (exts.length > 1) issues.push('file type');
-      if (counts.length > 1 && Math.max(...counts) / Math.min(...counts) >= 1.5) issues.push('file count');
-      if (issues.length) return { text: `Inconsistencies: <strong>${issues.join(', ')}</strong>.`, warning: true };
+      const warnings = [];
+      if (exts.length > 1) warnings.push('mixed file formats');
+      if (counts.length > 1 && Math.max(...counts) / Math.min(...counts) >= 1.5) warnings.push('unequal file counts between conditions');
+      if (warnings.length) return { text: `Inconsistencies: <strong>${warnings.join(', ')}</strong>.`, warning: true };
 
       return `All <strong>${escapeHtml(exts[0] ?? 'files')}</strong>.`;
     } catch { return null; }
@@ -50,99 +50,102 @@ export default {
 
   async overviewPlot(container, ctx) {
     const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
-    const gcExpr = gcFn();
+    const gcExpr  = gcFn();
+    const hasDate = ctx.schema.allCols.includes('modification_date');
 
-    const [extRows, groupRows] = await Promise.all([
+    // Fetch lightweight stats in parallel to decide what to show.
+    const [extRows, sizeRange, dateRange] = await Promise.all([
       ctx.queryRows(`
         SELECT "file_extension" AS ext, ${gcExpr} AS __group__, ${fileCount()} AS c
         FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}
         GROUP BY 1, 2
       `),
-      ctx.queryRows(`SELECT ${gcExpr} AS g, ${fileCount()} AS c FROM pp_data ${ctx.where} GROUP BY 1`),
+      ctx.queryRows(`
+        SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
+               COUNT(DISTINCT "size_bytes") AS n_unique
+        FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+      `),
+      hasDate
+        ? ctx.queryRows(`
+            SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
+                   EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
+                     - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms
+            FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+          `)
+        : Promise.resolve([]),
     ]);
 
-    const exts   = [...new Set(extRows.map(r => String(r.ext)))];
-    const counts = groupRows.map(r => Number(r.c)).filter(n => n > 0);
-    const countImbalance = counts.length > 1 &&
-      Math.max(...counts) / Math.min(...counts) >= 1.5;
+    const exts   = [...new Set(extRows.map(r => String(r.ext)))].sort();
+    const nSizes = Number(sizeRange[0]?.n_unique ?? 0);
+    // span > 0 means >= 1 timestamp; span === 0 means exactly one
+    const spanMs = Number(dateRange[0]?.span_ms ?? 0);
+    const onlyOneDateOccurring = spanMs === 0;
 
-    // One mini-plot per warning condition — same thresholds as overviewMessage,
-    // capped at 2 (beyond that the tile becomes too cramped to read).
-    const drawers = [];
+    // Show one mini-plot: the most informative varying property (ext > date > size).
     if (exts.length > 1) {
-      drawers.push({ title: 'File type', draw: (host) => {
-        const idx = new Map(extRows.map(r => [`${r.ext}\x00${r.__group__}`, Number(r.c)]));
-        const extCount = (e, g) => idx.get(`${e}\x00${g}`) ?? 0;
-        ctx.plot.appendMini(host, ctx.plot.groupedBarTraces(exts, extCount, { mini: true }),
-          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
-        return true;
-      }});
-    }
-    if (countImbalance) {
-      drawers.push({ title: 'File count', draw: (host) => {
-        const groups = groupRows.map(r => String(r.g));
-        const idx = new Map(groupRows.map(r => [String(r.g), Number(r.c)]));
-        ctx.plot.appendMini(host, ctx.plot.groupedBarTraces(groups, (g) => idx.get(g) ?? 0, { mini: true }),
-          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
-        return true;
-      }});
-    }
-
-    // Nothing varies: mirror the full widget, which lists every invariant property.
-    if (!drawers.length) {
-      const invariants = [];
-      if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
-
-      const [sizeRange, dateRange] = await Promise.all([
-        ctx.queryRows(`
-          SELECT MIN("size_bytes") AS min_s, COUNT(DISTINCT "size_bytes") AS n_unique
-          FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
-        `),
-        ctx.schema.allCols.includes('modification_date')
-          ? ctx.queryRows(`
-              SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
-                     COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique
-              FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
-            `)
-          : Promise.resolve([]),
-      ]);
-
-      if (Number(sizeRange[0]?.n_unique ?? 0) <= 1) {
-        invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
-      }
-      if (dateRange[0]?.min_fmt != null && Number(dateRange[0].n_unique) <= 1) {
-        invariants.push(['Modification Date', dateRange[0].min_fmt]);
-      }
-
-      if (!invariants.length) return false;
-      ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
+      const idx = new Map(extRows.map(r => [`${r.ext}\x00${r.__group__}`, Number(r.c)]));
+      ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(exts, (e, g) => idx.get(`${e}\x00${g}`) ?? 0, { mini: true }),
+        { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
       return true;
     }
 
-    if (drawers.length === 1) return drawers[0].draw(container);
-
-    // Two issues: split the tile vertically, one labelled mini-plot each.
-    container.style.cssText += ';display:flex;flex-direction:column;gap:2px';
-    let drew = false;
-    for (const { title, draw } of drawers) {
-      const cell = document.createElement('div');
-      cell.style.cssText = 'flex:1 1 0;min-height:0;display:flex;flex-direction:column';
-      const cap = document.createElement('div');
-      cap.textContent = title;
-      cap.style.cssText = 'font-size:10px;font-weight:600;color:#6c757d;text-align:center;flex-shrink:0';
-      const plotHost = document.createElement('div');
-      plotHost.style.cssText = 'flex:1 1 0;min-height:0;position:relative';
-      cell.append(cap, plotHost);
-      container.appendChild(cell);
-      drew = (await draw(plotHost)) !== false || drew;
+    if (spanMs >= MS_SECOND) {
+      const fmt = spanMs >= MS_DAY    ? '%Y-%m-%d'
+                : spanMs >= MS_HOUR   ? '%Y-%m-%d %H:00'
+                : spanMs >= MS_MINUTE ? '%Y-%m-%d %H:%M'
+                :                       '%Y-%m-%d %H:%M:%S';
+      let { rows, cats } = await bucketByDateFmt(ctx, fmt);
+      if (fmt === '%Y-%m-%d' && cats.length > MAX_DAYS) ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m'));
+      if (cats.length) {
+        ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(cats, pick(rows, r => r.bucket, 'count'), { mini: true }),
+          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
+        return true;
+      }
     }
-    return drew;
+
+    if (nSizes > 1) {
+      const minS = Number(sizeRange[0]?.min_s ?? 0);
+      const maxS = Number(sizeRange[0]?.max_s ?? 0);
+      const { breaks, labels } = computeSizeBins(minS, maxS, nSizes, ctx.plot.formatBytes);
+      if (breaks.length) {
+        const rows = await ctx.queryRows(`
+          SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin,
+                 ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
+          FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+          GROUP BY 1, 2
+        `);
+        ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(labels, pick(rows, r => r.bin, 'count'), { mini: true }),
+          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
+        return true;
+      }
+    }
+
+    // Nothing varies: invariant summary table.
+    const invariants = [];
+    if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
+    if (nSizes <= 1) invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
+    if (onlyOneDateOccurring && dateRange[0]?.min_fmt) invariants.push(['Modification Date', dateRange[0].min_fmt]);
+    if (!invariants.length) return false;
+    ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
+    return true;
   },
 
   async render(container, ctx) {
     try {
       const invariants = [];
       const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx);
+
+      // Files per group, summed over extensions - the same numbers a separate
+      // per-group count query returns, without the extra query.
+      const byGroup = new Map();
+      for (const r of extRows) byGroup.set(r.__group__, (byGroup.get(r.__group__) ?? 0) + Number(r.count));
+      const counts = [...byGroup.values()].filter(n => n > 0);
+      if (counts.length > 1 && Math.max(...counts) / Math.min(...counts) >= 1.5) {
+        ctx.plot.prependWarning(container, {
+          level: 'yellow',
+          html: 'File counts differ significantly between conditions (ratio &gt;1.5×). This may indicate an imbalanced dataset.',
+        });
+      }
 
       // Each section draws a chart when the property varies, or adds an
       // invariant row when it's shared by every file.

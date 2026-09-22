@@ -85,7 +85,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
      * groupCol (if set) is always included as __group__.
      */
     async querySample(cols, n = 5000) {
-      const gcExpr  = state.groupCol ? `${_q(state.groupCol)} AS ${GROUP_COL_ALIAS}, ` : `'${GROUP_ALL}' AS ${GROUP_COL_ALIAS}, `;
+      const gcExpr  = `${_groupExpr(state, schema.dateCols ?? [])}, `;
       const colList = cols.map(_q).join(', ');
       const sql     = `SELECT ${gcExpr}${colList} FROM pp_data ${where} ${sample(n)}`;
       return this.queryRows(sql);
@@ -117,8 +117,8 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       q:         _q,
       andWhere,
       sample,
-      groupCol:  () => _groupCol(state),
-      groupExpr: () => _groupExpr(state),
+      groupCol:  () => _groupCol(state, schema.dateCols ?? []),
+      groupExpr: () => _groupExpr(state, schema.dateCols ?? []),
 
       fileCount: () => fileCount(schema.allCols ?? []),
 
@@ -262,7 +262,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const where = buildScopedWhere(schema, state);
 
   // Fetch distinct groups and filtered count in parallel.
-  const gcExpr = state.groupCol ? _q(state.groupCol) : `'${GROUP_ALL}'`;
+  const gcExpr = _groupCol(state, schema.dateCols ?? []);
   const [groupResult, countResult] = await Promise.all([
     conn.query(
       `SELECT DISTINCT ${gcExpr} AS g FROM pp_data ${where} ORDER BY 1 LIMIT 50`,

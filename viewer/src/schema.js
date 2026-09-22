@@ -46,7 +46,9 @@ const INFRA_COLS = new Set(['obs_level']);
 
 /**
  * Detect schema from an array of {name, type} column descriptors.
- * `type` is the string from Arrow's field type (e.g. "Float64", "Utf8", "Int32").
+ * `type` is a type name: either from the loader and DuckDB's information_schema
+ *  data_type ("VARCHAR", "TIMESTAMP", "BIGINT[]") or from Arrow and tests ("Utf8", 
+ *  "Int64", "Date32"). Both are accepted.
  *
  * Files carry per-dimension dim_t/dim_c/... nullable int columns plus obs_level.
  *
@@ -85,7 +87,8 @@ export function detectSchema(columns) {
 
     const isNumeric = /^(int|uint|float|double|decimal|bigint|smallint|tinyint|real|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64)/i.test(type);
     const isDate    = /^(date|timestamp)/i.test(type); // excludes bare TIME (time-of-day, not a date)
-    const isString  = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
+    // Any type that can act as group label
+    const isGroupable = /^(utf8|string|large_utf8|bool|date|time|timestamp|varchar|char|text)/i.test(type);
     const isDimCol  = DIM_COL_RE.test(name); // dim_t, dim_c, …
 
     // dim_* columns: track but don't add to allCols/metricCols
@@ -109,7 +112,7 @@ export function detectSchema(columns) {
     if (!isSkipped) {
       if (KNOWN_GROUP_COLS.has(name)) {
         groupCols.push(name);
-      } else if (isString) {
+      } else if (isGroupable) {
         groupCols.push(name);
       }
     }

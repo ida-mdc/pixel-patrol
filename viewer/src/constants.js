@@ -5,8 +5,9 @@ export const FILE_ROW_NUMBER     = 'file_row_number';
 export const WIDGET_CONTAINER_ID = 'widget-container';
 
 // Timestamp columns, and the SQL STRFTIME format used to render them.
-export const DATE_COLS = new Set(['modification_date']);
-export const DATE_FMT  = "'%Y-%m-%d %H:%M:%S'";
+export const DATE_COLS      = new Set(['modification_date']);
+export const DATE_FMT       = "'%Y-%m-%d %H:%M:%S'";
+export const DATE_GROUP_FMT = "'%Y-%m-%d'";
 
 // DOM element IDs shared across modules
 export const ID_WELCOME_SCREEN   = 'welcome-screen';
