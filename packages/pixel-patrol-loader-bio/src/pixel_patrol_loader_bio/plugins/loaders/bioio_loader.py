@@ -79,6 +79,15 @@ def normalize_metadata(metadata):
 
 
 _TIFF_EXTENSIONS = {".tif", ".tiff"}
+_JPEG_EXTENSIONS = {".jpg", ".jpeg"}
+
+
+class _JpegReader(bioio_imageio.Reader):
+    @staticmethod
+    def _get_image_length(fs, path, extension, mode):
+        if extension.lower() in ("jpg", "jpeg"):
+            return 1
+        return bioio_imageio.Reader._get_image_length(fs, path, extension, mode)
 
 
 def _is_ome_tiff(file_path: Path) -> bool:
@@ -98,6 +107,8 @@ def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
         if file_path.suffix.lower() in _TIFF_EXTENSIONS:
             reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
             return BioImage(file_path, reader=reader)
+        if file_path.suffix.lower() in _JPEG_EXTENSIONS:
+            return BioImage(file_path, reader=_JpegReader)
         return BioImage(file_path)
     except UnsupportedFileFormatError:
         try:
