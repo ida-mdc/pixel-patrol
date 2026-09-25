@@ -147,6 +147,8 @@ class BioIoLoader:
             if nbytes > best_nbytes:
                 best_nbytes = nbytes
                 shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+        if shape is None:
+            raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
 
     def load(self, file_path: Path) -> Record:
