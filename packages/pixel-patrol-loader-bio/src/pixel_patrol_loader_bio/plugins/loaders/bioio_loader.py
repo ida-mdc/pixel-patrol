@@ -66,6 +66,15 @@ def _extract_metadata(img: Any, data: Any) -> Dict[str, Any]:
 
 
 _TIFF_EXTENSIONS = {".tif", ".tiff"}
+_JPEG_EXTENSIONS = {".jpg", ".jpeg"}
+
+
+class _JpegReader(bioio_imageio.Reader):
+    @staticmethod
+    def _get_image_length(fs, path, extension, mode):
+        if extension.lower() in ("jpg", "jpeg"):
+            return 1
+        return bioio_imageio.Reader._get_image_length(fs, path, extension, mode)
 
 
 def _is_ome_tiff(file_path: Path) -> bool:
@@ -85,6 +94,8 @@ def _load_bioio_image(file_path: Path) -> Optional[Reader]:
         if file_path.suffix.lower() in _TIFF_EXTENSIONS:
             reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
             return reader(file_path)
+        if file_path.suffix.lower() in _JPEG_EXTENSIONS:
+            return _JpegReader(file_path)
         return BioImage.determine_plugin(file_path).metadata.get_reader()(file_path)
     except UnsupportedFileFormatError:
         try:
@@ -117,13 +128,13 @@ class BioIoLoader:
     NAME = "bioio"
     DESCRIPTION = "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes)."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "ome.tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
-    CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff"}
+    CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff", "ome.tif", "ome.tiff"}
 
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)
