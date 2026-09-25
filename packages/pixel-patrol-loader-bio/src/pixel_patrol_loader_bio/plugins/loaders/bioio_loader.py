@@ -129,13 +129,13 @@ class BioIoLoader:
     NAME = "bioio"
     DESCRIPTION = "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes)."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "ome.tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
     FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
-    CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff"}
+    CONTAINER_EXTENSIONS: Set[str] = {"czi", "nd2", "lif", "tif", "tiff", "ome.tif", "ome.tiff"}
 
     def is_folder_supported(self, path: Path) -> bool:
         return is_zarr_store(path)

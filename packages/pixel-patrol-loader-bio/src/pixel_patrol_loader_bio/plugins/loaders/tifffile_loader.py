@@ -158,9 +158,9 @@ class TifffileLoader:
     NAME = "tifffile"
     DESCRIPTION = "Loads TIFF and OME-TIFF images via tifffile, reading pixel data and OME image metadata."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif", "ome.tiff"}
     FOLDER_EXTENSIONS:    Set[str] = set()
-    CONTAINER_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif"}
+    CONTAINER_EXTENSIONS: Set[str] = {"tif", "tiff", "ome.tif", "ome.tiff"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
