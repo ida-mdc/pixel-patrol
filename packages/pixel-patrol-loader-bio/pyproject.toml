@@ -11,14 +11,14 @@ authors = [
 requires-python = ">=3.12"
 
 dependencies = [
-    "bioio==3.0.0",
+    "bioio==3.5.1",
     "bioio-tifffile==1.3.0",
     "bioio-ome-tiff==1.4.0",
     "bioio-ome-zarr==2.3.0",
     "bioio-imageio==1.3.0",
     "bioio-lif==1.4.2",
     "bioio-nd2==1.8.0",
-    "bioio-czi==2.4.2",
+    "bioio-czi==3.0.0",
     "pixel-patrol-base==0.9.1",
     "zarr==3.1.1",
     "tifffile==2025.9.9",
