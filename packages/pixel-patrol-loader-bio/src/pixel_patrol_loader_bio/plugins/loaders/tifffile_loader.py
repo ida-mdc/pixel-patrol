@@ -24,20 +24,6 @@ from pixel_patrol_base.core.record import Record, record_from
 logger = logging.getLogger(__name__)
 
 
-def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
-    dim_order = metadata["dim_order"]
-    keep = [i for i, s in enumerate(metadata["shape"]) if s != 1]
-    metadata["shape"] = [metadata["shape"][i] for i in keep]
-    metadata["ndim"] = len(metadata["shape"])
-    metadata["dim_order"] = "".join(dim_order[i] for i in keep)
-    if "dim_names" in metadata:
-        metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
-    for ax in list(dim_order):
-        if metadata.get(f"size_{ax}", None) == 1:
-            metadata.pop(f"size_{ax}", None)
-    return metadata
-
-
 def _page0_description(tf: tifffile.TiffFile) -> Optional[str]:
     try:
         desc = tf.pages[0].description
@@ -181,7 +167,7 @@ class TifffileLoader:
             best_nbytes = -1
             shape = dtype = dim_order = None
             for i in range(min(3, n_images)):
-                meta = _normalize_metadata(_extract_metadata(tf, tf.series[i], i))
+                meta = _extract_metadata(tf, tf.series[i], i)
                 candidate_shape = tuple(int(x) for x in meta["shape"])
                 candidate_dtype = np.dtype(meta.get("dtype", "float32"))
                 nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
@@ -227,7 +213,5 @@ class TifffileLoader:
     def _build_record(tf: tifffile.TiffFile, series_index: int) -> Record:
         series = tf.series[series_index]
         meta = _extract_metadata(tf, series, series_index)
-        meta = _normalize_metadata(meta)
         data = _dask_from_series(series)
-        data = da.squeeze(data)
         return record_from(data, meta, kind="intensity")

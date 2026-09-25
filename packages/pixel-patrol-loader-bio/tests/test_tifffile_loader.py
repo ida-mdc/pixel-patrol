@@ -165,3 +165,14 @@ def test_load_pyramidal_ome_tiff_is_lazy_and_chunked(tmp_path: Path, loader, cap
     import dask.array as da
     assert isinstance(rec.data, da.Array), "load() must return a lazy dask array"
     np.testing.assert_array_equal(rec.data.compute(), im)
+
+
+def test_load_ome_tif_line_scan(tmp_path: Path, loader):
+    arr = np.zeros((5, 1, 1, 1, 512), dtype=np.uint8)
+    tifffile.imwrite(tmp_path / "line.ome.tif", arr, ome=True, metadata={"axes": "TCZYX"})
+
+    rec = loader.load(tmp_path / "line.ome.tif")
+
+    assert rec.dim_order == "TYX"
+    assert rec.data.shape == (5, 1, 512)
+    assert rec.meta["size_Y"] == 1
