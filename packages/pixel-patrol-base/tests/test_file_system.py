@@ -217,3 +217,25 @@ def test_compound_not_applied_in_all_mode(tmp_path: Path):
 
     assert found["brain.nii.gz"]["file_extension"] == "gz"
     assert found["scan.ome.tif"]["file_extension"] == "tif"
+
+
+# --- Tests for hidden file/directory filtering ---
+
+def test_hidden_files_are_skipped(tmp_path: Path):
+    (tmp_path / "image.tif").write_bytes(b"x")
+    (tmp_path / "._image.tif").write_bytes(b"x")
+    (tmp_path / ".DS_Store").write_bytes(b"x")
+
+    names = [meta["name"] for _, meta in _discover_files([tmp_path], "all")]
+
+    assert names == ["image.tif"]
+
+
+def test_hidden_directories_are_not_walked(tmp_path: Path):
+    (tmp_path / ".hidden_dir").mkdir()
+    (tmp_path / ".hidden_dir" / "image.tif").write_bytes(b"x")
+    (tmp_path / "visible.tif").write_bytes(b"x")
+
+    names = [meta["name"] for _, meta in _discover_files([tmp_path], "all")]
+
+    assert names == ["visible.tif"]

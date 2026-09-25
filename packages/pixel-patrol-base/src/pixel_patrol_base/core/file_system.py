@@ -108,6 +108,8 @@ def _discover_files(
             if folder_exts or is_folder_dataset is not None:
                 keep_dirs: List[str] = []
                 for dname in sorted(dirnames):
+                    if dname.startswith("."):
+                        continue
                     sub = dir_path / dname
                     ext_raw = sub.suffix.lower().lstrip(".")
                     by_ext = ext_raw in folder_exts and (extensions is None or ("." + ext_raw) in extensions)
@@ -129,9 +131,11 @@ def _discover_files(
                         keep_dirs.append(dname)
                 dirnames[:] = keep_dirs
             else:
-                dirnames.sort()
+                dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
 
             for fname in sorted(filenames):
+                if fname.startswith("."):
+                    continue
                 path = dir_path / fname
                 ext  = path.suffix.lower()
                 if extensions is not None:
