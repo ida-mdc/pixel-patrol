@@ -6,9 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 import tifffile
+from bioio_base.exceptions import UnsupportedFileFormatError
 from PIL import Image
 
-from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader, _extract_metadata
 
 
 @pytest.fixture
@@ -122,3 +123,30 @@ def test_load_czi_line_scan(tmp_path: Path, loader, create_czi):
 
     assert rec.data.shape == (4, 1, 1, 1, 16)
     assert rec.meta["size_Y"] == 1
+
+
+def test_read_header_no_scenes_raises(monkeypatch, loader):
+    class _FakeImage:
+        scenes = []
+
+    monkeypatch.setattr(
+        "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
+        lambda file_path: _FakeImage(),
+    )
+
+    with pytest.raises(UnsupportedFileFormatError):
+        loader.read_header(Path("unused.czi"))
+
+
+def test_channel_names_fallback_when_reader_has_none():
+    class _FakeData:
+        dims = ("C", "Y", "X")
+        shape = (2, 4, 4)
+
+    class _FakeReader:
+        dtype = np.dtype("uint16")
+        channel_names = None
+        current_scene = "Image:0"
+
+    meta = _extract_metadata(_FakeReader(), _FakeData())
+    assert meta["channel_names"] == ["Channel:0:0"]
