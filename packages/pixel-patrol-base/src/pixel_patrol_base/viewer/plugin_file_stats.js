@@ -224,14 +224,12 @@ function renderExtensions(container, ctx, extRows, invariants, { ungrouped = fal
     invariants.push(['File Extension', exts[0]]);
     return;
   }
-  if (!ungrouped) {
-    ctx.plot.prependWarning(container, {
-      level: 'red',
-      html: `This dataset contains files with more than one extension: ` +
-        `${exts.map(e => ctx.plot.escapeHtml(e)).join(', ')}. ` +
-        `Mixed file formats can mean a mixed dataset or even images that were saved twice - worth looking into.`,
-    });
-  }
+  ctx.plot.prependWarning(container, {
+    level: 'red',
+    html: `This dataset contains files with more than one extension: ` +
+      `${exts.map(e => ctx.plot.escapeHtml(e)).join(', ')}. ` +
+      `Mixed file formats can mean a mixed dataset or even images that were saved twice - worth looking into.`,
+  });
   renderGroupedBars(container, { categories: exts, getValue: pick(extRows, r => r.ext, 'count'),
     title: 'File Count by Extension', xLabel: 'Extension', yLabel: 'File count' }, ctx, { ungrouped });
   renderGroupedBars(container, { categories: exts, getValue: pick(extRows, r => r.ext, 'total_bytes'),
