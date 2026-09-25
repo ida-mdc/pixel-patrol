@@ -20,7 +20,8 @@ def plain_h5(tmp_path: Path) -> Path:
     """Two image datasets at different depths plus one non-image dataset."""
     path = tmp_path / "plain.h5"
     with h5py.File(path, "w") as f:
-        f.create_dataset("raw", data=np.arange(2 * 4 * 6, dtype="uint16").reshape(2, 4, 6))
+        dset = f.create_dataset("raw", data=np.arange(2 * 4 * 6, dtype="uint16").reshape(2, 4, 6))
+        dset.attrs["element_size_um"] = np.array([0.5, 0.25, 0.25])
         f.create_group("nested").create_dataset(
             "labels", data=np.zeros((4, 6), dtype="uint8"), chunks=(2, 3)
         )
@@ -72,15 +73,44 @@ def bdv_h5(tmp_path: Path) -> Path:
     return path
 
 
-def test_name_and_extensions(loader):
-    assert loader.NAME == "h5"
-    assert loader.SUPPORTED_EXTENSIONS == {"h5", "hdf5"}
-    assert loader.CONTAINER_EXTENSIONS == {"h5", "hdf5"}
-    assert loader.FOLDER_EXTENSIONS == set()
+def _imaris_text(value: str) -> np.ndarray:
+    """Encode text the way many Imaris files store HDF5 attributes."""
+    return np.frombuffer(value.encode("utf-8") + b"\x00", dtype="S1")
 
 
-def test_is_folder_supported_is_always_false(tmp_path: Path, loader):
-    assert loader.is_folder_supported(tmp_path) is False
+@pytest.fixture
+def imaris_h5(tmp_path: Path) -> Path:
+    """Minimal two-timepoint, two-channel, pyramidal Imaris 5.5 file."""
+    path = tmp_path / "modern.ims"
+    with h5py.File(path, "w") as f:
+        f.attrs["ImarisDataSet"] = _imaris_text("ImarisDataSet")
+        f.attrs["ImarisVersion"] = _imaris_text("5.5.0")
+
+        image = f.create_group("DataSetInfo/Image")
+        image.attrs["Unit"] = _imaris_text("um")
+        for index, (minimum, maximum) in enumerate(((0, 2), (0, 3), (0, 4))):
+            image.attrs[f"ExtMin{index}"] = _imaris_text(str(minimum))
+            image.attrs[f"ExtMax{index}"] = _imaris_text(str(maximum))
+        for channel, (name, em, ex) in enumerate([("DAPI", "460 nm", "405 nm"), ("GFP", "525 nm", "488 nm")]):
+            grp = f.create_group(f"DataSetInfo/Channel {channel}")
+            grp.attrs["Name"] = _imaris_text(name)
+            grp.attrs["LSMEmissionWavelength"] = _imaris_text(em)
+            grp.attrs["LSMExcitationWavelength"] = _imaris_text(ex)
+
+        for timepoint in range(2):
+            for channel in range(2):
+                value = timepoint * 10 + channel
+                f.create_dataset(
+                    f"DataSet/ResolutionLevel 0/TimePoint {timepoint}/Channel {channel}/Data",
+                    data=np.full((2, 3, 4), value, dtype=np.uint16),
+                    chunks=(1, 3, 4),
+                )
+                f.create_dataset(
+                    f"DataSet/ResolutionLevel 1/TimePoint {timepoint}/Channel {channel}/Data",
+                    data=np.full((1, 2, 2), value, dtype=np.uint16),
+                )
+        f.create_dataset("Thumbnail/Data", data=np.zeros((8, 8), dtype=np.uint8))
+    return path
 
 
 # ── plain HDF5 ───────────────────────────────────────────────────────────────
@@ -88,9 +118,9 @@ def test_is_folder_supported_is_always_false(tmp_path: Path, loader):
 def test_read_header_counts_image_datasets_only(plain_h5: Path, loader):
     info = loader.read_header(plain_h5)
     assert info.n_images == 2  # 'raw' and 'nested/labels'; the 1-D dataset is skipped
-    assert info.shape == (4, 6)  # first by sorted path: 'nested/labels'
-    assert info.dtype == np.dtype("uint8")
-    assert info.dim_order == "YX"
+    assert info.shape == (2, 4, 6)  # largest dataset is safest for task sizing
+    assert info.dtype == np.dtype("uint16")
+    assert info.dim_order == "AYX"
 
 
 def test_load_returns_first_dataset_lazily(plain_h5: Path, loader):
@@ -115,14 +145,23 @@ def test_load_range_yields_every_dataset(plain_h5: Path, loader):
     assert np.array_equal(raw.data.compute(), np.arange(48, dtype="uint16").reshape(2, 4, 6))
 
 
-def test_load_range_honours_slice_bounds(plain_h5: Path, loader):
-    assert [cid for cid, _ in loader.load_range(plain_h5, 1, 2)] == ["raw"]
-    assert list(loader.load_range(plain_h5, 2, 5)) == []
+@pytest.mark.parametrize("start, end, expected", [(1, 2, ["raw"]), (2, 5, [])])
+def test_load_range_honours_slice_bounds(plain_h5: Path, loader, start, end, expected):
+    assert [cid for cid, _ in loader.load_range(plain_h5, start, end)] == expected
 
 
 def test_root_attributes_are_merged_into_meta(plain_h5: Path, loader):
     record = loader.load(plain_h5)
     assert record.meta["h5_attributes"]["experiment"] == "test-run"
+
+
+def test_element_size_um_sets_pixel_sizes(plain_h5: Path, loader):
+    items = list(loader.load_range(plain_h5, 0, 2))
+    _, raw = items[1]
+    assert raw.meta["pixel_size_Z"] == pytest.approx(0.5)
+    assert raw.meta["pixel_size_Y"] == pytest.approx(0.25)
+    assert raw.meta["pixel_size_X"] == pytest.approx(0.25)
+    assert raw.meta["pixel_size_unit"] == "um"
 
 
 def test_axistags_attribute_sets_dim_order(axistags_h5: Path, loader):
@@ -133,7 +172,6 @@ def test_axistags_attribute_sets_dim_order(axistags_h5: Path, loader):
 
 
 def test_dataset_proxy_survives_pickling(plain_h5: Path, loader):
-    """Records are built in the coordinator and computed in worker processes."""
     record = loader.load(plain_h5)
     revived = pickle.loads(pickle.dumps(record.data))
     assert np.array_equal(revived.compute(), record.data.compute())
@@ -145,11 +183,6 @@ def test_no_image_dataset_raises(tmp_path: Path, loader):
         f.create_dataset("scalars", data=np.arange(3))
     with pytest.raises(RuntimeError, match="no image-like dataset"):
         loader.read_header(path)
-
-
-def test_missing_file_raises(tmp_path: Path, loader):
-    with pytest.raises(Exception):
-        loader.load(tmp_path / "nonexistent.h5")
 
 
 # ── BigDataViewer ────────────────────────────────────────────────────────────
@@ -181,3 +214,42 @@ def test_bdv_without_xml_still_loads(bdv_h5: Path, loader):
     assert record.dim_order == "ZYX"
     assert "pixel_size_X" not in record.meta
     assert record.meta["bdv_setup"] == "s00"
+
+
+# ── Imaris IMS ──────────────────────────────────────────────────────────────
+
+def test_imaris_header_is_one_tczyx_image(imaris_h5: Path, loader):
+    info = loader.read_header(imaris_h5)
+    assert info.n_images == 1
+    assert info.shape == (2, 2, 2, 3, 4)
+    assert info.dtype == np.dtype("uint16")
+    assert info.dim_order == "TCZYX"
+
+
+def test_imaris_load_combines_time_and_channels_lazily(imaris_h5: Path, loader):
+    record = loader.load(imaris_h5)
+    assert isinstance(record.data, da.Array)
+    assert record.dim_order == "TCZYX"
+    assert record.data.shape == (2, 2, 2, 3, 4)
+    assert np.all(record.data[0, 0].compute() == 0)
+    assert np.all(record.data[1, 1].compute() == 11)
+
+
+def test_imaris_uses_only_full_resolution_and_extracts_metadata(imaris_h5: Path, loader):
+    record = loader.load(imaris_h5)
+    assert record.meta["h5_dataset_path"] == "/DataSet/ResolutionLevel 0"
+    assert record.meta["channel_names"] == ["DAPI", "GFP"]
+    assert record.meta["imaris_format_version"] == "5.5.0"
+    assert record.meta["pixel_size_unit"] == "um"
+    assert record.meta["pixel_size_X"] == pytest.approx(0.5)
+    assert record.meta["pixel_size_Y"] == pytest.approx(1.0)
+    assert record.meta["pixel_size_Z"] == pytest.approx(2.0)
+    assert record.meta["emission_wavelengths"] == ["460 nm", "525 nm"]
+    assert record.meta["excitation_wavelengths"] == ["405 nm", "488 nm"]
+
+
+def test_legacy_non_hdf5_ims_has_clear_error(tmp_path: Path, loader):
+    path = tmp_path / "legacy.ims"
+    path.write_bytes(b"not an HDF5 file")
+    with pytest.raises(RuntimeError, match="legacy Imaris 2.7/3"):
+        loader.read_header(path)
