@@ -334,3 +334,15 @@ def test_all_task_types_have_correct_file_indices():
     assert any(ip.file_index == 0 for bt in batch_tasks for ip in bt.files)
     assert all(t.file_index == 1 for t in container_tasks)
     assert all(t.file_index == 2 for t in chunk_tasks)
+
+
+def test_unreadable_header_is_recorded():
+    loader = MockLoader({"/data/broken.lmdb": MockEntry(shape=(10, 10), dtype=np.uint8, dim_order="YX", fail=True)})
+    files_meta: List[dict] = []
+    unreadable: List[str] = []
+    tasks = list(_plan_tasks(_stream([("/data/broken.lmdb", 100)]), ProcessingConfig(), loader,
+                             files_meta, processors=[], unreadable_files=unreadable))
+
+    assert tasks == []
+    assert files_meta == []
+    assert unreadable == [str(Path("/data/broken.lmdb"))]

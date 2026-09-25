@@ -11,6 +11,8 @@ import { writeUrlParams } from './url-params.js';
 import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
+import { openInspector } from './point-inspector.js';
+import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 
 /**
  * Build a plugin context object.
@@ -47,7 +49,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
   const groupLabels = buildGroupLabels(groups);
   plotEngine.setDateCols(schema.dateCols ?? []);
 
-  return {
+  const ctx = {
     schema,
     state,
     colorMap,
@@ -84,7 +86,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
      * groupCol (if set) is always included as __group__.
      */
     async querySample(cols, n = 5000) {
-      const gcExpr  = state.groupCol ? `${_q(state.groupCol)} AS ${GROUP_COL_ALIAS}, ` : `'${GROUP_ALL}' AS ${GROUP_COL_ALIAS}, `;
+      const gcExpr  = `${_groupExpr(state, schema.dateCols ?? [])}, `;
       const colList = cols.map(_q).join(', ');
       const sql     = `SELECT ${gcExpr}${colList} FROM pp_data ${where} ${sample(n)}`;
       return this.queryRows(sql);
@@ -116,8 +118,8 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       q:         _q,
       andWhere,
       sample,
-      groupCol:  () => _groupCol(state),
-      groupExpr: () => _groupExpr(state),
+      groupCol:  () => _groupCol(state, schema.dateCols ?? []),
+      groupExpr: () => _groupExpr(state, schema.dateCols ?? []),
 
       fileCount: () => fileCount(schema.allCols ?? []),
 
@@ -202,8 +204,12 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
     META_COLS,
 
     /** Data utilities shared across plugins. */
-    data: { extractBinary },
+    data: { extractBinary, drawThumbnailRGBA, SPRITE },
   };
+
+  // Open the single-file point inspector for a row; plots and the mosaic call this.
+  ctx.openInspector = (fileRowNumber, opts) => openInspector(fileRowNumber, ctx, opts);
+  return ctx;
 }
 
 /**
@@ -257,7 +263,7 @@ export async function renderAll(plugins, conn, schema, state, totalRows) {
   const where = buildScopedWhere(schema, state);
 
   // Fetch distinct groups, filtered count, and within-file group variation in parallel.
-  const gcExpr = state.groupCol ? _q(state.groupCol) : `'${GROUP_ALL}'`;
+  const gcExpr = _groupCol(state, schema.dateCols ?? []);
   const hasPaths = schema.allCols.includes('path');
   const [groupResult, countResult, mixedResult] = await Promise.all([
     conn.query(

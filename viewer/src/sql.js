@@ -1,4 +1,4 @@
-import { GROUP_ALL, GROUP_COL_ALIAS } from './constants.js';
+import { GROUP_ALL, GROUP_COL_ALIAS, DATE_GROUP_FMT } from './constants.js';
 
 /**
  * SQL helpers.
@@ -121,13 +121,22 @@ export function stripWhere(where) {
   return where ? where.replace(/^\s*WHERE\s+/i, '') : '';
 }
 
+/** Day-bucketed SQL expression for a datetime column. */
+export function dateGroupExpr(col) {
+  return `STRFTIME(${q(col)}, ${DATE_GROUP_FMT})`;
+}
+
 /**
  * Bare SQL expression for the active group column.
  * Returns `"col"` when grouping is active, or `'all'` when not.
- * Use this when you write ` AS __group__` yourself in the query.
+ * Datetime columns (listed in dateCols) are bucketed via dateGroupExpr(), so
+ * groups are day-level rather than one per distinct timestamp.
  */
-export function groupCol(state) {
-  return state.groupCol ? q(state.groupCol) : `'${GROUP_ALL}'`;
+export function groupCol(state, dateCols = []) {
+  if (!state.groupCol) return `'${GROUP_ALL}'`;
+  return dateCols.includes(state.groupCol)
+    ? dateGroupExpr(state.groupCol)
+    : q(state.groupCol);
 }
 
 /**
@@ -135,8 +144,8 @@ export function groupCol(state) {
  * Returns `"col" AS __group__` or `'all' AS __group__`.
  * Use this in SELECT lists directly.
  */
-export function groupExpr(state) {
-  return `${groupCol(state)} AS ${GROUP_COL_ALIAS}`;
+export function groupExpr(state, dateCols = []) {
+  return `${groupCol(state, dateCols)} AS ${GROUP_COL_ALIAS}`;
 }
 
 /**

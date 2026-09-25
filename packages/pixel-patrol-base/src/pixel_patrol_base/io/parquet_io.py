@@ -22,12 +22,14 @@ def with_field_descriptions(schema):
     'description' in its field metadata, so the parquet file is self-describing.
 
     Descriptions come from the registered plugins + base/pipeline column docs
-    (see pixel_patrol_base.core.schema_catalog). Schema-level (footer) metadata
-    is preserved unchanged. Unknown columns are left without a description.
+    (see pixel_patrol_base.core.schema_catalog). A 'pp_column_producers' footer
+    entry maps each present column to its producing processor. Other footer
+    metadata is preserved. Unknown columns are left without a description.
     """
+    import json
     import pyarrow as pa
     from pixel_patrol_base.core import column_docs
-    from pixel_patrol_base.core.schema_catalog import column_descriptions
+    from pixel_patrol_base.core.schema_catalog import column_descriptions, column_producers
 
     exact = column_descriptions()
     fields = []
@@ -38,7 +40,12 @@ def with_field_descriptions(schema):
             meta[b"description"] = desc.encode()
             field = field.with_metadata(meta)
         fields.append(field)
-    return pa.schema(fields, metadata=schema.metadata)
+
+    footer = dict(schema.metadata or {})
+    producers = {c: p for c, p in column_producers().items() if c in schema.names}
+    if producers:
+        footer[b"pp_column_producers"] = json.dumps(producers).encode()
+    return pa.schema(fields, metadata=footer)
 
 
 def write_chunk(df: pl.DataFrame, path: Path, compression: Literal["lz4", "uncompressed", "snappy", "gzip", "brotli", "zstd"] = "zstd") -> Optional[Path]:

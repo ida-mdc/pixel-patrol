@@ -71,7 +71,7 @@ export default {
       c2d.fillStyle = ctx.color.group(items[i].group);
       c2d.fillRect(x, y, tile, tile);
       c2d.clearRect(x + BORDER, y + BORDER, SPRITE, SPRITE);
-      if (items[i].thumb?.kind === 'raw') drawThumbnailRGBA(c2d, items[i].thumb.data, x + BORDER, y + BORDER);
+      if (items[i].thumb?.kind === 'raw') ctx.data.drawThumbnailRGBA(c2d, items[i].thumb.data, x + BORDER, y + BORDER);
     }
     container.style.display = 'flex';
     container.style.alignItems = 'center';
@@ -181,7 +181,7 @@ async function renderMosaic(container, ctx, sortCol, displayMode = DISPLAY_NORM,
   const { canvas, perRow } = drawMosaicCanvas(items, ctx, displayMode);
   container.style.position = 'relative';
   container.appendChild(canvas);
-  attachTooltip(container, canvas, items, perRow);
+  attachTooltip(container, canvas, items, perRow, ctx);
 
   const present = new Set(items.map(it => it.group));
   const presentGroups = ctx.groups.filter(g => present.has(g));
@@ -207,7 +207,7 @@ async function pickMosaicItems(ctx, { metricCol, mode, sortDir }) {
   const hasNorm = ctx.schema.allCols.includes('thumbnail_norm_min') &&
                   ctx.schema.allCols.includes('thumbnail_norm_max') &&
                   ctx.schema.allCols.includes('thumbnail_dtype');
-  const cols = `${geFn()}, "thumbnail"`
+  const cols = `${geFn()}, "thumbnail", "file_row_number" AS __frn__`
     + (hoverCol ? `, ${q(hoverCol)} AS __label__` : '')
     + (metricCol ? `, ${q(metricCol)} AS __sort__` : '')
     + (hasNorm ? `, "thumbnail_norm_min" AS __tn_min__, "thumbnail_norm_max" AS __tn_max__, "thumbnail_dtype" AS __tn_dtype__` : '');
@@ -252,35 +252,50 @@ function drawMosaicCanvas(items, ctx, displayMode) {
       const raw = (displayMode === DISPLAY_DENORM && it.tnMin != null && it.tnMax != null && it.tnDtype)
         ? denormalizeThumbnailRGBA(it.thumb.data, it.tnMin, it.tnMax, it.tnDtype)
         : it.thumb.data;
-      drawThumbnailRGBA(c2d, raw, x + BORDER, y + BORDER);
+      ctx.data.drawThumbnailRGBA(c2d, raw, x + BORDER, y + BORDER);
     }
   });
   return { canvas, perRow };
 }
 
-// Floating filename tooltip that follows the cursor over the mosaic tiles.
-function attachTooltip(container, canvas, items, perRow) {
+// Floating filename tooltip that follows the cursor over the mosaic tiles, plus
+// click-to-inspect: clicking a tile opens the single-file point inspector for it.
+function attachTooltip(container, canvas, items, perRow, ctx) {
   const tip = document.createElement('div');
   tip.style.cssText = ['position:absolute','display:none','pointer-events:none','z-index:10','background:rgba(0,0,0,0.85)','color:white','padding:6px 8px','border-radius:6px','font-size:12px','max-width:360px','white-space:nowrap','overflow:hidden','text-overflow:ellipsis'].join(';');
   container.appendChild(tip);
 
   const tileSize = CELL - GAP;
-  canvas.onmousemove = e => {
+  // Index of the tile under a mouse event, or -1 if between/outside tiles.
+  const tileAt = e => {
     const rect = canvas.getBoundingClientRect();
     const px = (e.clientX - rect.left) * (canvas.width / rect.width);
     const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
     const col = Math.floor(px / CELL), row = Math.floor(py / CELL);
     const localX = px - col * CELL, localY = py - row * CELL;
     const idx = row * perRow + col;
-    if (col < 0 || row < 0 || localX >= tileSize || localY >= tileSize || idx < 0 || idx >= items.length) {
-      tip.style.display = 'none'; return;
-    }
+    if (col < 0 || row < 0 || localX >= tileSize || localY >= tileSize || idx < 0 || idx >= items.length) return -1;
+    return idx;
+  };
+  canvas.onmousemove = e => {
+    const idx = tileAt(e);
+    if (idx < 0) { tip.style.display = 'none'; return; }
+    const rect = canvas.getBoundingClientRect();
     tip.textContent = items[idx].label || items[idx].group;
     tip.style.left = `${Math.min(rect.width - 10, (e.clientX - rect.left) + 12)}px`;
     tip.style.top  = `${Math.min(rect.height - 10, (e.clientY - rect.top) + 12)}px`;
     tip.style.display = 'block';
   };
   canvas.onmouseleave = () => { tip.style.display = 'none'; };
+
+  if (ctx?.openInspector) {
+    canvas.style.cursor = 'pointer';
+    canvas.onclick = e => {
+      const idx = tileAt(e);
+      const frn = idx >= 0 ? items[idx].frn : null;
+      if (frn != null) ctx.openInspector(Number(frn));
+    };
+  }
 }
 
 function rowIdSql(name) {
@@ -300,24 +315,6 @@ function extractBytes(val) {
   if (Array.isArray(val)) return Uint8Array.from(val, v => Number(v) & 0xff);
   if (val.values instanceof Uint8Array) return val.values;
   return null;
-}
-
-function drawThumbnailRGBA(ctx2d, pixels, x, y) {
-  const iData = ctx2d.createImageData(SPRITE, SPRITE);
-  const d     = iData.data;
-  const isRGBA = pixels.length >= SPRITE * SPRITE * 4;
-  for (let i = 0; i < SPRITE * SPRITE; i++) {
-    const idx = i * 4;
-    if (isRGBA) {
-      const a = pixels[i * 4 + 3] ?? 255;
-      if (a < 128) { d[idx] = 0; d[idx+1] = 0; d[idx+2] = 0; d[idx+3] = 0; }
-      else { d[idx] = pixels[i*4]; d[idx+1] = pixels[i*4+1]; d[idx+2] = pixels[i*4+2]; d[idx+3] = 255; }
-    } else {
-      const v = pixels[i] ?? 0;
-      d[idx] = d[idx+1] = d[idx+2] = v; d[idx+3] = 255;
-    }
-  }
-  ctx2d.putImageData(iData, x, y);
 }
 
 function extractThumbnail(val) {
@@ -343,6 +340,7 @@ function tableToItems(table, { hoverCol, hasSort, hasNorm }) {
   const n     = Number(table.numRows ?? 0);
   const gCol  = getCol(table, '__group__');
   const tCol  = getCol(table, 'thumbnail');
+  const fCol  = getCol(table, '__frn__');
   const oCol  = getCol(table, '__ord__');
   const lCol  = hoverCol ? getCol(table, '__label__') : null;
   const sCol  = hasSort ? getCol(table, '__sort__') : null;
@@ -355,7 +353,7 @@ function tableToItems(table, { hoverCol, hasSort, hasNorm }) {
     const bytes = tCol ? tCol.get(i) : null;
     const thumb = extractThumbnail(bytes);
     if (!thumb) continue;
-    out.push({ ord: oCol ? Number(oCol.get(i)) : null, group, thumb, label: lCol ? String(lCol.get(i) ?? '') : '', sort: sCol ? Number(sCol.get(i) ?? 0) : 0, tnMin: minCol ? minCol.get(i) : null, tnMax: maxCol ? maxCol.get(i) : null, tnDtype: dtCol ? String(dtCol.get(i) ?? '') : null });
+    out.push({ ord: oCol ? Number(oCol.get(i)) : null, group, thumb, frn: fCol ? Number(fCol.get(i)) : null, label: lCol ? String(lCol.get(i) ?? '') : '', sort: sCol ? Number(sCol.get(i) ?? 0) : 0, tnMin: minCol ? minCol.get(i) : null, tnMax: maxCol ? maxCol.get(i) : null, tnDtype: dtCol ? String(dtCol.get(i) ?? '') : null });
   }
   if (out.some(it => it.ord != null && Number.isFinite(it.ord))) out.sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
   return out;
@@ -391,3 +389,7 @@ function dtypeInfo(name) {
     default:       return null;
   }
 }
+
+// The point inspector (viewer/src/point-inspector.js) now renders the image and
+// its diagnostic map inline, so the mosaic no longer registers inspector
+// contributors for them - it stays focused on the thumbnail-grid dashboard.

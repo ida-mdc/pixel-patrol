@@ -54,8 +54,9 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import HISTOGRAM_BINS
-from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor
+from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, SkipFile
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
+from pixel_patrol_base.utils.df_utils import add_parent_level_columns
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
 from pixel_patrol_base.core.specs import is_record_matching_processor
@@ -363,8 +364,11 @@ def _plan_tasks(
     loader:      Any,
     files_meta:  List[dict],
     processors:  List[Any],
+    unreadable_files: Optional[List[str]] = None,
 ) -> Iterator[Task]:
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
+
+    Files whose header cannot be read are skipped and appended to unreadable_files.
 
     Routing (evaluated in order):
       n_images > 1  → flush pending batch; yield ContainerTasks.
@@ -412,8 +416,12 @@ def _plan_tasks(
 
         try:
             info: FileInfo = loader.read_header(file_path)
+        except SkipFile:
+            continue
         except Exception as exc:
             logger.warning("_plan_tasks: read_header failed for %s; skipping (%s)", file_path, exc)
+            if unreadable_files is not None:
+                unreadable_files.append(str(file_path))
             continue
 
         file_index = len(files_meta)
@@ -911,6 +919,8 @@ def _post_process(df: pl.DataFrame) -> pl.DataFrame:
     if casts:
         df = df.with_columns(casts)
 
+    df = add_parent_level_columns(df)
+
     # Column reorder
     dim_cols    = sorted(c for c in df.columns if c.startswith("dim_") and len(c) == len("dim_") + 1)
     blob_cols   = [c for c in df.columns if _is_blob_dtype(df.schema[c])]
@@ -991,7 +1001,8 @@ class _ResultsWriter:
         if self._row_group_size is not None:
             write_kwargs["row_group_size"] = self._row_group_size
         rows_this_part = self._buffer_rows
-        pl.concat(self._buffer, how="diagonal_relaxed").write_parquet(part_path, **write_kwargs)
+        part_df = add_parent_level_columns(pl.concat(self._buffer, how="diagonal_relaxed"))
+        part_df.write_parquet(part_path, **write_kwargs)
         self._part_paths.append(part_path)
         self._total_rows  += rows_this_part
         self._buffer      = []
@@ -1048,6 +1059,7 @@ def _coordinate_pipeline(
     parts_dir:    Optional[Path],
     on_progress:  Optional[Callable[[int, int], None]],
     is_distributed: bool = False,
+    unreadable_files: Optional[List[str]] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Drive the full submit → gather → rollup → join → accumulate cycle.
 
@@ -1217,6 +1229,8 @@ def _coordinate_pipeline(
             )
 
     pbar.close()
+    # Files skipped during planning never reach a worker; count each as one failed image.
+    error_records += len(unreadable_files or ())
     wall_s = time.perf_counter() - t_wall_start
     elapsed_total = time.monotonic() - t_pipeline_start
     attempted = completed_records + error_records
@@ -1584,14 +1598,17 @@ def build_records_df(
 
     with _get_or_create_client(cfg) as (client, is_distributed):
         files_meta: List[dict] = []
+        unreadable_files: List[str] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
             _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir,
-                            is_folder_dataset=getattr(loader, "is_folder_supported", None)),
+                            is_folder_dataset=getattr(loader, "is_folder_supported", None),
+                            folder_file_extension=getattr(loader, "FOLDER_FILE_EXTENSION", None)),
             config=cfg,
             loader=loader,
             files_meta=files_meta,
             processors=processors,
+            unreadable_files=unreadable_files,
         )
         return _coordinate_pipeline(
             client=client,
@@ -1603,6 +1620,7 @@ def build_records_df(
             parts_dir=parts_dir,
             on_progress=on_progress,
             is_distributed=is_distributed,
+            unreadable_files=unreadable_files,
         )
 
 

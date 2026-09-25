@@ -107,6 +107,39 @@ Answer the questions below and we'll walk you through each decision together, bu
         </div>
       </label>
       <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="geospatial"
+               onchange="procWiz.pick('loader','geospatial')">
+        <div>
+          <div class="wiz-opt-title">
+            GeoTIFF or NetCDF
+            <code class="wiz-badge">--loader geospatial</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .tif, .tiff, and .nc files; reads geospatial metadata (CRS, resolution, no-data values).</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="nifti"
+               onchange="procWiz.pick('loader','nifti')">
+        <div>
+          <div class="wiz-opt-title">
+            NIfTI
+            <code class="wiz-badge">--loader nifti</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .nii and .nii.gz files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="dicom"
+               onchange="procWiz.pick('loader','dicom')">
+        <div>
+          <div class="wiz-opt-title">
+            DICOM
+            <code class="wiz-badge">--loader dicom</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .dcm and .dicom files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
         <input type="radio" name="proc-loader" value=""
                onchange="procWiz.pick('loader','')">
         <div>

@@ -2,10 +2,12 @@
 const EXCLUDED_SUBSTRINGS = ['thumbnail', 'histogram', 'obs_level', 'channel_names', 'file_row_number'];
 
 const EXTRA_NUMERIC = new Set([
-  'size_Y', 'size_X', 'size_Z', 'size_T', 'size_C', 'size_S',
   'n_images', 'ndim', 'num_pixels', 'depth', 'size_bytes',
   'pixel_size_X', 'pixel_size_Y', 'pixel_size_Z',
 ]);
+
+// Matches size_X/size_Y/size_Z/... (one axis letter) - not e.g. size_bytes.
+const SIZE_DIM_RE = /^size_[A-Za-z]$/;
 
 const MAX_CAT      = 30;
 const MAX_HUE      = 12;
@@ -573,7 +575,7 @@ export default {
     const dateCols   = new Set(ctx.schema.dateCols ?? []);
     const numericSet = new Set([
       ...ctx.schema.metricCols,
-      ...available.filter(c => EXTRA_NUMERIC.has(c) || dateCols.has(c)),
+      ...available.filter(c => EXTRA_NUMERIC.has(c) || SIZE_DIM_RE.test(c) || dateCols.has(c)),
     ]);
 
     // Dims the user can toggle into "Slice by" controls per plot - excludes

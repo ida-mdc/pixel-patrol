@@ -70,3 +70,18 @@ def test_meta_order_non_alpha_chars_preserved():
     order = record.dim_order
     assert order == "T1"
     assert names == ["T", "1"]
+
+
+@pytest.mark.parametrize("channel_names,expect_rgb", [
+    (["red", "green", "blue"], True),
+    (["Red", "Green", "Blue"], True),
+    (["R", "G", "B"], True),
+    (["r", "r", "r"], False),
+    (["red", "red", "blue"], False),
+    (["blue", "green", "red"], False),
+])
+def test_rgb_capability_requires_ordered_channel_names(channel_names, expect_rgb):
+    a = StubArr((3, 4, 4))
+    meta = {"dim_order": "CYX", "channel_names": channel_names}
+    record = record_from(a, meta)
+    assert ("rgb:C" in record.capabilities) == expect_rgb

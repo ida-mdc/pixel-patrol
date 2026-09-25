@@ -91,6 +91,27 @@ def test_saved_parquet_embeds_field_descriptions(tmp_path):
     assert b"pp_project_name" in (pq.read_metadata(dest).metadata or {})
 
 
+def test_column_producers_maps_metrics_to_processors():
+    producers = schema_catalog.column_producers()
+    # raster-basic ships in the base package, so its metrics are always mapped.
+    assert producers.get("min_intensity") == "raster-basic"
+    assert producers.get("mean_intensity") == "raster-basic"
+
+
+def test_saved_parquet_embeds_column_producers(tmp_path):
+    import json
+    df = pl.DataFrame({"mean_intensity": [1.0], "name": ["a"]})
+    dest = tmp_path / "report.parquet"
+    save_parquet(df, dest, ProjectMetadata(project_name="t"))
+
+    footer = pq.read_metadata(dest).metadata or {}
+    assert b"pp_column_producers" in footer
+    producers = json.loads(footer[b"pp_column_producers"].decode())
+    assert producers["mean_intensity"] == "raster-basic"
+    # columns with no producing processor are omitted
+    assert "name" not in producers
+
+
 # --- widget connections -----------------------------------------------------
 
 def test_connections_resolve_widget_inputs():

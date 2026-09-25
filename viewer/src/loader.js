@@ -2,7 +2,7 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import { detectSchema, pickDefaultGroupCol } from './schema.js';
-import { q } from './sql.js';
+import { q, dateGroupExpr, sample } from './sql.js';
 import { FILE_ROW_NUMBER } from './constants.js';
 
 const MAX_UNIQUE_GROUP = 12; // Match Dash app (pixel-patrol-base)
@@ -181,7 +181,7 @@ export async function finishLoad(conn, parquetPath = null) {
   }
 
   // Cardinality-filter the schema-heuristic group candidates.
-  schema.groupCols = await filterGroupColsByCardinality(conn, schema.groupCols);
+  schema.groupCols = await filterGroupColsByCardinality(conn, schema.groupCols, schema.dateCols);
 
   // Always include any URL-param group col if it exists in the parquet.
   const urlGroup = new URLSearchParams(window.location.search).get('group');
@@ -199,6 +199,7 @@ export async function finishLoad(conn, parquetPath = null) {
   const reportMeta = parquetPath
     ? await _readParquetMeta(conn, parquetPath)
     : _emptyReportMeta();
+  schema.producerByCol = reportMeta.columnProducers || {};
 
   return { schema, totalRows, projectName: reportMeta.projectName, description: reportMeta.description, reportMeta };
 }
@@ -230,6 +231,8 @@ function _parseRawMeta(raw) {
   try { processingStats = JSON.parse(raw.pp_processing_stats || '{}'); } catch {}
   let privacySummary = [];
   try { privacySummary = JSON.parse(raw.pp_privacy_summary || '[]'); } catch {}
+  let columnProducers = {};
+  try { columnProducers = JSON.parse(raw.pp_column_producers || '{}'); } catch {}
   return {
     projectName:     raw.pp_project_name || null,
     description:     raw.pp_description  || null,
@@ -241,21 +244,28 @@ function _parseRawMeta(raw) {
     paths,
     processingStats,
     privacySummary,
+    columnProducers,
   };
 }
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
-           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [] };
+           createdAt: null, loader: null, baseDir: null, paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
 }
 
-async function filterGroupColsByCardinality(conn, cols) {
+async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
   if (!cols.length) return [];
-  // Sample 10 000 rows - enough to reliably detect 2–12 unique values without
-  // fetching every column chunk from a remote file.
-  const exprs = cols.map(c => `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`).join(', ');
+  // Sample 10 000 rows. Randomly, to get more groups with reports written sequentially in path order.
+  // Datetime columns are counted at day granularity so a batch of files with
+  // unique timestamps can still group into a handful of distinct days.
+  const dateColSet = new Set(dateCols);
+  const exprs = cols.map(c =>
+    dateColSet.has(c)
+      ? `COUNT(DISTINCT ${dateGroupExpr(c)}) AS ${q(c)}`
+      : `COUNT(DISTINCT ${q(c)}) AS ${q(c)}`,
+  ).join(', ');
   try {
-    const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data LIMIT 10000)`);
+    const res = await conn.query(`SELECT ${exprs} FROM (SELECT ${cols.map(q).join(', ')} FROM pp_data ${sample(10000)})`);
     const first = res.toArray()[0];
     if (!first) return [];
 

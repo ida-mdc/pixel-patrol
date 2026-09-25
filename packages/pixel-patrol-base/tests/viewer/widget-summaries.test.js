@@ -130,7 +130,7 @@ describe('file-stats widget · overviewMessage', () => {
       rows: router({ exts: ['tif', 'png'], counts: [5] }),
     }));
     expect(out).toMatchObject({ warning: true });
-    expect(out.text).toContain('file type');
+    expect(out.text).toContain('file format');
   });
 
   it('flags an imbalanced per-group file count', async () => {

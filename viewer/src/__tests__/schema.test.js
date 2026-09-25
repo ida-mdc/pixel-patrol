@@ -78,6 +78,18 @@ describe('detectSchema', () => {
     expect(metricCols).not.toContain('thumbnail');
   });
 
+  it('classifies datetime columns into both dateCols and groupCols', () => {
+    const { dateCols, groupCols } = detectSchema(cols({
+      obs_level: 'Int64',
+      modification_date: 'TIMESTAMP',
+      acquisition_date: 'Date32',
+    }));
+    expect(dateCols).toContain('modification_date');
+    expect(dateCols).toContain('acquisition_date');
+    expect(groupCols).toContain('modification_date');
+    expect(groupCols).toContain('acquisition_date');
+  });
+
   it('classifies known string group columns into groupCols', () => {
     const { groupCols } = detectSchema(cols({
       obs_level: 'Int64',

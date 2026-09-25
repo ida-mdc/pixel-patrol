@@ -355,6 +355,10 @@ def _column_view(loaders: List[Dict], processors: List[Dict]) -> List[Dict[str, 
     put("dim_<axis>", "int", column_docs.base_column_description("dim_z") or "",
         "agg", "agg", _BASE, _BASE_PKG, regex=r"^dim_[A-Za-z]+$")
 
+    # one column per directory level; count depends on tree depth
+    put("parent<N>", "str", column_docs.base_column_description("parent0") or "",
+        "file", "file", _BASE, _BASE_PKG, regex=r"^parent\d+$")
+
     # remaining base columns (file-system scan + obs rollup)
     for name, desc in column_docs.BASE_COLUMN_DESCRIPTIONS.items():
         if name in cols:
@@ -612,4 +616,14 @@ def column_descriptions() -> Dict[str, str]:
             desc = _resolve_column_description(comp, name)
             if desc:
                 out[name] = desc
+    return out
+
+
+def column_producers() -> Dict[str, str]:
+    """Flat ``column -> producing processor NAME`` map, from the catalog's column provenance."""
+    out: Dict[str, str] = {}
+    for col in build_catalog(include_widgets=False)["columns"]:
+        producer = col.get("producer", "")
+        if producer.startswith("processor:"):
+            out[col["name"]] = producer.split(":", 1)[1]
     return out

@@ -7,8 +7,6 @@ import os
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 
 
-# --- Fixture ---
-
 @pytest.fixture
 def complex_temp_dir(tmp_path: Path) -> Path:
     """
@@ -59,19 +57,16 @@ def _discover_by_name(bases: list[Path], base_dir: Path | None = None) -> dict[s
 
 
 def test_discover_files_paths_relative_to_base_dir(complex_temp_dir: Path):
-    """With base_dir set, path/parent/imported_path are stored relative to it."""
+    """With base_dir set, path/imported_path are stored relative to it."""
     root = complex_temp_dir.resolve()
     meta = _discover_by_name([root], base_dir=root)
 
     assert meta["file1.txt"]["path"] == "file1.txt"
-    assert meta["file1.txt"]["parent"] == "."
     assert meta["file1.txt"]["imported_path"] == "."
 
     assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
-    assert meta["fileA.jpg"]["parent"] == "subdir_a"
 
     assert meta["fileAA.csv"]["path"] == os.path.join("subdir_a", "subdir_aa", "fileAA.csv")
-    assert meta["fileAA.csv"]["parent"] == os.path.join("subdir_a", "subdir_aa")
 
 
 def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
@@ -82,17 +77,15 @@ def test_discover_files_base_dir_ancestor_of_base(complex_temp_dir: Path):
     meta = _discover_by_name([subdir], base_dir=root)
 
     assert meta["fileA.jpg"]["path"] == os.path.join("subdir_a", "fileA.jpg")
-    assert meta["fileA.jpg"]["parent"] == "subdir_a"
     assert meta["fileA.jpg"]["imported_path"] == "subdir_a"
 
 
 def test_discover_files_absolute_paths_without_base_dir(complex_temp_dir: Path):
-    """Without base_dir, path/parent/imported_path remain absolute (default behavior)."""
+    """Without base_dir, path/imported_path remain absolute (default behavior)."""
     root = complex_temp_dir.resolve()
     meta = _discover_by_name([root])
 
     assert meta["file1.txt"]["path"] == str(root / "file1.txt")
-    assert meta["file1.txt"]["parent"] == str(root)
     assert meta["file1.txt"]["imported_path"] == str(root)
 
 
@@ -166,3 +159,83 @@ def test_extension_matched_folder_datasets_are_marked_and_sized_too(tmp_path: Pa
 
     assert found["store.zarr"][FOLDER_DATASET_KEY] is True
     assert found["store.zarr"]["size_bytes"] == 501  # .zarray (1 byte) + chunk (500)
+
+
+# --- Tests for compound extension support ---
+
+def test_compound_extension_file_is_matched(tmp_path: Path):
+    """Files with compound extensions are matched when the compound is in the accepted set."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+    (tmp_path / "archive.tar.gz").write_bytes(b"x" * 10)  # not in accepted set
+    (tmp_path / "plain.nii").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"nii", "nii.gz", "tif", "ome.tif"})
+    }
+
+    assert set(found) == {"brain.nii.gz", "scan.ome.tif", "plain.nii"}
+    assert "archive.tar.gz" not in found
+
+
+def test_compound_extension_reported_in_file_extension(tmp_path: Path):
+    """file_extension for compound-matched files is the full compound, not just the last suffix."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"nii", "nii.gz", "tif", "ome.tif"})
+    }
+
+    assert found["brain.nii.gz"]["file_extension"] == "nii.gz"
+    assert found["scan.ome.tif"]["file_extension"] == "ome.tif"
+
+
+def test_single_suffix_tif_not_promoted_to_compound(tmp_path: Path):
+    """A plain .tif file is matched by 'tif' but file_extension stays 'tif', not 'ome.tif'."""
+    (tmp_path / "plain.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], {"tif", "ome.tif"})
+    }
+
+    assert found["plain.tif"]["file_extension"] == "tif"
+
+
+def test_compound_not_applied_in_all_mode(tmp_path: Path):
+    """In 'all' mode (extensions=None) compound detection does not run; file_extension is the last suffix."""
+    (tmp_path / "brain.nii.gz").write_bytes(b"x" * 10)
+    (tmp_path / "scan.ome.tif").write_bytes(b"x" * 10)
+
+    found = {
+        meta["name"]: meta
+        for _, meta in _discover_files([tmp_path], "all")
+    }
+
+    assert found["brain.nii.gz"]["file_extension"] == "gz"
+    assert found["scan.ome.tif"]["file_extension"] == "tif"
+
+
+# --- Tests for hidden file/directory filtering ---
+
+def test_hidden_files_are_skipped(tmp_path: Path):
+    (tmp_path / "image.tif").write_bytes(b"x")
+    (tmp_path / "._image.tif").write_bytes(b"x")
+    (tmp_path / ".DS_Store").write_bytes(b"x")
+
+    names = [meta["name"] for _, meta in _discover_files([tmp_path], "all")]
+
+    assert names == ["image.tif"]
+
+
+def test_hidden_directories_are_not_walked(tmp_path: Path):
+    (tmp_path / ".hidden_dir").mkdir()
+    (tmp_path / ".hidden_dir" / "image.tif").write_bytes(b"x")
+    (tmp_path / "visible.tif").write_bytes(b"x")
+
+    names = [meta["name"] for _, meta in _discover_files([tmp_path], "all")]
+
+    assert names == ["visible.tif"]
