@@ -1,13 +1,15 @@
 """Unit tests for BioIoLoader - fast, no pipeline."""
 
+import itertools
 from pathlib import Path
 
 import numpy as np
 import pytest
 import tifffile
+from bioio_base.exceptions import UnsupportedFileFormatError
 from PIL import Image
 
-from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader
+from pixel_patrol_loader_bio.plugins.loaders.bioio_loader import BioIoLoader, _extract_metadata
 
 
 @pytest.fixture
@@ -77,3 +79,74 @@ def test_load_range_one_bad_scene_does_not_lose_its_siblings(monkeypatch, loader
     assert results["s0"] == "s0"
     assert results["s1"] is None
     assert results["s2"] == "s2"
+
+
+@pytest.fixture
+def create_czi(monkeypatch):
+    from pylibCZIrw import czi as pyczi
+
+    # pylibCZIrw only passes T/Z/C/S on to libCZI; let V and I through too.
+    monkeypatch.setattr(pyczi.CziWriter, "_create_plane",
+                        staticmethod(lambda plane, scene: {"T": 0, "Z": 0, "C": 0, **(plane or {}), "S": scene}))
+    return pyczi.create_czi
+
+
+def test_load_czi_with_views_and_illuminations(tmp_path: Path, loader, create_czi):
+    with create_czi(str(tmp_path / "views.czi")) as czi:
+        for v, i, z in itertools.product(range(2), range(2), range(3)):
+            czi.write(np.full((6, 8, 1), 100 * v + 10 * i + z, dtype=np.uint16), plane={"V": v, "I": i, "Z": z})
+
+    rec = loader.load(tmp_path / "views.czi")
+
+    assert rec.dim_order == "VITCZYX"
+    assert rec.data[1, 0, 0, 0, 2, 0, 0].compute() == 102
+
+
+def test_load_czi_mosaic(tmp_path: Path, loader, create_czi):
+    with create_czi(str(tmp_path / "mosaic.czi")) as czi:
+        for m, location in enumerate([(0, 0), (8, 0), (0, 6), (8, 6)]):
+            czi.write(np.full((6, 8, 1), m + 1, dtype=np.uint16), location=location)
+
+    rec = loader.load(tmp_path / "mosaic.czi")
+
+    assert rec.dim_order == "TCZYX"
+    assert rec.data.shape == (1, 1, 1, 12, 16)
+    assert set(np.unique(rec.data.compute())) == {1, 2, 3, 4}
+
+
+def test_load_czi_line_scan(tmp_path: Path, loader, create_czi):
+    with create_czi(str(tmp_path / "line.czi")) as czi:
+        for t in range(4):
+            czi.write(np.full((1, 16, 1), t, dtype=np.uint8), plane={"T": t})
+
+    rec = loader.load(tmp_path / "line.czi")
+
+    assert rec.data.shape == (4, 1, 1, 1, 16)
+    assert rec.meta["size_Y"] == 1
+
+
+def test_read_header_no_scenes_raises(monkeypatch, loader):
+    class _FakeImage:
+        scenes = []
+
+    monkeypatch.setattr(
+        "pixel_patrol_loader_bio.plugins.loaders.bioio_loader._load_bioio_image",
+        lambda file_path: _FakeImage(),
+    )
+
+    with pytest.raises(UnsupportedFileFormatError):
+        loader.read_header(Path("unused.czi"))
+
+
+def test_channel_names_fallback_when_reader_has_none():
+    class _FakeData:
+        dims = ("C", "Y", "X")
+        shape = (2, 4, 4)
+
+    class _FakeReader:
+        dtype = np.dtype("uint16")
+        channel_names = None
+        current_scene = "Image:0"
+
+    meta = _extract_metadata(_FakeReader(), _FakeData())
+    assert meta["channel_names"] == ["Channel:0:0"]

@@ -30,7 +30,7 @@ export default {
       const { q, andWhere } = ctx.sql;
       const sizeCols = ctx.schema.allCols.filter(c => SIZE_DIM_RE.test(c));
       const hasXY    = sizeCols.includes('size_X') && sizeCols.includes('size_Y');
-      const KNOWN_DIMS = { size_Z: 'Z slices', size_T: 'timepoints', size_C: 'channels', size_S: 'series/tiles' };
+      const KNOWN_DIMS = { size_Z: 'Z slices', size_T: 'timepoints', size_C: 'channels', size_S: 'samples (RGB)' };
       const extraDimCols = sizeCols.filter(c => c !== 'size_X' && c !== 'size_Y' && c !== 'num_pixels');
 
       const [{ total }] = await ctx.queryRows(`SELECT COUNT(*) AS total FROM pp_data ${ctx.where}`);

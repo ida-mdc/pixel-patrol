@@ -7,11 +7,13 @@ import bioio_imageio
 import bioio_ome_tiff
 import bioio_tifffile
 import numpy as np
-import dask.array as da
 import polars as pl
 import tifffile
 from bioio import BioImage
+from bioio.ome_utils import generate_ome_channel_id
+from bioio_base.dimensions import DimensionNames, Dimensions
 from bioio_base.exceptions import UnsupportedFileFormatError
+from bioio_base.reader import Reader
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.loader_schema import (
@@ -24,24 +26,23 @@ from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 logger = logging.getLogger(__name__)
 
 
-def _extract_metadata(img: Any) -> Dict[str, Any]:
+def _extract_metadata(img: Any, data: Any) -> Dict[str, Any]:
     """
-    Extract metadata from a BioImage-like object into a flat dict.
+    Extract metadata from a bioio reader into a flat dict; dims and shape come from its xarray `data`.
     """
     metadata: Dict[str, Any] = {}
 
     # Dim order and per-dimension sizes (e.g., size_X, size_Y, size_Z, size_C, size_T)
-    dim_order = getattr(getattr(img, 'dims', None), 'order', '')
+    dims = Dimensions(dims="".join(data.dims), shape=data.shape)
+    dim_order = dims.order
     metadata["dim_order"] = dim_order
     for letter in dim_order:
-        dim_size= getattr(img.dims, letter, None)
+        dim_size= getattr(dims, letter, None)
         if not dim_size:
             dim_size = 1
         metadata[f"size_{letter}"] = int(dim_size)
 
-    dim_names = getattr(getattr(img, 'dims', None), 'names', None)
-    if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
-        metadata["dim_names"] = list(dim_names)
+    metadata["dim_names"] = list(data.dims)
 
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
@@ -50,30 +51,16 @@ def _extract_metadata(img: Any) -> Dict[str, Any]:
                 metadata[f"pixel_size_{ax}"] = val
 
     if hasattr(img, "channel_names"):
-        metadata["channel_names"] = [str(c) for c in img.channel_names]
+        # Readers without channel names get the id BioImage would give them.
+        channel_names = img.channel_names or [generate_ome_channel_id(image_id=img.current_scene, channel_id=0)]
+        metadata["channel_names"] = [str(c) for c in channel_names]
 
     if hasattr(img, "dtype"):
         metadata["dtype"] = str(img.dtype)
 
-    if hasattr(img, "shape"):
-        metadata["shape"] = np.array(img.shape)
-        metadata["ndim"] = len(img.shape)
-        metadata["num_pixels"] = math.prod(img.shape)
-
-    return metadata
-
-
-def normalize_metadata(metadata):
-    dim_order = metadata["dim_order"]
-    keep = [i for i, s in enumerate(metadata["shape"]) if s != 1]
-    metadata["shape"] = [metadata["shape"][i] for i in keep]
-    metadata["ndim"] = len(metadata["shape"])
-    metadata["dim_order"] = "".join(dim_order[i] for i in keep)
-    if "dim_names" in metadata:
-        metadata["dim_names"] = [metadata["dim_names"][i] for i in keep]
-    for ax in list(dim_order):
-        if metadata.get(f"size_{ax}", None) == 1:
-            metadata.pop(f"size_{ax}", None)
+    metadata["shape"] = np.array(data.shape)
+    metadata["ndim"] = len(data.shape)
+    metadata["num_pixels"] = math.prod(data.shape)
 
     return metadata
 
@@ -98,31 +85,43 @@ def _is_ome_tiff(file_path: Path) -> bool:
         return False
 
 
-def _load_bioio_image(file_path: Path) -> Optional[BioImage]:
+def _load_bioio_image(file_path: Path) -> Optional[Reader]:
     """
-    Try BioImage, then fall back to imageio reader; return None if both fail.
+    Open the reader BioImage would pick, then fall back to imageio reader; return None if both fail.
     """
     try:
         file_path = Path(file_path)
         if file_path.suffix.lower() in _TIFF_EXTENSIONS:
             reader = bioio_ome_tiff.Reader if _is_ome_tiff(file_path) else bioio_tifffile.Reader
-            return BioImage(file_path, reader=reader)
+            return reader(file_path)
         if file_path.suffix.lower() in _JPEG_EXTENSIONS:
-            return BioImage(file_path, reader=_JpegReader)
-        return BioImage(file_path)
+            return _JpegReader(file_path)
+        return BioImage.determine_plugin(file_path).metadata.get_reader()(file_path)
     except UnsupportedFileFormatError:
         try:
-            return BioImage(file_path, reader=bioio_imageio.Reader)
+            return bioio_imageio.Reader(file_path)
         except Exception as e:
-            logger.warning(f"Could not load '{file_path}' with BioImage (imageio fallback): {e}")
+            logger.warning(f"Could not load '{file_path}' with bioio (imageio fallback): {e}")
             return None
     except Exception as e:
-        logger.warning(f"Could not load '{file_path}' with BioImage: {e}")
+        logger.warning(f"Could not load '{file_path}' with bioio: {e}")
         return None
+
+
+def _scene_xarray(img: Reader) -> Any:
+    """
+    The current scene as an xarray in the reader's dims, with mosaic tiles (M) stitched.
+
+    BioImage would reshape it to TCZYX and silently keep only index 0 of any
+    other dimension, e.g. the views (V) and illuminations (I) of a light-sheet CZI.
+    """
+    if DimensionNames.MosaicTile in img.dims.order:
+        return img.mosaic_xarray_dask_data
+    return img.xarray_dask_data
 
 class BioIoLoader:
     """
-    Loader that produces an record from BioIO/BioImage.
+    Loader that produces an record from a BioIO reader.
     Protocol: single `load()` method returning an Record.
     """
 
@@ -152,13 +151,15 @@ class BioIoLoader:
         for scene in scenes[:min(3, n_images)]:
             if scene is not None:
                 img.set_scene(scene)
-            meta = normalize_metadata(_extract_metadata(img))
+            meta = _extract_metadata(img, _scene_xarray(img))
             candidate_shape = tuple(int(x) for x in meta["shape"])
             candidate_dtype = np.dtype(meta.get("dtype", "float32"))
             nbytes = int(np.prod(candidate_shape)) * candidate_dtype.itemsize
             if nbytes > best_nbytes:
                 best_nbytes = nbytes
                 shape, dtype, dim_order = candidate_shape, candidate_dtype, meta["dim_order"]
+        if shape is None:
+            raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=n_images)
 
     def load(self, file_path: Path) -> Record:
@@ -185,11 +186,10 @@ class BioIoLoader:
                 yield child_id, None
 
     @staticmethod
-    def _build_record(img: BioImage) -> Record:
-        """Extract metadata, squeeze singleton dims, and build a Record."""
+    def _build_record(img: Reader) -> Record:
+        """Extract metadata and build a Record."""
         if hasattr(img, "set_resolution_level"):
             img.set_resolution_level(0)
-        meta = _extract_metadata(img)
-        meta = normalize_metadata(meta)
-        data = da.squeeze(img.dask_data)
-        return record_from(data, meta, kind="intensity")
+        data = _scene_xarray(img)
+        meta = _extract_metadata(img, data)
+        return record_from(data.data, meta, kind="intensity")
