@@ -42,9 +42,7 @@ def _extract_metadata(img: Any, data: Any) -> Dict[str, Any]:
             dim_size = 1
         metadata[f"size_{letter}"] = int(dim_size)
 
-    dim_names = getattr(getattr(img, 'dims', None), 'names', None)
-    if isinstance(dim_names, (list, tuple)) and all(isinstance(x, str) for x in dim_names):
-        metadata["dim_names"] = list(dim_names)
+    metadata["dim_names"] = list(data.dims)
 
     if hasattr(img, "physical_pixel_sizes"):
         for ax in ("X", "Y", "Z", "T"):
