@@ -1,3 +1,5 @@
+export const MIXED_GROUP_WARNING = 'Some files contain images from multiple groups - file count and size cannot be attributed to a single group.';
+
 const SIZE_NUM_BINS      = 20;
 const SIZE_LOG_THRESHOLD = 30;
 const MAX_DAYS           = 20;
@@ -30,6 +32,9 @@ export default {
 
   async overviewMessage(ctx) {
     try {
+      if (ctx.withinFileGroupVariation) {
+        return { text: MIXED_GROUP_WARNING, warning: true };
+      }
       const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
       const { escapeHtml } = ctx.plot;
       const [extRows, groupRows] = await Promise.all([
@@ -50,6 +55,24 @@ export default {
 
   async overviewPlot(container, ctx) {
     const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
+
+    if (ctx.withinFileGroupVariation) {
+      const groupRows = await ctx.queryRows(`
+        SELECT ${gcFn()} AS g, COUNT(*) AS c
+        FROM pp_data ${ctx.where} GROUP BY 1 ORDER BY 1
+      `);
+      if (!groupRows.length) return false;
+      const groups = groupRows.map(r => String(r.g));
+      ctx.plot.appendMini(container, [{
+        type: 'bar',
+        x: groups.map(g => ctx.groupLabel(g)),
+        y: groupRows.map(r => Number(r.c)),
+        marker: { color: groups.map(g => ctx.colorMap[g] ?? '#6c757d') },
+        hoverinfo: 'skip',
+      }], { xaxis: { type: 'category' }, bargap: 0.3 });
+      return true;
+    }
+
     const gcExpr  = gcFn();
     const hasDate = ctx.schema.allCols.includes('modification_date');
 
@@ -133,7 +156,9 @@ export default {
   async render(container, ctx) {
     try {
       const invariants = [];
-      const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx);
+      const ungrouped = ctx.withinFileGroupVariation;
+      if (ungrouped) ctx.plot.prependWarning(container, { level: 'yellow', html: MIXED_GROUP_WARNING });
+      const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx, { ungrouped });
 
       // Files per group, summed over extensions - the same numbers a separate
       // per-group count query returns, without the extra query.
@@ -149,9 +174,9 @@ export default {
 
       // Each section draws a chart when the property varies, or adds an
       // invariant row when it's shared by every file.
-      renderExtensions(container, ctx, extRows, invariants);
-      await renderSizeBins(container, ctx, sizeRange, invariants);
-      await renderModificationDates(container, ctx, dateRange, invariants);
+      renderExtensions(container, ctx, extRows, invariants, { ungrouped });
+      await renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped });
+      await renderModificationDates(container, ctx, dateRange, invariants, { ungrouped });
 
       if (invariants.length) ctx.plot.invariantTable(container, {
         title: 'Properties shared by all files that report it',
@@ -169,9 +194,9 @@ export default {
 };
 
 // The three datasets the full view needs, fetched in parallel.
-function fetchFileStats(ctx) {
-  const { perFile, andWhere, groupCol: gcFn } = ctx.sql;
-  const gcExpr  = gcFn();
+function fetchFileStats(ctx, { ungrouped = false } = {}) {
+  const { perFile, andWhere } = ctx.sql;
+  const gcExpr  = gcExprFor(ctx, ungrouped);
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
     ctx.queryRows(`
@@ -199,7 +224,7 @@ function fetchFileStats(ctx) {
 }
 
 // One shared extension → invariant row; several → red warning + count/size bars.
-function renderExtensions(container, ctx, extRows, invariants) {
+function renderExtensions(container, ctx, extRows, invariants, { ungrouped = false } = {}) {
   const exts = [...new Set(extRows.map(r => String(r.ext)))].sort();
   if (!exts.length) return;
   if (exts.length === 1) {
@@ -213,13 +238,13 @@ function renderExtensions(container, ctx, extRows, invariants) {
       `Mixed file formats can mean a mixed dataset or even images that were saved twice - worth looking into.`,
   });
   renderGroupedBars(container, { categories: exts, getValue: pick(extRows, r => r.ext, 'count'),
-    title: 'File Count by Extension', xLabel: 'Extension', yLabel: 'File count' }, ctx);
+    title: 'File Count by Extension', xLabel: 'Extension', yLabel: 'File count' }, ctx, { ungrouped });
   renderGroupedBars(container, { categories: exts, getValue: pick(extRows, r => r.ext, 'total_bytes'),
-    title: 'Total Size by Extension', xLabel: 'Extension', yLabel: 'Total size (bytes)' }, ctx);
+    title: 'Total Size by Extension', xLabel: 'Extension', yLabel: 'Total size (bytes)' }, ctx, { ungrouped });
 }
 
 // One distinct size → invariant row; otherwise a count-per-size-bin chart.
-async function renderSizeBins(container, ctx, sizeRange, invariants) {
+async function renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped = false } = {}) {
   const minS  = Number(sizeRange[0]?.min_s ?? 0);
   const maxS  = Number(sizeRange[0]?.max_s ?? 0);
   const nUniq = Number(sizeRange[0]?.n_unique ?? 0);
@@ -229,8 +254,9 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
   }
   const { breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
   if (!breaks.length) return;
+  const gcExpr = gcExprFor(ctx, ungrouped);
   const rows = await ctx.queryRows(`
-    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
+    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${gcExpr} AS __group__, ${ctx.sql.fileCount()} AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
     GROUP BY 1, 2
   `);
@@ -238,14 +264,14 @@ async function renderSizeBins(container, ctx, sizeRange, invariants) {
     categories: labels, getValue: pick(rows, r => r.bin, 'count'),
     title: 'File Count by Size Bin',
     xLabel: useLog ? 'File size (log-spaced bins)' : 'File size bin', yLabel: 'File count', showLegend: true,
-  }, ctx);
+  }, ctx, { ungrouped });
 }
 
 // One exact timestamp shared by every file → invariant row with full precision.
 // Otherwise a timeline, bucketed at whatever granularity (day/hour/minute/second)
 // actually shows spread - rolled up to months if there are too many distinct days,
 // or collapsed to a compact range if the spread is sub-second and no bucket would help.
-export async function renderModificationDates(container, ctx, dateRange, invariants) {
+export async function renderModificationDates(container, ctx, dateRange, invariants, { ungrouped = false } = {}) {
   const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw } = dateRange[0] ?? {};
   if (minFmt == null) return;
 
@@ -268,24 +294,30 @@ export async function renderModificationDates(container, ctx, dateRange, invaria
                          : spanMs >= MS_MINUTE ? ['%Y-%m-%d %H:%M', 'Minute']
                          :                       ['%Y-%m-%d %H:%M:%S', 'Second'];
 
-  let { rows, cats } = await bucketByDateFmt(ctx, fmt);
+  let { rows, cats } = await bucketByDateFmt(ctx, fmt, { ungrouped });
   let finalLabel = dateLabel;
   if (fmt === '%Y-%m-%d' && cats.length > MAX_DAYS) {
-    ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m'));
+    ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m', { ungrouped }));
     finalLabel = 'Month';
   }
 
   renderGroupedBars(container, {
     categories: cats, getValue: pick(rows, r => r.bucket, 'count'),
     title: 'File Count by Modification Date', xLabel: finalLabel, yLabel: 'File count', showLegend: true,
-  }, ctx);
+  }, ctx, { ungrouped });
+}
+
+// Returns the group column SQL expression, or a constant when grouping is suppressed.
+function gcExprFor(ctx, ungrouped) {
+  return ungrouped ? "'_all_'" : ctx.sql.groupCol();
 }
 
 // Group modification_date into buckets of the given STRFTIME format.
-async function bucketByDateFmt(ctx, fmt) {
+async function bucketByDateFmt(ctx, fmt, { ungrouped = false } = {}) {
+  const gcExpr = gcExprFor(ctx, ungrouped);
   const rows = await ctx.queryRows(`
     SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '${fmt}') AS bucket,
-           ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
+           ${gcExpr} AS __group__, ${ctx.sql.fileCount()} AS count
     FROM pp_data ${ctx.sql.andWhere(ctx.where, '"modification_date" IS NOT NULL')}
     GROUP BY 1, 2 ORDER BY 1, 2
   `);
@@ -298,9 +330,12 @@ function pick(rows, catOf, valueKey) {
   return (cat, g) => m.get(`${cat}\x00${g}`) ?? 0;
 }
 
-function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx) {
-  const legend = showLegend && ctx.groups.length > 1;
-  ctx.plot.append(container, ctx.plot.groupedBarTraces(categories, getValue), {
+function renderGroupedBars(container, { categories, getValue, title, xLabel, yLabel, showLegend = true }, ctx, { ungrouped = false } = {}) {
+  const traces = ungrouped
+    ? [{ type: 'bar', x: categories, y: categories.map(c => getValue(c, '_all_')), marker: { color: '#6c757d' } }]
+    : ctx.plot.groupedBarTraces(categories, getValue);
+  const legend = !ungrouped && showLegend && ctx.groups.length > 1;
+  ctx.plot.append(container, traces, {
     margin:     FILE_STATS_MARGIN,
     title:      { text: title },
     barmode:    'stack',

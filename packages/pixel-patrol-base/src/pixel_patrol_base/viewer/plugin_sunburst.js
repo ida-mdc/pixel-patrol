@@ -132,6 +132,7 @@ async function countFiles(ctx) {
 }
 
 // One row per folder (with file count + size) when rolled up, else one per file.
+// For the file-level case, is_mixed flags files whose images span multiple groups.
 function fetchSunburstRows(ctx, { foldersOnly, pathWhere }) {
   const gcExpr = ctx.sql.groupCol();
   const src    = ctx.sql.perFile(pathWhere);
@@ -146,9 +147,17 @@ function fetchSunburstRows(ctx, { foldersOnly, pathWhere }) {
         GROUP BY 1, 2
       `)
     : ctx.queryRows(`
-        SELECT "path", ${gcExpr} AS __group__,
-               __n_images__::INTEGER AS __images__, "size_bytes"::BIGINT AS __size__
+        WITH mixed AS (
+          SELECT "path", COUNT(DISTINCT ${gcExpr}) > 1 AS is_mixed
+          FROM pp_data ${pathWhere}
+          GROUP BY "path"
+        )
+        SELECT pp_file."path", ${gcExpr} AS __group__,
+               pp_file.__n_images__::INTEGER AS __images__,
+               pp_file."size_bytes"::BIGINT AS __size__,
+               COALESCE(m.is_mixed, false) AS is_mixed
         FROM ${src}
+        LEFT JOIN mixed m ON pp_file."path" = m."path"
       `);
 }
 
@@ -163,11 +172,12 @@ function buildHierarchy(rows, colorMap, { foldersOnly, mode }) {
     if (commonRoot && rel.startsWith(commonRoot)) rel = rel.slice(commonRoot.length);
     rel = rel.replace(/^[/\\]+/, '');
     return {
-      path:   rel,
-      group:  String(r.__group__),
-      files:  foldersOnly ? num(r.__n__) : 1,
-      images: num(r.__images__),
-      bytes:  num(r.__size__),
+      path:    rel,
+      group:   String(r.__group__),
+      files:   foldersOnly ? num(r.__n__) : 1,
+      images:  num(r.__images__),
+      bytes:   num(r.__size__),
+      isMixed: !foldersOnly && Boolean(r.is_mixed),
     };
   });
 
@@ -192,7 +202,7 @@ function buildHierarchy(rows, colorMap, { foldersOnly, mode }) {
       fileId = rootName ? `${rootName}${sep}${path}` : path;
       const parentId = getParentId(fileId, sep, rootName);
       nodeStats[fileId]  = { files: rec.files, images: rec.images, bytes: rec.bytes };
-      nodeGroups[fileId] = new Set([group]);
+      nodeGroups[fileId] = rec.isMixed ? new Set([group, '__mixed__']) : new Set([group]);
       nodeParent[fileId] = parentId;
       nodeLabel[fileId]  = parts[parts.length - 1] || fileId;
     }
