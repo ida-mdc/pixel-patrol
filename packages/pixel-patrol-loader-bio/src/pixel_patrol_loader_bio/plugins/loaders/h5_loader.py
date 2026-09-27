@@ -324,10 +324,33 @@ def _imaris_channel_names(h5: h5py.File, channel_count: int) -> List[str]:
     return [name or f"Channel {i}" for i, name in enumerate(raw)]
 
 
+def _imaris_image_attrs(h5: h5py.File) -> Optional[h5py.Group]:
+    info = h5.get(_IMARIS_INFO)
+    return info.get("Image") if isinstance(info, h5py.Group) else None
+
+
+def _imaris_declared_zyx(image: Optional[h5py.Group], source_zyx: Tuple[int, int, int]) -> Tuple[int, int, int]:
+    """Real (unpadded) per-axis ZYX size from DataSetInfo/Image's X/Y/Z attrs, falling back to
+    the dataset's own size on any axis where the attribute is missing or invalid."""
+    declared = []
+    for axis, source_size in zip("ZYX", source_zyx):
+        value = _attr_float(image, axis) if image is not None else None
+        size = int(value) if value is not None else None
+        if size is None or not (0 < size <= source_size):
+            size = source_size
+        declared.append(size)
+    return tuple(declared)
+
+
+def _imaris_zyx_shape(h5: h5py.File, dset: h5py.Dataset) -> Tuple[int, int, int]:
+    source_shape = tuple(int(size) for size in dset.shape)
+    source_zyx = source_shape if len(source_shape) == 3 else (1, *source_shape)
+    return _imaris_declared_zyx(_imaris_image_attrs(h5), source_zyx)
+
+
 def _imaris_spatial_metadata(h5: h5py.File, zyx_shape: Tuple[int, int, int]) -> Dict[str, Any]:
     meta: Dict[str, Any] = {}
-    info = h5.get(_IMARIS_INFO)
-    image = info.get("Image") if isinstance(info, h5py.Group) else None
+    image = _imaris_image_attrs(h5)
     if image is None:
         return meta
 
@@ -344,10 +367,7 @@ def _imaris_spatial_metadata(h5: h5py.File, zyx_shape: Tuple[int, int, int]) -> 
     return meta
 
 
-def _imaris_metadata(h5: h5py.File, grid: List[List[str]]) -> Dict[str, Any]:
-    first = h5[grid[0][0]]
-    source_shape = tuple(int(size) for size in first.shape)
-    zyx_shape = source_shape if len(source_shape) == 3 else (1, *source_shape)
+def _imaris_metadata(h5: h5py.File, grid: List[List[str]], zyx_shape: Tuple[int, int, int]) -> Dict[str, Any]:
     n_channels = len(grid[0])
     meta: Dict[str, Any] = {
         "h5_dataset_path": f"/{_IMARIS_DATASET}/{_IMARIS_LEVEL}",
@@ -363,19 +383,23 @@ def _imaris_metadata(h5: h5py.File, grid: List[List[str]]) -> Dict[str, Any]:
 
 
 def _build_imaris_record(file_path: Path, h5: h5py.File) -> Record:
-    """Build one lazy TCZYX record from an HDF5-backed IMS file."""
+    """Build one lazy TCZYX record from an HDF5-backed IMS file, cropped to the declared (unpadded) extent."""
     grid = _imaris_dataset_grid(h5)
+    first = h5[grid[0][0]]
+    zyx_shape = _imaris_zyx_shape(h5, first)
+    crop = tuple(slice(0, size) for size in zyx_shape[-first.ndim:])
+
     time_arrays: List[da.Array] = []
     for row in grid:
         channel_arrays: List[da.Array] = []
         for path in row:
-            array = _as_dask(file_path, h5[path])
+            array = _as_dask(file_path, h5[path])[crop]
             if array.ndim == 2:
                 array = array[None, ...]
             channel_arrays.append(array)
         time_arrays.append(da.stack(channel_arrays, axis=0))
     data = da.stack(time_arrays, axis=0)
-    return record_from(data, _imaris_metadata(h5, grid), kind="intensity")
+    return record_from(data, _imaris_metadata(h5, grid, zyx_shape), kind="intensity")
 
 
 # ---------------------------------------------------------------------------
@@ -552,8 +576,7 @@ class H5Loader:
             if _is_imaris_file(h5):
                 grid = _imaris_dataset_grid(h5)
                 dset = h5[grid[0][0]]
-                source_shape = tuple(int(size) for size in dset.shape)
-                zyx_shape = source_shape if len(source_shape) == 3 else (1, *source_shape)
+                zyx_shape = _imaris_zyx_shape(h5, dset)
                 return FileInfo(
                     shape=(len(grid), len(grid[0]), *zyx_shape),
                     dtype=dset.dtype,

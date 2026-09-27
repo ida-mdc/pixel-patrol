@@ -248,6 +248,38 @@ def test_imaris_uses_only_full_resolution_and_extracts_metadata(imaris_h5: Path,
     assert record.meta["excitation_wavelengths"] == ["405 nm", "488 nm"]
 
 
+@pytest.fixture
+def imaris_padded_h5(tmp_path: Path) -> Path:
+    """Imaris file whose on-disk dataset is padded past the declared X/Y/Z image size."""
+    path = tmp_path / "padded.ims"
+    with h5py.File(path, "w") as f:
+        f.attrs["ImarisDataSet"] = _imaris_text("ImarisDataSet")
+        image = f.create_group("DataSetInfo/Image")
+        image.attrs["X"] = _imaris_text("3")
+        image.attrs["Y"] = _imaris_text("2")
+        image.attrs["Z"] = _imaris_text("1")
+        for index, (minimum, maximum) in enumerate(((0, 3), (0, 2), (0, 1))):
+            image.attrs[f"ExtMin{index}"] = _imaris_text(str(minimum))
+            image.attrs[f"ExtMax{index}"] = _imaris_text(str(maximum))
+        # dataset padded to (2, 4, 6): real image is only the (1, 2, 3) corner.
+        data = np.zeros((2, 4, 6), dtype=np.uint16)
+        data[0, :2, :3] = 1
+        f.create_dataset("DataSet/ResolutionLevel 0/TimePoint 0/Channel 0/Data", data=data)
+    return path
+
+
+def test_imaris_crops_padded_dataset_to_declared_size(imaris_padded_h5: Path, loader):
+    info = loader.read_header(imaris_padded_h5)
+    assert info.shape == (1, 1, 1, 2, 3)
+
+    record = loader.load(imaris_padded_h5)
+    assert record.data.shape == (1, 1, 1, 2, 3)
+    assert np.all(record.data.compute() == 1)
+    assert record.meta["pixel_size_X"] == pytest.approx(1.0)
+    assert record.meta["pixel_size_Y"] == pytest.approx(1.0)
+    assert record.meta["pixel_size_Z"] == pytest.approx(1.0)
+
+
 def test_legacy_non_hdf5_ims_has_clear_error(tmp_path: Path, loader):
     path = tmp_path / "legacy.ims"
     path.write_bytes(b"not an HDF5 file")
