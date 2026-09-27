@@ -60,6 +60,12 @@ table is generated from the installed plugins.
 | `nodata_value` | `Union` | Declared nodata/fill value from the file metadata. | Loaders | geospatial | pixel-patrol-geospatial |
 | `pixel_size_<axis>` | `float` | Physical pixel size along the given axis, in the image's spatial unit. | Loaders | aqqua_lmdb, bioio, tifffile, video, zarr | pixel-patrol-aqqua, pixel-patrol-loader-bio, pixel-patrol-loader-video |
 | `shape` | `list` | Raster dimensions as [bands, height, width]. | Loaders | geospatial | pixel-patrol-geospatial |
+| `bdv_setup` | `string` | BigDataViewer setup group the sub-image belongs to (e.g. 's00'). | Loaders | h5 | pixel-patrol-loader-bio |
+| `bdv_setup_name` | `string` | Name of the BigDataViewer setup, from the sibling XML. | Loaders | h5 | pixel-patrol-loader-bio |
+| `bdv_timepoint` | `string` | BigDataViewer timepoint group the sub-image belongs to (e.g. 't00000'). | Loaders | h5 | pixel-patrol-loader-bio |
+| `h5_attributes` | `dict` | Raw key-value attributes of the dataset, merged over the file's root attributes. | Loaders | h5 | pixel-patrol-loader-bio |
+| `h5_dataset_path` | `string` | Path of the dataset within the HDF5 file this row was read from. | Loaders | h5 | pixel-patrol-loader-bio |
+| `pixel_size_unit` | `string` | Physical unit the pixel_size_* values are given in. | Loaders | h5 | pixel-patrol-loader-bio |
 | `zarr_attributes` | `dict` | Raw key-value attributes stored in the Zarr/OME-Zarr group metadata. | Loaders | zarr | pixel-patrol-loader-bio |
 | `ndim` | `int` | Number of image dimensions, derived from dim_order. | Pipeline | base processing | pixel-patrol-base |
 | `num_pixels` | `int` | Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels). | Pipeline | base processing | pixel-patrol-base |

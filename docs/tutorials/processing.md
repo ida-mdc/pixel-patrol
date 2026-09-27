@@ -96,6 +96,17 @@ Answer the questions below and we'll walk you through each decision together, bu
         </div>
       </label>
       <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="h5"
+               onchange="procWiz.pick('loader','h5')">
+        <div>
+          <div class="wiz-opt-title">
+            HDF5, BigDataViewer, or Imaris IMS
+            <code class="wiz-badge">--loader h5</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .h5, .hdf5, and .ims files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
         <input type="radio" name="proc-loader" value="tifffile"
                onchange="procWiz.pick('loader','tifffile')">
         <div>

@@ -1,3 +1,4 @@
+import string
 from pathlib import Path
 import zarr
 
@@ -27,3 +28,13 @@ def is_zarr_store(path: Path) -> bool:
     except Exception as e:
         # Catches any error, indicating it's not a valid or accessible Zarr store.
         return False
+
+
+def infer_dim_order(n: int) -> str:
+    """
+    Infer a simple dim order assuming the last two dims are YX.
+    Preceding dims are assigned A,B,C,... in order.
+    """
+    if n <= 2:
+        return "YX"[-n:]  # n==0 -> "", n==1 -> "X", n==2 -> "YX"
+    return string.ascii_uppercase[: n - 2] + "YX"
