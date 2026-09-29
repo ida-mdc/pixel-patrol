@@ -86,7 +86,7 @@ export default {
       ctx.queryRows(`
         SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
                COUNT(DISTINCT "size_bytes") AS n_unique,
-               COUNT(*) FILTER (WHERE "size_bytes" IS NULL) AS n_null
+               ${fileCount()} FILTER (WHERE "size_bytes" IS NULL) AS n_null
         FROM pp_data ${ctx.where}
       `),
       hasDate
@@ -205,9 +205,13 @@ export default {
   },
 };
 
-// The three datasets the full view needs, fetched in parallel.
+// The three datasets the full view needs, fetched in parallel. size_bytes and
+// modification_date are per-file values repeated across a file's image rows,
+// so null counts use fileCount() (COUNT DISTINCT path) rather than COUNT(*) -
+// otherwise a single null-valued file with many image rows would be counted
+// once per row instead of once per file.
 function fetchFileStats(ctx, { ungrouped = false } = {}) {
-  const { perFile } = ctx.sql;
+  const { perFile, fileCount } = ctx.sql;
   const gcExpr  = gcExprFor(ctx, ungrouped);
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
@@ -220,7 +224,7 @@ function fetchFileStats(ctx, { ungrouped = false } = {}) {
     ctx.queryRows(`
       SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
              COUNT(DISTINCT "size_bytes") AS n_unique,
-             COUNT(*) FILTER (WHERE "size_bytes" IS NULL) AS n_null
+             ${fileCount()} FILTER (WHERE "size_bytes" IS NULL) AS n_null
       FROM pp_data ${ctx.where}
     `),
     hasDate
@@ -230,7 +234,7 @@ function fetchFileStats(ctx, { ungrouped = false } = {}) {
                  EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
                    - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms,
                  COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique,
-                 COUNT(*) FILTER (WHERE "modification_date" IS NULL) AS n_null
+                 ${fileCount()} FILTER (WHERE "modification_date" IS NULL) AS n_null
           FROM pp_data ${ctx.where}
         `)
       : Promise.resolve([]),
