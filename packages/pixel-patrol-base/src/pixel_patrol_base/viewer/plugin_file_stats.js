@@ -54,7 +54,7 @@ export default {
   },
 
   async overviewPlot(container, ctx) {
-    const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
+    const { groupCol: gcFn, fileCount } = ctx.sql;
 
     if (ctx.withinFileGroupVariation) {
       const groupRows = await ctx.queryRows(`
@@ -85,21 +85,23 @@ export default {
       `),
       ctx.queryRows(`
         SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
-               COUNT(DISTINCT "size_bytes") AS n_unique
-        FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+               COUNT(DISTINCT "size_bytes") AS n_unique,
+               COUNT(*) FILTER (WHERE "size_bytes" IS NULL) AS n_null
+        FROM pp_data ${ctx.where}
       `),
       hasDate
         ? ctx.queryRows(`
             SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
                    EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
                      - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms
-            FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+            FROM pp_data ${ctx.where}
           `)
         : Promise.resolve([]),
     ]);
 
     const exts   = [...new Set(extRows.map(r => String(r.ext)))].sort();
     const nSizes = Number(sizeRange[0]?.n_unique ?? 0);
+    const nSizeNulls = Number(sizeRange[0]?.n_null ?? 0);
     // span > 0 means >= 1 timestamp; span === 0 means exactly one
     const spanMs = Number(dateRange[0]?.span_ms ?? 0);
     const onlyOneDateOccurring = spanMs === 0;
@@ -126,15 +128,15 @@ export default {
       }
     }
 
-    if (nSizes > 1) {
+    if (nSizes > 1 || nSizeNulls > 0) {
       const minS = Number(sizeRange[0]?.min_s ?? 0);
       const maxS = Number(sizeRange[0]?.max_s ?? 0);
-      const { breaks, labels } = computeSizeBins(minS, maxS, nSizes, ctx.plot.formatBytes);
-      if (breaks.length) {
+      const { breaks, labels } = sizeBinsWithNull(minS, maxS, nSizes, nSizeNulls, ctx.plot.formatBytes);
+      if (labels.length > 1) {
         const rows = await ctx.queryRows(`
           SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin,
                  ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
-          FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+          FROM pp_data ${ctx.where}
           GROUP BY 1, 2
         `);
         ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(labels, pick(rows, r => r.bin, 'count'), { mini: true }),
@@ -146,7 +148,7 @@ export default {
     // Nothing varies: invariant summary table.
     const invariants = [];
     if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
-    if (nSizes <= 1) invariants.push(['File Size', ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
+    if (nSizes <= 1) invariants.push(['File Size', nSizeNulls > 0 ? '(no size)' : ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
     if (onlyOneDateOccurring && dateRange[0]?.min_fmt) invariants.push(['Modification Date', dateRange[0].min_fmt]);
     if (!invariants.length) return false;
     ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
@@ -195,7 +197,7 @@ export default {
 
 // The three datasets the full view needs, fetched in parallel.
 function fetchFileStats(ctx, { ungrouped = false } = {}) {
-  const { perFile, andWhere } = ctx.sql;
+  const { perFile } = ctx.sql;
   const gcExpr  = gcExprFor(ctx, ungrouped);
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
@@ -207,8 +209,9 @@ function fetchFileStats(ctx, { ungrouped = false } = {}) {
     `),
     ctx.queryRows(`
       SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
-             COUNT(DISTINCT "size_bytes") AS n_unique
-      FROM pp_data ${andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+             COUNT(DISTINCT "size_bytes") AS n_unique,
+             COUNT(*) FILTER (WHERE "size_bytes" IS NULL) AS n_null
+      FROM pp_data ${ctx.where}
     `),
     hasDate
       ? ctx.queryRows(`
@@ -216,8 +219,9 @@ function fetchFileStats(ctx, { ungrouped = false } = {}) {
                  STRFTIME(MAX(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS max_fmt,
                  EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
                    - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms,
-                 COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique
-          FROM pp_data ${andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+                 COUNT(DISTINCT TRY_CAST("modification_date" AS TIMESTAMP)) AS n_unique,
+                 COUNT(*) FILTER (WHERE "modification_date" IS NULL) AS n_null
+          FROM pp_data ${ctx.where}
         `)
       : Promise.resolve([]),
   ]);
@@ -243,21 +247,22 @@ function renderExtensions(container, ctx, extRows, invariants, { ungrouped = fal
     title: 'Total Size by Extension', xLabel: 'Extension', yLabel: 'Total size (bytes)' }, ctx, { ungrouped });
 }
 
-// One distinct size → invariant row; otherwise a count-per-size-bin chart.
+// One distinct size (ignoring nulls) → invariant row; otherwise a count-per-size-bin
+// chart, with a trailing '(no size)' bin when any file is missing size_bytes.
 async function renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped = false } = {}) {
   const minS  = Number(sizeRange[0]?.min_s ?? 0);
   const maxS  = Number(sizeRange[0]?.max_s ?? 0);
   const nUniq = Number(sizeRange[0]?.n_unique ?? 0);
-  if (nUniq <= 1) {
-    invariants.push(['File Size', ctx.plot.formatBytes(minS)]);
+  const nNull = Number(sizeRange[0]?.n_null ?? 0);
+  const { breaks, labels, useLog } = sizeBinsWithNull(minS, maxS, nUniq, nNull, ctx.plot.formatBytes);
+  if (labels.length <= 1) {
+    invariants.push(['File Size', labels[0] ?? ctx.plot.formatBytes(minS)]);
     return;
   }
-  const { breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, ctx.plot.formatBytes);
-  if (!breaks.length) return;
   const gcExpr = gcExprFor(ctx, ungrouped);
   const rows = await ctx.queryRows(`
     SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${gcExpr} AS __group__, ${ctx.sql.fileCount()} AS count
-    FROM pp_data ${ctx.sql.andWhere(ctx.where, '"size_bytes" IS NOT NULL')}
+    FROM pp_data ${ctx.where}
     GROUP BY 1, 2
   `);
   renderGroupedBars(container, {
@@ -272,17 +277,21 @@ async function renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped
 // actually shows spread - rolled up to months if there are too many distinct days,
 // or collapsed to a compact range if the spread is sub-second and no bucket would help.
 export async function renderModificationDates(container, ctx, dateRange, invariants, { ungrouped = false } = {}) {
-  const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw } = dateRange[0] ?? {};
-  if (minFmt == null) return;
+  const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw, n_null: nNullRaw } = dateRange[0] ?? {};
+  const nNull = Number(nNullRaw ?? 0);
+  if (minFmt == null) {
+    if (nNull > 0) invariants.push(['Modification Date', '(no date)']);
+    return;
+  }
 
   const nUnique = Number(nUniqueRaw);
-  if (nUnique <= 1) {
+  if (nUnique <= 1 && nNull === 0) {
     invariants.push(['Modification Date', minFmt]);
     return;
   }
 
   const spanMs = Number(spanMsRaw);
-  if (spanMs < MS_SECOND) {
+  if (spanMs < MS_SECOND && nNull === 0) {
     invariants.push(['Modification Date', minFmt === maxFmt
       ? `${minFmt} (span < 1s)`
       : `${minFmt} – ${maxFmt} (span < 1s)`]);
@@ -312,13 +321,14 @@ function gcExprFor(ctx, ungrouped) {
   return ungrouped ? "'_all_'" : ctx.sql.groupCol();
 }
 
-// Group modification_date into buckets of the given STRFTIME format.
+// Group modification_date into buckets of the given STRFTIME format. Files
+// with no date fall into their own '(no date)' bucket instead of being dropped.
 async function bucketByDateFmt(ctx, fmt, { ungrouped = false } = {}) {
   const gcExpr = gcExprFor(ctx, ungrouped);
   const rows = await ctx.queryRows(`
-    SELECT STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '${fmt}') AS bucket,
+    SELECT COALESCE(STRFTIME(TRY_CAST("modification_date" AS TIMESTAMP), '${fmt}'), '(no date)') AS bucket,
            ${gcExpr} AS __group__, ${ctx.sql.fileCount()} AS count
-    FROM pp_data ${ctx.sql.andWhere(ctx.where, '"modification_date" IS NOT NULL')}
+    FROM pp_data ${ctx.where}
     GROUP BY 1, 2 ORDER BY 1, 2
   `);
   return { rows, cats: [...new Set(rows.map(r => String(r.bucket)))].sort() };
@@ -371,9 +381,20 @@ function computeSizeBins(minS, maxS, nUniq, fmt) {
   return { breaks, labels, useLog };
 }
 
+// Non-null size bins/labels via computeSizeBins, plus a trailing '(no size)'
+// label when any file is missing size_bytes. Labels drive both the chart
+// categories and the CASE SQL below, so the two never drift apart.
+function sizeBinsWithNull(minS, maxS, nUniq, nNull, fmt) {
+  let breaks = [], labels = [], useLog = false;
+  if (nUniq > 1) ({ breaks, labels, useLog } = computeSizeBins(minS, maxS, nUniq, fmt));
+  else if (nUniq === 1) labels = [fmt(minS)];
+  if (nNull > 0) labels = [...labels, '(no size)'];
+  return { breaks, labels, useLog };
+}
+
 function buildSizeCaseSQL(breaks, labels) {
-  let sql = `CASE`;
+  let sql = `CASE WHEN "size_bytes" IS NULL THEN '(no size)'`;
   for (let i = 0; i < breaks.length; i++) sql += ` WHEN "size_bytes" < ${breaks[i]} THEN '${labels[i]}'`;
-  sql += ` ELSE '${labels[labels.length - 1]}' END`;
+  sql += ` ELSE '${labels[breaks.length]}' END`;
   return sql;
 }
