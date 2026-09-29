@@ -444,7 +444,7 @@ export function dataAvailabilityWarning(container, items, total, { unit = 'files
   const rows = incomplete.map(({ label, present, reason }) => `
     <li style="display:flex;justify-content:space-between;gap:16px;max-width:320px">
       <span><code>${escapeHtml(label)}</code>${reason ? `<br><small style="opacity:.7">${escapeHtml(reason)}</small>` : ''}</span>
-      <span style="font-variant-numeric:tabular-nums;white-space:nowrap">${present.toLocaleString()} of ${total.toLocaleString()} (${pct(present)}%)</span>
+      <span style="font-variant-numeric:tabular-nums;white-space:nowrap">${present.toLocaleString()} of ${total.toLocaleString()} (${pct(present)}%) have it</span>
     </li>`).join('');
 
   return prependWarning(container, {
