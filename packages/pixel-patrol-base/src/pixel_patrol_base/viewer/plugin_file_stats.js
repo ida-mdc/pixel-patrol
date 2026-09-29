@@ -166,6 +166,16 @@ export default {
       // per-group count query returns, without the extra query.
       const byGroup = new Map();
       for (const r of extRows) byGroup.set(r.__group__, (byGroup.get(r.__group__) ?? 0) + Number(r.count));
+      const total = [...byGroup.values()].reduce((a, b) => a + b, 0);
+
+      const nullExtCount = extRows.filter(r => String(r.ext) === '(none)').reduce((s, r) => s + Number(r.count), 0);
+      const availability = [
+        { label: 'File Extension', present: total - nullExtCount },
+        { label: 'File Size', present: total - Number(sizeRange[0]?.n_null ?? 0) },
+      ];
+      if (dateRange.length) availability.push({ label: 'Modification Date', present: total - Number(dateRange[0]?.n_null ?? 0) });
+      ctx.plot.dataAvailabilityWarning(container, availability, total, { unit: 'files' });
+
       const counts = [...byGroup.values()].filter(n => n > 0);
       if (counts.length > 1 && Math.max(...counts) / Math.min(...counts) >= 1.5) {
         ctx.plot.prependWarning(container, {
