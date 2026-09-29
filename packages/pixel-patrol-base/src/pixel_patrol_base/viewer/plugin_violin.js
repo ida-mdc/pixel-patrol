@@ -363,6 +363,12 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
     else toPlot.push({ metric, total });
   }
 
+  // Distinct-value count per metric, batched so renderDistribution doesn't re-query.
+  // Only used for a small-N threshold, so approx_count_distinct (cheaper than exact) is fine.
+  const ndCols = toPlot.map(({ metric }) => `approx_count_distinct(${q(metric)}) AS "${metric}__nd"`).join(', ');
+  const [ndRow] = toPlot.length
+    ? await ctx.queryRows(`SELECT ${ndCols} FROM ${sourceTable} ${combinedWhere}`) : [{}];
+
   const numGroups   = groups.length;
   let plotsPerRow = numGroups <= 2 ? 3 : numGroups === 3 ? 2 : 1;
   const showSignificance = !!ctx.state.showSignificance;
@@ -418,6 +424,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
+        distinctCount: Number(ndRow[`${metric}__nd`]),
         sideInfo: sideInfoFor(metric),
         ...(isClipping ? { layout: { yaxis: { tickformat: '.2%', title: label } } } : {}),
       });
