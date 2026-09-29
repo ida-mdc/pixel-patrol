@@ -218,7 +218,7 @@ async function renderDimDistributions(container, ctx, sizeCols) {
     `);
     return { col, nd: Number(nd ?? 0), val };
   }));
-  const variant   = dimStats.filter(d => d.nd > 1).map(d => d.col);
+  const variant   = dimStats.filter(d => d.nd > 1);
   const invariant = dimStats.filter(d => d.nd === 1);
 
   if (variant.length) await renderDimViolins(container, ctx, variant);
@@ -233,7 +233,7 @@ async function renderDimDistributions(container, ctx, sizeCols) {
 // One small violin per varying dimension, laid out in a flex grid. Uses the
 // shared distribution engine (same as the violin widget) so these render
 // identically to it apart from the compact grid size, and get the large-data
-// box fallback for free.
+// box fallback (and few-distinct-values strip fallback) for free.
 async function renderDimViolins(container, ctx, dims) {
   const { q, andWhere, groupCol: gcFn } = ctx.sql;
 
@@ -245,7 +245,7 @@ async function renderDimViolins(container, ctx, dims) {
   wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
   container.appendChild(wrap);
 
-  for (const col of dims) {
+  for (const { col, nd } of dims) {
     await ctx.plot.engine.renderDistribution(wrap, ctx, {
       numCol:          col,
       source:          { table: 'pp_data', where: andWhere(ctx.where, `${q(col)} IS NOT NULL`) },
@@ -256,6 +256,7 @@ async function renderDimViolins(container, ctx, dims) {
       series:          { isCategory: true },
       categoriesOrder: ctx.groups,
       catLabelFn:      ctx.groupLabel,
+      distinctCount:   nd,  // already have it from dimStats above - avoids a re-query
       // Only the size differs from the violin widget - everything else is the engine default.
       layout:          { height: 280, margin: { l: 44, r: 10, t: 36, b: 40 }, title: { font: { size: 12 } } },
       divStyle:        'flex:0 0 280px;min-width:220px;margin-bottom:16px',
