@@ -35,10 +35,10 @@ export default {
       if (ctx.withinFileGroupVariation) {
         return { text: MIXED_GROUP_WARNING, warning: true };
       }
-      const { andWhere, groupCol: gcFn, fileCount } = ctx.sql;
+      const { groupCol: gcFn, fileCount } = ctx.sql;
       const { escapeHtml } = ctx.plot;
       const [extRows, groupRows] = await Promise.all([
-        ctx.queryRows(`SELECT DISTINCT "file_extension" AS ext FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}`),
+        ctx.queryRows(`SELECT DISTINCT COALESCE("file_extension", '(none)') AS ext FROM pp_data ${ctx.where}`),
         ctx.queryRows(`SELECT ${gcFn()} AS g, ${fileCount()} AS c FROM pp_data ${ctx.where} GROUP BY 1`),
       ]);
       const exts   = [...new Set(extRows.map(r => String(r.ext)))];
@@ -79,8 +79,8 @@ export default {
     // Fetch lightweight stats in parallel to decide what to show.
     const [extRows, sizeRange, dateRange] = await Promise.all([
       ctx.queryRows(`
-        SELECT "file_extension" AS ext, ${gcExpr} AS __group__, ${fileCount()} AS c
-        FROM pp_data ${andWhere(ctx.where, '"file_extension" IS NOT NULL')}
+        SELECT COALESCE("file_extension", '(none)') AS ext, ${gcExpr} AS __group__, ${fileCount()} AS c
+        FROM pp_data ${ctx.where}
         GROUP BY 1, 2
       `),
       ctx.queryRows(`
@@ -200,9 +200,9 @@ function fetchFileStats(ctx, { ungrouped = false } = {}) {
   const hasDate = ctx.schema.allCols.includes('modification_date');
   return Promise.all([
     ctx.queryRows(`
-      SELECT "file_extension" AS ext, ${gcExpr} AS __group__,
+      SELECT COALESCE("file_extension", '(none)') AS ext, ${gcExpr} AS __group__,
              COUNT(*) AS count, SUM("size_bytes") AS total_bytes
-      FROM ${perFile(andWhere(ctx.where, '"file_extension" IS NOT NULL'))}
+      FROM ${perFile(ctx.where)}
       GROUP BY 1, 2 ORDER BY 1, 2
     `),
     ctx.queryRows(`
