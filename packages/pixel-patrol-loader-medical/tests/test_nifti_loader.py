@@ -124,3 +124,28 @@ def test_complex_dtype_raises_skip_file(tmp_path, loader):
         loader.read_header(path)
     with pytest.raises(SkipFile, match="complex"):
         loader.load(path)
+
+
+def test_rgb24_dtype_converted_to_channels(tmp_path, loader):
+    rgb_dtype = np.dtype([("R", "u1"), ("G", "u1"), ("B", "u1")])
+    arr = np.zeros((4, 5, 6), dtype=rgb_dtype)
+    arr["R"][:] = 1
+    arr["G"][:] = 2
+    arr["B"][:] = 3
+    path = tmp_path / "rgb.nii"
+    _write_nifti(path, arr)
+
+    info = loader.read_header(path)
+    assert info.shape == (4, 5, 6, 3)
+    assert info.dtype == np.uint8
+    assert info.dim_order == "XYZC"
+
+    rec = loader.load(path)
+    assert rec.meta["channel_names"] == ["R", "G", "B"]
+    assert "rgb:C" in rec.capabilities
+    data = np.asarray(rec.data.compute())
+    assert data.shape == (4, 5, 6, 3)
+    assert data.dtype == np.uint8
+    assert (data[..., 0] == 1).all()
+    assert (data[..., 1] == 2).all()
+    assert (data[..., 2] == 3).all()
