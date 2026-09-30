@@ -179,13 +179,18 @@ export function accumulateGroupHistograms(records, { computeNormalized = true } 
   return result;
 }
 
-// Source table + WHERE respecting pinned dims (pp_all at the right obs_level).
-function histSource(ctx) {
-  const fixed = Object.fromEntries(
+// Dimensions pinned in the sidebar. A pinned dim narrows every point to one
+// slice, same as plugin_violin.js's fixedDims.
+function fixedDims(ctx) {
+  return Object.fromEntries(
     Object.entries(ctx.state.dimensions ?? {})
       .map(([letter, idx]) => [letter, Number(idx)])
       .filter(([, idx]) => Number.isFinite(idx)));
-  const parts = ctx.sql.dimSubsetWhere({ fixed });
+}
+
+// Source table + WHERE respecting pinned dims (pp_all at the right obs_level).
+function histSource(ctx) {
+  const parts = ctx.sql.dimSubsetWhere({ fixed: fixedDims(ctx) });
   return { table: 'pp_all', where: parts.length ? `WHERE ${parts.join(' AND ')}` : '' };
 }
 
@@ -307,6 +312,11 @@ export default {
   },
 
   async render(container, ctx) {
+    // Pinned dims narrow every point to one slice, exactly like plugin_violin.js -
+    // keep the header badge (declared 'image' above) in sync with that.
+    const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
+    ctx.plot.setScopeBadge(headerBadge, Object.keys(fixedDims(ctx)).length ? 'slice' : 'image');
+
     const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
     const hasDtype = ctx.schema.allCols.includes('dtype');
     const hasNames = ctx.schema.allCols.includes('name');
