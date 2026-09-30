@@ -312,10 +312,8 @@ export default {
   },
 
   async render(container, ctx) {
-    // Pinned dims narrow every point to one slice, exactly like plugin_violin.js -
-    // keep the header badge (declared 'image' above) in sync with that.
-    const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
-    ctx.plot.setScopeBadge(headerBadge, Object.keys(fixedDims(ctx)).length ? 'slice' : 'image');
+    // Pinned dims narrow every point to one slice (see histSource above).
+    ctx.plot.syncPinnedScopeBadge(container, ctx);
 
     const hasRange = ctx.schema.allCols.includes('histogram_min') && ctx.schema.allCols.includes('histogram_max');
     const hasDtype = ctx.schema.allCols.includes('dtype');

@@ -479,10 +479,7 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
 
       // The card header already carries a "🖼️ per image" badge (from `scope: 'image'`
       // above) - keep it in sync with the toggles instead of adding a second badge.
-      const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
-      const pinned = pinnedDims(ctx);
-      const syncBadge = () =>
-        ctx.plot.setScopeBadge(headerBadge, (splitDims.size || pinned.length) ? 'slice' : 'image');
+      const syncBadge = () => ctx.plot.syncPinnedScopeBadge(container, ctx, splitDims.size > 0);
       syncBadge();
 
       const draw = async () => {
