@@ -92,6 +92,25 @@ def _apply_rescale(arr: np.ndarray, ds: pydicom.Dataset) -> np.ndarray:
     return arr.astype(np.float32) * slope + intercept
 
 
+def _samples_per_pixel(ds: pydicom.Dataset) -> int:
+    return int(getattr(ds, "SamplesPerPixel", 1) or 1)
+
+
+def _shape_and_dim_order(z: int, rows: int, cols: int, n_samples: int) -> Tuple[Tuple[int, ...], str]:
+    spatial_shape = (z, rows, cols) if z > 1 else (rows, cols)
+    spatial_dim = "ZYX" if z > 1 else "YX"
+    if n_samples > 1:
+        return (*spatial_shape, n_samples), spatial_dim + "C"
+    return spatial_shape, spatial_dim
+
+
+def _channel_names(ds: pydicom.Dataset, n_samples: int) -> List[str] | None:
+    # Only RGB is unambiguous; other multi-sample spaces just get an unlabeled C axis.
+    if n_samples == 3 and str(getattr(ds, "PhotometricInterpretation", "")).upper() == "RGB":
+        return ["R", "G", "B"]
+    return None
+
+
 def _pixel_sizes(ds: pydicom.Dataset) -> Dict[str, float]:
     out: Dict[str, float] = {}
     ps = getattr(ds, "PixelSpacing", None)
@@ -120,11 +139,13 @@ _DICOM_TAGS = [
 ]
 
 
-def _series_meta(ds: pydicom.Dataset, dim_order: str) -> Dict[str, Any]:
+def _series_meta(ds: pydicom.Dataset, dim_order: str, channel_names: List[str] | None = None) -> Dict[str, Any]:
     meta: Dict[str, Any] = {
         "dim_order": dim_order,
         "dtype": str(_output_dtype(ds)),
     }
+    if channel_names:
+        meta["channel_names"] = channel_names
     meta.update(_pixel_sizes(ds))
     for tag in _DICOM_TAGS:
         val = getattr(ds, tag, None)
@@ -175,10 +196,10 @@ def _build_series_record(files: List[Path], ref_ds: pydicom.Dataset) -> Record:
     rows, cols = int(ref_ds.Rows), int(ref_ds.Columns)
     n_frames_per_file = int(getattr(ref_ds, "NumberOfFrames", 1) or 1)
     n_total = n * n_frames_per_file
-    shape = (n_total, rows, cols) if n_total > 1 else (rows, cols)
-    dim_order = "ZYX" if n_total > 1 else "YX"
+    n_samples = _samples_per_pixel(ref_ds)
+    shape, dim_order = _shape_and_dim_order(n_total, rows, cols, n_samples)
     dtype = _output_dtype(ref_ds)
-    meta = _series_meta(ref_ds, dim_order)
+    meta = _series_meta(ref_ds, dim_order, _channel_names(ref_ds, n_samples))
     data = da.from_delayed(
         dask.delayed(_load_series_array)([str(f) for f in files]),
         shape=shape,
@@ -216,8 +237,7 @@ class DicomLoader:
             raise SkipFile(f"non-image DICOM (SR/RT/PR): {file_path.name}")
         rows, cols = int(ds.Rows), int(ds.Columns)
         n_frames = int(getattr(ds, "NumberOfFrames", 1) or 1)
-        shape = (n_frames, rows, cols) if n_frames > 1 else (rows, cols)
-        dim_order = "ZYX" if n_frames > 1 else "YX"
+        shape, dim_order = _shape_and_dim_order(n_frames, rows, cols, _samples_per_pixel(ds))
         return FileInfo(shape=shape, dtype=_output_dtype(ds), dim_order=dim_order, n_images=1)
 
     def _folder_header(self, folder: Path) -> FileInfo:
@@ -231,8 +251,7 @@ class DicomLoader:
         n = len(first_files)
         n_frames_per_file = int(getattr(ds, "NumberOfFrames", 1) or 1)
         n_total = n * n_frames_per_file
-        shape = (n_total, rows, cols) if n_total > 1 else (rows, cols)
-        dim_order = "ZYX" if n_total > 1 else "YX"
+        shape, dim_order = _shape_and_dim_order(n_total, rows, cols, _samples_per_pixel(ds))
         return FileInfo(shape=shape, dtype=_output_dtype(ds), dim_order=dim_order, n_images=n_images)
 
     def load(self, file_path: Path) -> Record:
@@ -260,10 +279,10 @@ class DicomLoader:
             raise SkipFile(f"non-image DICOM (SR/RT/PR): {file_path.name}")
         n_frames = int(getattr(ds, "NumberOfFrames", 1) or 1)
         rows, cols = int(ds.Rows), int(ds.Columns)
-        shape = (n_frames, rows, cols) if n_frames > 1 else (rows, cols)
-        dim_order = "ZYX" if n_frames > 1 else "YX"
+        n_samples = _samples_per_pixel(ds)
+        shape, dim_order = _shape_and_dim_order(n_frames, rows, cols, n_samples)
         dtype = _output_dtype(ds)
-        meta = _series_meta(ds, dim_order)
+        meta = _series_meta(ds, dim_order, _channel_names(ds, n_samples))
         data = da.from_delayed(
             dask.delayed(_load_single_dicom)(str(file_path)),
             shape=shape,
