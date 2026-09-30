@@ -294,7 +294,11 @@ export default {
   label: 'My Widget',          // shown in the sidebar widget list
   group: 'My Extension Name',  // optional - gives the widget its own sidebar section
   scope: 'image',              // optional - 'file' | 'image' | 'slice', shown as a badge
-                               // describing what one datapoint in this widget represents
+                               // describing what one datapoint in this widget represents.
+                               // If render() changes this at runtime (e.g. a "Slice by"
+                               // toggle), call ctx.plot.setScopeBadge(el, scope) to keep
+                               // it honest - and make sure overviewPlot always reflects
+                               // the base scope, since collapsing a tile doesn't re-run render()
 
   requires(schema) {
     // return false to hide the widget when its columns are absent
@@ -320,7 +324,9 @@ export default {
   },
 
   async overviewPlot(container, ctx) {
-    // small preview plot drawn into the tile; return false to skip it
+    // small preview plot drawn into the tile; return false to skip it.
+    // Apply ctx.where here too - it's a separate query path from render(),
+    // so filters aren't inherited automatically.
   },
 };
 ```
@@ -339,6 +345,7 @@ export default {
 <tr><td><code>ctx.where</code></td><td><code>string</code></td><td>SQL <code>WHERE</code> clause for the active filter (or <code>''</code>) - merge with <code>AND</code> if your query needs its own</td></tr>
 <tr><td><code>ctx.groups</code></td><td><code>string[]</code></td><td>distinct values of the active group column</td></tr>
 <tr><td><code>ctx.filteredCount</code> / <code>ctx.totalRows</code></td><td><code>number</code></td><td>row counts</td></tr>
+<tr><td><code>ctx.plot</code></td><td><code>object</code></td><td>plotting/DOM helpers (<code>appendMini</code>, <code>setScopeBadge</code>, <code>niceName</code>, ...)</td></tr>
 </tbody>
 </table>
 

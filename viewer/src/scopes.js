@@ -43,3 +43,16 @@ export function setScopeBadge(el, scope) {
   el.title = s.desc;
   el.textContent = `${s.icon} ${s.label}`;
 }
+
+/**
+ * Badge sync for widgets that switch from 'image' to 'slice' when a sidebar
+ * dim is pinned (plugin_violin.js, plugin_histogram.js). Not for widgets
+ * where pinning narrows the cohort without changing granularity (e.g.
+ * plugin_custom_plot.js) - those call setScopeBadge directly.
+ */
+export function syncPinnedScopeBadge(container, ctx, runtimeSlice = false) {
+  const el = container.closest?.('.widget-card')?.querySelector('.widget-scope-badge');
+  const pinned = Object.values(ctx.state?.dimensions ?? {})
+    .some(idx => idx !== '' && idx != null && Number.isFinite(Number(idx)));
+  setScopeBadge(el, (pinned || runtimeSlice) ? 'slice' : 'image');
+}
