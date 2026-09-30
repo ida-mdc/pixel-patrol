@@ -11,6 +11,7 @@ import dask
 import dask.array as da
 import nibabel as nib
 import numpy as np
+from numpy.lib.recfunctions import structured_to_unstructured
 
 from pixel_patrol_base.core.contracts import FileInfo, SkipFile
 from pixel_patrol_base.core.loader_schema import (
@@ -28,6 +29,14 @@ def _nifti_dim_order(ndim: int) -> str:
     if ndim <= 4:
         return base[:ndim]
     return base + "ABCDEFGHIJ"[: ndim - 4]
+
+
+def _channel_field_dtype(dtype: np.dtype) -> np.dtype | None:
+    """Shared scalar dtype of a uniform structured dtype (e.g. NIfTI DT_RGB24), else None."""
+    if dtype.names is None:
+        return None
+    field_dtypes = {dtype.fields[name][0] for name in dtype.names}
+    return field_dtypes.pop() if len(field_dtypes) == 1 else None
 
 
 def _load_bids_sidecar(nifti_path: Path) -> Dict[str, Any]:
@@ -94,7 +103,10 @@ def _extract_meta(img: Any, dim_order: str) -> Dict[str, Any]:
 
 def _load_nifti_array(path_str: str) -> np.ndarray:
     img = nib.load(path_str)
-    return np.asarray(img.dataobj)
+    arr = np.asarray(img.dataobj)
+    if arr.dtype.names is not None:
+        arr = structured_to_unstructured(arr)  # e.g. RGB24 struct -> (..., C) plain array
+    return arr
 
 
 class NiftiLoader:
@@ -122,15 +134,27 @@ class NiftiLoader:
         dtype = np.dtype(img.get_data_dtype())
         if np.issubdtype(dtype, np.complexfloating):
             raise SkipFile(f"complex dtype ({dtype}): NIfTI-MRS spectroscopy data is not supported")
-        dim_order = _nifti_dim_order(len(shape))
+        channel_dtype = _channel_field_dtype(dtype)
+        if dtype.names is not None and channel_dtype is None:
+            raise SkipFile(f"unsupported structured dtype ({dtype}): mixed-width fields")
+        if channel_dtype is not None:
+            dim_order = _nifti_dim_order(len(shape)) + "C"
+            shape = (*shape, len(dtype.names))
+            dtype = channel_dtype
+        else:
+            dim_order = _nifti_dim_order(len(shape))
         return FileInfo(shape=shape, dtype=dtype, dim_order=dim_order, n_images=1)
 
     def load(self, file_path: Path) -> Record:
-        info = self.read_header(file_path)  # raises SkipFile for complex dtype
+        info = self.read_header(file_path)  # raises SkipFile for complex/unsupported dtype
         img = nib.load(str(file_path))
         shape, dtype, dim_order = info.shape, info.dtype, info.dim_order
         # sidecar merged first so header values take precedence on any key conflict
         meta = {**_load_bids_sidecar(file_path), **_extract_meta(img, dim_order)}
+        raw_names = np.dtype(img.get_data_dtype()).names
+        if raw_names is not None:
+            meta["channel_names"] = list(raw_names)  # e.g. ['R', 'G', 'B']; only tagged rgb:C if they match
+            meta["dtype"] = str(dtype)  # per-channel dtype, not the original structured dtype
         data = da.from_delayed(
             dask.delayed(_load_nifti_array)(str(file_path)),
             shape=shape,
