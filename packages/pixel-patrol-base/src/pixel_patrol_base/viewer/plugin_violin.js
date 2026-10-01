@@ -3,7 +3,9 @@ const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
 
-// Matches QualityMetricsProcessor.OUTPUT_SCHEMA.
+// Quality-signal columns shown in the "Image Quality Metrics" tab, matched by name
+// regardless of which processor produced them (mostly QualityMetricsProcessor;
+// nan_fraction comes from BasicMetricsProcessor, alongside finite_pixel_count).
 // One description per metric, used as each metric's own per-plot side note (and
 // by plugin_stats_across_dims.js, the other quality-metric widget, so it isn't
 // duplicated there). `hintUp`/`hintDown`/`goodDirection` are only set where the
@@ -36,6 +38,10 @@ export const QUALITY_METRIC_INFO = {
   bright_clipping_fraction: {
     desc: 'Fraction of pixels at the dtype\'s maximum representable value (integer types only; NaN for float).',
     hintUp: 'more bright-clipped pixels', hintDown: 'fewer bright-clipped pixels', goodDirection: 'down',
+  },
+  nan_fraction: {
+    desc: 'Fraction of pixels excluded as NaN (missing/invalid data).',
+    hintUp: 'more NaN pixels', hintDown: 'fewer NaN pixels', goodDirection: 'down',
   },
 };
 

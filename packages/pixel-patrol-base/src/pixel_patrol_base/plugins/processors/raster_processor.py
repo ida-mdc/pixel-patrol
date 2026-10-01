@@ -23,6 +23,11 @@ class MetricContext:
     s_min: float = 0.0
     s_max: float = 0.0
     cache: Dict = field(default_factory=dict)
+    all_nan: bool = False
+
+
+def _is_all_nan(arr: np.ndarray) -> bool:
+    return arr.size > 0 and np.issubdtype(arr.dtype, np.floating) and bool(np.all(np.isnan(arr)))
 
 
 class MetricNames(StrEnum):
@@ -56,7 +61,7 @@ def _scalar_rows_agg(fn):
         if not vals:
             return None
         arr = np.asarray(vals, dtype=float)
-        return fn(arr) if np.any(np.isfinite(arr)) else np.nan
+        return fn(arr) if np.any(np.isfinite(arr)) else None
     return agg
 
 
@@ -88,6 +93,23 @@ def _integer_sum_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     return int(sum(int(v) for v in vals))
 
 
+def _pixel_weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
+    """Per-chunk-pixel-count-weighted mean of a per-chunk fraction metric. Weights by
+    num_pixels (every pixel), unlike _weighted_mean_agg which weights by finite_pixel_count -
+    needed for fractions that describe pixels excluded from the "finite" count itself."""
+    num = den = 0.0
+    for r in rows:
+        if spec.name not in r:
+            continue
+        w = float(r.get("num_pixels", 0) or 0)
+        if w <= 0:
+            continue
+        v = float(r[spec.name])
+        if np.isfinite(v):
+            num += v * w; den += w
+    return (num / den) if den > 0 else None
+
+
 def _weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     """Pixel-count weighted mean."""
     num = den = 0.0
@@ -113,6 +135,10 @@ def _aggregate_histograms(rows: List[Dict]) -> Any:
     h_counts = [r[MetricNames.HISTOGRAM_COUNTS] for r in rows if MetricNames.HISTOGRAM_COUNTS in r]
     if not h_counts:
         return None
+    if np.all(np.isnan(h_mins)):
+        res = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
+        res[0] = sum(int(np.sum(c)) for c in h_counts)
+        return res
     g_min, g_max = np.nanmin(h_mins), np.nanmax(h_maxs)
     if g_min == g_max:
         res = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
@@ -173,19 +199,29 @@ def _histogram_counts(arr: np.ndarray, s_min: float, s_max: float) -> np.ndarray
 
 
 def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
-    """NumPy backend: compute one n-D metric on the chunk."""
-    match spec.name:
-        case MetricNames.MIN_INTENSITY:      return float(np.nanmin(arr))
-        case MetricNames.MAX_INTENSITY:      return float(np.nanmax(arr))
-        case MetricNames.MEAN_INTENSITY:     return float(np.nanmean(arr))
-        case MetricNames.STD_INTENSITY:      return float(np.nanstd(arr))
-        case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
-        case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
-        case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
-        case MetricNames.HISTOGRAM_NAN_COUNT:
-            return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
-        case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
-        case _:                              return None
+    """NumPy backend: compute one n-D metric on the chunk.
+
+    invalid='ignore': Inf pixels make nanmean/nanstd hit inf-inf=NaN internally
+    (a correct result - variance of an infinite signal is undefined) - suppress
+    the resulting RuntimeWarning rather than the computation itself.
+    """
+    with np.errstate(invalid='ignore'):
+        match spec.name:
+            case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
+            case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
+            case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
+            case MetricNames.STD_INTENSITY:
+                # dtype=float64: avoids float32 overflow in the sum-of-squares for extreme pixel values.
+                return float("nan") if ctx.all_nan else float(np.nanstd(arr, dtype=np.float64))
+            case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
+            case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
+            case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
+            case MetricNames.HISTOGRAM_NAN_COUNT:
+                return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
+            case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
+            case "nan_fraction":
+                return float(np.mean(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0.0
+            case _:                              return None
 
 
 # ---------------------------------------------------------------------------
@@ -204,10 +240,13 @@ class RasterProcessor:
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
-        try:
-            ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
-        except (TypeError, ValueError):
-            return {}
+        if _is_all_nan(chunk):
+            ctx = MetricContext(s_min=float("nan"), s_max=float("nan"), all_nan=True)
+        else:
+            try:
+                ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+            except (TypeError, ValueError):
+                return {}
         return {
             spec.name: val
             for spec in self.METRICS
@@ -227,7 +266,7 @@ class RasterProcessor:
 
 class BasicMetricsProcessor(RasterProcessor):
     NAME        = "raster-basic"
-    DESCRIPTION = "Computes basic per-image intensity statistics (min, max, mean, std) and the finite-pixel count, aggregated across chunks and dimensions."
+    DESCRIPTION = "Computes basic per-image intensity statistics (min, max, mean, std), the finite-pixel count, and the NaN fraction, aggregated across chunks and dimensions."
     METRICS = (
         RasterMetricSpec(name=MetricNames.MIN_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin),
                          description="Minimum pixel intensity over the covered extent (ignoring NaNs)."),
@@ -239,6 +278,8 @@ class BasicMetricsProcessor(RasterProcessor):
                          description="Pooled standard deviation of intensity over the covered extent."),
         RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
                          description="Number of finite (non-NaN/Inf) pixels contributing to the statistics."),
+        RasterMetricSpec(name="nan_fraction", data_type=np.float32, aggregate_rows=_pixel_weighted_mean_agg,
+                         description="Fraction of pixels excluded as NaN."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}
