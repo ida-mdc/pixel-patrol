@@ -199,21 +199,27 @@ def _histogram_counts(arr: np.ndarray, s_min: float, s_max: float) -> np.ndarray
 
 
 def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
-    """NumPy backend: compute one n-D metric on the chunk."""
-    match spec.name:
-        case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
-        case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
-        case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
-        case MetricNames.STD_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanstd(arr))
-        case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
-        case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
-        case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
-        case MetricNames.HISTOGRAM_NAN_COUNT:
-            return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
-        case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
-        case "nan_fraction":
-            return float(np.mean(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0.0
-        case _:                              return None
+    """NumPy backend: compute one n-D metric on the chunk.
+
+    invalid='ignore': Inf pixels make nanmean/nanstd hit inf-inf=NaN internally
+    (a correct result - variance of an infinite signal is undefined) - suppress
+    the resulting RuntimeWarning rather than the computation itself.
+    """
+    with np.errstate(invalid='ignore'):
+        match spec.name:
+            case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
+            case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
+            case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
+            case MetricNames.STD_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanstd(arr))
+            case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
+            case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
+            case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
+            case MetricNames.HISTOGRAM_NAN_COUNT:
+                return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
+            case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
+            case "nan_fraction":
+                return float(np.mean(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0.0
+            case _:                              return None
 
 
 # ---------------------------------------------------------------------------

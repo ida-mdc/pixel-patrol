@@ -34,7 +34,8 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
     """
     if ctx.all_nan:
         return float("nan")
-    with np.errstate(invalid='ignore', divide='ignore'), \
+    # over='ignore': fft**2 in spectral_slope can overflow float32 harmlessly.
+    with np.errstate(invalid='ignore', divide='ignore', over='ignore'), \
          warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
         warnings.filterwarnings('ignore', 'All-NaN slice encountered', RuntimeWarning)
