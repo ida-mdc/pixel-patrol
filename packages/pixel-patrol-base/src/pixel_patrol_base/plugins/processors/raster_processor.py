@@ -93,6 +93,23 @@ def _integer_sum_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     return int(sum(int(v) for v in vals))
 
 
+def _pixel_weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
+    """Per-chunk-pixel-count-weighted mean of a per-chunk fraction metric. Weights by
+    num_pixels (every pixel), unlike _weighted_mean_agg which weights by finite_pixel_count -
+    needed for fractions that describe pixels excluded from the "finite" count itself."""
+    num = den = 0.0
+    for r in rows:
+        if spec.name not in r:
+            continue
+        w = float(r.get("num_pixels", 0) or 0)
+        if w <= 0:
+            continue
+        v = float(r[spec.name])
+        if np.isfinite(v):
+            num += v * w; den += w
+    return (num / den) if den > 0 else None
+
+
 def _weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     """Pixel-count weighted mean."""
     num = den = 0.0
@@ -194,6 +211,8 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
         case MetricNames.HISTOGRAM_NAN_COUNT:
             return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
         case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
+        case "nan_fraction":
+            return float(np.mean(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0.0
         case _:                              return None
 
 
@@ -239,7 +258,7 @@ class RasterProcessor:
 
 class BasicMetricsProcessor(RasterProcessor):
     NAME        = "raster-basic"
-    DESCRIPTION = "Computes basic per-image intensity statistics (min, max, mean, std) and the finite-pixel count, aggregated across chunks and dimensions."
+    DESCRIPTION = "Computes basic per-image intensity statistics (min, max, mean, std), the finite-pixel count, and the NaN fraction, aggregated across chunks and dimensions."
     METRICS = (
         RasterMetricSpec(name=MetricNames.MIN_INTENSITY,      data_type=np.float32, aggregate_rows=_scalar_rows_agg(np.nanmin),
                          description="Minimum pixel intensity over the covered extent (ignoring NaNs)."),
@@ -251,6 +270,8 @@ class BasicMetricsProcessor(RasterProcessor):
                          description="Pooled standard deviation of intensity over the covered extent."),
         RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
                          description="Number of finite (non-NaN/Inf) pixels contributing to the statistics."),
+        RasterMetricSpec(name="nan_fraction", data_type=np.float32, aggregate_rows=_pixel_weighted_mean_agg,
+                         description="Fraction of pixels excluded as NaN."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}
     OUTPUT_SCHEMA_DESCRIPTIONS = {m.name: m.description for m in METRICS}

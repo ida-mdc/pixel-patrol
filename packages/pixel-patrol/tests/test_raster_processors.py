@@ -62,7 +62,7 @@ def _blurred(sharp):
 
 def test_basic_processor_keys(proc):
     row = _chunk(proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity", "finite_pixel_count"):
+    for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity", "finite_pixel_count", "nan_fraction"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -99,6 +99,27 @@ def test_nan_excluded(proc):
     assert row["finite_pixel_count"] == 5
 
 
+def test_nan_fraction(proc):
+    row = _chunk(proc, np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32), "YX")
+    assert row["nan_fraction"] == pytest.approx(1 / 6)
+    # Inf is not NaN: nan_fraction stays 0 while finite_pixel_count still drops it.
+    row_inf = _chunk(proc, np.array([[0, 1, np.inf]], dtype=np.float32), "YX")
+    assert row_inf["nan_fraction"] == 0.0
+    assert row_inf["finite_pixel_count"] == 2
+    # Integer dtypes can't hold NaN: always 0, no isnan() dtype error.
+    row_int = _chunk(proc, np.arange(4, dtype=np.uint8).reshape(2, 2), "YX")
+    assert row_int["nan_fraction"] == 0.0
+
+
+def test_nan_fraction_aggregated_across_chunks(proc):
+    """One chunk all-NaN, one chunk clean - aggregated fraction is pixel-count-weighted,
+    not a plain average of per-chunk fractions."""
+    nan_chunk = _chunk(proc, np.full((2, 2), np.nan, dtype=np.float32), "YX")
+    real_chunk = _chunk(proc, np.ones((6, 2), dtype=np.float32), "YX")
+    frac = proc.get_aggregation("nan_fraction")([nan_chunk, real_chunk], ())
+    assert frac == pytest.approx(4 / 16)
+
+
 def test_all_nan_chunk_no_warnings(proc, hist_proc, quality_proc):
     data = np.full((8, 8), np.nan, dtype=np.float32)
     with warnings.catch_warnings():
@@ -109,6 +130,7 @@ def test_all_nan_chunk_no_warnings(proc, hist_proc, quality_proc):
     for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity"):
         assert np.isnan(basic[k])
     assert basic["finite_pixel_count"] == 0
+    assert basic["nan_fraction"] == 1.0
     assert np.isnan(hist["histogram_min"])
     assert np.isnan(hist["histogram_max"])
     assert hist["histogram_nan_count"] == 64
