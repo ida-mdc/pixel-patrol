@@ -21,6 +21,7 @@ from pixel_patrol_base.plugins.processors.raster_image_numpy_metrics import (
 from pixel_patrol_base.plugins.processors.raster_processor import (
     MetricContext,
     RasterMetricSpec,
+    _is_all_nan,
     _weighted_mean_agg,
 )
 
@@ -31,6 +32,8 @@ def numpy_image_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricCont
     Metric functions reduce over the last two (spatial) axes, returning a value
     per non-spatial leading dim. nanmean collapses those to one scalar for the row.
     """
+    if ctx.all_nan:
+        return float("nan")
     with np.errstate(invalid='ignore', divide='ignore'), \
          warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'Mean of empty slice', RuntimeWarning)
@@ -64,7 +67,7 @@ class RasterImageProcessor:
         if y_ax != len(dim_order_out) - 2 or x_ax != len(dim_order_out) - 1:
             other = [i for i in range(chunk.ndim) if i not in (y_ax, x_ax)]
             chunk = chunk.transpose(other + [y_ax, x_ax])
-        ctx = MetricContext()
+        ctx = MetricContext(all_nan=_is_all_nan(chunk))
         return {
             spec.name: val
             for spec in self.METRICS

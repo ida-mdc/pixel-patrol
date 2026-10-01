@@ -23,6 +23,11 @@ class MetricContext:
     s_min: float = 0.0
     s_max: float = 0.0
     cache: Dict = field(default_factory=dict)
+    all_nan: bool = False
+
+
+def _is_all_nan(arr: np.ndarray) -> bool:
+    return arr.size > 0 and np.issubdtype(arr.dtype, np.floating) and bool(np.all(np.isnan(arr)))
 
 
 class MetricNames(StrEnum):
@@ -56,7 +61,7 @@ def _scalar_rows_agg(fn):
         if not vals:
             return None
         arr = np.asarray(vals, dtype=float)
-        return fn(arr) if np.any(np.isfinite(arr)) else np.nan
+        return fn(arr) if np.any(np.isfinite(arr)) else None
     return agg
 
 
@@ -113,6 +118,10 @@ def _aggregate_histograms(rows: List[Dict]) -> Any:
     h_counts = [r[MetricNames.HISTOGRAM_COUNTS] for r in rows if MetricNames.HISTOGRAM_COUNTS in r]
     if not h_counts:
         return None
+    if np.all(np.isnan(h_mins)):
+        res = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
+        res[0] = sum(int(np.sum(c)) for c in h_counts)
+        return res
     g_min, g_max = np.nanmin(h_mins), np.nanmax(h_maxs)
     if g_min == g_max:
         res = np.zeros(HISTOGRAM_BINS, dtype=np.int64)
@@ -175,10 +184,10 @@ def _histogram_counts(arr: np.ndarray, s_min: float, s_max: float) -> np.ndarray
 def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
     """NumPy backend: compute one n-D metric on the chunk."""
     match spec.name:
-        case MetricNames.MIN_INTENSITY:      return float(np.nanmin(arr))
-        case MetricNames.MAX_INTENSITY:      return float(np.nanmax(arr))
-        case MetricNames.MEAN_INTENSITY:     return float(np.nanmean(arr))
-        case MetricNames.STD_INTENSITY:      return float(np.nanstd(arr))
+        case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
+        case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
+        case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
+        case MetricNames.STD_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanstd(arr))
         case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
         case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
         case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
@@ -204,10 +213,13 @@ class RasterProcessor:
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
-        try:
-            ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
-        except (TypeError, ValueError):
-            return {}
+        if _is_all_nan(chunk):
+            ctx = MetricContext(s_min=float("nan"), s_max=float("nan"), all_nan=True)
+        else:
+            try:
+                ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+            except (TypeError, ValueError):
+                return {}
         return {
             spec.name: val
             for spec in self.METRICS
