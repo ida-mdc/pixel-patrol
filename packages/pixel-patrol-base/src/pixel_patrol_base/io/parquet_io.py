@@ -117,13 +117,19 @@ def load_parquet(src: Path) -> Tuple[pl.DataFrame, ProjectMetadata]:
     return records_df, metadata
 
 
-def reattach_parquet_metadata(target: Path, source: Path) -> None:
+def reattach_parquet_metadata(target: Path, source: Path, extra: Optional[dict] = None) -> None:
     """
     Copy KV footer metadata from source onto target parquet, in-place.
     Used after DuckDB COPY TO strips the original metadata.
+
+    Args:
+        extra: additional {str: str} keys to merge in on top of the source's
+               metadata (e.g. pp_export_note describing an export's scope/filters).
     """
-    source_raw = pq.read_metadata(source).metadata or {}
-    table      = pq.read_table(target)
+    source_raw = dict(pq.read_metadata(source).metadata or {})
+    if extra:
+        source_raw.update({k.encode(): v.encode() for k, v in extra.items()})
+    table = pq.read_table(target)
     _write_with_metadata(table, target, source_raw)
 
 

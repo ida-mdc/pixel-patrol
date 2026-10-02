@@ -242,6 +242,7 @@ function _parseRawMeta(raw) {
     loader:          raw.pp_loader       || null,
     baseDir:         raw.pp_base_dir     || null,
     fileKind:        raw.pp_file_kind    || null,
+    exportNote:      raw.pp_export_note  || null,
     paths,
     processingStats,
     privacySummary,
@@ -251,7 +252,8 @@ function _parseRawMeta(raw) {
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
-           createdAt: null, loader: null, baseDir: null, fileKind: null, paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
+           createdAt: null, loader: null, baseDir: null, fileKind: null, exportNote: null,
+           paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
 }
 
 async function filterGroupColsByCardinality(conn, cols, dateCols = []) {
