@@ -541,6 +541,10 @@ function populateReportFooter(meta) {
   const stats = meta.processingStats || {};
   let html = '';
 
+  if (meta.fileKind === 'intermediate_part') {
+    html += `<div class="ri-row ri-warning">This is an intermediate part file from a processing run, not the final merged project file.</div>`;
+  }
+
   // ── top row: name + description on left, chips on right ──
   const nameHtml = (meta.projectName && meta.projectName !== 'Imported Project')
     ? `<span class="ri-name">${_esc(meta.projectName)}</span>` : '';

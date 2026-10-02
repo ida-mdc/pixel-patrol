@@ -65,7 +65,7 @@ def write_chunk(df: pl.DataFrame, path: Path, compression: Literal["lz4", "uncom
         df = df.with_columns(pl.lit(None).alias(col))
 
     try:
-        df.write_parquet(path, compression=compression)
+        df.write_parquet(path, compression=compression, metadata={"pp_file_kind": "intermediate_part"})
         return path
     except Exception as exc:
         logger.warning("Parquet IO: Could not write chunk '%s': %s", path.name, exc)
