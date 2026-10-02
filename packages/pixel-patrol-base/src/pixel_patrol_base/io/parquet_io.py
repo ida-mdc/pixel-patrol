@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Tuple, Optional, Literal
+from typing import Tuple, Optional
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -46,30 +46,6 @@ def with_field_descriptions(schema):
     if producers:
         footer[b"pp_column_producers"] = json.dumps(producers).encode()
     return pa.schema(fields, metadata=footer)
-
-
-def write_chunk(df: pl.DataFrame, path: Path, compression: Literal["lz4", "uncompressed", "snappy", "gzip", "brotli", "zstd"] = "zstd") -> Optional[Path]:
-    """
-    Write a single DataFrame chunk to parquet. Used for intermediate batch files.
-    Handles empty struct columns which pyarrow/polars cannot serialize.
-    Returns the path on success, None on failure.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    empty_struct_cols = [
-        name for name, dtype in df.schema.items()
-        if isinstance(dtype, pl.Struct) and not dtype.fields
-    ]
-    for col in empty_struct_cols:
-        df = df.with_columns(pl.lit(None).alias(col))
-
-    try:
-        df.write_parquet(path, compression=compression, metadata={"pp_file_kind": "intermediate_part"})
-        return path
-    except Exception as exc:
-        logger.warning("Parquet IO: Could not write chunk '%s': %s", path.name, exc)
-        return None
 
 
 def save_parquet(
