@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 import dataclasses
-from typing import Dict, List, Union, Iterable, Optional, Set, Callable
+from typing import Any, Dict, List, Union, Iterable, Optional, Set, Callable
 import click
 import polars as pl
 
@@ -193,12 +193,13 @@ class Project:
         expected_parts = [Path(p) for p in stats.pop("part_paths", [])]  # not persisted metadata
 
         if stats:
+            stats.update(_processing_params(config))
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
 
         # Computed once, embedded in the parquet footer and printed below.
         self.metadata.privacy_summary = _privacy_disclosure_lines(
-            self.loader, processors, config.metadata.omit_base_dir
+            self.loader, processors, config.metadata.omit_base_dir, config
         )
 
         saved = False
@@ -268,7 +269,18 @@ class Project:
         return self.output_path
 
 
-def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool) -> List[str]:
+def _processing_params(config) -> Dict[str, Any]:
+    """Processing-config fields that affect the resulting statistics (chunking, aggregation
+    granularity, …). Single source of truth for pp_processing_stats and the privacy disclosure.
+    """
+    return {
+        "mb_per_task":         config.mb_per_task,
+        "max_images_per_task": config.max_images_per_task,
+        "slice_size":          config.slice_size,
+    }
+
+
+def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool, config) -> List[str]:
     """Human-readable summary of what this run stores in the parquet, so users know
     what they're sharing before they hand the file to someone else.
     """
@@ -288,6 +300,9 @@ def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool) -> 
     stat_procs = [n for n in proc_names if n != "thumbnail"]
     if stat_procs:
         lines.append(f"- derived image data statistics from: {', '.join(stat_procs)}")
+
+    params_str = ", ".join(f"{k}={v}" for k, v in _processing_params(config).items())
+    lines.append(f"- processing parameters affecting results: {params_str}")
 
     return lines
 

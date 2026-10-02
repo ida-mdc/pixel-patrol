@@ -607,6 +607,9 @@ function populateReportFooter(meta) {
   if (meta.loader)          subs.push(`<span class="ri-loader"><span class="ri-label">Loader:</span> ${_esc(meta.loader)}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
+  if (stats.mb_per_task)    subs.push(`${stats.mb_per_task} MB/task`);
+  if (stats.max_images_per_task) subs.push(`${stats.max_images_per_task} max images/task`);
+  if (stats.slice_size)     subs.push(`<span class="ri-loader"><span class="ri-label">Slice size:</span> ${_esc(JSON.stringify(stats.slice_size))}</span>`);
 
   if (subs.length) {
     html += `<div class="ri-row ri-sub">${subs.join('<span class="ri-sep"> · </span>')}</div>`;
