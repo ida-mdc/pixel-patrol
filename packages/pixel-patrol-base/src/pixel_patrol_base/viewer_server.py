@@ -272,6 +272,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(query_string)
             scope  = params.get("scope", ["summary"])[0]
             where  = params.get("where", [""])[0]
+            note   = params.get("note", [""])[0]
             table  = "pp_all" if scope == "full" else "pp_data"
 
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
@@ -286,7 +287,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             with self.query_lock:
                 self.duck_conn.execute(sql)
 
-            reattach_parquet_metadata(Path(tmp_path), self.parquet_path)
+            extra = {"pp_export_note": note} if note else None
+            reattach_parquet_metadata(Path(tmp_path), self.parquet_path, extra=extra)
 
             data = Path(tmp_path).read_bytes()
             Path(tmp_path).unlink(missing_ok=True)

@@ -997,7 +997,7 @@ class _ResultsWriter:
             return
         self._parts_dir.mkdir(parents=True, exist_ok=True)
         part_path = self._parts_dir / f"part_{self._part_counter:04d}.parquet"
-        write_kwargs: Dict[str, Any] = {"compression": "zstd"}
+        write_kwargs: Dict[str, Any] = {"compression": "zstd", "metadata": {"pp_file_kind": "intermediate_part"}}
         if self._row_group_size is not None:
             write_kwargs["row_group_size"] = self._row_group_size
         rows_this_part = self._buffer_rows

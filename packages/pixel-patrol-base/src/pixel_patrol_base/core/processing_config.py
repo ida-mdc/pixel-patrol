@@ -50,6 +50,7 @@ class ProcessingConfig:
         if self.max_images_per_task < 1:
             raise ValueError("max_images_per_task must be a positive integer.")
         if self.slice_size is not None:
+            self.slice_size = {dim.upper(): sz for dim, sz in self.slice_size.items()}
             for dim, sz in self.slice_size.items():
                 if sz != -1 and sz < 1:
                     raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")

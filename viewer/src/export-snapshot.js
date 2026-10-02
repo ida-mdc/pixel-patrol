@@ -1,6 +1,6 @@
 import { WIDGET_CONTAINER_ID, ID_WELCOME_SCREEN, ID_MAIN_APP, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP } from './constants.js';
 
-const FILTER_OP_LABEL = {
+export const FILTER_OP_LABEL = {
   contains: 'contains',
   not_contains: 'does not contain',
   eq: '=',
