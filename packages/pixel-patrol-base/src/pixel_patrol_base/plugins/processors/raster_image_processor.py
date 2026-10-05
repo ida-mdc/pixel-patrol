@@ -55,20 +55,25 @@ class RasterImageProcessor:
     OUTPUT      = "features"
     OUTPUT_SCHEMA: Dict[str, Any] = {}
     OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {}
+    # Override for subclasses whose metrics live in a different module.
+    COMPUTE = staticmethod(numpy_image_compute)
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
         dim_order_out = record.dim_order
         y_ax = dim_order_out.index("Y")
         x_ax = dim_order_out.index("X")
+        # Falls back to the (pre-transpose) chunk shape when X isn't split across chunks (the default).
+        full_width = record.meta.get("full_shape", chunk.shape)[x_ax]
         if y_ax != len(dim_order_out) - 2 or x_ax != len(dim_order_out) - 1:
             other = [i for i in range(chunk.ndim) if i not in (y_ax, x_ax)]
             chunk = chunk.transpose(other + [y_ax, x_ax])
         ctx = MetricContext()
+        ctx.cache["full_width"] = full_width
         return {
             spec.name: val
             for spec in self.METRICS
-            if (val := numpy_image_compute(spec, chunk, ctx)) is not None
+            if (val := self.COMPUTE(spec, chunk, ctx)) is not None
         }
 
     def get_aggregation(self, name: str):

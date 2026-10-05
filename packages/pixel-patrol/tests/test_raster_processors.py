@@ -8,6 +8,7 @@ from pixel_patrol_base.core.record import record_from
 from pixel_patrol_base.plugins.processors.raster_image_processor import (
     QualityMetricsProcessor,
 )
+from pixel_patrol_base.plugins.processors.scale_bar_processor import ScaleBarProcessor
 from pixel_patrol_base.plugins.processors.raster_processor import (
     BasicMetricsProcessor,
     HistogramProcessor,
@@ -27,6 +28,11 @@ def hist_proc():
 @pytest.fixture
 def quality_proc():
     return QualityMetricsProcessor()
+
+
+@pytest.fixture
+def scale_bar_proc():
+    return ScaleBarProcessor()
 
 
 def _chunk(proc, np_arr, dim_order_str, origin=None):
@@ -68,6 +74,85 @@ def test_histogram_processor_keys(hist_proc):
     row = _chunk(hist_proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
     for k in ("histogram_counts", "histogram_min", "histogram_max", "histogram_nan_count"):
         assert k in row, f"Missing key: {k}"
+
+
+def _image_with_bar(h=120, w=160, bar_value=255, bar_frac=0.3, thickness=3, pos_frac=0.92, seed=0):
+    """Random-noise background with a solid horizontal bar burned in near one border."""
+    rng = np.random.default_rng(seed)
+    img = rng.integers(60, 180, size=(h, w)).astype(np.uint8)
+    bar_len = int(w * bar_frac)
+    start = (w - bar_len) // 2
+    row = int(h * pos_frac)
+    img[row:row + thickness, start:start + bar_len] = bar_value
+    return img
+
+
+def test_scale_bar_no_false_positive_on_frame_filling_object(scale_bar_proc):
+    # Regression: a disc nearly filling the frame previously tripped the detector.
+    h, w = 160, 160
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    cy, cx, radius = h / 2, w / 2, min(h, w) * 0.46
+    dist = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+    data = np.where(dist <= radius, 60.0, 180.0).astype(np.uint8)
+    assert _chunk(scale_bar_proc, data, "YX")["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_processor_keys(scale_bar_proc):
+    row = _chunk(scale_bar_proc, np.arange(64, dtype=np.uint8).reshape(8, 8), "YX")
+    assert "scale_bar_score" in row
+
+
+def test_scale_bar_detects_horizontal_bar(scale_bar_proc):
+    data = _image_with_bar()
+    row = _chunk(scale_bar_proc, data, "YX")
+    assert row["scale_bar_score"] >= 0.2
+
+
+def test_scale_bar_no_false_positive_on_noise(scale_bar_proc):
+    data = np.random.default_rng(1).integers(60, 180, size=(120, 160)).astype(np.uint8)
+    assert _chunk(scale_bar_proc, data, "YX")["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_no_false_positive_on_horizontal_gradient(scale_bar_proc):
+    # Every row identical -> no vertical contrast against the interior, regardless of run length.
+    data = np.tile(np.linspace(0, 255, 160, dtype=np.float32), (120, 1))
+    assert _chunk(scale_bar_proc, data, "YX")["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_no_false_positive_on_flat_image(scale_bar_proc):
+    data = np.full((120, 160), 128, dtype=np.uint8)
+    assert _chunk(scale_bar_proc, data, "YX")["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_ignores_bar_like_feature_away_from_border(scale_bar_proc):
+    # Same solid run, but centered vertically -> outside the border band, must not fire.
+    data = _image_with_bar(pos_frac=0.5)
+    assert _chunk(scale_bar_proc, data, "YX")["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_small_image_returns_nan(scale_bar_proc):
+    row = _chunk(scale_bar_proc, np.ones((4, 4), dtype=np.float32), "YX")
+    assert np.isnan(row.get("scale_bar_score", np.nan))
+
+
+def test_scale_bar_uses_full_image_width_not_chunk_width(scale_bar_proc):
+    # A run that's a plausible bar fraction of a narrow chunk can be a tiny, implausible
+    # fraction of the real (much wider) image; it must be judged against the real width.
+    h, tile_w, full_w = 120, 40, 400
+    tile = np.random.default_rng(0).integers(60, 180, size=(h, tile_w)).astype(np.uint8)
+    tile[110:113, 5:20] = 255  # 15/40 = 0.375 of the tile, but 15/400 = 0.0375 of the real image
+    record = record_from(tile, {"dim_order": "YX", "full_shape": (h, full_w)})
+    row = scale_bar_proc.run_chunk(record)
+    assert row["scale_bar_score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_scale_bar_leading_dims_picks_up_any_slice(scale_bar_proc):
+    # Only one of two stacked frames carries a bar; the chunk-level value must still flag it.
+    with_bar = _image_with_bar()
+    without_bar = np.random.default_rng(2).integers(60, 180, size=with_bar.shape).astype(np.uint8)
+    stack = np.stack([without_bar, with_bar])
+    row = _chunk(scale_bar_proc, stack, "CYX")
+    assert row["scale_bar_score"] >= 0.2
 
 
 def test_quality_processor_keys(quality_proc):
