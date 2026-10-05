@@ -53,7 +53,6 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           VIEWER_ASSETS="$(pwd)/viewer/public"
-          LAUNCH_ASSETS="$(pwd)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
           pyinstaller \
             --onefile \
             --name pixel-patrol-launcher \
@@ -63,7 +62,7 @@ jobs:
             --hidden-import flask \
             --add-data "${VIEWER_ASSETS}/icon.png:." \
             --add-data "${VIEWER_ASSETS}/Helmholtz-Imaging_Mark.png:." \
-            --add-data "${LAUNCH_ASSETS}/prevalidation.png:." \
+            --add-data "${VIEWER_ASSETS}/prevalidation.png:." \
             --clean \
             deploy/launcher/launcher.py
 
@@ -72,7 +71,6 @@ jobs:
         shell: pwsh
         run: |
           $viewerAssets = "$($PWD.Path)/viewer/public"
-          $launchAssets = "$($PWD.Path)/packages/pixel-patrol-base/src/pixel_patrol_base/launch_assets"
           pyinstaller `
             --onefile `
             --name pixel-patrol-launcher `
@@ -82,7 +80,7 @@ jobs:
             --hidden-import flask `
             --add-data "${viewerAssets}/icon.png;." `
             --add-data "${viewerAssets}/Helmholtz-Imaging_Mark.png;." `
-            --add-data "${launchAssets}/prevalidation.png;." `
+            --add-data "${viewerAssets}/prevalidation.png;." `
             --clean `
             deploy/launcher/launcher.py
 

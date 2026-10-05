@@ -40,8 +40,6 @@ def _b64_png(rel_path: str) -> str:
     candidates = [
         os.path.join(here, rel_path),
         os.path.join(repo_root, "viewer", "public", os.path.basename(rel_path)),
-        os.path.join(repo_root, "packages", "pixel-patrol-base", "src",
-                      "pixel_patrol_base", "launch_assets", os.path.basename(rel_path)),
     ]
     for p in candidates:
         try:
