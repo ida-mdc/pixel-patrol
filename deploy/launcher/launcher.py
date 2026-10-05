@@ -40,8 +40,6 @@ def _b64_png(rel_path: str) -> str:
     candidates = [
         os.path.join(here, rel_path),
         os.path.join(repo_root, "viewer", "public", os.path.basename(rel_path)),
-        os.path.join(repo_root, "packages", "pixel-patrol-base", "src",
-                      "pixel_patrol_base", "launch_assets", os.path.basename(rel_path)),
     ]
     for p in candidates:
         try:
@@ -52,7 +50,7 @@ def _b64_png(rel_path: str) -> str:
     return ""
 
 _IMG_ICON      = _b64_png("icon.png")
-_IMG_LOGO      = _b64_png("prevalidation.png")
+_IMG_LOGO      = _b64_png("pixel-patrol.png")
 _IMG_HELMHOLTZ = _b64_png("Helmholtz-Imaging_Mark.png")
 
 # ── Version ────────────────────────────────────────────────────────────────────
