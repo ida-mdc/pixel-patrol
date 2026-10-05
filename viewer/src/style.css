@@ -546,6 +546,7 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   border-radius: 10px; padding: 1px 9px;
   font-size: 11px; white-space: nowrap;
 }
+.ri-warning { color: #a15c00; font-weight: 600; font-size: 12px; }
 .ri-sub { color: #6c757d; font-size: 11px; flex-wrap: wrap; }
 .ri-paths { word-break: break-all; }
 .ri-label { color: #495057; font-weight: 500; }

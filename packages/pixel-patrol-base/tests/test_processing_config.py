@@ -110,6 +110,16 @@ def test_slice_size_invalid_raises():
         ProcessingConfig(slice_size={"Z": 0})
 
 
+def test_slice_size_lowercase_normalised_to_uppercase():
+    config = ProcessingConfig(slice_size={"z": 2, "y": -1})
+    assert config.slice_size == {"Z": 2, "Y": -1}
+
+
+def test_slice_size_mixed_case_normalised():
+    config = ProcessingConfig(slice_size={"z": 2, "X": -1})
+    assert config.slice_size == {"Z": 2, "X": -1}
+
+
 # --- rows_per_part ---
 
 def test_rows_per_part_valid():

@@ -9,7 +9,7 @@ import { buildWhere } from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
 import { getPaletteNames } from './colors.js';
 import { readUrlParams, writeUrlParams } from './url-params.js';
-import { exportBakedHtml } from './export-snapshot.js';
+import { exportBakedHtml, FILTER_OP_LABEL } from './export-snapshot.js';
 import { ID_WELCOME_SCREEN, ID_MAIN_APP, ID_LOADING_OVERLAY, ID_SIDEBAR_BACKDROP } from './constants.js';
 
 // ── Module-level handles ──────────────────────────────────────────────────────
@@ -457,11 +457,33 @@ async function handleCsvExport(table, scope, where, isFiltered) {
   }
 }
 
+function buildExportNote(scope, state) {
+  const parts = [];
+  const hasSlicing = (schema?.dimCols ?? []).length > 0;
+  if (hasSlicing) {
+    parts.push(scope === 'full' ? 'full table (incl. dim-slice rows)' : 'summary only (one row per image)');
+  }
+
+  const { col, op, val } = state.filter ?? {};
+  if (col && op && val !== '') {
+    parts.push(`filter: ${col} ${FILTER_OP_LABEL[op] ?? op} ${val}`);
+  }
+
+  const dims = Object.entries(state.dimensions ?? {})
+    .map(([letter, idx]) => `${letter.toUpperCase()}=${idx}`)
+    .join(', ');
+  if (dims) parts.push(`dims: ${dims}`);
+
+  return parts.join(' | ');
+}
+
 async function handleParquetExport(scope, where, isFiltered) {
   try {
     const params = new URLSearchParams();
     if (scope === 'full') params.set('scope', 'full');
     if (where)           params.set('where', where);
+    const note = buildExportNote(scope, state);
+    if (note) params.set('note', note);
     const qs   = params.size ? `?${params}` : '';
     const resp = await fetch(`/api/export-parquet${qs}`);
     if (!resp.ok) throw new Error(await resp.text());
@@ -541,6 +563,13 @@ function populateReportFooter(meta) {
   const stats = meta.processingStats || {};
   let html = '';
 
+  if (meta.fileKind === 'intermediate_part') {
+    html += `<div class="ri-row ri-warning">This is an intermediate part file from a processing run, not the final merged project file.</div>`;
+  }
+  if (meta.exportNote) {
+    html += `<div class="ri-row ri-warning">Exported from the viewer &middot; ${_esc(meta.exportNote)}</div>`;
+  }
+
   // ── top row: name + description on left, chips on right ──
   const nameHtml = (meta.projectName && meta.projectName !== 'Imported Project')
     ? `<span class="ri-name">${_esc(meta.projectName)}</span>` : '';
@@ -578,6 +607,9 @@ function populateReportFooter(meta) {
   if (meta.loader)          subs.push(`<span class="ri-loader"><span class="ri-label">Loader:</span> ${_esc(meta.loader)}</span>`);
   if (stats.n_workers)      subs.push(`${stats.n_workers} worker${stats.n_workers !== 1 ? 's' : ''}`);
   if (stats.peak_worker_rss_mb) subs.push(`${Math.round(stats.peak_worker_rss_mb)} MB peak RAM`);
+  if (stats.mb_per_task)    subs.push(`${stats.mb_per_task} MB/task`);
+  if (stats.max_images_per_task) subs.push(`${stats.max_images_per_task} max images/task`);
+  if (stats.slice_size)     subs.push(`<span class="ri-loader"><span class="ri-label">Slice size:</span> ${_esc(JSON.stringify(stats.slice_size))}</span>`);
 
   if (subs.length) {
     html += `<div class="ri-row ri-sub">${subs.join('<span class="ri-sep"> · </span>')}</div>`;

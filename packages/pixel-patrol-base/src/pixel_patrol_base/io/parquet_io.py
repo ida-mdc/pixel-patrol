@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Tuple, Optional, Literal
+from typing import Tuple, Optional
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -46,30 +46,6 @@ def with_field_descriptions(schema):
     if producers:
         footer[b"pp_column_producers"] = json.dumps(producers).encode()
     return pa.schema(fields, metadata=footer)
-
-
-def write_chunk(df: pl.DataFrame, path: Path, compression: Literal["lz4", "uncompressed", "snappy", "gzip", "brotli", "zstd"] = "zstd") -> Optional[Path]:
-    """
-    Write a single DataFrame chunk to parquet. Used for intermediate batch files.
-    Handles empty struct columns which pyarrow/polars cannot serialize.
-    Returns the path on success, None on failure.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    empty_struct_cols = [
-        name for name, dtype in df.schema.items()
-        if isinstance(dtype, pl.Struct) and not dtype.fields
-    ]
-    for col in empty_struct_cols:
-        df = df.with_columns(pl.lit(None).alias(col))
-
-    try:
-        df.write_parquet(path, compression=compression)
-        return path
-    except Exception as exc:
-        logger.warning("Parquet IO: Could not write chunk '%s': %s", path.name, exc)
-        return None
 
 
 def save_parquet(
@@ -141,13 +117,19 @@ def load_parquet(src: Path) -> Tuple[pl.DataFrame, ProjectMetadata]:
     return records_df, metadata
 
 
-def reattach_parquet_metadata(target: Path, source: Path) -> None:
+def reattach_parquet_metadata(target: Path, source: Path, extra: Optional[dict] = None) -> None:
     """
     Copy KV footer metadata from source onto target parquet, in-place.
     Used after DuckDB COPY TO strips the original metadata.
+
+    Args:
+        extra: additional {str: str} keys to merge in on top of the source's
+               metadata (e.g. pp_export_note describing an export's scope/filters).
     """
-    source_raw = pq.read_metadata(source).metadata or {}
-    table      = pq.read_table(target)
+    source_raw = dict(pq.read_metadata(source).metadata or {})
+    if extra:
+        source_raw.update({k.encode(): v.encode() for k, v in extra.items()})
+    table = pq.read_table(target)
     _write_with_metadata(table, target, source_raw)
 
 
