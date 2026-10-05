@@ -50,7 +50,7 @@ def _b64_png(rel_path: str) -> str:
     return ""
 
 _IMG_ICON      = _b64_png("icon.png")
-_IMG_LOGO      = _b64_png("prevalidation.png")
+_IMG_LOGO      = _b64_png("pixel-patrol.png")
 _IMG_HELMHOLTZ = _b64_png("Helmholtz-Imaging_Mark.png")
 
 # ── Version ────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-# <img src="viewer/public/prevalidation.png" width="80">  PixelPatrol
+# <img src="viewer/public/pixel-patrol.png" width="80">  PixelPatrol
 
 ### Image Dataset Quality Control and Exploration
 

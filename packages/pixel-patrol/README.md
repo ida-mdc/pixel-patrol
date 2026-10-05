@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/viewer/public/prevalidation.png" width="80">  PixelPatrol
+# <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/viewer/public/pixel-patrol.png" width="80">  PixelPatrol
 
 ### Image Dataset Quality Control and Exploration
 

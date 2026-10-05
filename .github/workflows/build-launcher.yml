@@ -62,7 +62,7 @@ jobs:
             --hidden-import flask \
             --add-data "${VIEWER_ASSETS}/icon.png:." \
             --add-data "${VIEWER_ASSETS}/Helmholtz-Imaging_Mark.png:." \
-            --add-data "${VIEWER_ASSETS}/prevalidation.png:." \
+            --add-data "${VIEWER_ASSETS}/pixel-patrol.png:." \
             --clean \
             deploy/launcher/launcher.py
 
@@ -80,7 +80,7 @@ jobs:
             --hidden-import flask `
             --add-data "${viewerAssets}/icon.png;." `
             --add-data "${viewerAssets}/Helmholtz-Imaging_Mark.png;." `
-            --add-data "${viewerAssets}/prevalidation.png;." `
+            --add-data "${viewerAssets}/pixel-patrol.png;." `
             --clean `
             deploy/launcher/launcher.py
 
