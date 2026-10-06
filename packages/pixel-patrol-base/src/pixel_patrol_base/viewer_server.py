@@ -27,7 +27,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
 import importlib.resources
-from urllib.parse import urlencode
+import tempfile
+from urllib.parse import urlencode, urlsplit
 
 
 def _js(value) -> str:
@@ -154,7 +155,24 @@ def _setup_duckdb(parquet_path: Path):
         conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all")
 
     meta = _read_parquet_meta(conn, escaped)
+    _restrict_to_report(conn, parquet_path)
     return conn, meta
+
+
+def _restrict_to_report(conn, path: Path) -> None:
+    """Confine SQL to this report: no other files, no extensions, no way back.
+
+    The viewer sends arbitrary SQL to /api/query, so without this a query could
+    read or write any file the server can (read_text, COPY ... TO). The temp
+    directory stays writable for the filtered-parquet export.
+    """
+    def quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    conn.execute(f"SET allowed_paths=[{quote(str(path))}]")
+    conn.execute(f"SET allowed_directories=[{quote(tempfile.gettempdir())}]")
+    conn.execute("SET enable_external_access=false")
+    conn.execute("SET lock_configuration=true")
 
 
 def _read_parquet_meta(conn, escaped_path: str) -> dict:
@@ -194,7 +212,24 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     extension_dirs:   list  # list[Path] - each dir contains extension.json + plugin JS files
 
     # ------------------------------------------------------------------
+    # Local-only access: no CORS, and Host/Origin must be this server, so no
+    # other website can read from or drive it (also blocks DNS rebinding).
+    def _is_local_request(self) -> bool:
+        host = self.headers.get("Host", "")
+        if urlsplit(f"//{host}").hostname not in ("127.0.0.1", "localhost", "::1"):
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or urlsplit(origin).netloc == host
+
+    def _allow_request(self) -> bool:
+        if self._is_local_request():
+            return True
+        self.send_error(403, "Forbidden")
+        return False
+
     def do_HEAD(self) -> None:
+        if not self._allow_request():
+            return
         path = self.path.split("?")[0]
         if path == "/data.parquet":
             self._send_parquet_head(self.parquet_path)
@@ -202,6 +237,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self._send_static_head(path)
 
     def do_GET(self) -> None:
+        if not self._allow_request():
+            return
         path, _, query_string = self.path.partition("?")
         if path == "/data.parquet":
             self._serve_parquet(self.parquet_path)
@@ -214,14 +251,16 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
 
     def do_POST(self) -> None:
+        if not self._allow_request():
+            return
         if self.path == "/api/query":
             self._serve_query()
         else:
             self.send_error(404)
 
     def do_OPTIONS(self) -> None:
-        self.send_response(204)
-        self._common_headers("text/plain", 0)
+        self.send_response(204)  # no CORS: everything is same-origin
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     # ------------------------------------------------------------------
@@ -455,8 +494,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self.send_header("Accept-Ranges",                "bytes")
         self.send_header("Cross-Origin-Opener-Policy",   "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        self.send_header("Access-Control-Allow-Origin",  "*")
-        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type")
+        self.send_header("X-Content-Type-Options",       "nosniff")
+        self.send_header("Referrer-Policy",              "no-referrer")
         self.send_header("Cache-Control",                "no-cache")
 
     def _write_chunks(self, f, length: int, chunk: int = 1 << 20) -> None:

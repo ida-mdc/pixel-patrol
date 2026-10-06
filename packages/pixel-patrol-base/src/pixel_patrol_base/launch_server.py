@@ -22,7 +22,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import urllib.request
 import webbrowser
@@ -463,27 +462,10 @@ _report_conns: Dict[Path, _ReportConn] = {}
 _conns_lock = threading.Lock()
 
 
-def _restrict_to_report(conn, path: Path) -> None:
-    """Confine /api/query to this report: no other files, no extensions, no way back.
-
-    The viewer sends arbitrary SQL, so without this a query could read or write
-    any file the server can (read_text, COPY ... TO). The temp directory stays
-    writable for the filtered-parquet export.
-    """
-    def quote(value: str) -> str:
-        return "'" + value.replace("'", "''") + "'"
-
-    conn.execute(f"SET allowed_paths=[{quote(str(path))}]")
-    conn.execute(f"SET allowed_directories=[{quote(tempfile.gettempdir())}]")
-    conn.execute("SET enable_external_access=false")
-    conn.execute("SET lock_configuration=true")
-
-
 def _get_report_conn(path: Path) -> _ReportConn:
     with _conns_lock:
         if path not in _report_conns:
             conn, meta = _setup_duckdb(path)
-            _restrict_to_report(conn, path)
             _report_conns[path] = (conn, threading.Lock(), meta)
         return _report_conns[path]
 
@@ -516,40 +498,6 @@ class _LaunchHandler(_ViewerHandler):
     @property
     def extension_dirs(self) -> List[Path]:
         return _extension_dirs()
-
-    # ------------------------------------------------------------------
-    # Local-only access: the API can browse, delete and process files, so no
-    # other website may drive it (no CORS, and Host/Origin must be this server).
-    # ------------------------------------------------------------------
-
-    def _is_local_request(self) -> bool:
-        host = self.headers.get("Host", "")
-        hostname = urlsplit(f"//{host}").hostname
-        if hostname not in ("127.0.0.1", "localhost", "::1"):
-            return False  # also rejects DNS-rebinding hostnames
-        origin = self.headers.get("Origin")
-        return origin is None or urlsplit(origin).netloc == host
-
-    def _common_headers(self, content_type: str, length: int) -> None:
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(length))
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
-        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Cache-Control", "no-cache")
-
-    def do_OPTIONS(self) -> None:
-        self.send_response(204)  # no CORS: everything is same-origin
-        self.send_header("Content-Length", "0")
-        self.end_headers()
-
-    def _allow_request(self) -> bool:
-        if self._is_local_request():
-            return True
-        self.send_error(403, "Forbidden")
-        return False
 
     def do_HEAD(self) -> None:
         if not self._allow_request():
