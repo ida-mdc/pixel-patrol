@@ -22,6 +22,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.request
 import webbrowser
@@ -462,10 +463,27 @@ _report_conns: Dict[Path, _ReportConn] = {}
 _conns_lock = threading.Lock()
 
 
+def _restrict_to_report(conn, path: Path) -> None:
+    """Confine /api/query to this report: no other files, no extensions, no way back.
+
+    The viewer sends arbitrary SQL, so without this a query could read or write
+    any file the server can (read_text, COPY ... TO). The temp directory stays
+    writable for the filtered-parquet export.
+    """
+    def quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    conn.execute(f"SET allowed_paths=[{quote(str(path))}]")
+    conn.execute(f"SET allowed_directories=[{quote(tempfile.gettempdir())}]")
+    conn.execute("SET enable_external_access=false")
+    conn.execute("SET lock_configuration=true")
+
+
 def _get_report_conn(path: Path) -> _ReportConn:
     with _conns_lock:
         if path not in _report_conns:
             conn, meta = _setup_duckdb(path)
+            _restrict_to_report(conn, path)
             _report_conns[path] = (conn, threading.Lock(), meta)
         return _report_conns[path]
 
@@ -518,6 +536,8 @@ class _LaunchHandler(_ViewerHandler):
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-cache")
 
     def do_OPTIONS(self) -> None:

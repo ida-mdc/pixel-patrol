@@ -672,6 +672,26 @@ def test_query_routes_to_report(server, tmp_path):
     assert table.to_pydict() == {"n": [4]}
 
 
+def test_report_connection_cannot_touch_other_files(tmp_path):
+    output = tmp_path / "report.parquet"
+    save_parquet(pl.DataFrame({"a": [1, 2]}), output, ProjectMetadata(project_name="p"))
+    # Outside the temp dir, which stays open for the parquet export.
+    other = Path.home() / ".pixel-patrol-test-secret"
+    outside_out = Path.home() / ".pixel-patrol-test-out.csv"
+
+    conn, _lock, _meta = ls._get_report_conn(output.resolve())
+
+    assert conn.execute("SELECT count(*) FROM pp_data").fetchall() == [(2,)]
+    for sql in (
+        f"SELECT * FROM read_text('{other}')",
+        f"COPY (SELECT 1) TO '{outside_out}'",
+        "SET enable_external_access=true",
+    ):
+        with pytest.raises(Exception, match="Permission|Invalid Input"):
+            conn.execute(sql)
+    assert not outside_out.exists()
+
+
 def test_query_unknown_report_is_404(server):
     req = urllib.request.Request(
         _url(server, "/api/query?report=deadbeef"),
