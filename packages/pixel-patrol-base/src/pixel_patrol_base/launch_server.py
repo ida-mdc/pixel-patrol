@@ -499,13 +499,49 @@ class _LaunchHandler(_ViewerHandler):
     def extension_dirs(self) -> List[Path]:
         return _extension_dirs()
 
+    # ------------------------------------------------------------------
+    # Local-only access: the API can browse, delete and process files, so no
+    # other website may drive it (no CORS, and Host/Origin must be this server).
+    # ------------------------------------------------------------------
+
+    def _is_local_request(self) -> bool:
+        host = self.headers.get("Host", "")
+        hostname = urlsplit(f"//{host}").hostname
+        if hostname not in ("127.0.0.1", "localhost", "::1"):
+            return False  # also rejects DNS-rebinding hostnames
+        origin = self.headers.get("Origin")
+        return origin is None or urlsplit(origin).netloc == host
+
+    def _common_headers(self, content_type: str, length: int) -> None:
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("Cache-Control", "no-cache")
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)  # no CORS: everything is same-origin
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _allow_request(self) -> bool:
+        if self._is_local_request():
+            return True
+        self.send_error(403, "Forbidden")
+        return False
+
     def do_HEAD(self) -> None:
+        if not self._allow_request():
+            return
         file_path = self._find_asset(self.path.split("?")[0]) or ASSETS_DIR / "index.html"
         self.send_response(200)
         self._common_headers(_mime(file_path.suffix), file_path.stat().st_size)
         self.end_headers()
 
     def do_GET(self) -> None:
+        if not self._allow_request():
+            return
         path, _, query_string = self.path.partition("?")
         if path == "/api/loaders":
             self._send_json(_get_available_loaders())
@@ -530,6 +566,8 @@ class _LaunchHandler(_ViewerHandler):
             self._serve_asset(path)
 
     def do_POST(self) -> None:
+        if not self._allow_request():
+            return
         path, _, query_string = self.path.partition("?")
         if path == "/api/process":
             payload = self._read_json()

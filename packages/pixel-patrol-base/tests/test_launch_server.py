@@ -310,6 +310,19 @@ def test_browse_files_off_lists_only_folders(server, tmp_path):
     assert names == ["sub"]
 
 
+def test_foreign_origin_and_host_are_rejected(server):
+    for headers in ({"Origin": "https://evil.example"}, {"Host": "evil.example"}):
+        req = urllib.request.Request(_url(server, "/api/reports"), headers=headers)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(req)
+        assert excinfo.value.code == 403
+
+
+def test_responses_carry_no_cors_headers(server):
+    with urllib.request.urlopen(_url(server, "/api/reports")) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
 def test_loaders_and_processors_endpoints(server):
     with urllib.request.urlopen(_url(server, "/api/loaders")) as resp:
         loaders = json.loads(resp.read())
