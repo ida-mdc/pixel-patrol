@@ -282,9 +282,11 @@ export async function renderDistribution(container, ctx, spec) {
   const total = statRows ? statRows.reduce((s, r) => s + Number(r.n || 0), 0) : null;
   if (statRows && !total) return false;
 
-  // Skip for 'bar' (irrelevant) and dates (already always a sampled raw violin).
+  // Skip for 'bar' (irrelevant), dates (already always a sampled raw violin), and
+  // maxRawPoints: 0 callers (e.g. overview tiles), who need the box-summary path
+  // to stay a pure SQL aggregate regardless of how few distinct values there are.
   let nd = distinctCount;
-  if (nd == null && force !== 'bar' && !isDate) {
+  if (nd == null && force !== 'bar' && !isDate && maxRawPoints !== 0) {
     // Only used for the small-N threshold below, so an approximate (HyperLogLog)
     // count is fine and cheaper than an exact one.
     const [{ nd: ndRaw }] = await ctx.queryRows(`
@@ -295,7 +297,7 @@ export async function renderDistribution(container, ctx, spec) {
   }
 
   const mode = force === 'bar' ? 'bar'
-             : (nd != null && nd <= STRIP_MAX_DISTINCT) ? 'strip'
+             : (maxRawPoints !== 0 && nd != null && nd <= STRIP_MAX_DISTINCT) ? 'strip'
              : (statRows && total > maxRawPoints) ? 'box'
              : 'violin';
 
