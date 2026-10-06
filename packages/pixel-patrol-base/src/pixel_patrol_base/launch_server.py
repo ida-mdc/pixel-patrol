@@ -585,7 +585,8 @@ class _LaunchHandler(_ViewerHandler):
             self._send_json({"error": "No report path given."}, status=400)
             return
         result = library.import_report(Path(target))
-        self._send_json(result, status=result.pop("status", 200) if "error" in result else 200)
+        status = result.pop("status") if "error" in result else 200
+        self._send_json(result, status=status)
 
     def _handle_delete_report(self, payload: Dict[str, Any]) -> None:
         target = (payload.get("path") or "").strip()
@@ -629,7 +630,7 @@ class _LaunchHandler(_ViewerHandler):
 
     def _handle_report_url(self, payload: Dict[str, Any]) -> None:
         """Build the in-app ``/report?path=...`` URL, encoding the initial viewer state."""
-        output_parquet = payload.get("output_parquet") or payload.get("path")
+        output_parquet = payload.get("output_parquet")
         if not output_parquet:
             self._send_json({"error": "No report path given."}, status=400)
             return

@@ -372,9 +372,9 @@ def test_unknown_reports_are_refused(server, tmp_path, monkeypatch):
     stray = tmp_path / "elsewhere.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), stray, ProjectMetadata(project_name="p"))
 
-    for endpoint in ("/api/report-url", "/api/delete-report"):
+    for endpoint, key in (("/api/report-url", "output_parquet"), ("/api/delete-report", "path")):
         with pytest.raises(urllib.error.HTTPError) as excinfo:
-            _post_json(server, endpoint, {"path": str(stray)})
+            _post_json(server, endpoint, {key: str(stray)})
         assert excinfo.value.code == 404
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         urllib.request.urlopen(_url(server, f"/report?path={urllib.parse.quote(str(stray))}"))
