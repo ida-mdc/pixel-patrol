@@ -18,7 +18,10 @@ also be used.
 
 from __future__ import annotations
 
+import atexit
+import functools
 import json
+import shutil
 import socket
 import threading
 import warnings
@@ -164,18 +167,26 @@ def _to_arrow_table(result):
     return (getattr(result, "to_arrow_table", None) or result.fetch_arrow_table)()
 
 
+@functools.lru_cache(maxsize=1)
+def _export_dir() -> str:
+    """Private per-process scratch dir for exports, removed at exit."""
+    path = tempfile.mkdtemp(prefix="pp_export_")
+    atexit.register(shutil.rmtree, path, ignore_errors=True)
+    return path
+
+
 def _restrict_to_report(conn, path: Path) -> None:
     """Confine SQL to this report: no other files, no extensions, no way back.
 
     The viewer sends arbitrary SQL to /api/query, so without this a query could
-    read or write any file the server can (read_text, COPY ... TO). The temp
-    directory stays writable for the filtered-parquet export.
+    read or write any file the server can (read_text, COPY ... TO). Only the
+    private export dir stays writable, for the filtered-parquet export.
     """
     def quote(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
     conn.execute(f"SET allowed_paths=[{quote(str(path))}]")
-    conn.execute(f"SET allowed_directories=[{quote(tempfile.gettempdir())}]")
+    conn.execute(f"SET allowed_directories=[{quote(_export_dir())}]")
     conn.execute("SET enable_external_access=false")
     conn.execute("SET lock_configuration=true")
 
@@ -308,7 +319,6 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _handle_export_parquet(self, query_string: str) -> None:
-        import tempfile
         import urllib.parse
         from pixel_patrol_base.io.parquet_io import reattach_parquet_metadata
 
@@ -319,7 +329,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             note   = params.get("note", [""])[0]
             table  = "pp_all" if scope == "full" else "pp_data"
 
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".parquet", dir=_export_dir(), delete=False) as f:
                 tmp_path = f.name
 
             sql = (

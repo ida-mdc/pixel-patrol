@@ -57,11 +57,11 @@ def test_foreign_origin_or_host_is_rejected(viewer_url, headers):
     assert excinfo.value.code == 403
 
 
-def test_sql_cannot_touch_other_files(report):
+def test_sql_cannot_touch_other_files(report, tmp_path):
     conn, _meta = viewer_server._setup_duckdb(report)
-    # Outside the temp dir, which stays open for the parquet export.
-    other = Path.home() / ".pixel-patrol-test-secret"
-    outside_out = Path.home() / ".pixel-patrol-test-out.csv"
+    other = tmp_path / "secret.txt"
+    other.write_text("secret")
+    outside_out = tmp_path / "out.csv"
 
     assert conn.execute("SELECT count(*) FROM pp_data").fetchall() == [(2,)]
     for sql in (
@@ -72,3 +72,12 @@ def test_sql_cannot_touch_other_files(report):
         with pytest.raises(Exception, match="Permission|Invalid Input"):
             conn.execute(sql)
     assert not outside_out.exists()
+
+
+def test_sql_can_write_only_to_export_dir(report):
+    conn, _meta = viewer_server._setup_duckdb(report)
+    target = Path(viewer_server._export_dir()) / "export.parquet"
+
+    conn.execute(f"COPY (SELECT 1) TO '{target}' (FORMAT parquet)")
+    assert target.exists()
+    target.unlink()
