@@ -148,9 +148,9 @@ def _get_available_loaders() -> list:
     """List of available loaders with their names and supported extensions."""
     from pixel_patrol_base.plugin_registry import discover_plugins_from_entrypoints
 
-    loaders = [{"label": "None (basic file info only)", "value": "", "extensions": []}]
+    loaders = []
 
-    for loader_class in discover_plugins_from_entrypoints("pixel_patrol.loader_plugins"):
+    for loader_class in sorted(discover_plugins_from_entrypoints("pixel_patrol.loader_plugins"), key=lambda c: c.NAME.lower()):
         try:
             extensions = sorted(getattr(loader_class, "SUPPORTED_EXTENSIONS", set()) or [])
         except Exception as e:
@@ -158,6 +158,7 @@ def _get_available_loaders() -> list:
             extensions = []
         loaders.append({"label": loader_class.NAME, "value": loader_class.NAME, "extensions": extensions})
 
+    loaders.append({"label": "None (basic file info only)", "value": "", "extensions": []})
     return loaders
 
 

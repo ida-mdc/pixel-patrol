@@ -215,9 +215,6 @@ async function loadLoaders() {
     opt.textContent = loader.label;
     loaderSelect.appendChild(opt);
   }
-  if (availableLoaders.length > 1) {
-    loaderSelect.value = availableLoaders[1].value;
-  }
   updateFileExtensionsHelp();
 }
 
