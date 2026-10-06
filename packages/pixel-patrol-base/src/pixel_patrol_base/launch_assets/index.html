@@ -88,12 +88,18 @@
         <div class="form-row">
           <div class="form-group">
             <label for="paths">Paths (experimental conditions)</label>
-            <textarea id="paths" name="paths" rows="2" placeholder="path1, path2..."></textarea>
-            <p class="form-text">Comma-separated. Subdirectories of Base Directory (absolute or relative).</p>
+            <div class="input-with-button">
+              <textarea id="paths" name="paths" rows="2" placeholder="path1, path2..."></textarea>
+              <button type="button" id="browse-paths-btn" class="btn btn-secondary">Browse…</button>
+            </div>
+            <p class="form-text">Comma-separated. Subdirectories of the Dataset Folder (absolute or relative).</p>
           </div>
           <div class="form-group">
             <label for="output-path">Output Path</label>
-            <input type="text" id="output-path" name="output_path" placeholder="Auto (saved into the reports directory)">
+            <div class="input-with-button">
+              <input type="text" id="output-path" name="output_path" placeholder="Auto (saved into the reports directory)">
+              <button type="button" id="browse-output-btn" class="btn btn-secondary">Browse…</button>
+            </div>
             <p class="form-text">Optional .parquet path. Leave empty to auto-name it inside the reports directory.</p>
           </div>
         </div>
@@ -265,6 +271,9 @@
         <input type="text" id="browser-path" class="browser-path-input">
       </div>
       <div id="browser-list" class="browser-list"></div>
+      <div id="browser-filename-row" class="browser-path-row" hidden>
+        <input type="text" id="browser-filename" class="browser-path-input" placeholder="file name, e.g. my-report.parquet">
+      </div>
       <div id="import-error"></div>
       <div class="modal-actions">
         <button type="button" id="import-cancel" class="btn btn-secondary">Cancel</button>

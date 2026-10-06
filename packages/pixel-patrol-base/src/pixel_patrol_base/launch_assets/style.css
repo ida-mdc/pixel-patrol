@@ -410,3 +410,6 @@ hr { border: none; border-top: 1px solid #dee2e6; margin: 16px 0; }
 
 .input-with-button { display: flex; gap: 8px; }
 .input-with-button input { flex: 1; }
+.input-with-button .btn { align-self: flex-start; }
+.browser-path-row[hidden] { display: none; }
+.browser-entry .browser-check { margin: 0 0.3em; }

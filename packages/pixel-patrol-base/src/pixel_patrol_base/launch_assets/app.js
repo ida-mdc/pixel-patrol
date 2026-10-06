@@ -488,21 +488,47 @@ async function openProcessedReport(outputParquet) {
 const LAST_BROWSE_DIR_KEY = "pixelPatrolLastBrowseDir";
 const browserTitleEl = document.getElementById("browser-title");
 const browserHintEl = document.getElementById("browser-hint");
-let selectedPath = null;
+const browserFilenameRow = document.getElementById("browser-filename-row");
+const browserFilenameInput = document.getElementById("browser-filename");
 let currentParentDir = null;
 let browserConfig = null;
+let selectedFile = null;            // pick: "file"
+const selectedFolders = new Set();  // pick: "multi" (absolute paths)
 
-// One dialog, two uses: pick a .parquet file (files: true) or a folder (files: false).
+// One dialog, four uses (config.pick):
+//   "file"   choose an existing .parquet
+//   "folder" choose the folder currently shown
+//   "save"   choose a folder and type a .parquet file name
+//   "multi"  tick several subfolders below a root (config.root)
 function openBrowser(config) {
   browserConfig = config;
   browserTitleEl.textContent = config.title;
   browserHintEl.innerHTML = config.hint;
   importConfirmBtn.textContent = config.confirmLabel;
   importError.innerHTML = "";
-  selectedPath = null;
-  importConfirmBtn.disabled = !config.files;
+  selectedFile = null;
+  selectedFolders.clear();
+  for (const p of config.preselect || []) selectedFolders.add(p);
+  browserFilenameRow.hidden = config.pick !== "save";
+  browserFilenameInput.value = config.filename || "";
   importOverlay.hidden = false;
+  updateConfirmState();
   loadBrowser(config.startDir || localStorage.getItem(LAST_BROWSE_DIR_KEY) || "");
+}
+
+const browserListsFiles = () => browserConfig.pick === "file" || browserConfig.pick === "save";
+const joinPath = (dir, name) => dir.replace(/\/$/, "") + "/" + name;
+const isInsideRoot = (path) =>
+  !browserConfig.root || path === browserConfig.root || path.startsWith(browserConfig.root + "/");
+
+function updateConfirmState() {
+  const { pick } = browserConfig;
+  if (pick === "file") importConfirmBtn.disabled = !selectedFile;
+  else if (pick === "save") importConfirmBtn.disabled = !browserFilenameInput.value.trim();
+  else if (pick === "multi") {
+    importConfirmBtn.disabled = selectedFolders.size === 0;
+    importConfirmBtn.textContent = `${browserConfig.confirmLabel} (${selectedFolders.size})`;
+  } else importConfirmBtn.disabled = false;
 }
 
 function showImportDialog() {
@@ -510,7 +536,7 @@ function showImportDialog() {
     title: "Import Report",
     hint: "Pick a <code>.parquet</code> report from anywhere on disk. It is added to the list and stays there across restarts; the file itself is left where it is.",
     confirmLabel: "Import",
-    files: true,
+    pick: "file",
     onConfirm: importReport,
   });
 }
@@ -520,10 +546,51 @@ function showDatasetFolderDialog() {
     title: "Select Dataset Folder",
     hint: "Navigate to the folder containing your images and press <strong>Select this folder</strong>.",
     confirmLabel: "Select this folder",
-    files: false,
+    pick: "folder",
     startDir: form.base_directory.value.trim(),
     onConfirm: (folder) => {
       form.base_directory.value = folder;
+      hideImportDialog();
+    },
+  });
+}
+
+function showPathsDialog() {
+  const root = form.base_directory.value.trim().replace(/\/$/, "");
+  if (!root) {
+    alert("Please choose the Dataset Folder first.");
+    return;
+  }
+  const preselect = form.paths.value.split(",").map((p) => p.trim()).filter(Boolean)
+    .map((p) => (p.startsWith("/") ? p : joinPath(root, p)));
+  openBrowser({
+    title: "Select Paths",
+    hint: "Tick the subfolders (relative to the Dataset Folder) that make up your experimental conditions. Click a folder name to look inside it.",
+    confirmLabel: "Use selected",
+    pick: "multi",
+    root,
+    startDir: root,
+    preselect,
+    onConfirm: (folders) => {
+      const base = browserConfig.root + "/";
+      form.paths.value = folders.map((f) => (f.startsWith(base) ? f.slice(base.length) : f)).join(", ");
+      hideImportDialog();
+    },
+  });
+}
+
+function showOutputDialog() {
+  const current = form.output_path.value.trim();
+  const slash = current.lastIndexOf("/");
+  openBrowser({
+    title: "Choose Output File",
+    hint: "Pick the folder and type a file name; <code>.parquet</code> is added if missing. Click an existing file to reuse its name.",
+    confirmLabel: "Use this file",
+    pick: "save",
+    startDir: slash > 0 ? current.slice(0, slash) : "",
+    filename: slash >= 0 ? current.slice(slash + 1) : current,
+    onConfirm: (file) => {
+      form.output_path.value = file;
       hideImportDialog();
     },
   });
@@ -535,16 +602,18 @@ function hideImportDialog() {
 
 async function loadBrowser(path) {
   importError.innerHTML = "";
+  if (!isInsideRoot(path)) path = browserConfig.root;
   try {
     const params = new URLSearchParams();
     if (path) params.set("path", path);
-    if (!browserConfig.files) params.set("files", "0");
+    if (!browserListsFiles()) params.set("files", "0");
     const res = await fetch(`/api/browse?${params}`);
     const data = await res.json();
     if (!res.ok || data.error) {
       importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
       return;
     }
+    resolveBrowserRoot(data.path);
     renderBrowser(data);
     localStorage.setItem(LAST_BROWSE_DIR_KEY, data.path);
   } catch (err) {
@@ -552,45 +621,78 @@ async function loadBrowser(path) {
   }
 }
 
+// The server resolves symlinks; adopt its spelling of the root (once) so that
+// "inside the root" checks and preselected folders keep matching later listings.
+function resolveBrowserRoot(resolvedPath) {
+  if (!browserConfig.root || browserConfig.rootResolved) return;
+  const typedRoot = browserConfig.root;
+  browserConfig.root = resolvedPath;
+  browserConfig.rootResolved = true;
+  const remapped = [...selectedFolders].map((f) => resolvedPath + f.slice(typedRoot.length));
+  selectedFolders.clear();
+  remapped.forEach((f) => selectedFolders.add(f));
+}
+
 function renderBrowser(data) {
   browserPathInput.value = data.path;
-  browserUpBtn.disabled = !data.parent;
-  currentParentDir = data.parent;
-
-  selectedPath = null;
-  importConfirmBtn.disabled = browserConfig.files;
+  currentParentDir = data.parent && isInsideRoot(data.parent) ? data.parent : null;
+  browserUpBtn.disabled = !currentParentDir;
+  selectedFile = null;
+  updateConfirmState();
 
   browserListEl.innerHTML = "";
   if (!data.entries.length) {
-    browserListEl.innerHTML = `<div class="browser-empty">${browserConfig.files ? "No subfolders or .parquet files here" : "No subfolders here"}</div>`;
+    browserListEl.innerHTML = `<div class="browser-empty">${browserListsFiles() ? "No subfolders or .parquet files here" : "No subfolders here"}</div>`;
     return;
   }
-
   for (const entry of data.entries) {
-    const row = document.createElement("div");
-    row.className = "browser-entry";
-    const icon = entry.is_dir ? "📁" : "📄";
-    row.innerHTML = `<span class="browser-entry-icon">${icon}</span><span>${escapeHtml(entry.name)}</span>`;
-    const fullPath = data.path.replace(/\/$/, "") + "/" + entry.name;
-    if (entry.is_dir) {
-      row.addEventListener("click", () => loadBrowser(fullPath));
-    } else {
-      row.addEventListener("click", () => {
-        for (const el of browserListEl.querySelectorAll(".browser-entry.selected")) {
-          el.classList.remove("selected");
-        }
-        row.classList.add("selected");
-        selectedPath = fullPath;
-        importConfirmBtn.disabled = false;
-      });
-    }
-    browserListEl.appendChild(row);
+    browserListEl.appendChild(browserRow(entry, joinPath(data.path, entry.name)));
   }
 }
 
+function browserRow(entry, fullPath) {
+  const row = document.createElement("div");
+  row.className = "browser-entry";
+  const lead = browserConfig.pick === "multi" && entry.is_dir
+    ? `<input type="checkbox" class="browser-check" ${selectedFolders.has(fullPath) ? "checked" : ""}>`
+    : `<span class="browser-entry-icon">${entry.is_dir ? "📁" : "📄"}</span>`;
+  row.innerHTML = `${lead}<span>${escapeHtml(entry.name)}</span>`;
+
+  const check = row.querySelector(".browser-check");
+  if (check) {
+    check.addEventListener("click", (e) => e.stopPropagation());
+    check.addEventListener("change", () => {
+      check.checked ? selectedFolders.add(fullPath) : selectedFolders.delete(fullPath);
+      updateConfirmState();
+    });
+  }
+
+  if (entry.is_dir) {
+    row.addEventListener("click", () => loadBrowser(fullPath));
+  } else {
+    row.addEventListener("click", () => selectBrowserFile(row, entry.name, fullPath));
+  }
+  return row;
+}
+
+function selectBrowserFile(row, name, fullPath) {
+  for (const el of browserListEl.querySelectorAll(".browser-entry.selected")) el.classList.remove("selected");
+  row.classList.add("selected");
+  selectedFile = fullPath;
+  browserFilenameInput.value = name;
+  updateConfirmState();
+}
+
 function confirmBrowser() {
-  const chosen = browserConfig.files ? selectedPath : browserPathInput.value.trim();
-  if (chosen) browserConfig.onConfirm(chosen);
+  const { pick, onConfirm } = browserConfig;
+  if (pick === "file") onConfirm(selectedFile);
+  else if (pick === "folder") onConfirm(browserPathInput.value.trim());
+  else if (pick === "multi") onConfirm([...selectedFolders].sort());
+  else {
+    let name = browserFilenameInput.value.trim();
+    if (!name.toLowerCase().endsWith(".parquet")) name += ".parquet";
+    onConfirm(joinPath(browserPathInput.value.trim(), name));
+  }
 }
 
 async function importReport(path) {
@@ -613,7 +715,7 @@ async function importReport(path) {
     importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
   } finally {
     importConfirmBtn.disabled = false;
-    importConfirmBtn.textContent = browserConfig.confirmLabel;
+    updateConfirmState();
   }
 }
 
@@ -621,6 +723,9 @@ importBtn.addEventListener("click", showImportDialog);
 importCancelBtn.addEventListener("click", hideImportDialog);
 importConfirmBtn.addEventListener("click", confirmBrowser);
 document.getElementById("browse-dataset-btn").addEventListener("click", showDatasetFolderDialog);
+document.getElementById("browse-paths-btn").addEventListener("click", showPathsDialog);
+document.getElementById("browse-output-btn").addEventListener("click", showOutputDialog);
+browserFilenameInput.addEventListener("input", updateConfirmState);
 browserUpBtn.addEventListener("click", () => {
   if (currentParentDir) loadBrowser(currentParentDir);
 });
