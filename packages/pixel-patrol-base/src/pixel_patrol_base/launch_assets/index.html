@@ -61,7 +61,10 @@
         <div class="form-row">
           <div class="form-group">
             <label for="base-directory">Dataset Folder <span class="required">*</span></label>
-            <input type="text" id="base-directory" name="base_directory" placeholder="/path/to/your/images" required>
+            <div class="input-with-button">
+              <input type="text" id="base-directory" name="base_directory" placeholder="/path/to/your/images" required>
+              <button type="button" id="browse-dataset-btn" class="btn btn-secondary">Browse…</button>
+            </div>
             <p class="form-text">Path to the folder containing the images/files you want to inspect.</p>
           </div>
           <div class="form-group">
@@ -255,11 +258,8 @@
   <!-- ── Import report modal ── -->
   <div id="import-overlay" class="modal-overlay" hidden>
     <div class="modal">
-      <h3>Import Report</h3>
-      <p class="form-text" style="margin-bottom:8px">
-        Pick a <code>.parquet</code> report from anywhere on disk. It is added to the
-        list and stays there across restarts; the file itself is left where it is.
-      </p>
+      <h3 id="browser-title"></h3>
+      <p class="form-text" id="browser-hint" style="margin-bottom:8px"></p>
       <div class="browser-path-row">
         <button type="button" id="browser-up-btn" class="btn btn-secondary" title="Go to parent folder">&uarr;</button>
         <input type="text" id="browser-path" class="browser-path-input">
@@ -268,7 +268,7 @@
       <div id="import-error"></div>
       <div class="modal-actions">
         <button type="button" id="import-cancel" class="btn btn-secondary">Cancel</button>
-        <button type="button" id="import-confirm" class="btn btn-primary" disabled>Import</button>
+        <button type="button" id="import-confirm" class="btn btn-primary" disabled></button>
       </div>
     </div>
   </div>

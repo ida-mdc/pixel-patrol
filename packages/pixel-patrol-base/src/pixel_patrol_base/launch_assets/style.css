@@ -407,3 +407,6 @@ hr { border: none; border-top: 1px solid #dee2e6; margin: 16px 0; }
   background: #1e1e1e; color: #d4d4d4; border-radius: 4px;
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap;
 }
+
+.input-with-button { display: flex; gap: 8px; }
+.input-with-button input { flex: 1; }

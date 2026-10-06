@@ -256,13 +256,13 @@ def _update_pixel_patrol() -> Dict[str, Any]:
     return {"status": "ok"}
 
 
-def _list_directory(path: Path) -> Dict[str, Any]:
-    """List subdirectories and .parquet files in path, for the table file picker."""
+def _list_directory(path: Path, with_files: bool = True) -> Dict[str, Any]:
+    """List subdirectories (and .parquet files unless with_files is off), for the file picker."""
     entries = []
     for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
         if child.is_dir():
             entries.append({"name": child.name, "is_dir": True})
-        elif child.suffix.lower() == ".parquet":
+        elif with_files and child.suffix.lower() == ".parquet":
             entries.append({"name": child.name, "is_dir": False})
     parent = path.parent
     return {
@@ -606,7 +606,7 @@ class _LaunchHandler(_ViewerHandler):
             return
 
         try:
-            self._send_json(_list_directory(target))
+            self._send_json(_list_directory(target, with_files=query.get("files", ["1"])[0] != "0"))
         except PermissionError:
             self._send_json({"error": f"Permission denied: {target}"}, status=403)
 

@@ -300,6 +300,16 @@ def test_status_includes_console_output(server):
     assert any("hello console" in line for line in data["console"])
 
 
+def test_browse_files_off_lists_only_folders(server, tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.parquet").write_bytes(b"")
+
+    with urllib.request.urlopen(_url(server, f"/api/browse?path={tmp_path}&files=0")) as resp:
+        names = [e["name"] for e in json.loads(resp.read())["entries"]]
+
+    assert names == ["sub"]
+
+
 def test_loaders_and_processors_endpoints(server):
     with urllib.request.urlopen(_url(server, "/api/loaders")) as resp:
         loaders = json.loads(resp.read())

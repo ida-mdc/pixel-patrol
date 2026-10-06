@@ -486,16 +486,47 @@ async function openProcessedReport(outputParquet) {
 // ---------------------------------------------------------------------
 
 const LAST_BROWSE_DIR_KEY = "pixelPatrolLastBrowseDir";
-let selectedReportPath = null;
+const browserTitleEl = document.getElementById("browser-title");
+const browserHintEl = document.getElementById("browser-hint");
+let selectedPath = null;
 let currentParentDir = null;
+let browserConfig = null;
+
+// One dialog, two uses: pick a .parquet file (files: true) or a folder (files: false).
+function openBrowser(config) {
+  browserConfig = config;
+  browserTitleEl.textContent = config.title;
+  browserHintEl.innerHTML = config.hint;
+  importConfirmBtn.textContent = config.confirmLabel;
+  importError.innerHTML = "";
+  selectedPath = null;
+  importConfirmBtn.disabled = !config.files;
+  importOverlay.hidden = false;
+  loadBrowser(config.startDir || localStorage.getItem(LAST_BROWSE_DIR_KEY) || "");
+}
 
 function showImportDialog() {
-  importError.innerHTML = "";
-  selectedReportPath = null;
-  importConfirmBtn.disabled = true;
-  importOverlay.hidden = false;
-  const startDir = localStorage.getItem(LAST_BROWSE_DIR_KEY) || "";
-  loadBrowser(startDir);
+  openBrowser({
+    title: "Import Report",
+    hint: "Pick a <code>.parquet</code> report from anywhere on disk. It is added to the list and stays there across restarts; the file itself is left where it is.",
+    confirmLabel: "Import",
+    files: true,
+    onConfirm: importReport,
+  });
+}
+
+function showDatasetFolderDialog() {
+  openBrowser({
+    title: "Select Dataset Folder",
+    hint: "Navigate to the folder containing your images and press <strong>Select this folder</strong>.",
+    confirmLabel: "Select this folder",
+    files: false,
+    startDir: form.base_directory.value.trim(),
+    onConfirm: (folder) => {
+      form.base_directory.value = folder;
+      hideImportDialog();
+    },
+  });
 }
 
 function hideImportDialog() {
@@ -505,8 +536,10 @@ function hideImportDialog() {
 async function loadBrowser(path) {
   importError.innerHTML = "";
   try {
-    const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : "/api/browse";
-    const res = await fetch(url);
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    if (!browserConfig.files) params.set("files", "0");
+    const res = await fetch(`/api/browse?${params}`);
     const data = await res.json();
     if (!res.ok || data.error) {
       importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
@@ -524,12 +557,12 @@ function renderBrowser(data) {
   browserUpBtn.disabled = !data.parent;
   currentParentDir = data.parent;
 
-  selectedReportPath = null;
-  importConfirmBtn.disabled = true;
+  selectedPath = null;
+  importConfirmBtn.disabled = browserConfig.files;
 
   browserListEl.innerHTML = "";
   if (!data.entries.length) {
-    browserListEl.innerHTML = `<div class="browser-empty">No subfolders or .parquet files here</div>`;
+    browserListEl.innerHTML = `<div class="browser-empty">${browserConfig.files ? "No subfolders or .parquet files here" : "No subfolders here"}</div>`;
     return;
   }
 
@@ -547,7 +580,7 @@ function renderBrowser(data) {
           el.classList.remove("selected");
         }
         row.classList.add("selected");
-        selectedReportPath = fullPath;
+        selectedPath = fullPath;
         importConfirmBtn.disabled = false;
       });
     }
@@ -555,15 +588,19 @@ function renderBrowser(data) {
   }
 }
 
-async function importSelectedReport() {
-  if (!selectedReportPath) return;
+function confirmBrowser() {
+  const chosen = browserConfig.files ? selectedPath : browserPathInput.value.trim();
+  if (chosen) browserConfig.onConfirm(chosen);
+}
+
+async function importReport(path) {
   importConfirmBtn.disabled = true;
   importConfirmBtn.textContent = "Importing…";
   try {
     const res = await fetch("/api/import-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: selectedReportPath }),
+      body: JSON.stringify({ path }),
     });
     const data = await res.json();
     if (!res.ok || data.error) {
@@ -576,13 +613,14 @@ async function importSelectedReport() {
     importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
   } finally {
     importConfirmBtn.disabled = false;
-    importConfirmBtn.textContent = "Import";
+    importConfirmBtn.textContent = browserConfig.confirmLabel;
   }
 }
 
 importBtn.addEventListener("click", showImportDialog);
 importCancelBtn.addEventListener("click", hideImportDialog);
-importConfirmBtn.addEventListener("click", importSelectedReport);
+importConfirmBtn.addEventListener("click", confirmBrowser);
+document.getElementById("browse-dataset-btn").addEventListener("click", showDatasetFolderDialog);
 browserUpBtn.addEventListener("click", () => {
   if (currentParentDir) loadBrowser(currentParentDir);
 });
