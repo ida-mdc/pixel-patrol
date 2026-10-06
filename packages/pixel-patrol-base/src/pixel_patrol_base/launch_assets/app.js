@@ -559,7 +559,7 @@ function showPathsDialog() {
     return;
   }
   const preselect = form.paths.value.split(",").map((p) => p.trim()).filter(Boolean)
-    .map((p) => (p.startsWith("/") ? p : joinPath(root, p)));
+    .map((p) => (/^([a-zA-Z]:)?[\\/]/.test(p) ? p : joinPath(root, p)));
   openBrowser({
     title: "Select Paths",
     hint: "Tick the subfolders (relative to the Dataset Folder) that make up your experimental conditions. Click a folder name to look inside it.",

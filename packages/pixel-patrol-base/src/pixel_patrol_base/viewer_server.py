@@ -330,22 +330,23 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             table  = "pp_all" if scope == "full" else "pp_data"
 
             with tempfile.NamedTemporaryFile(suffix=".parquet", dir=_export_dir(), delete=False) as f:
-                tmp_path = f.name
+                tmp_path = Path(f.name)
 
-            sql = (
-                f"COPY ("
-                f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
-                f") TO '{tmp_path}' "
-                f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
-            )
-            with self.query_lock:
-                self.duck_conn.execute(sql)
+            try:
+                sql = (
+                    f"COPY ("
+                    f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
+                    f") TO '{tmp_path}' "
+                    f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
+                )
+                with self.query_lock:
+                    self.duck_conn.execute(sql)
 
-            extra = {"pp_export_note": note} if note else None
-            reattach_parquet_metadata(Path(tmp_path), self.parquet_path, extra=extra)
-
-            data = Path(tmp_path).read_bytes()
-            Path(tmp_path).unlink(missing_ok=True)
+                extra = {"pp_export_note": note} if note else None
+                reattach_parquet_metadata(tmp_path, self.parquet_path, extra=extra)
+                data = tmp_path.read_bytes()
+            finally:
+                tmp_path.unlink(missing_ok=True)
 
             stem = self.parquet_path.stem
             suffix = "_full" if scope == "full" else "_summary"

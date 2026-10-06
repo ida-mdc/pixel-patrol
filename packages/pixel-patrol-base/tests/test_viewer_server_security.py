@@ -81,3 +81,10 @@ def test_sql_can_write_only_to_export_dir(report):
     conn.execute(f"COPY (SELECT 1) TO '{target}' (FORMAT parquet)")
     assert target.exists()
     target.unlink()
+
+
+def test_failed_export_leaves_no_temp_file(viewer_url):
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(viewer_url + "api/export-parquet?where=WHERE%20nonsense(")
+    assert excinfo.value.code == 500
+    assert list(Path(viewer_server._export_dir()).iterdir()) == []

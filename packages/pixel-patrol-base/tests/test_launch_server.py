@@ -400,8 +400,8 @@ def test_browse_lists_dirs_and_parquet_files(server, tmp_path):
     with urllib.request.urlopen(_url(server, f"/api/browse?path={tmp_path}")) as resp:
         data = json.loads(resp.read())
 
-    assert data["path"] == str(tmp_path)
-    assert data["parent"] == str(tmp_path.parent)
+    assert data["path"] == tmp_path.as_posix()
+    assert data["parent"] == tmp_path.parent.as_posix()
     names = {(e["name"], e["is_dir"]) for e in data["entries"]}
     assert ("subdir", True) in names
     assert ("report.parquet", False) in names
@@ -429,7 +429,7 @@ def test_browse_no_path_defaults_to_home(server, monkeypatch, tmp_path):
     with urllib.request.urlopen(_url(server, "/api/browse")) as resp:
         data = json.loads(resp.read())
 
-    assert data["path"] == str(tmp_path)
+    assert data["path"] == tmp_path.as_posix()
 
 
 # ---------------------------------------------------------------------------

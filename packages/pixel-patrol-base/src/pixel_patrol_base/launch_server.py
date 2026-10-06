@@ -268,8 +268,8 @@ def _list_directory(path: Path, with_files: bool = True) -> Dict[str, Any]:
             entries.append({"name": child.name, "is_dir": False})
     parent = path.parent
     return {
-        "path": str(path),
-        "parent": str(parent) if parent != path else None,
+        "path": path.as_posix(),  # "/" separators on every OS, as app.js expects
+        "parent": parent.as_posix() if parent != path else None,
         "entries": entries,
     }
 
