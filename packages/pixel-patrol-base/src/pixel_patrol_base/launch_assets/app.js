@@ -11,17 +11,25 @@ const fileExtHelp = document.getElementById("file-extensions-help");
 const processorsIncludeSelect = document.getElementById("processors-include");
 const processorsExcludeSelect = document.getElementById("processors-exclude");
 
+const reportsDirEl = document.getElementById("reports-dir");
+const reportsListEl = document.getElementById("reports-list");
+const addReportBtn = document.getElementById("add-report-btn");
+const addCancelBtn = document.getElementById("add-cancel-btn");
+const addReportOverlay = document.getElementById("add-report-overlay");
+const refreshBtn = document.getElementById("refresh-btn");
+
 const versionInfoEl = document.getElementById("version-info");
-const openExistingBtn = document.getElementById("open-existing-btn");
-const openExistingOverlay = document.getElementById("open-existing-overlay");
+const importBtn = document.getElementById("import-existing-btn");
+const importOverlay = document.getElementById("import-overlay");
 const browserPathInput = document.getElementById("browser-path");
 const browserUpBtn = document.getElementById("browser-up-btn");
 const browserListEl = document.getElementById("browser-list");
-const existingReportError = document.getElementById("existing-report-error");
-const existingReportCancelBtn = document.getElementById("existing-report-cancel");
-const existingReportOpenBtn = document.getElementById("existing-report-open");
+const importError = document.getElementById("import-error");
+const importCancelBtn = document.getElementById("import-cancel");
+const importConfirmBtn = document.getElementById("import-confirm");
 
-const statusEl = document.getElementById("progress-status");
+const statusBanner = document.getElementById("status-banner");
+const statusEl = document.getElementById("status-text");
 const progressContainer = document.getElementById("progress-bar-container");
 const progressBar = document.getElementById("progress-bar");
 const progressLabel = document.getElementById("progress-bar-label");
@@ -32,6 +40,7 @@ const actionButtonsEl = document.getElementById("action-buttons");
 
 let availableLoaders = [];
 let pollTimer = null;
+let lastCompletedReport = null;
 const dismissedWarnings = new Set();
 
 // ---------------------------------------------------------------------
@@ -48,8 +57,150 @@ function warningKey(w) {
   return `${w.timestamp}|${w.level}|${w.message}`;
 }
 
+function reportUrl(path) {
+  return `/report?path=${encodeURIComponent(path)}`;
+}
+
 // ---------------------------------------------------------------------
-// Initial setup: loaders / processors
+// Reports list
+// ---------------------------------------------------------------------
+
+async function loadReports(refresh = false) {
+  try {
+    const res = await fetch(refresh ? "/api/reports?refresh=1" : "/api/reports");
+    const data = await res.json();
+    if (data.reports_dir) {
+      reportsDirEl.textContent = `Reports directory: ${data.reports_dir}`;
+    }
+    const reports = data.reports || [];
+    renderReports(reports);
+    return reports.length;
+  } catch (err) {
+    reportsListEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+    return null;
+  }
+}
+
+function renderReports(reports) {
+  reportsListEl.innerHTML = "";
+  if (!reports.length) {
+    reportsListEl.innerHTML =
+      `<div class="reports-empty">No reports yet. Click <strong>+ New Report</strong> to process a folder of images.</div>`;
+    return;
+  }
+  for (const r of reports) {
+    reportsListEl.appendChild(renderReportCard(r));
+  }
+}
+
+function formatDate(iso) {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  if (isNaN(d)) return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+function renderReportCard(r) {
+  const card = document.createElement("div");
+  card.className = "report-card";
+  const imported = r.source === "imported";
+  const missing = r.exists === false;
+  if (missing) card.classList.add("report-missing");
+
+  const { date, time } = formatDate(r.created_at);
+
+  const thumb = r.thumbnail_b64
+    ? `<img class="report-thumb" src="data:image/jpeg;base64,${r.thumbnail_b64}" alt="">`
+    : `<div class="report-thumb report-thumb-empty"></div>`;
+
+  const stats = [];
+  if (r.n_files) stats.push(`${r.n_files.toLocaleString()} files`);
+  if (r.total_size_bytes && r.size_readable) stats.push(escapeHtml(r.size_readable));
+  for (const [ext, n] of Object.entries(r.file_type_counts || {}).slice(0, 4)) {
+    stats.push(`.${escapeHtml(ext)} ×${n}`);
+  }
+
+  const title = r.project_name || r.filename;
+  const badge = imported ? `<span class="report-badge">imported</span>` : "";
+  // Show where the data came from (base directory); the report file path is on hover.
+  const source = r.base_dir || r.path;
+  const meta = missing
+    ? `<div class="report-meta report-danger" title="${escapeHtml(r.path)}">File no longer found: ${escapeHtml(r.path)}</div>`
+    : `<div class="report-meta" title="Report file: ${escapeHtml(r.path)}">${escapeHtml(source)}</div>` +
+      (stats.length ? `<div class="report-meta">${stats.join("  ·  ")}</div>` : "");
+
+  const openBtn = missing
+    ? ""
+    : `<a class="btn btn-primary report-open" href="${reportUrl(r.path)}" target="_blank" rel="noopener">Open</a>`;
+
+  // Imported reports are only dropped from the list; internal ones are deleted
+  // from disk - hence the different colour, label, and tooltip.
+  const removeBtn = imported
+    ? `<button type="button" class="btn btn-secondary report-delete" title="Remove from this list (the report file stays on disk)">Remove</button>`
+    : `<button type="button" class="btn btn-danger report-delete" title="Delete the report file from disk">Delete</button>`;
+
+  card.innerHTML = `
+    <div class="report-thumb-wrap">${thumb}</div>
+    <div class="report-main">
+      <div class="report-name">${escapeHtml(title)}${badge}</div>
+      ${meta}
+    </div>
+    <div class="report-date">${escapeHtml(date)} ${escapeHtml(time)}</div>
+    <div class="report-actions">
+      ${openBtn}
+      ${removeBtn}
+    </div>
+  `;
+
+  card.querySelector(".report-delete").addEventListener("click", () => deleteReport(r));
+  return card;
+}
+
+async function deleteReport(r) {
+  const imported = r.source === "imported";
+  const prompt = imported
+    ? `Remove "${r.filename}" from the list?\n\nThe file stays where it is:\n${r.path}`
+    : `Delete report "${r.filename}" from disk?\n\n${r.path}`;
+  if (!confirm(prompt)) return;
+  try {
+    const res = await fetch("/api/delete-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: r.path }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      alert(data.error || "Could not remove report.");
+      return;
+    }
+    loadReports();
+  } catch (err) {
+    alert(String(err));
+  }
+}
+
+// ---------------------------------------------------------------------
+// Add Report modal
+// ---------------------------------------------------------------------
+
+function showAddReport() {
+  addReportOverlay.hidden = false;
+}
+
+function hideAddReport() {
+  addReportOverlay.hidden = true;
+}
+
+addReportBtn.addEventListener("click", showAddReport);
+addCancelBtn.addEventListener("click", hideAddReport);
+refreshBtn.addEventListener("click", () => loadReports(true));
+
+// ---------------------------------------------------------------------
+// Loaders / processors
 // ---------------------------------------------------------------------
 
 async function loadLoaders() {
@@ -62,7 +213,6 @@ async function loadLoaders() {
     opt.textContent = loader.label;
     loaderSelect.appendChild(opt);
   }
-  // Default to the first real loader (index 1), matching previous behaviour.
   if (availableLoaders.length > 1) {
     loaderSelect.value = availableLoaders[1].value;
   }
@@ -103,20 +253,24 @@ function updateFileExtensionsHelp() {
 loaderSelect.addEventListener("change", updateFileExtensionsHelp);
 
 // ---------------------------------------------------------------------
-// Info popover
-// ---------------------------------------------------------------------
-
-document.getElementById("config-info-btn").addEventListener("click", () => {
-  const panel = document.getElementById("config-info-panel");
-  panel.hidden = !panel.hidden;
-});
-
-// ---------------------------------------------------------------------
 // Form submission
 // ---------------------------------------------------------------------
 
 function selectedValues(select) {
   return Array.from(select.selectedOptions).map((o) => o.value);
+}
+
+function viewerDefaults() {
+  return {
+    group_by: form.group_by.value.trim(),
+    filter_col: form.filter_col.value.trim(),
+    filter_op: form.filter_op.value,
+    filter_value: form.filter_value.value.trim(),
+    dimensions: form.dimensions.value.trim(),
+    widgets_exclude: form.widgets_exclude.value.trim(),
+    is_show_significance: form.is_show_significance.checked,
+    palette: form.palette.value.trim(),
+  };
 }
 
 form.addEventListener("submit", async (e) => {
@@ -144,6 +298,7 @@ form.addEventListener("submit", async (e) => {
   };
 
   dismissedWarnings.clear();
+  lastCompletedReport = null;
 
   const res = await fetch("/api/process", {
     method: "POST",
@@ -151,6 +306,7 @@ form.addEventListener("submit", async (e) => {
     body: JSON.stringify(payload),
   });
   const state = await res.json();
+  hideAddReport();
   renderState(state);
   startPolling();
 });
@@ -177,11 +333,12 @@ async function pollStatus() {
   renderState(state);
   if (state.status !== "running") {
     stopPolling();
+    if (state.status === "completed") loadReports();
   }
 }
 
 // ---------------------------------------------------------------------
-// Rendering
+// Rendering the processing banner
 // ---------------------------------------------------------------------
 
 function renderState(state) {
@@ -189,36 +346,37 @@ function renderState(state) {
 
   startBtn.disabled = status === "running";
 
-  // Status text
-  statusEl.className = "status-text";
   if (status === "idle") {
-    statusEl.classList.add("status-muted");
-    statusEl.textContent = "Ready to start processing";
-  } else if (status === "running") {
+    statusBanner.hidden = true;
+    return;
+  }
+  statusBanner.hidden = false;
+
+  statusEl.className = "status-text";
+  if (status === "running") {
     statusEl.classList.add("status-running");
-    statusEl.innerHTML = `<strong>Processing...</strong><br>${escapeHtml(message)}`;
+    statusEl.innerHTML = `<strong>Processing…</strong> ${escapeHtml(message)}`;
   } else if (status === "completed") {
     statusEl.classList.add("status-success");
-    statusEl.innerHTML = `<strong>Processing completed!</strong><br>${escapeHtml(message)}`;
+    statusEl.innerHTML = `<strong>Processing completed.</strong> ${escapeHtml(message)}`;
   } else if (status === "cancelled") {
     statusEl.classList.add("status-muted");
     statusEl.innerHTML = `<strong>Processing cancelled.</strong>`;
   } else if (status === "error") {
     statusEl.classList.add("status-danger");
-    statusEl.innerHTML = `<strong>Error occurred</strong><br>${escapeHtml(error || "Unknown error")}`;
+    statusEl.innerHTML = `<strong>Error.</strong> ${escapeHtml(error || "Unknown error")}`;
   }
 
-  // Progress bar
-  if (status === "running" || status === "completed") {
+  // Only show the progress bar while running; once finished the status text
+  // and action buttons convey the result.
+  if (status === "running") {
     progressContainer.hidden = false;
     progressBar.style.width = `${progress}%`;
-    progressBar.classList.toggle("completed", status === "completed");
-    progressLabel.textContent = `${progress.toFixed(1)}%`;
+    progressLabel.textContent = `${progress.toFixed(0)}%`;
   } else {
     progressContainer.hidden = true;
   }
 
-  // Details
   if (total_files > 0) {
     detailsEl.innerHTML = `<strong>Progress: ${processed_files}/${total_files} files</strong>`;
   } else if (status === "running" && processed_files > 0) {
@@ -227,25 +385,28 @@ function renderState(state) {
     detailsEl.innerHTML = "";
   }
 
-  // Error message
-  if (error && status === "error") {
-    errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(error)}</span></div>`;
-  } else {
-    errorEl.innerHTML = "";
-  }
+  errorEl.innerHTML =
+    error && status === "error"
+      ? `<div class="alert alert-danger"><span>${escapeHtml(error)}</span></div>`
+      : "";
 
-  // Warnings
   renderWarnings(warnings || []);
 
-  // Action buttons
+  if (output_parquet) lastCompletedReport = output_parquet;
+
   if (status === "running") {
-    actionButtonsEl.innerHTML = `<button type="button" id="cancel-btn" class="btn btn-secondary btn-lg btn-block">Cancel Processing</button>`;
+    actionButtonsEl.innerHTML = `<button type="button" id="cancel-btn" class="btn btn-secondary">Cancel Processing</button>`;
     document.getElementById("cancel-btn").addEventListener("click", cancelProcessing);
-  } else if (status === "completed" && output_parquet) {
-    actionButtonsEl.innerHTML = `<button type="button" id="open-viewer-btn" class="btn btn-success btn-lg btn-block">Open in Viewer</button>`;
-    document.getElementById("open-viewer-btn").addEventListener("click", () => openViewer(output_parquet));
+  } else if (status === "completed" && lastCompletedReport) {
+    actionButtonsEl.innerHTML =
+      `<button type="button" id="open-report-btn" class="btn btn-success">Open Report</button>
+       <button type="button" id="dismiss-banner-btn" class="btn btn-secondary">Dismiss</button>`;
+    document.getElementById("open-report-btn").addEventListener("click", () => openProcessedReport(lastCompletedReport));
+    document.getElementById("dismiss-banner-btn").addEventListener("click", () => { statusBanner.hidden = true; });
   } else {
-    actionButtonsEl.innerHTML = "";
+    actionButtonsEl.innerHTML =
+      `<button type="button" id="dismiss-banner-btn" class="btn btn-secondary">Dismiss</button>`;
+    document.getElementById("dismiss-banner-btn").addEventListener("click", () => { statusBanner.hidden = true; });
   }
 }
 
@@ -270,10 +431,6 @@ function renderWarnings(warnings) {
   }
 }
 
-// ---------------------------------------------------------------------
-// Cancel processing
-// ---------------------------------------------------------------------
-
 async function cancelProcessing() {
   const btn = document.getElementById("cancel-btn");
   btn.disabled = true;
@@ -283,77 +440,69 @@ async function cancelProcessing() {
   renderState(state);
 }
 
-// ---------------------------------------------------------------------
-// Open in viewer
-// ---------------------------------------------------------------------
-
-async function openViewer(outputParquet) {
-  const btn = document.getElementById("open-viewer-btn");
+// Open a freshly processed report, applying the form's viewer defaults.
+async function openProcessedReport(outputParquet) {
+  const btn = document.getElementById("open-report-btn");
   btn.disabled = true;
-  btn.textContent = "Launching viewer...";
+  btn.textContent = "Opening…";
   try {
-    const res = await fetch("/api/open-viewer", {
+    const res = await fetch("/api/report-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        output_parquet: outputParquet,
-        group_by: form.group_by.value.trim(),
-        filter_col: form.filter_col.value.trim(),
-        filter_op: form.filter_op.value,
-        filter_value: form.filter_value.value.trim(),
-        dimensions: form.dimensions.value.trim(),
-        widgets_exclude: form.widgets_exclude.value.trim(),
-        is_show_significance: form.is_show_significance.checked,
-        palette: form.palette.value.trim(),
-      }),
+      body: JSON.stringify({ output_parquet: outputParquet, ...viewerDefaults() }),
     });
     const data = await res.json();
     if (data.url) {
-      window.open(data.url, "_blank");
+      window.open(data.url, "_blank", "noopener");
+      btn.disabled = false;
+      btn.textContent = "Open Report";
     } else {
-      errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to launch viewer")}</span></div>`;
+      errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to open report")}</span></div>`;
+      btn.disabled = false;
+      btn.textContent = "Open Report";
     }
-  } finally {
+  } catch (err) {
+    errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
     btn.disabled = false;
-    btn.textContent = "Open in Viewer";
+    btn.textContent = "Open Report";
   }
 }
 
 // ---------------------------------------------------------------------
-// Open existing report
+// Import existing report (directory browser → add to the index)
 // ---------------------------------------------------------------------
 
 const LAST_BROWSE_DIR_KEY = "pixelPatrolLastBrowseDir";
 let selectedReportPath = null;
 let currentParentDir = null;
 
-function showOpenExistingDialog() {
-  existingReportError.innerHTML = "";
+function showImportDialog() {
+  importError.innerHTML = "";
   selectedReportPath = null;
-  existingReportOpenBtn.disabled = true;
-  openExistingOverlay.hidden = false;
+  importConfirmBtn.disabled = true;
+  importOverlay.hidden = false;
   const startDir = localStorage.getItem(LAST_BROWSE_DIR_KEY) || "";
   loadBrowser(startDir);
 }
 
-function hideOpenExistingDialog() {
-  openExistingOverlay.hidden = true;
+function hideImportDialog() {
+  importOverlay.hidden = true;
 }
 
 async function loadBrowser(path) {
-  existingReportError.innerHTML = "";
+  importError.innerHTML = "";
   try {
     const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : "/api/browse";
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok || data.error) {
-      existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
+      importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
       return;
     }
     renderBrowser(data);
     localStorage.setItem(LAST_BROWSE_DIR_KEY, data.path);
   } catch (err) {
-    existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+    importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
   }
 }
 
@@ -363,7 +512,7 @@ function renderBrowser(data) {
   currentParentDir = data.parent;
 
   selectedReportPath = null;
-  existingReportOpenBtn.disabled = true;
+  importConfirmBtn.disabled = true;
 
   browserListEl.innerHTML = "";
   if (!data.entries.length) {
@@ -386,41 +535,41 @@ function renderBrowser(data) {
         }
         row.classList.add("selected");
         selectedReportPath = fullPath;
-        existingReportOpenBtn.disabled = false;
+        importConfirmBtn.disabled = false;
       });
     }
     browserListEl.appendChild(row);
   }
 }
 
-async function openExistingReport() {
+async function importSelectedReport() {
   if (!selectedReportPath) return;
-  existingReportOpenBtn.disabled = true;
-  existingReportOpenBtn.textContent = "Opening...";
+  importConfirmBtn.disabled = true;
+  importConfirmBtn.textContent = "Importing…";
   try {
-    const res = await fetch("/api/open-viewer", {
+    const res = await fetch("/api/import-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ output_parquet: selectedReportPath }),
+      body: JSON.stringify({ path: selectedReportPath }),
     });
     const data = await res.json();
-    if (data.url) {
-      window.open(data.url, "_blank");
-      hideOpenExistingDialog();
-    } else {
-      existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to open report")}</span></div>`;
+    if (!res.ok || data.error) {
+      importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to import report")}</span></div>`;
+      return;
     }
+    hideImportDialog();
+    loadReports();
   } catch (err) {
-    existingReportError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+    importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
   } finally {
-    existingReportOpenBtn.disabled = false;
-    existingReportOpenBtn.textContent = "Open";
+    importConfirmBtn.disabled = false;
+    importConfirmBtn.textContent = "Import";
   }
 }
 
-openExistingBtn.addEventListener("click", showOpenExistingDialog);
-existingReportCancelBtn.addEventListener("click", hideOpenExistingDialog);
-existingReportOpenBtn.addEventListener("click", openExistingReport);
+importBtn.addEventListener("click", showImportDialog);
+importCancelBtn.addEventListener("click", hideImportDialog);
+importConfirmBtn.addEventListener("click", importSelectedReport);
 browserUpBtn.addEventListener("click", () => {
   if (currentParentDir) loadBrowser(currentParentDir);
 });
@@ -463,16 +612,16 @@ async function installUpdate() {
     const res = await fetch("/api/update", { method: "POST" });
     const data = await res.json();
     if (res.ok) {
-      versionInfoEl.innerHTML = `<span>Update installed — close this tab and reopen Pixel Patrol to use the new version.</span>`;
+      versionInfoEl.innerHTML = `<span>Update installed — close this tab and reopen PixelPatrol to use the new version.</span>`;
     } else {
       btn.disabled = false;
       btn.textContent = "Install Update";
-      errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Update failed")}</span></div>`;
+      alert(data.error || "Update failed");
     }
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "Install Update";
-    errorEl.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(String(err))}</span></div>`;
+    alert(String(err));
   }
 }
 
@@ -482,11 +631,15 @@ async function installUpdate() {
 
 (async function init() {
   await Promise.all([loadLoaders(), loadProcessors()]);
+  const reportCount = await loadReports();
   checkVersion();
   const res = await fetch("/api/status");
   const state = await res.json();
   renderState(state);
   if (state.status === "running") {
     startPolling();
+  } else if (reportCount === 0) {
+    // Nothing to look at yet - guide first-time users straight to processing.
+    showAddReport();
   }
 })();

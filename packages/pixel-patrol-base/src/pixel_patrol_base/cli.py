@@ -159,12 +159,17 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
 
 @cli.command()
 @click.option('--port', type=int, default=8051, show_default=True,
-              help='Port number for the processing dashboard server.')
+              help='Port number for the report manager server.')
 @click.option('--no-browser', is_flag=True, default=False,
               help='Do not open the browser automatically.')
 def launch(port: int, no_browser: bool):
     """
-    Launches the web-based processing dashboard for configuring and monitoring PixelPatrol processing.
+    Launch the PixelPatrol report manager.
+
+    Lists existing reports, lets you add new ones (processing runs in the
+    background), and opens any report in the built-in viewer - all on a single
+    port. Reports are stored in PIXEL_PATROL_REPORTS_DIR
+    (default: ~/pixel-patrol-reports).
     """
     serve_launch(port=port, open_browser=not no_browser)
 

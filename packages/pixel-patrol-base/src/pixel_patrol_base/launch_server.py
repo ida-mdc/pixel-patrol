@@ -1,14 +1,15 @@
 """
-Local HTTP server for the PixelPatrol processing launch page.
+Local HTTP server for the PixelPatrol report manager.
 
-Serves a small static JS/HTML frontend (``launch_assets/``) that configures
-and monitors a PixelPatrol processing run, then hands off to the existing
-viewer (``viewer_server.serve_viewer``) once a parquet file has
-been produced.
+Serves a small static JS/HTML frontend (``launch_assets/``) that lists the
+reports in ``PIXEL_PATROL_REPORTS_DIR`` (see ``report_library``), runs new
+processing in a background thread, and opens any report in the viewer.
 
-Mirrors the architecture of ``viewer_server.py``: a plain
-``http.server.ThreadingHTTPServer`` serving static assets plus a small JSON
-API, no Dash/Flask dependency required.
+The viewer is served from this same server under ``/report?path=...``, reusing
+``viewer_server._ViewerHandler``: its SQL queries go to
+``/api/query?report=<id>``, answered by a native DuckDB connection per report.
+One port keeps the whole experience working on an HPC node reachable through a
+single forwarded port.
 """
 
 from __future__ import annotations
@@ -24,16 +25,26 @@ import sys
 import threading
 import urllib.request
 import webbrowser
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 from collections import deque
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from functools import lru_cache
+from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from packaging.version import InvalidVersion, Version
 
 from pixel_patrol_base import api
-from pixel_patrol_base.viewer_server import build_viewer_url_params, serve_viewer
+from pixel_patrol_base import report_library as library
+from pixel_patrol_base.viewer_server import (
+    _discover_installed_extensions,
+    _js,
+    _mime,
+    _setup_duckdb,
+    _ViewerHandler,
+    build_viewer_url_params,
+    find_viewer_dist,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,21 +55,6 @@ ASSETS_DIR = (Path(__file__).parent / "launch_assets").resolve()
 _LAUNCHER_HOME = Path.home() / ".pixel-patrol"
 _LAUNCHER_VENV = _LAUNCHER_HOME / "venv"
 _PYPI_URL = "https://pypi.org/pypi/pixel-patrol/json"
-
-_MIME = {
-    ".html": "text/html; charset=utf-8",
-    ".js":   "application/javascript",
-    ".css":  "text/css",
-    ".json": "application/json",
-    ".png":  "image/png",
-    ".svg":  "image/svg+xml",
-    ".ico":  "image/x-icon",
-}
-
-
-def _mime(suffix: str) -> str:
-    return _MIME.get(suffix.lower(), "application/octet-stream")
-
 
 # ---------------------------------------------------------------------------
 # Processing state (single in-flight job, mirrors the previous Dash app)
@@ -314,10 +310,14 @@ def _start_processing(payload: Dict[str, Any]) -> None:
         return
 
     base_directory = (payload.get("base_directory") or "").strip()
-    output_path = (payload.get("output_path") or "").strip()
-    if not base_directory or not output_path:
-        update_state(status="error", error="Base directory and output parquet path are required")
+    if not base_directory:
+        update_state(status="error", error="Base directory is required")
         return
+
+    output_path = (payload.get("output_path") or "").strip()
+    if not output_path:
+        output_path = str(library.default_output_path(base_directory, payload.get("project_name") or ""))
+    payload["output_path"] = output_path
 
     try:
         slice_size = _parse_slice_size(payload.get("slice_size"))
@@ -349,6 +349,7 @@ def _run_processing(payload: Dict[str, Any], slice_size: Optional[Dict[str, int]
             return
 
         output_path = Path(payload["output_path"]).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         path_list = _parse_csv(payload.get("paths"))
         extensions = set(_parse_csv(payload.get("file_extensions"))) or "all"
         loader = payload.get("loader") or None
@@ -427,67 +428,69 @@ def _run_processing(payload: Dict[str, Any], slice_size: Optional[Dict[str, int]
 
 
 # ---------------------------------------------------------------------------
-# Viewer launching - one viewer server per parquet file, started on demand
+# Viewer support: one native DuckDB connection per report, opened on demand
 # ---------------------------------------------------------------------------
 
-_viewer_lock = threading.Lock()
-_viewer_servers: Dict[str, str] = {}  # resolved parquet path -> viewer URL
+@lru_cache(maxsize=1)
+def _viewer_dist() -> Path:
+    return find_viewer_dist()
 
 
-def _get_or_launch_viewer(parquet_path: Path) -> str:
-    key = str(parquet_path)
-    with _viewer_lock:
-        url = _viewer_servers.get(key)
-        if url is not None:
-            return url
+@lru_cache(maxsize=1)
+def _extension_dirs() -> List[Path]:
+    return _discover_installed_extensions()
 
-        ready = threading.Event()
-        result: Dict[str, str] = {}
 
-        def on_ready(_port: int, viewer_url: str) -> None:
-            result["url"] = viewer_url
-            ready.set()
+_ReportConn = Tuple[Any, threading.Lock, Dict[str, str]]  # (connection, query lock, parquet meta)
+_report_conns: Dict[Path, _ReportConn] = {}
+_conns_lock = threading.Lock()
 
-        thread = threading.Thread(
-            target=serve_viewer,
-            kwargs=dict(parquet_path=parquet_path, port=0, open_browser=False, ready_callback=on_ready),
-            daemon=True,
-        )
-        thread.start()
 
-        if not ready.wait(timeout=15):
-            raise RuntimeError("Timed out starting the viewer server")
+def _get_report_conn(path: Path) -> _ReportConn:
+    with _conns_lock:
+        if path not in _report_conns:
+            conn, meta = _setup_duckdb(path)
+            _report_conns[path] = (conn, threading.Lock(), meta)
+        return _report_conns[path]
 
-        url = result["url"]
-        _viewer_servers[key] = url
-        return url
+
+def _close_report_conn(path: Path) -> None:
+    with _conns_lock:
+        entry = _report_conns.pop(path, None)
+    if entry:
+        entry[0].close()
 
 
 # ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
 
-class _LaunchHandler(BaseHTTPRequestHandler):
+class _LaunchHandler(_ViewerHandler):
+    """Report manager API + static pages, plus the inherited viewer endpoints.
+
+    The viewer endpoints (``/api/query``, ``/api/export-parquet``, the viewer
+    page itself) act on one report at a time; ``_bind_report`` points the
+    inherited per-report attributes at the requested one.
+    """
+
+    report_id: Optional[str] = None
+
+    @property
+    def dist_dir(self) -> Path:
+        return _viewer_dist()
+
+    @property
+    def extension_dirs(self) -> List[Path]:
+        return _extension_dirs()
 
     def do_HEAD(self) -> None:
-        path = self.path.split("?")[0]
-        rel = path.lstrip("/") or "index.html"
-        file_path = (ASSETS_DIR / rel).resolve()
-        try:
-            file_path.relative_to(ASSETS_DIR)
-        except ValueError:
-            self.send_error(403)
-            return
-        if not file_path.exists() or not file_path.is_file():
-            file_path = ASSETS_DIR / "index.html"
+        file_path = self._find_asset(self.path.split("?")[0]) or ASSETS_DIR / "index.html"
         self.send_response(200)
-        self.send_header("Content-Type", _mime(file_path.suffix))
-        self.send_header("Content-Length", str(file_path.stat().st_size))
-        self.send_header("Cache-Control", "no-cache")
+        self._common_headers(_mime(file_path.suffix), file_path.stat().st_size)
         self.end_headers()
 
     def do_GET(self) -> None:
-        path = self.path.split("?")[0]
+        path, _, query_string = self.path.partition("?")
         if path == "/api/loaders":
             self._send_json(_get_available_loaders())
         elif path == "/api/processors":
@@ -498,29 +501,45 @@ class _LaunchHandler(BaseHTTPRequestHandler):
             self._send_json(state)
         elif path == "/api/version":
             self._send_json(_get_version_info())
+        elif path == "/api/reports":
+            self._handle_reports(query_string)
         elif path == "/api/browse":
             self._handle_browse()
+        elif path == "/report":
+            self._serve_report_page(query_string)
+        elif path == "/api/export-parquet":
+            if self._bind_report(query_string):
+                self._handle_export_parquet(query_string)
+        elif path.startswith("/extension/"):
+            self._serve_extension_file(path)
         else:
-            self._serve_static(path)
+            self._serve_asset(path)
 
     def do_POST(self) -> None:
-        if self.path == "/api/process":
+        path, _, query_string = self.path.partition("?")
+        if path == "/api/process":
             payload = self._read_json()
             if payload is not None:
                 _start_processing(payload)
             state = get_state()
             state["warnings"] = get_warnings()
             self._send_json(state)
-        elif self.path == "/api/cancel":
+        elif path == "/api/cancel":
             if get_state()["status"] == "running":
                 _cancel_event.set()
             state = get_state()
             state["warnings"] = get_warnings()
             self._send_json(state)
-        elif self.path == "/api/open-viewer":
-            payload = self._read_json() or {}
-            self._handle_open_viewer(payload)
-        elif self.path == "/api/update":
+        elif path == "/api/report-url":
+            self._handle_report_url(self._read_json() or {})
+        elif path == "/api/import-report":
+            self._handle_import_report(self._read_json() or {})
+        elif path == "/api/delete-report":
+            self._handle_delete_report(self._read_json() or {})
+        elif path == "/api/query":
+            if self._bind_report(query_string):
+                self._serve_query()
+        elif path == "/api/update":
             if not _is_managed_install():
                 self._send_json(
                     {"error": "Update is only available for installations managed by the PixelPatrol launcher."},
@@ -531,6 +550,34 @@ class _LaunchHandler(BaseHTTPRequestHandler):
                 self._send_json(result, status=200 if "error" not in result else 500)
         else:
             self.send_error(404)
+
+    # ------------------------------------------------------------------
+    # Report library
+    # ------------------------------------------------------------------
+
+    def _handle_reports(self, query_string: str) -> None:
+        if parse_qs(query_string).get("refresh", ["0"])[0] in ("1", "true"):
+            library.invalidate_meta()
+        self._send_json({"reports_dir": str(library.REPORTS_DIR), "reports": library.scan_reports()})
+
+    def _handle_import_report(self, payload: Dict[str, Any]) -> None:
+        target = (payload.get("path") or "").strip()
+        if not target:
+            self._send_json({"error": "No report path given."}, status=400)
+            return
+        result = library.import_report(Path(target))
+        self._send_json(result, status=result.pop("status", 200) if "error" in result else 200)
+
+    def _handle_delete_report(self, payload: Dict[str, Any]) -> None:
+        target = (payload.get("path") or "").strip()
+        if not target:
+            self._send_json({"error": "No report path given."}, status=400)
+            return
+        _close_report_conn(Path(target).resolve())
+        if library.delete_report(Path(target)):
+            self._send_json({"status": "ok"})
+        else:
+            self._send_json({"error": f"Could not delete report: {target}"}, status=400)
 
     # ------------------------------------------------------------------
     def _handle_browse(self) -> None:
@@ -554,22 +601,19 @@ class _LaunchHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Permission denied: {target}"}, status=403)
 
     # ------------------------------------------------------------------
-    def _handle_open_viewer(self, payload: Dict[str, Any]) -> None:
-        output_parquet = payload.get("output_parquet")
+    # Viewer
+    # ------------------------------------------------------------------
+
+    def _handle_report_url(self, payload: Dict[str, Any]) -> None:
+        """Build the in-app ``/report?path=...`` URL, encoding the initial viewer state."""
+        output_parquet = payload.get("output_parquet") or payload.get("path")
         if not output_parquet:
-            self._send_json({"error": "No output file available. Please run processing first."}, status=400)
+            self._send_json({"error": "No report path given."}, status=400)
             return
 
-        parquet_path = Path(output_parquet).resolve()
-        if not parquet_path.exists():
-            self._send_json({"error": f"Output file not found: {parquet_path}"}, status=404)
-            return
-
-        try:
-            url = _get_or_launch_viewer(parquet_path)
-        except Exception as exc:
-            logger.exception("Failed to launch viewer")
-            self._send_json({"error": f"Failed to launch viewer: {exc}"}, status=500)
+        parquet_path = Path(output_parquet).expanduser().resolve()
+        if not parquet_path.exists() or parquet_path.suffix.lower() != ".parquet":
+            self._send_json({"error": f"Report not found: {parquet_path}"}, status=404)
             return
 
         try:
@@ -578,7 +622,7 @@ class _LaunchHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=400)
             return
 
-        query = build_viewer_url_params(
+        viewer_qs = build_viewer_url_params(
             group_col=(payload.get("group_by") or "").strip() or None,
             filter_by=_parse_filter(payload.get("filter_col"), payload.get("filter_op"), payload.get("filter_value")),
             dimensions=dimensions,
@@ -586,33 +630,72 @@ class _LaunchHandler(BaseHTTPRequestHandler):
             is_show_significance=bool(payload.get("is_show_significance")),
             palette=(payload.get("palette") or "").strip() or None,
         )
-        if query:
-            url = f"{url}?{query}"
+        url = f"/report?path={quote(str(parquet_path))}"
+        self._send_json({"url": f"{url}&{viewer_qs}" if viewer_qs else url})
 
-        self._send_json({"url": url})
+    def _bind_report(self, query_string: str) -> bool:
+        """Point the viewer handler at the report named by ``?report=<id>``."""
+        path = library.resolve_report(parse_qs(query_string).get("report", [""])[0])
+        if path is None:
+            self._send_error_text(404, "Unknown report")
+            return False
+        return self._use_report(path)
 
-    # ------------------------------------------------------------------
-    # Static file serving
-    # ------------------------------------------------------------------
-
-    def _serve_static(self, url_path: str) -> None:
-        rel = url_path.lstrip("/") or "index.html"
-        file_path = (ASSETS_DIR / rel).resolve()
-
+    def _use_report(self, path: Path) -> bool:
         try:
-            file_path.relative_to(ASSETS_DIR)
-        except ValueError:
-            self.send_error(403)
+            self.duck_conn, self.query_lock, self.parquet_meta = _get_report_conn(path)
+        except Exception as exc:
+            logger.exception("Failed to open report")
+            self._send_error_text(500, f"Failed to open report: {exc}")
+            return False
+        self.parquet_path = path
+        self.report_id = library.register_report(path)
+        self.project_name = self.parquet_meta.get("pp_project_name") or None
+        self.description = self.parquet_meta.get("pp_description") or None
+        return True
+
+    def _serve_report_page(self, query_string: str) -> None:
+        raw_path = parse_qs(query_string).get("path", [""])[0]
+        if not raw_path:
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.end_headers()
             return
+        parquet_path = Path(raw_path).expanduser().resolve()
+        if not parquet_path.is_file() or parquet_path.suffix.lower() != ".parquet":
+            self._send_error_text(404, f"Report not found: {parquet_path}")
+            return
+        if self._use_report(parquet_path):
+            self._serve_static("/index.html")
 
-        if not file_path.exists() or not file_path.is_file():
-            file_path = ASSETS_DIR / "index.html"
+    def _inject_server_config(self, html: bytes) -> bytes:
+        """Add the report id so the viewer routes its queries to this report."""
+        html = super()._inject_server_config(html)
+        script = f"<script>window.__PP_REPORT_ID = {_js(self.report_id)};</script>\n".encode()
+        return html.replace(b"</head>", script + b"</head>", 1)
 
+    # ------------------------------------------------------------------
+    # Static file serving: manager assets first, then the viewer's dist assets
+    # ------------------------------------------------------------------
+
+    def _find_asset(self, url_path: str) -> Optional[Path]:
+        rel = url_path.lstrip("/") or "index.html"
+        roots = [ASSETS_DIR]
+        try:
+            roots.append(self.dist_dir)
+        except FileNotFoundError:
+            pass  # viewer not built: the manager itself still works
+        for root in roots:
+            candidate = (root / rel).resolve()
+            if candidate.is_file() and candidate.is_relative_to(root):
+                return candidate
+        return None
+
+    def _serve_asset(self, url_path: str) -> None:
+        file_path = self._find_asset(url_path) or ASSETS_DIR / "index.html"
         data = file_path.read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", _mime(file_path.suffix))
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-cache")
+        self._common_headers(_mime(file_path.suffix), len(data))
         self.end_headers()
         self.wfile.write(data)
 
@@ -631,14 +714,9 @@ class _LaunchHandler(BaseHTTPRequestHandler):
     def _send_json(self, data: Any, status: int = 200) -> None:
         body = json.dumps(data).encode()
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        self._common_headers("application/json", len(body))
         self.end_headers()
         self.wfile.write(body)
-
-    def log_message(self, fmt: str, *args) -> None:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -646,8 +724,9 @@ class _LaunchHandler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 
 def serve_launch(port: int = 8051, open_browser: bool = True) -> None:
-    """Start the processing launch server and (optionally) open it in the browser."""
+    """Start the report manager server and (optionally) open it in the browser."""
     _install_warning_capture()
+    library.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     chosen_port = port
     try:
@@ -661,7 +740,8 @@ def serve_launch(port: int = 8051, open_browser: bool = True) -> None:
     url = f"http://127.0.0.1:{chosen_port}/"
 
     import click
-    click.echo(f"Processing dashboard URL: {url}")
+    click.echo(f"PixelPatrol report manager: {url}")
+    click.echo(f"Reports directory: {library.REPORTS_DIR}")
     click.echo("Press Ctrl+C to stop.\n")
 
     if open_browser:

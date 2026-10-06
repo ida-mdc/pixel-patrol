@@ -480,6 +480,7 @@ function buildExportNote(scope, state) {
 async function handleParquetExport(scope, where, isFiltered) {
   try {
     const params = new URLSearchParams();
+    if (window.__PP_REPORT_ID) params.set('report', window.__PP_REPORT_ID);
     if (scope === 'full') params.set('scope', 'full');
     if (where)           params.set('where', where);
     const note = buildExportNote(scope, state);

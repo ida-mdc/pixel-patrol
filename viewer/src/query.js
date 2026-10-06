@@ -15,8 +15,15 @@ export const SERVER_MODE = typeof window !== 'undefined' && !!window.__PP_SERVER
  * WASM connection so all existing code works without modification.
  */
 export function makeServerConn() {
+  // The report manager (launch_server.py) serves several reports on one port
+  // and injects window.__PP_REPORT_ID so /api/query can be routed to the right
+  // report. The standalone viewer server has no id and answers /api/query for
+  // its single parquet.
+  const reportId = (typeof window !== 'undefined' && window.__PP_REPORT_ID) || null;
+  const queryUrl = reportId ? `/api/query?report=${encodeURIComponent(reportId)}` : '/api/query';
+
   async function query(sql) {
-    const res = await fetch('/api/query', {
+    const res = await fetch(queryUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ sql }),

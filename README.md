@@ -72,7 +72,7 @@ To use viewer parameters, run the two commands sequentially:
 pixel-patrol process path/to/images/ -o results.parquet --loader bioio && pixel-patrol view results.parquet
 ```
 
-**Or use the processing dashboard** for a visual interface:
+**Or use the report manager** for a visual interface - list, add, import, and open reports:
 
 ```bash
 pixel-patrol launch
