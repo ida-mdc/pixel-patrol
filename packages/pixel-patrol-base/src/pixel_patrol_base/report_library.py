@@ -257,6 +257,27 @@ def scan_reports() -> List[Dict[str, Any]]:
     return sorted(seen.values(), key=_sort_key, reverse=True)
 
 
+def _known_paths() -> Dict[str, Path]:
+    """Every report the manager knows (REPORTS_DIR contents + imported), by resolved path string."""
+    known = {str(p.resolve()): p.resolve() for p in REPORTS_DIR.glob("*.parquet")}
+    for external in _load_index():
+        resolved = Path(external).resolve()
+        known[str(resolved)] = resolved
+    return known
+
+
+def find_known(raw_path: str) -> Optional[Path]:
+    """The manager's own path for a requested report, or None if it is not one it knows.
+
+    The returned path comes from the manager's list, never from the request.
+    """
+    try:
+        requested = str(Path(raw_path).expanduser().resolve())
+    except OSError:
+        return None
+    return _known_paths().get(requested)
+
+
 def import_report(path: Path) -> Dict[str, Any]:
     """Add an existing parquet (typically outside REPORTS_DIR) to the index."""
     try:

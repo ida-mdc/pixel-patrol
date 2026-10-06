@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import logging
+import os
 import platform
 import shutil
 import socket
@@ -426,6 +427,7 @@ def _run_processing(payload: Dict[str, Any], slice_size: Optional[Dict[str, int]
             raise ValueError(f"Output file is empty: {final_parquet}")
 
         resolved = str(final_parquet)
+        library.import_report(final_parquet)  # outputs saved elsewhere join the list
         update_state(
             status="completed",
             progress=100,
@@ -589,8 +591,12 @@ class _LaunchHandler(_ViewerHandler):
         if not target:
             self._send_json({"error": "No report path given."}, status=400)
             return
-        _close_report_conn(Path(target).resolve())
-        if library.delete_report(Path(target)):
+        known = library.find_known(target)
+        if known is None:
+            self._send_json({"error": f"Unknown report: {target}"}, status=404)
+            return
+        _close_report_conn(known)
+        if library.delete_report(known):
             self._send_json({"status": "ok"})
         else:
             self._send_json({"error": f"Could not delete report: {target}"}, status=400)
@@ -627,9 +633,9 @@ class _LaunchHandler(_ViewerHandler):
             self._send_json({"error": "No report path given."}, status=400)
             return
 
-        parquet_path = Path(output_parquet).expanduser().resolve()
-        if not parquet_path.exists() or parquet_path.suffix.lower() != ".parquet":
-            self._send_json({"error": f"Report not found: {parquet_path}"}, status=404)
+        parquet_path = library.find_known(output_parquet)
+        if parquet_path is None or not parquet_path.exists():
+            self._send_json({"error": f"Report not found: {output_parquet}"}, status=404)
             return
 
         try:
@@ -677,9 +683,9 @@ class _LaunchHandler(_ViewerHandler):
             self.send_header("Location", "/")
             self.end_headers()
             return
-        parquet_path = Path(raw_path).expanduser().resolve()
-        if not parquet_path.is_file() or parquet_path.suffix.lower() != ".parquet":
-            self._send_error_text(404, f"Report not found: {parquet_path}")
+        parquet_path = library.find_known(raw_path)
+        if parquet_path is None or not parquet_path.is_file():
+            self._send_error_text(404, f"Report not found: {raw_path}")
             return
         if self._use_report(parquet_path):
             self._serve_static("/index.html")
@@ -702,9 +708,9 @@ class _LaunchHandler(_ViewerHandler):
         except FileNotFoundError:
             pass  # viewer not built: the manager itself still works
         for root in roots:
-            candidate = (root / rel).resolve()
-            if candidate.is_file() and candidate.is_relative_to(root):
-                return candidate
+            candidate = os.path.normpath(os.path.join(root, rel))
+            if candidate.startswith(str(root) + os.sep) and os.path.isfile(candidate):
+                return Path(candidate)
         return None
 
     def _serve_asset(self, url_path: str) -> None:

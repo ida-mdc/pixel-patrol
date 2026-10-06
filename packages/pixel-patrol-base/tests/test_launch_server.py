@@ -29,8 +29,12 @@ from pixel_patrol_base.io.parquet_io import save_parquet
 
 
 @pytest.fixture(autouse=True)
-def _reset_global_state():
-    """launch_server keeps module-level mutable state; reset it around each test."""
+def _reset_global_state(tmp_path_factory, monkeypatch):
+    """launch_server keeps module-level mutable state; reset it around each test.
+
+    Also keeps the tests away from the user's real reports directory and index.
+    """
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path_factory.mktemp("reports"))
     saved_state = dict(ls._state)
     saved_warnings = list(ls._warning_queue)
     cancel_was_set = ls._cancel_event.is_set()
@@ -363,6 +367,21 @@ def test_report_url_missing_output(server):
     assert excinfo.value.code == 400
 
 
+def test_unknown_reports_are_refused(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path / "reports")
+    stray = tmp_path / "elsewhere.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), stray, ProjectMetadata(project_name="p"))
+
+    for endpoint in ("/api/report-url", "/api/delete-report"):
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            _post_json(server, endpoint, {"path": str(stray)})
+        assert excinfo.value.code == 404
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(_url(server, f"/report?path={urllib.parse.quote(str(stray))}"))
+    assert excinfo.value.code == 404
+    assert stray.exists()
+
+
 def test_report_url_file_not_found(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         _post_json(server, "/api/report-url", {"output_parquet": "/no/such/report.parquet"})
@@ -507,7 +526,8 @@ def test_update_endpoint_uv_failure(server, monkeypatch, tmp_path):
     assert excinfo.value.code == 500
 
 
-def test_report_url_builds_query_string(server, tmp_path):
+def test_report_url_builds_query_string(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
 
@@ -532,7 +552,8 @@ def test_report_url_builds_query_string(server, tmp_path):
         assert fragment in url
 
 
-def test_report_url_no_extras_returns_bare_url(server, tmp_path):
+def test_report_url_no_extras_returns_bare_url(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
 
@@ -542,7 +563,8 @@ def test_report_url_no_extras_returns_bare_url(server, tmp_path):
     assert data["url"] == f"/report?path={urllib.parse.quote(str(output.resolve()))}"
 
 
-def test_report_url_bad_dimensions(server, tmp_path):
+def test_report_url_bad_dimensions(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
 
@@ -699,7 +721,8 @@ def test_query_unknown_report_is_404(server):
     assert excinfo.value.code == 404
 
 
-def test_report_index_injects_config(server, tmp_path):
+def test_report_index_injects_config(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     try:
         ls.find_viewer_dist()
     except Exception:
