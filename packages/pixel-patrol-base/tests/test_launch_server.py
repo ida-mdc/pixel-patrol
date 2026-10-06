@@ -751,3 +751,13 @@ def test_unknown_post_path_is_404(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         _post_json(server, "/api/does-not-exist", {})
     assert excinfo.value.code == 404
+
+
+def test_concurrent_index_adds_keep_every_entry():
+    paths = [Path(f"/data/report_{i}.parquet") for i in range(100)]
+    threads = [threading.Thread(target=library._add_to_index, args=(p,)) for p in paths]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(library._load_index()) == sorted(str(p) for p in paths)

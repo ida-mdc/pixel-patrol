@@ -84,22 +84,26 @@ def _load_index() -> List[str]:
 
 
 def _save_index(paths: List[str]) -> None:
+    """Atomically replace the index file. Callers hold ``_index_lock``."""
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    with _index_lock:
-        _index_file().write_text(json.dumps(sorted(set(paths)), indent=2))
+    tmp = _index_file().with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(sorted(set(paths)), indent=2))
+    os.replace(tmp, _index_file())
 
 
 def _add_to_index(path: Path) -> None:
-    paths = _load_index()
-    if str(path) not in paths:
-        _save_index([*paths, str(path)])
+    with _index_lock:
+        paths = _load_index()
+        if str(path) not in paths:
+            _save_index([*paths, str(path)])
 
 
 def _remove_from_index(path: Path) -> None:
-    paths = _load_index()
-    kept = [p for p in paths if str(Path(p).resolve()) != str(path)]
-    if len(kept) != len(paths):
-        _save_index(kept)
+    with _index_lock:
+        paths = _load_index()
+        kept = [p for p in paths if str(Path(p).resolve()) != str(path)]
+        if len(kept) != len(paths):
+            _save_index(kept)
 
 
 def is_internal(path: Path) -> bool:
