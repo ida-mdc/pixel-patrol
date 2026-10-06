@@ -5,7 +5,7 @@ Covers the parts that are meaningfully testable without a browser:
 - input parsing helpers (the same kind of user-typed strings the JS form submits)
 - the processing state machine (_start_processing / _run_processing), including
   validation, completion, error, and cancellation
-- the HTTP API surface (_LaunchHandler routing, status/cancel/open-viewer)
+- the HTTP API surface (_LaunchHandler routing, status/cancel/reports/query)
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import json
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -22,16 +23,20 @@ import polars as pl
 import pytest
 
 from pixel_patrol_base import launch_server as ls
+from pixel_patrol_base import report_library as library
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 from pixel_patrol_base.io.parquet_io import save_parquet
 
 
 @pytest.fixture(autouse=True)
-def _reset_global_state():
-    """launch_server keeps module-level mutable state; reset it around each test."""
+def _reset_global_state(tmp_path_factory, monkeypatch):
+    """launch_server keeps module-level mutable state; reset it around each test.
+
+    Also keeps the tests away from the user's real reports directory and index.
+    """
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path_factory.mktemp("reports"))
     saved_state = dict(ls._state)
     saved_warnings = list(ls._warning_queue)
-    saved_viewer_servers = dict(ls._viewer_servers)
     cancel_was_set = ls._cancel_event.is_set()
 
     yield
@@ -40,8 +45,9 @@ def _reset_global_state():
     ls._state.update(saved_state)
     ls._warning_queue.clear()
     ls._warning_queue.extend(saved_warnings)
-    ls._viewer_servers.clear()
-    ls._viewer_servers.update(saved_viewer_servers)
+    library._registry.clear()
+    library._meta_cache.clear()
+    ls._report_conns.clear()
     if cancel_was_set:
         ls._cancel_event.set()
     else:
@@ -89,7 +95,7 @@ def test_parse_filter():
 # _start_processing validation
 # ---------------------------------------------------------------------------
 
-def test_start_processing_requires_base_dir_and_output():
+def test_start_processing_requires_base_dir():
     ls.update_state(status="idle", error=None)
 
     ls._start_processing({})
@@ -97,6 +103,20 @@ def test_start_processing_requires_base_dir_and_output():
     state = ls.get_state()
     assert state["status"] == "error"
     assert "required" in state["error"]
+
+
+def test_start_processing_defaults_output_into_reports_dir(tmp_path, monkeypatch):
+    """Omitting output_path auto-names a parquet inside REPORTS_DIR."""
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path / "reports")
+    # Don't actually launch the background processing thread.
+    monkeypatch.setattr(ls.threading, "Thread", lambda *a, **k: SimpleNamespace(start=lambda: None))
+
+    payload = {"base_directory": str(tmp_path)}
+    ls.update_state(status="idle", error=None)
+    ls._start_processing(payload)
+
+    assert payload["output_path"].endswith(".parquet")
+    assert str(tmp_path / "reports") in payload["output_path"]
 
 
 def test_start_processing_rejects_bad_slice_size(tmp_path):
@@ -272,6 +292,41 @@ def test_status_endpoint(server):
     assert data["warnings"] == []
 
 
+def test_status_includes_console_output(server):
+    import logging
+    ls.clear_warnings()
+    ls._install_warning_capture()
+    logging.getLogger("pixel_patrol_base.test").info("hello console")
+
+    with urllib.request.urlopen(_url(server, "/api/status")) as resp:
+        data = json.loads(resp.read())
+
+    assert any("hello console" in line for line in data["console"])
+
+
+def test_browse_files_off_lists_only_folders(server, tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.parquet").write_bytes(b"")
+
+    with urllib.request.urlopen(_url(server, f"/api/browse?path={tmp_path}&files=0")) as resp:
+        names = [e["name"] for e in json.loads(resp.read())["entries"]]
+
+    assert names == ["sub"]
+
+
+def test_foreign_origin_and_host_are_rejected(server):
+    for headers in ({"Origin": "https://evil.example"}, {"Host": "evil.example"}):
+        req = urllib.request.Request(_url(server, "/api/reports"), headers=headers)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(req)
+        assert excinfo.value.code == 403
+
+
+def test_responses_carry_no_cors_headers(server):
+    with urllib.request.urlopen(_url(server, "/api/reports")) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
 def test_loaders_and_processors_endpoints(server):
     with urllib.request.urlopen(_url(server, "/api/loaders")) as resp:
         loaders = json.loads(resp.read())
@@ -306,15 +361,30 @@ def test_cancel_endpoint_sets_event_only_when_running(server):
     assert data["status"] == "running"
 
 
-def test_open_viewer_missing_output(server):
+def test_report_url_missing_output(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
-        _post_json(server, "/api/open-viewer", {"output_parquet": ""})
+        _post_json(server, "/api/report-url", {"output_parquet": ""})
     assert excinfo.value.code == 400
 
 
-def test_open_viewer_file_not_found(server):
+def test_unknown_reports_are_refused(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path / "reports")
+    stray = tmp_path / "elsewhere.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), stray, ProjectMetadata(project_name="p"))
+
+    for endpoint, key in (("/api/report-url", "output_parquet"), ("/api/delete-report", "path")):
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            _post_json(server, endpoint, {key: str(stray)})
+        assert excinfo.value.code == 404
     with pytest.raises(urllib.error.HTTPError) as excinfo:
-        _post_json(server, "/api/open-viewer", {"output_parquet": "/no/such/report.parquet"})
+        urllib.request.urlopen(_url(server, f"/report?path={urllib.parse.quote(str(stray))}"))
+    assert excinfo.value.code == 404
+    assert stray.exists()
+
+
+def test_report_url_file_not_found(server):
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _post_json(server, "/api/report-url", {"output_parquet": "/no/such/report.parquet"})
     assert excinfo.value.code == 404
 
 
@@ -330,8 +400,8 @@ def test_browse_lists_dirs_and_parquet_files(server, tmp_path):
     with urllib.request.urlopen(_url(server, f"/api/browse?path={tmp_path}")) as resp:
         data = json.loads(resp.read())
 
-    assert data["path"] == str(tmp_path)
-    assert data["parent"] == str(tmp_path.parent)
+    assert data["path"] == tmp_path.as_posix()
+    assert data["parent"] == tmp_path.parent.as_posix()
     names = {(e["name"], e["is_dir"]) for e in data["entries"]}
     assert ("subdir", True) in names
     assert ("report.parquet", False) in names
@@ -359,7 +429,7 @@ def test_browse_no_path_defaults_to_home(server, monkeypatch, tmp_path):
     with urllib.request.urlopen(_url(server, "/api/browse")) as resp:
         data = json.loads(resp.read())
 
-    assert data["path"] == str(tmp_path)
+    assert data["path"] == tmp_path.as_posix()
 
 
 # ---------------------------------------------------------------------------
@@ -456,11 +526,10 @@ def test_update_endpoint_uv_failure(server, monkeypatch, tmp_path):
     assert excinfo.value.code == 500
 
 
-def test_open_viewer_builds_query_string(server, tmp_path, monkeypatch):
+def test_report_url_builds_query_string(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
-
-    monkeypatch.setattr(ls, "_get_or_launch_viewer", lambda parquet_path: "http://127.0.0.1:9999/")
 
     payload = {
         "output_parquet": str(output),
@@ -473,37 +542,202 @@ def test_open_viewer_builds_query_string(server, tmp_path, monkeypatch):
         "is_show_significance": True,
         "palette": "viridis",
     }
-    with _post_json(server, "/api/open-viewer", payload) as resp:
+    with _post_json(server, "/api/report-url", payload) as resp:
         data = json.loads(resp.read())
 
     url = data["url"]
-    assert url.startswith("http://127.0.0.1:9999/?")
+    assert url.startswith("/report?path=")
     for fragment in ("group=path", "fc=file_extension", "fo=eq", "fv=tif",
                      "dims=z0.t1", "sig=1", "palette=viridis", "hidden=histogram.summary"):
         assert fragment in url
 
 
-def test_open_viewer_no_extras_returns_bare_url(server, tmp_path, monkeypatch):
+def test_report_url_no_extras_returns_bare_url(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
 
-    monkeypatch.setattr(ls, "_get_or_launch_viewer", lambda parquet_path: "http://127.0.0.1:9999/")
-
-    with _post_json(server, "/api/open-viewer", {"output_parquet": str(output)}) as resp:
+    with _post_json(server, "/api/report-url", {"output_parquet": str(output)}) as resp:
         data = json.loads(resp.read())
 
-    assert data["url"] == "http://127.0.0.1:9999/"
+    assert data["url"] == f"/report?path={urllib.parse.quote(str(output.resolve()))}"
 
 
-def test_open_viewer_bad_dimensions(server, tmp_path, monkeypatch):
+def test_report_url_bad_dimensions(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
 
-    monkeypatch.setattr(ls, "_get_or_launch_viewer", lambda parquet_path: "http://127.0.0.1:9999/")
-
     with pytest.raises(urllib.error.HTTPError) as excinfo:
-        _post_json(server, "/api/open-viewer", {"output_parquet": str(output), "dimensions": "bad"})
+        _post_json(server, "/api/report-url", {"output_parquet": str(output), "dimensions": "bad"})
     assert excinfo.value.code == 400
+
+
+# ---------------------------------------------------------------------------
+# Report library: list / metadata / delete / query routing
+# ---------------------------------------------------------------------------
+
+def test_reports_endpoint_lists_parquet_with_metadata(server, tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    monkeypatch.setattr(library, "REPORTS_DIR", reports_dir)
+    output = reports_dir / "20260101_120000_demo.parquet"
+    save_parquet(pl.DataFrame({"a": [1, 2, 3]}), output, ProjectMetadata(project_name="demo"))
+
+    with urllib.request.urlopen(_url(server, "/api/reports")) as resp:
+        data = json.loads(resp.read())
+
+    assert data["reports_dir"] == str(reports_dir)
+    assert len(data["reports"]) == 1
+    report = data["reports"][0]
+    assert report["filename"] == output.name
+    assert report["project_name"] == "demo"
+    assert report["n_files"] == 3
+    assert report["id"]
+
+
+def test_delete_report_removes_file(server, tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    monkeypatch.setattr(library, "REPORTS_DIR", reports_dir)
+    output = reports_dir / "demo.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="demo"))
+
+    with _post_json(server, "/api/delete-report", {"path": str(output)}) as resp:
+        data = json.loads(resp.read())
+
+    assert data == {"status": "ok"}
+    assert not output.exists()
+
+
+def test_import_report_adds_external_to_index_and_lists_it(server, tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    monkeypatch.setattr(library, "REPORTS_DIR", reports_dir)
+    outside = tmp_path / "elsewhere" / "ext.parquet"
+    outside.parent.mkdir()
+    save_parquet(pl.DataFrame({"a": [1, 2]}), outside, ProjectMetadata(project_name="ext"))
+
+    with _post_json(server, "/api/import-report", {"path": str(outside)}) as resp:
+        assert json.loads(resp.read())["status"] == "ok"
+
+    # Persisted to the index file and surfaced as an "imported" report.
+    assert str(outside.resolve()) in library._load_index()
+    with urllib.request.urlopen(_url(server, "/api/reports")) as resp:
+        reports = json.loads(resp.read())["reports"]
+    ext = [r for r in reports if r["path"] == str(outside.resolve())]
+    assert len(ext) == 1
+    assert ext[0]["source"] == "imported"
+    assert ext[0]["exists"] is True
+
+
+def test_import_report_missing_file_is_404(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path / "reports")
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _post_json(server, "/api/import-report", {"path": str(tmp_path / "nope.parquet")})
+    assert excinfo.value.code == 404
+
+
+def test_delete_imported_report_keeps_file(server, tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    monkeypatch.setattr(library, "REPORTS_DIR", reports_dir)
+    outside = tmp_path / "elsewhere.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), outside, ProjectMetadata(project_name="demo"))
+    library._add_to_index(outside)
+
+    with _post_json(server, "/api/delete-report", {"path": str(outside)}) as resp:
+        assert json.loads(resp.read()) == {"status": "ok"}
+
+    # Removed from the list but the external file is left untouched.
+    assert str(outside.resolve()) not in library._load_index()
+    assert outside.exists()
+
+
+def test_missing_imported_report_listed_as_unavailable(server, tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    monkeypatch.setattr(library, "REPORTS_DIR", reports_dir)
+    gone = tmp_path / "gone.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), gone, ProjectMetadata(project_name="demo"))
+    library._add_to_index(gone)
+    gone.unlink()
+
+    with urllib.request.urlopen(_url(server, "/api/reports")) as resp:
+        reports = json.loads(resp.read())["reports"]
+    entry = [r for r in reports if r["path"] == str(gone.resolve())]
+    assert len(entry) == 1
+    assert entry[0]["exists"] is False
+
+
+def test_query_routes_to_report(server, tmp_path):
+    import pyarrow.ipc as ipc
+
+    output = tmp_path / "report.parquet"
+    save_parquet(pl.DataFrame({"a": [1, 2, 3, 4]}), output, ProjectMetadata(project_name="p"))
+    rid = library.register_report(output.resolve())
+
+    req = urllib.request.Request(
+        _url(server, f"/api/query?report={rid}"),
+        data=json.dumps({"sql": "SELECT count(*) AS n FROM pp_data"}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        table = ipc.open_stream(resp.read()).read_all()
+
+    assert table.to_pydict() == {"n": [4]}
+
+
+def test_report_connection_cannot_touch_other_files(tmp_path):
+    output = tmp_path / "report.parquet"
+    save_parquet(pl.DataFrame({"a": [1, 2]}), output, ProjectMetadata(project_name="p"))
+    # Outside the temp dir, which stays open for the parquet export.
+    other = Path.home() / ".pixel-patrol-test-secret"
+    outside_out = Path.home() / ".pixel-patrol-test-out.csv"
+
+    conn, _lock, _meta = ls._get_report_conn(output.resolve())
+
+    assert conn.execute("SELECT count(*) FROM pp_data").fetchall() == [(2,)]
+    for sql in (
+        f"SELECT * FROM read_text('{other}')",
+        f"COPY (SELECT 1) TO '{outside_out}'",
+        "SET enable_external_access=true",
+    ):
+        with pytest.raises(Exception, match="Permission|Invalid Input"):
+            conn.execute(sql)
+    assert not outside_out.exists()
+
+
+def test_query_unknown_report_is_404(server):
+    req = urllib.request.Request(
+        _url(server, "/api/query?report=deadbeef"),
+        data=json.dumps({"sql": "SELECT 1"}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(req)
+    assert excinfo.value.code == 404
+
+
+def test_report_index_injects_config(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "REPORTS_DIR", tmp_path)  # makes tmp_path/report.parquet a known report
+    try:
+        ls.find_viewer_dist()
+    except Exception:
+        pytest.skip("viewer dist not built")
+
+    output = tmp_path / "report.parquet"
+    save_parquet(pl.DataFrame({"a": [1]}), output, ProjectMetadata(project_name="p"))
+    rid = library.register_report(output.resolve())
+
+    url = _url(server, f"/report?path={urllib.parse.quote(str(output.resolve()))}")
+    with urllib.request.urlopen(url) as resp:
+        body = resp.read().decode()
+
+    assert "__PP_SERVER" in body
+    assert rid in body
 
 
 def test_static_paths_serve_index(server):
@@ -517,3 +751,13 @@ def test_unknown_post_path_is_404(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         _post_json(server, "/api/does-not-exist", {})
     assert excinfo.value.code == 404
+
+
+def test_concurrent_index_adds_keep_every_entry():
+    paths = [Path(f"/data/report_{i}.parquet") for i in range(100)]
+    threads = [threading.Thread(target=library._add_to_index, args=(p,)) for p in paths]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(library._load_index()) == sorted(str(p) for p in paths)

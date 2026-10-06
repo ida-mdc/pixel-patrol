@@ -18,7 +18,10 @@ also be used.
 
 from __future__ import annotations
 
+import atexit
+import functools
 import json
+import shutil
 import socket
 import threading
 import warnings
@@ -27,7 +30,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
 import importlib.resources
-from urllib.parse import urlencode
+import tempfile
+from urllib.parse import urlencode, urlsplit
 
 
 def _js(value) -> str:
@@ -154,7 +158,37 @@ def _setup_duckdb(parquet_path: Path):
         conn.execute("CREATE VIEW pp_data AS SELECT * FROM pp_all")
 
     meta = _read_parquet_meta(conn, escaped)
+    _restrict_to_report(conn, parquet_path)
     return conn, meta
+
+
+def _to_arrow_table(result):
+    """DuckDB renamed fetch_arrow_table() to to_arrow_table() (old name now warns)."""
+    return (getattr(result, "to_arrow_table", None) or result.fetch_arrow_table)()
+
+
+@functools.lru_cache(maxsize=1)
+def _export_dir() -> str:
+    """Private per-process scratch dir for exports, removed at exit."""
+    path = tempfile.mkdtemp(prefix="pp_export_")
+    atexit.register(shutil.rmtree, path, ignore_errors=True)
+    return path
+
+
+def _restrict_to_report(conn, path: Path) -> None:
+    """Confine SQL to this report: no other files, no extensions, no way back.
+
+    The viewer sends arbitrary SQL to /api/query, so without this a query could
+    read or write any file the server can (read_text, COPY ... TO). Only the
+    private export dir stays writable, for the filtered-parquet export.
+    """
+    def quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    conn.execute(f"SET allowed_paths=[{quote(str(path))}]")
+    conn.execute(f"SET allowed_directories=[{quote(_export_dir())}]")
+    conn.execute("SET enable_external_access=false")
+    conn.execute("SET lock_configuration=true")
 
 
 def _read_parquet_meta(conn, escaped_path: str) -> dict:
@@ -194,7 +228,24 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     extension_dirs:   list  # list[Path] - each dir contains extension.json + plugin JS files
 
     # ------------------------------------------------------------------
+    # Local-only access: no CORS, and Host/Origin must be this server, so no
+    # other website can read from or drive it (also blocks DNS rebinding).
+    def _is_local_request(self) -> bool:
+        host = self.headers.get("Host", "")
+        if urlsplit(f"//{host}").hostname not in ("127.0.0.1", "localhost", "::1"):
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or urlsplit(origin).netloc == host
+
+    def _allow_request(self) -> bool:
+        if self._is_local_request():
+            return True
+        self.send_error(403, "Forbidden")
+        return False
+
     def do_HEAD(self) -> None:
+        if not self._allow_request():
+            return
         path = self.path.split("?")[0]
         if path == "/data.parquet":
             self._send_parquet_head(self.parquet_path)
@@ -202,6 +253,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             self._send_static_head(path)
 
     def do_GET(self) -> None:
+        if not self._allow_request():
+            return
         path, _, query_string = self.path.partition("?")
         if path == "/data.parquet":
             self._serve_parquet(self.parquet_path)
@@ -214,14 +267,16 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
 
     def do_POST(self) -> None:
+        if not self._allow_request():
+            return
         if self.path == "/api/query":
             self._serve_query()
         else:
             self.send_error(404)
 
     def do_OPTIONS(self) -> None:
-        self.send_response(204)
-        self._common_headers("text/plain", 0)
+        self.send_response(204)  # no CORS: everything is same-origin
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     # ------------------------------------------------------------------
@@ -242,7 +297,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         try:
             with self.query_lock:
-                arrow_table = self.duck_conn.execute(sql).fetch_arrow_table()
+                arrow_table = _to_arrow_table(self.duck_conn.execute(sql))
 
             sink   = pa.BufferOutputStream()
             writer = ipc.new_stream(sink, arrow_table.schema)
@@ -264,7 +319,6 @@ class _ViewerHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _handle_export_parquet(self, query_string: str) -> None:
-        import tempfile
         import urllib.parse
         from pixel_patrol_base.io.parquet_io import reattach_parquet_metadata
 
@@ -275,23 +329,24 @@ class _ViewerHandler(BaseHTTPRequestHandler):
             note   = params.get("note", [""])[0]
             table  = "pp_all" if scope == "full" else "pp_data"
 
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-                tmp_path = f.name
+            with tempfile.NamedTemporaryFile(suffix=".parquet", dir=_export_dir(), delete=False) as f:
+                tmp_path = Path(f.name)
 
-            sql = (
-                f"COPY ("
-                f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
-                f") TO '{tmp_path}' "
-                f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
-            )
-            with self.query_lock:
-                self.duck_conn.execute(sql)
+            try:
+                sql = (
+                    f"COPY ("
+                    f"  SELECT * EXCLUDE (file_row_number) FROM {table} {where}"
+                    f") TO '{tmp_path}' "
+                    f"(FORMAT parquet, COMPRESSION snappy, ROW_GROUP_SIZE 2048)"
+                )
+                with self.query_lock:
+                    self.duck_conn.execute(sql)
 
-            extra = {"pp_export_note": note} if note else None
-            reattach_parquet_metadata(Path(tmp_path), self.parquet_path, extra=extra)
-
-            data = Path(tmp_path).read_bytes()
-            Path(tmp_path).unlink(missing_ok=True)
+                extra = {"pp_export_note": note} if note else None
+                reattach_parquet_metadata(tmp_path, self.parquet_path, extra=extra)
+                data = tmp_path.read_bytes()
+            finally:
+                tmp_path.unlink(missing_ok=True)
 
             stem = self.parquet_path.stem
             suffix = "_full" if scope == "full" else "_summary"
@@ -455,8 +510,8 @@ class _ViewerHandler(BaseHTTPRequestHandler):
         self.send_header("Accept-Ranges",                "bytes")
         self.send_header("Cross-Origin-Opener-Policy",   "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        self.send_header("Access-Control-Allow-Origin",  "*")
-        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type")
+        self.send_header("X-Content-Type-Options",       "nosniff")
+        self.send_header("Referrer-Policy",              "no-referrer")
         self.send_header("Cache-Control",                "no-cache")
 
     def _write_chunks(self, f, length: int, chunk: int = 1 << 20) -> None:

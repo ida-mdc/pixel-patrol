@@ -74,7 +74,7 @@ The easiest way to share PixelPatrol results is to send the `.parquet` file and 
 
 ---
 
-## Using the processing dashboard
+## Using the report manager
 
 If you prefer a visual interface, `pixel-patrol launch` opens a web UI:
 
@@ -82,7 +82,7 @@ If you prefer a visual interface, `pixel-patrol launch` opens a web UI:
 pixel-patrol launch
 ```
 
-This opens a browser tab where you can set your project, process your data, and open the interactive report. An "Open Existing Table" button lets you jump straight to the viewer for a `.parquet` file from a previous run, without reprocessing.
+This opens a browser tab listing your reports (stored in `~/pixel-patrol-reports`). Use **+ New Report** to process a folder of images, or **Import Report…** to add a `.parquet` file from anywhere on disk. Any report opens in the interactive viewer.
 
 ---
 

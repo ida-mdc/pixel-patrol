@@ -190,15 +190,20 @@ Processors: raster-basic, raster-histogram, raster-quality, raster-compression
 
 ## `pixel-patrol launch`
 
-Opens the web-based processing dashboard for configuring and monitoring processing interactively.
+Opens the web-based **report manager**: it lists your existing reports, lets you
+add new ones (processing runs in the background), import reports stored elsewhere,
+and open any report in the built-in viewer.
 
 ```bash
 pixel-patrol launch [--port N] [--no-browser]
 ```
 
+Reports are stored in `PIXEL_PATROL_REPORTS_DIR` (default: `~/pixel-patrol-reports`).
+Imported reports living outside that folder are remembered across restarts.
+
 **Options**
 
 | Option | Default | Description |
 |---|---|---|
-| `--port N` | 8051 | Port for the dashboard server. |
+| `--port N` | 8051 | Port for the report manager server. |
 | `--no-browser` | off | Do not open the browser automatically. |
