@@ -36,6 +36,8 @@ const progressLabel = document.getElementById("progress-bar-label");
 const detailsEl = document.getElementById("progress-details");
 const errorEl = document.getElementById("error-message");
 const warningsEl = document.getElementById("warnings-display");
+const consolePanel = document.getElementById("console-panel");
+const consoleEl = document.getElementById("console-output");
 const actionButtonsEl = document.getElementById("action-buttons");
 
 let availableLoaders = [];
@@ -342,7 +344,7 @@ async function pollStatus() {
 // ---------------------------------------------------------------------
 
 function renderState(state) {
-  const { status, progress, message, error, processed_files, total_files, output_parquet, warnings } = state;
+  const { status, progress, message, error, processed_files, total_files, output_parquet, warnings, console: consoleLines } = state;
 
   startBtn.disabled = status === "running";
 
@@ -391,6 +393,7 @@ function renderState(state) {
       : "";
 
   renderWarnings(warnings || []);
+  renderConsole(consoleLines || [], status);
 
   if (output_parquet) lastCompletedReport = output_parquet;
 
@@ -409,6 +412,16 @@ function renderState(state) {
     document.getElementById("dismiss-banner-btn").addEventListener("click", () => { statusBanner.hidden = true; });
   }
 }
+
+function renderConsole(lines, status) {
+  consolePanel.hidden = lines.length === 0;
+  if (status === "running" && !consolePanel.dataset.touched) consolePanel.open = true;
+  const atBottom = consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 24;
+  consoleEl.textContent = lines.join("\n");
+  if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+consolePanel.addEventListener("toggle", () => { consolePanel.dataset.touched = "1"; });
 
 function renderWarnings(warnings) {
   const visible = warnings.filter((w) => !dismissedWarnings.has(warningKey(w)));

@@ -399,3 +399,11 @@ hr { border: none; border-top: 1px solid #dee2e6; margin: 16px 0; }
   .report-card { grid-template-columns: 56px 1fr auto; }
   .report-date { display: none; }
 }
+
+.console-panel { margin-top: 0.75rem; }
+.console-panel summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.console-output {
+  margin: 0.4rem 0 0; padding: 0.6rem 0.75rem; max-height: 14rem; overflow: auto;
+  background: #1e1e1e; color: #d4d4d4; border-radius: 4px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap;
+}

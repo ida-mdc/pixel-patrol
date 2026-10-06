@@ -288,6 +288,18 @@ def test_status_endpoint(server):
     assert data["warnings"] == []
 
 
+def test_status_includes_console_output(server):
+    import logging
+    ls.clear_warnings()
+    ls._install_warning_capture()
+    logging.getLogger("pixel_patrol_base.test").info("hello console")
+
+    with urllib.request.urlopen(_url(server, "/api/status")) as resp:
+        data = json.loads(resp.read())
+
+    assert any("hello console" in line for line in data["console"])
+
+
 def test_loaders_and_processors_endpoints(server):
     with urllib.request.urlopen(_url(server, "/api/loaders")) as resp:
         loaders = json.loads(resp.read())

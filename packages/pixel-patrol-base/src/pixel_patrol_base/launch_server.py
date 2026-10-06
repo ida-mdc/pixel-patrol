@@ -27,6 +27,7 @@ import urllib.request
 import webbrowser
 from urllib.parse import parse_qs, quote, urlsplit
 from collections import deque
+from datetime import datetime
 from functools import lru_cache
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -94,10 +95,15 @@ _cancel_event = threading.Event()
 # ---------------------------------------------------------------------------
 
 _warning_queue: deque = deque(maxlen=100)
+_console_lines: deque = deque(maxlen=500)
 
 
 class _WarningCaptureHandler(logging.Handler):
+    """Collects INFO+ records as console lines, and WARNING+ records as UI alerts."""
+
     def emit(self, record: logging.LogRecord) -> None:
+        stamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
+        _console_lines.append(f"{stamp} {record.levelname:<7} {record.getMessage()}")
         if record.levelno >= logging.WARNING:
             _warning_queue.append({
                 "level": record.levelname,
@@ -111,8 +117,10 @@ def _install_warning_capture() -> None:
     base_logger = logging.getLogger("pixel_patrol_base")
     if not any(isinstance(h, _WarningCaptureHandler) for h in base_logger.handlers):
         handler = _WarningCaptureHandler()
-        handler.setLevel(logging.WARNING)
+        handler.setLevel(logging.INFO)
         base_logger.addHandler(handler)
+        if base_logger.getEffectiveLevel() > logging.INFO:
+            base_logger.setLevel(logging.INFO)
 
 
 def get_warnings() -> list:
@@ -121,6 +129,14 @@ def get_warnings() -> list:
 
 def clear_warnings() -> None:
     _warning_queue.clear()
+    _console_lines.clear()
+
+
+def _state_with_messages() -> Dict[str, Any]:
+    state = get_state()
+    state["warnings"] = get_warnings()
+    state["console"] = list(_console_lines)
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -496,9 +512,7 @@ class _LaunchHandler(_ViewerHandler):
         elif path == "/api/processors":
             self._send_json(_get_available_processors())
         elif path == "/api/status":
-            state = get_state()
-            state["warnings"] = get_warnings()
-            self._send_json(state)
+            self._send_json(_state_with_messages())
         elif path == "/api/version":
             self._send_json(_get_version_info())
         elif path == "/api/reports":
@@ -521,15 +535,11 @@ class _LaunchHandler(_ViewerHandler):
             payload = self._read_json()
             if payload is not None:
                 _start_processing(payload)
-            state = get_state()
-            state["warnings"] = get_warnings()
-            self._send_json(state)
+            self._send_json(_state_with_messages())
         elif path == "/api/cancel":
             if get_state()["status"] == "running":
                 _cancel_event.set()
-            state = get_state()
-            state["warnings"] = get_warnings()
-            self._send_json(state)
+            self._send_json(_state_with_messages())
         elif path == "/api/report-url":
             self._handle_report_url(self._read_json() or {})
         elif path == "/api/import-report":
