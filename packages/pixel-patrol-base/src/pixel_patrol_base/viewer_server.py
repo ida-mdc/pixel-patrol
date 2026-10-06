@@ -159,6 +159,11 @@ def _setup_duckdb(parquet_path: Path):
     return conn, meta
 
 
+def _to_arrow_table(result):
+    """DuckDB renamed fetch_arrow_table() to to_arrow_table() (old name now warns)."""
+    return (getattr(result, "to_arrow_table", None) or result.fetch_arrow_table)()
+
+
 def _restrict_to_report(conn, path: Path) -> None:
     """Confine SQL to this report: no other files, no extensions, no way back.
 
@@ -281,7 +286,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         try:
             with self.query_lock:
-                arrow_table = self.duck_conn.execute(sql).fetch_arrow_table()
+                arrow_table = _to_arrow_table(self.duck_conn.execute(sql))
 
             sink   = pa.BufferOutputStream()
             writer = ipc.new_stream(sink, arrow_table.schema)

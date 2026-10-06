@@ -654,11 +654,6 @@ def test_query_routes_to_report(server, tmp_path):
     output = tmp_path / "report.parquet"
     save_parquet(pl.DataFrame({"a": [1, 2, 3, 4]}), output, ProjectMetadata(project_name="p"))
     rid = library.register_report(output.resolve())
-    # Open the DuckDB connection in the main thread first. Under pytest's
-    # assertion-rewrite import hook, importing duckdb lazily inside the request
-    # handler thread can raise "__import__ returned a result with an exception
-    # set"; pre-warming avoids that test-only race (the server works in real use).
-    ls._get_report_conn(output.resolve())
 
     req = urllib.request.Request(
         _url(server, f"/api/query?report={rid}"),
