@@ -1,8 +1,26 @@
 # Installation
 
-Answer the questions below and we'll show you the exact commands for your setup.
+## No terminal? Use the app
+
+Download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
+
+[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
+[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
+[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
+
+!!! warning "App only - no terminal commands"
+    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).
+
+!!! note "First time running it?"
+    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
+    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
+    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).
 
 ---
+
+## Terminal
+
+Answer the questions below and we'll show you the exact commands for your setup.
 
 <div class="pp-wizard" id="pp-inst-wizard">
 
@@ -166,17 +184,3 @@ const instWiz = {
 !!! tip "Already installed?"
     Run `pixel-patrol --version` to confirm. Then head to the [Processing tutorial](processing.md) to build your first command.
 
----
-
-## Prefer a one-click app?
-
-If you'd rather skip the command line entirely, download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
-
-[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
-[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
-[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
-
-!!! note "First time running it?"
-    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
-    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
-    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).
