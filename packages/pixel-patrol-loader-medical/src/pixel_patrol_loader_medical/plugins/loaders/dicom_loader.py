@@ -105,8 +105,11 @@ def _shape_and_dim_order(z: int, rows: int, cols: int, n_samples: int) -> Tuple[
 
 
 def _channel_names(ds: pydicom.Dataset, n_samples: int) -> List[str] | None:
-    # Only RGB is unambiguous; other multi-sample spaces just get an unlabeled C axis.
-    if n_samples == 3 and str(getattr(ds, "PhotometricInterpretation", "")).upper() == "RGB":
+    # pydicom converts all of them to RGB if loaded with .pixel_array
+    RGB_PHOTOMETRIC_INTERPRETATION = {"RGB", "YBR_FULL", "YBR_FULL_422", "YBR_RCT", "YBR_ICT"}
+    # only these are guaranteed to be RGB,
+    image_photometric_mode = str(getattr(ds, "PhotometricInterpretation", "")).upper()
+    if n_samples == 3 and image_photometric_mode in RGB_PHOTOMETRIC_INTERPRETATION:
         return ["R", "G", "B"]
     return None
 
