@@ -149,12 +149,22 @@ export async function exportBakedHtml(state, schema, plugins) {
   for (const link of [...doc.querySelectorAll('link[rel="stylesheet"]')]) {
     const rawHref = link.getAttribute('href');
     if (!rawHref) continue;
+    let absHref = rawHref;
     try {
-      const absHref = new URL(rawHref, pageBase).href;
+      absHref = new URL(rawHref, pageBase).href;
       const style = doc.createElement('style');
       style.textContent = await inlineFontsInCss(await fetchText(absHref), absHref);
       link.replaceWith(style);
-    } catch { /* leave external link */ }
+    } catch (err) {
+      console.warn(`Snapshot: fetching ${absHref} failed, using loaded stylesheet`, err);
+      try {
+        const sheet = [...document.styleSheets].find(s => s.href === absHref);
+        const css = [...sheet.cssRules].map(r => r.cssText).join('\n');
+        const style = doc.createElement('style');
+        style.textContent = await inlineFontsInCss(css, absHref);
+        link.replaceWith(style);
+      } catch { /* leave external link */ }
+    }
   }
 
   // Inline images
