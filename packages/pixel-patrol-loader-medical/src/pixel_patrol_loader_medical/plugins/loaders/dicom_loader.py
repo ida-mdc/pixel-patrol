@@ -178,9 +178,9 @@ def _load_series_array(file_strs: List[str]) -> np.ndarray:
     for path_str in file_strs:
         ds = pydicom.dcmread(path_str)
         arr = _apply_rescale(ds.pixel_array, ds)
-        # Enhanced DICOM (SamplesPerPixel=1) returns (n_frames, rows, cols); unpack as Z slices.
-        if arr.ndim == 3 and int(getattr(ds, "SamplesPerPixel", 1)) == 1:
-            for i in range(arr.shape[0]):
+        n_frames = int(getattr(ds, "NumberOfFrames", 1) or 1)
+        if n_frames > 1:
+            for i in range(n_frames):
                 slices.append(arr[i])
         else:
             slices.append(arr)
