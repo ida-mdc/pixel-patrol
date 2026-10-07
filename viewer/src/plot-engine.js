@@ -395,7 +395,8 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
           boxpoints: 'all', jitter: 0.3, pointpos: 0,
           fillcolor: 'rgba(0,0,0,0)', line: { width: 0 },
           marker: { color, size: 7 },
-          hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
+          hoveron: 'points',
+          hovertemplate: '<b>Value:</b> %{y:.2f}<extra></extra>',
         };
       }
       // Small samples read better as every (jittered) point than as a sparse violin.
@@ -476,6 +477,8 @@ async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, stat
           boxpoints: 'all', jitter: 0.3, pointpos: 0,
           fillcolor: 'rgba(0,0,0,0)', line: { width: 0 },
           marker: { color, size: 7 },
+          hoveron: 'points',
+          hovertemplate: '<b>Value:</b> %{y:.2f}<extra></extra>',
         };
       }
       return {
