@@ -63,9 +63,10 @@ def cli():
 @click.option('--scheduler', type=str, default=None,
               help='Connect to an existing Dask scheduler instead of spawning a local one '
                    '(e.g. tcp://host:8786). Useful for HPC clusters.')
-@click.option('--mb-per-task', type=float, default=None, show_default=True,
-              help='Work budget per Dask task in MB (default: 512); also sets worker memory limit. '
-                   'If workers keep pausing/restarting on memory, raise this.')
+@click.option('--mb-per-worker', type=float, default=None, show_default=True,
+              help='RAM per worker in MB (default: 4096). More RAM per worker means fewer parallel '
+                   'workers. Images larger than 1/8 of this are split into chunks; smaller files '
+                   'are batched up to that size. With --scheduler, defaults to the workers\' memory.')
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,
@@ -90,7 +91,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
               parquet_row_group_size: int | None,
               max_workers: int | None,
               scheduler: str | None,
-              mb_per_task: float | None,
+              mb_per_worker: float | None,
               max_images_per_task: int | None,
               slice_size: tuple[str, ...],
               rows_per_part: int | None,
@@ -130,7 +131,7 @@ def process(base_directory: Path, output: Path, name: str | None, paths: tuple[s
         selected_file_extensions=selected_extensions,
         processors_included=set(processors_include) if processors_include else None,
         processors_excluded=set(processors_exclude) if processors_exclude else None,
-        mb_per_task=mb_per_task,
+        mb_per_worker=mb_per_worker,
         max_images_per_task=max_images_per_task,
         slice_size=_parse_slice_size(slice_size) if slice_size else None,
         rows_per_part=rows_per_part,

@@ -288,7 +288,7 @@ form.addEventListener("submit", async (e) => {
     processors_exclude: selectedValues(processorsExcludeSelect),
     max_workers: form.max_workers.value ? parseInt(form.max_workers.value, 10) : null,
     scheduler: form.scheduler.value.trim(),
-    mb_per_task: form.mb_per_task.value ? parseFloat(form.mb_per_task.value) : null,
+    mb_per_worker: form.mb_per_worker.value ? parseFloat(form.mb_per_worker.value) : null,
     max_images_per_task: form.max_images_per_task.value ? parseInt(form.max_images_per_task.value, 10) : null,
     rows_per_part: form.rows_per_part.value ? parseInt(form.rows_per_part.value, 10) : null,
     parquet_row_group_size: form.parquet_row_group_size.value ? parseInt(form.parquet_row_group_size.value, 10) : null,

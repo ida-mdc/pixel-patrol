@@ -16,7 +16,7 @@ triggers the same boundary bugs as a large one for a fraction of the runtime.
 
 All tests share one module-scoped 2-worker Dask client (see `shared_client`) instead of
 each spinning up its own cluster: real per-test clusters size `memory_limit` off
-`mb_per_task` (`memory_limit = mb_per_task * 8`), so a tiny `mb_per_task` - needed to make
+`mb_per_worker` (`memory_limit = mb_per_worker`), so a tiny `mb_per_worker` - needed to make
 tiny images trigger chunking - starves the worker process below its own baseline RAM
 footprint and gets it killed by Dask's memory monitor. Reusing one client with a real
 `memory_limit` sidesteps that, and 2 workers means these tests also exercise cross-worker
@@ -164,7 +164,7 @@ def _write_small_zcyx(tmp_path: Path) -> Tuple[Path, np.ndarray]:
 
 
 def _write_medium_zcyx(tmp_path: Path, name: str = "medium.tif") -> Tuple[Path, np.ndarray]:
-    """Z=7, C=3, Y=50, X=50 (~102.5KB) - at mb_per_task=0.05 still forces ragged
+    """Z=7, C=3, Y=50, X=50 (~102.5KB) - at mb_per_worker=0.4 still forces ragged
     Z-group memory chunking (7 -> 3+3+1); size is irrelevant to the raggedness,
     only the ratio of array size to budget is.
 
@@ -183,7 +183,7 @@ def _write_medium_zcyx(tmp_path: Path, name: str = "medium.tif") -> Tuple[Path, 
 def _write_large_2d(tmp_path: Path) -> Tuple[Path, np.ndarray]:
     """Y=97, X=101 (~19.1KB), plain 2D - forces spatial (X/Y) memory-chunk splitting
     directly (nothing else to split first), with a ragged chunk boundary in X
-    (101 -> 50+50+1) at mb_per_task=0.01.
+    (101 -> 50+50+1) at mb_per_worker=0.08.
 
     Value range is deliberately narrow (0-9): the histogram merge takes an exact
     fast path only when every chunk's local min/max exactly match the global
@@ -200,6 +200,18 @@ def _write_large_2d(tmp_path: Path) -> Tuple[Path, np.ndarray]:
     return path, arr
 
 
+def test_existing_cluster_mb_per_worker_defaults_to_worker_memory(shared_client, tmp_path: Path):
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+    _write_small_zcyx(img_dir)
+
+    _, stats = _build([img_dir], ProcessingConfig(max_workers=1), img_dir)
+    assert stats["mb_per_worker"] == pytest.approx(512e6 / 2**20)  # the shared cluster's memory_limit
+
+    _, stats = _build([img_dir], ProcessingConfig(max_workers=1, mb_per_worker=800), img_dir)
+    assert stats["mb_per_worker"] == 800
+
+
 # ── 1. Baseline: unchunked, default per-Z/per-C leaf granularity ────────────
 
 def test_baseline_unchunked_matches_oracle_and_default_granularity(shared_client, tmp_path: Path):
@@ -207,7 +219,7 @@ def test_baseline_unchunked_matches_oracle_and_default_granularity(shared_client
     img_dir.mkdir()
     _, arr = _write_small_zcyx(img_dir)
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800)
     df, stats = _build([img_dir], config, img_dir)
 
     assert stats["n_images_processed"] == 1
@@ -256,11 +268,11 @@ def test_ragged_z_memory_chunking_matches_unchunked(shared_client, tmp_path: Pat
     chunked_dir.mkdir()
     tifffile.imwrite(chunked_dir / "medium.tif", arr, metadata={"axes": "ZCYX"})
 
-    unchunked_cfg = ProcessingConfig(max_workers=1, mb_per_task=1)
+    unchunked_cfg = ProcessingConfig(max_workers=1, mb_per_worker=8)
     df_unchunked, stats_unchunked = _build([unchunked_dir], unchunked_cfg, unchunked_dir)
     assert stats_unchunked["task_types"] == {"BatchTask": 1}
 
-    chunked_cfg = ProcessingConfig(max_workers=1, mb_per_task=0.05)
+    chunked_cfg = ProcessingConfig(max_workers=1, mb_per_worker=0.4)
     df_chunked, stats_chunked = _build([chunked_dir], chunked_cfg, chunked_dir)
     # 3 ragged memory chunks: Z split into groups of 3 (7 -> 3+3+1), C untouched.
     assert stats_chunked["task_types"] == {"MemoryChunkTask": 3}
@@ -290,11 +302,11 @@ def test_ragged_spatial_memory_chunking_matches_unchunked(shared_client, tmp_pat
     chunked_dir.mkdir()
     tifffile.imwrite(chunked_dir / "spatial.tif", arr, metadata={"axes": "YX"})
 
-    unchunked_cfg = ProcessingConfig(max_workers=1, mb_per_task=1)
+    unchunked_cfg = ProcessingConfig(max_workers=1, mb_per_worker=8)
     df_unchunked, stats_unchunked = _build([unchunked_dir], unchunked_cfg, unchunked_dir)
     assert stats_unchunked["task_types"] == {"BatchTask": 1}
 
-    chunked_cfg = ProcessingConfig(max_workers=1, mb_per_task=0.01)
+    chunked_cfg = ProcessingConfig(max_workers=1, mb_per_worker=0.08)
     df_chunked, stats_chunked = _build([chunked_dir], chunked_cfg, chunked_dir)
     # Ragged spatial split: X=101 -> 50+50+1, Y untouched.
     assert stats_chunked["task_types"] == {"MemoryChunkTask": 3}
@@ -318,7 +330,7 @@ def test_custom_slice_size_z_block_2_reconciles_with_global(shared_client, tmp_p
     img_dir.mkdir()
     _, arr = _write_small_zcyx(img_dir)
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100, slice_size={"Z": 2, "C": -1})
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800, slice_size={"Z": 2, "C": -1})
     df, stats = _build([img_dir], config, img_dir)
 
     # Z=3 in blocks of 2 -> 2 ragged groups (2,1); C pinned to -1 (never split).
@@ -359,10 +371,10 @@ def test_mixed_batch_container_and_chunked_dataset(shared_client, tmp_path: Path
         for i in range(3):
             tw.write(rng.integers(0, 255, (16, 16), dtype=np.uint8), metadata={"axes": "YX"})
 
-    # 1 medium file -> forced into memory chunks by the small mb_per_task below.
+    # 1 medium file -> forced into memory chunks by the small mb_per_worker below.
     _, medium_arr = _write_medium_zcyx(img_dir, name="medium.tif")
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=0.05)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=0.4)
     df, stats = _build([img_dir], config, img_dir)
 
     assert stats["n_images_processed"] == 2 + 3 + 1
@@ -392,7 +404,7 @@ def test_processor_exclusion_wired_end_to_end(shared_client, tmp_path: Path):
 
     proj = Project("test", img_dir, loader="tifffile", output_path=tmp_path / "out.parquet")
     config = ProcessingConfig(
-        max_workers=1, mb_per_task=100,
+        max_workers=1, mb_per_worker=800,
         processors_included={"raster-basic", "raster-histogram", "thumbnail"},
     )
     _process(proj, config)
@@ -402,7 +414,7 @@ def test_processor_exclusion_wired_end_to_end(shared_client, tmp_path: Path):
     assert "thumbnail" in result.columns
 
     config_excl = ProcessingConfig(
-        max_workers=1, mb_per_task=100,
+        max_workers=1, mb_per_worker=800,
         processors_included={"raster-basic", "raster-histogram"},  # thumbnail dropped
     )
     proj2 = Project("test2", img_dir, loader="tifffile", output_path=tmp_path / "out2.parquet")
@@ -426,7 +438,7 @@ def test_real_parts_written_and_merged_with_correct_metadata(shared_client, tmp_
         arrays[name] = arr
 
     parts_dir = tmp_path / "_parts"
-    config = ProcessingConfig(max_workers=1, mb_per_task=100, rows_per_part=1)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800, rows_per_part=1)
     proj = Project("test", img_dir, loader="tifffile", output_path=tmp_path / "out.parquet")
     proj.metadata = ProcessingConfig().metadata.populate_from_project(proj)
 

@@ -24,8 +24,8 @@ from _processing_mocks import MockMemoryProcessor
 _DUMMY_PATH = Path("/mock/file")
 
 
-def _specs(shape, dim_order, mb_per_task, leaf_block_shape=None, dtype=np.float32):
-    return _compute_memory_chunk_specs(_DUMMY_PATH, dim_order, shape, dtype, mb_per_task, leaf_block_shape)
+def _specs(shape, dim_order, task_mb, leaf_block_shape=None, dtype=np.float32):
+    return _compute_memory_chunk_specs(_DUMMY_PATH, dim_order, shape, dtype, task_mb, leaf_block_shape)
 
 
 # ── _resolve_leaf_block_shape ─────────────────────────────────────────────────
@@ -190,8 +190,8 @@ def test_exact_3d_z_and_y_both_split():
 
 # ── deferred_dims ─────────────────────────────────────────────────────────────
 
-def _specs_deferred(shape, dim_order, mb_per_task, deferred_dims, dtype=np.float32):
-    return _compute_memory_chunk_specs(_DUMMY_PATH, dim_order, shape, dtype, mb_per_task, None, deferred_dims)
+def _specs_deferred(shape, dim_order, task_mb, deferred_dims, dtype=np.float32):
+    return _compute_memory_chunk_specs(_DUMMY_PATH, dim_order, shape, dtype, task_mb, None, deferred_dims)
 
 
 def test_deferred_dim_is_not_split_when_primary_absorbs_budget():
@@ -251,7 +251,7 @@ def _sums(chunk_group: List[MemoryChunkResult]) -> int:
 def test_small_sub_image_stays_a_single_chunk():
     small = np.arange(2 * 4 * 4, dtype=np.uint8).reshape(2, 4, 4)
     loader = _FakeContainerLoader([small])
-    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))  # budget = 100 bytes
+    config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
     results = _execute_container_task(task, loader, [_SumProcessor()], config)
@@ -264,7 +264,7 @@ def test_small_sub_image_stays_a_single_chunk():
 def test_oversized_sub_image_is_chunked_and_reassembles_correctly():
     big = np.arange(20 * 4 * 4, dtype=np.uint8).reshape(20, 4, 4)
     loader = _FakeContainerLoader([big])
-    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))  # budget = 100 bytes; big = 320 bytes
+    config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes; big = 320 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
     results = _execute_container_task(task, loader, [_SumProcessor()], config)
@@ -278,7 +278,7 @@ def test_mixed_batch_only_chunks_the_oversized_sub_image():
     small = np.arange(2 * 4 * 4, dtype=np.uint8).reshape(2, 4, 4)
     big   = np.arange(20 * 4 * 4, dtype=np.uint8).reshape(20, 4, 4)
     loader = _FakeContainerLoader([small, big])
-    config = ProcessingConfig(mb_per_task=100 / (1024 * 1024))
+    config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 2))
 
     results = _execute_container_task(task, loader, [_SumProcessor()], config)
@@ -317,7 +317,7 @@ class _OneBadSubImageLoader:
 
 def test_one_bad_sub_image_does_not_discard_its_siblings():
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 3))
-    config = ProcessingConfig(mb_per_task=100)
+    config = ProcessingConfig(mb_per_worker=800)
 
     results = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
 
@@ -343,7 +343,7 @@ def test_one_bad_file_does_not_discard_its_batch_siblings():
         _IndexedPath(file_index=1, file_path="bad.tif"),
         _IndexedPath(file_index=2, file_path="c.tif"),
     ))
-    config = ProcessingConfig(mb_per_task=100)
+    config = ProcessingConfig(mb_per_worker=800)
 
     results = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
 

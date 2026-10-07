@@ -11,6 +11,8 @@ DEFAULT_ROWS_PER_PART: int = 10_000
 # max images per task (applies to both batch tasks and container sub-images);
 # caps task size to keep workers returning results frequently
 DEFAULT_MAX_IMAGES_PER_TASK: int = 200
+# RAM per worker in MB; tasks are sized at 1/8 of this (see processing._MAX_SIZE_EXPANSION_FACTOR)
+DEFAULT_MB_PER_WORKER: float = 4096.0
 
 # Legacy alias - kept so any direct import still works during the transition
 DEFAULT_RECORDS_FLUSH_EVERY_N: int = DEFAULT_ROWS_PER_PART

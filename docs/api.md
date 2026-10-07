@@ -70,7 +70,7 @@ api.process_files(
     project,
     selected_file_extensions={"tif", "nd2"},
     max_workers=8,
-    mb_per_task=256,
+    mb_per_worker=2048,
     description="Batch 3 - fluorescence dataset",
 )
 ```

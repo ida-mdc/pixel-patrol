@@ -99,7 +99,7 @@ Processors fall into two categories that determine what data they receive:
 
 - **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
 
-- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the `mb_per_task` budget, the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
+- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the task size limit (1/8 of `mb_per_worker`), the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
 
 ### `--slice-size`
 
@@ -234,22 +234,24 @@ Everything before `--` controls the SLURM cluster (number of jobs, cores per job
 PixelPatrol groups work into Dask tasks. Three kinds of task exist, each with its own sizing logic:
 
 - **Batch tasks** - many small files are grouped into one task to reduce scheduling overhead.
-- **Memory chunk tasks** - a single large file (whose uncompressed size exceeds `mb_per_task`) is split into spatial sub-regions, each processed as a separate task. Results are assembled before writing.
-- **Container tasks** - sub-images from a container file are batched into tasks, again bounded by `mb_per_task`.
+- **Memory chunk tasks** - a single large file (whose uncompressed size exceeds 1/8 of `mb_per_worker`) is split into spatial sub-regions, each processed as a separate task. Results are assembled before writing.
+- **Container tasks** - sub-images from a container file are batched into tasks, again bounded by 1/8 of `mb_per_worker`.
 
-### `--mb-per-task`
+### `--mb-per-worker`
 
-The memory/work budget per task in MB (default: 512). It controls batch sizes for all three task types:
+RAM per worker in MB (default: 4096). Workers are packed into free RAM, so more RAM per worker means fewer parallel workers. Task sizes follow from it: images larger than 1/8 of this are split into chunks, and smaller files are batched up to that size. The factor 8 leaves room for processing copies and decompression.
 
-- **Many small files** - increase to reduce overhead: `--mb-per-task 2048`
-- **Large 3D volumes or container files with large images** - decrease to keep individual tasks short: `--mb-per-task 128`
+- **Default** - fine for most data.
+- **Increase** (e.g. `--mb-per-worker 16384`) - keeps large images whole instead of splitting them, and helps if workers keep pausing or restarting on memory. Fewer parallel workers.
+- **Decrease** (e.g. `--mb-per-worker 1024`) - more parallel workers when RAM is the limit and images are small.
+- **Existing Dask cluster** (`--scheduler`) - defaults to the workers' memory limit, which is set on the cluster (e.g. SLURM `--memory`). Setting it above that can make workers run out of memory.
 
 ### `--max-images-per-task`
 
 Maximum number of files (or sub-images) per task (default: 200).
 
 ```bash
-pixel-patrol process my-data/ -o results.parquet --mb-per-task 256 --max-images-per-task 50
+pixel-patrol process my-data/ -o results.parquet --mb-per-worker 2048 --max-images-per-task 50
 ```
 
 

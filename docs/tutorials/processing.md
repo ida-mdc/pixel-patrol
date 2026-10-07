@@ -434,21 +434,20 @@ Answer the questions below and we'll walk you through each decision together, bu
              oninput="procWiz.set('max_workers', this.value)">
     </div>
 
-    <!-- MB per task -->
+    <!-- MB per worker -->
     <div class="wiz-adv-field">
       <div class="wiz-adv-field-label">
-        MB per task <code class="wiz-badge">--mb-per-task</code>
-        <span class="wiz-optional"> (default: 512)</span>
+        MB per worker <code class="wiz-badge">--mb-per-worker</code>
+        <span class="wiz-optional"> (default: 4096)</span>
       </div>
       <div class="wiz-adv-field-hint">
-        Memory budget per Dask task in MB. Controls how files are batched:
-        <strong>increase</strong> (e.g. 2048) for datasets with many tiny files to reduce scheduling overhead;
-        <strong>decrease</strong> (e.g. 128) for large 3D volumes or container files with large sub-images
-        to keep individual tasks short and prevent memory spikes.
+        RAM per worker in MB. More RAM per worker means fewer parallel workers.
+        <strong>Increase</strong> (e.g. 16384) to keep large images whole or if workers run out of memory;
+        <strong>decrease</strong> (e.g. 1024) for more parallel workers when images are small.
       </div>
-      <input class="wiz-input" type="number" id="pwi-mb_per_task"
-             placeholder="512" min="1"
-             oninput="procWiz.set('mb_per_task', this.value)">
+      <input class="wiz-input" type="number" id="pwi-mb_per_worker"
+             placeholder="4096" min="1"
+             oninput="procWiz.set('mb_per_worker', this.value)">
     </div>
 
     <!-- Max images per task -->
@@ -540,7 +539,7 @@ const procWiz = {
     processors_include:  '',
     processors_exclude:  '',
     max_workers:         '',
-    mb_per_task:         '',
+    mb_per_worker:       '',
     max_images_per_task: '',
     rows_per_part:       '',
     log_file:            false,
@@ -728,7 +727,7 @@ const procWiz = {
       s.processors_exclude.split(',').map(e => e.trim()).filter(Boolean)
         .forEach(p => pp.push('--processors-exclude ' + p));
     if (!isSlurm && s.max_workers) pp.push('--max-workers ' + s.max_workers);
-    if (s.mb_per_task)         pp.push('--mb-per-task ' + s.mb_per_task);
+    if (s.mb_per_worker)       pp.push('--mb-per-worker ' + s.mb_per_worker);
     if (s.max_images_per_task) pp.push('--max-images-per-task ' + s.max_images_per_task);
     if (s.rows_per_part)       pp.push('--rows-per-part ' + s.rows_per_part);
     if (s.log_file)            pp.push('--log-file');
@@ -802,7 +801,7 @@ const procWiz = {
       if (pairs) kwargs.push('slice_size={' + pairs + '}');
     }
     if (!isSlurm && s.max_workers) kwargs.push('max_workers=' + s.max_workers);
-    if (s.mb_per_task)         kwargs.push('mb_per_task=' + s.mb_per_task);
+    if (s.mb_per_worker)       kwargs.push('mb_per_worker=' + s.mb_per_worker);
     if (s.max_images_per_task) kwargs.push('max_images_per_task=' + s.max_images_per_task);
     if (s.rows_per_part)       kwargs.push('rows_per_part=' + s.rows_per_part);
     if (s.description && s.description.trim())

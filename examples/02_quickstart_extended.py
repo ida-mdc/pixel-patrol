@@ -32,11 +32,7 @@ def main():
         max_workers=4,          # Dask worker count; None = auto (all CPUs)
                                 # To use an external Dask cluster (e.g. SLURM):
                                 #   connect before calling: with Client("tcp://host:8786"): api.process_files(...)
-        # --- Task sizing ---
-        mb_per_task=512,        # MB budget per Dask task.
-                                # Default (512 MB) works well for small files.
-                                # For containers with large images (e.g. 6 MP), use 50 MB or less
-                                # to keep individual task durations under ~2 minutes.
+        mb_per_worker=4096,     # RAM per Dask worker in MB (default). Lower = more parallel workers.
         # --- File selection ---
         selected_file_extensions={"tif", "png", "jpeg"},
         # --- Report metadata ---
