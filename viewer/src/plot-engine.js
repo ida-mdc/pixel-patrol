@@ -39,6 +39,9 @@ export const MAX_VIOLIN_POINTS = 5_000;
 // datapoint than a sparse shape. Default for all category violins so the violin,
 // dimension-size, and custom-plot widgets render distributions identically.
 export const VIOLIN_ALL_POINTS_BELOW = 500;
+// At or below this many distinct values, use 'strip' mode (raw jittered
+// points) instead of violin/box - see renderDistribution.
+export const STRIP_MAX_DISTINCT = 10;
 
 // Populated from the detected schema via setDateCols() - see renderer.js buildCtx.
 export function setDateCols(cols) {
@@ -48,7 +51,7 @@ export function setDateCols(cols) {
 
 export const CONSTANTS = {
   COUNT_Y, NULL_LABEL, MAX_CAT, MAX_HUE, MAX_SAMPLE, MAX_VIOLIN_POINTS,
-  VIOLIN_ALL_POINTS_BELOW, DATE_COLS,
+  VIOLIN_ALL_POINTS_BELOW, STRIP_MAX_DISTINCT, DATE_COLS,
 };
 
 // ── Small SQL / formatting helpers ────────────────────────────────────────────
@@ -230,6 +233,8 @@ const STAT_SELECT = (q, num) => `
  *   stats?            precomputed per-category stats (category mode, avoids a query)
  *   allPointsBelow?   category-mode violins with fewer than this many points show
  *                     every (jittered) datapoint instead of just outliers (default 0)
+ *   distinctCount?    total distinct values of numCol, if the caller already has it
+ *                     (avoids a query); else computed here. Drives 'strip' mode.
  *   layout?           extra Plotly layout merged over the computed one (height,
  *                     margin, title font, …) - for compact grid cells
  *   divStyle?         wrapper element style string (e.g. flex sizing in a grid)
@@ -250,7 +255,7 @@ export async function renderDistribution(container, ctx, spec) {
     maxRawPoints = MAX_VIOLIN_POINTS, series, categoriesOrder = null,
     catLabelFn = (v) => v, stats: precomputed = null, isStale = () => false,
     allPointsBelow = VIOLIN_ALL_POINTS_BELOW, layout: layoutOverride = {}, divStyle = '',
-    sideInfo = null,
+    sideInfo = null, distinctCount = null,
   } = spec;
   const { table, where } = source;
 
@@ -277,7 +282,22 @@ export async function renderDistribution(container, ctx, spec) {
   const total = statRows ? statRows.reduce((s, r) => s + Number(r.n || 0), 0) : null;
   if (statRows && !total) return false;
 
+  // Skip for 'bar' (irrelevant), dates (already always a sampled raw violin), and
+  // maxRawPoints: 0 callers (e.g. overview tiles), who need the box-summary path
+  // to stay a pure SQL aggregate regardless of how few distinct values there are.
+  let nd = distinctCount;
+  if (nd == null && force !== 'bar' && !isDate && maxRawPoints !== 0) {
+    // Only used for the small-N threshold below, so an approximate (HyperLogLog)
+    // count is fine and cheaper than an exact one.
+    const [{ nd: ndRaw }] = await ctx.queryRows(`
+      SELECT approx_count_distinct(${q(numCol)}) AS nd
+      FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}
+    `);
+    nd = Number(ndRaw ?? 0);
+  }
+
   const mode = force === 'bar' ? 'bar'
+             : (maxRawPoints !== 0 && nd != null && nd <= STRIP_MAX_DISTINCT) ? 'strip'
              : (statRows && total > maxRawPoints) ? 'box'
              : 'violin';
 
@@ -323,8 +343,8 @@ export async function renderDistribution(container, ctx, spec) {
   const plotContainer = (sideInfo && ctx.state.showInfo) ? appendSideInfoRow(container, sideInfo) : container;
   const plotDiv = ctx.plot.append(plotContainer, traces, finalLayout, divStyle);
 
-  // Both violin and box carry customdata (outlier overlay for box), so both are click-to-inspect.
-  if (mode === 'violin' || mode === 'box') registerPointPlot(plotDiv, ctx, numCol);
+  // All three carry customdata, so all are click-to-inspect.
+  if (mode === 'violin' || mode === 'box' || mode === 'strip') registerPointPlot(plotDiv, ctx, numCol);
 
   // Significance only makes sense with one violin/box per X category: either
   // category mode, or a single color series. Keyed on raw category values;
@@ -352,27 +372,42 @@ async function buildCategoryTraces(ctx, { numCol, table, where, catSql, mode, st
   const present = (categoriesOrder ?? sortCats([...byCat.keys()])).filter(c => byCat.has(c) && Number(byCat.get(c).n) > 0);
   if (!present.length) return { traces: [], categories: [] };
 
-  if (mode === 'violin') {
-    const rows = await ctx.queryRows(`
+  if (mode === 'violin' || mode === 'strip') {
+    const rawQuery = `
       SELECT ${catSql} AS __cat__, ${q(numCol)} AS val, ${q(FILE_ROW_NUMBER)} AS frn
-      FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}
-    `);
+      FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}`;
+    // Few distinct values can still mean many rows - sample like dates do.
+    const rows = await ctx.queryRows(mode === 'strip'
+      ? `SELECT * FROM (${rawQuery}) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)` : rawQuery);
     const byG = new Map(present.map(g => [g, []]));
     for (const r of rows) byG.get(String(r.__cat__))?.push(r);
     const traces = present.map(g => {
       const grp = byG.get(g);
       const y = grp.map(r => Number(r.val));
+      const x = y.map(() => catLabelFn(g));
+      // customdata aligns with y so a clicked point maps back to its source row.
+      const customdata = grp.map(r => r.frn);
+      const color = ctx.color.group(g);
+      if (mode === 'strip') {
+        // Box trace with the box hidden - reuses Plotly's jitter, no density/quartile shape.
+        return {
+          type: 'box', name: catLabelFn(g), x, y, customdata,
+          boxpoints: 'all', jitter: 0.3, pointpos: 0,
+          fillcolor: 'rgba(0,0,0,0)', line: { width: 0 },
+          marker: { color, size: 7 },
+          hoveron: 'points',
+          hovertemplate: '<b>Value:</b> %{y:.2f}<extra></extra>',
+        };
+      }
       // Small samples read better as every (jittered) point than as a sparse violin.
       const allPoints = allPointsBelow > 0 && y.length < allPointsBelow;
       return {
         // spanmode 'soft' (default) gives smooth tapering tails; 'hard' clips the
         // density flat at the data min/max, which reads as an ugly "cropped" violin.
-        type: 'violin', name: catLabelFn(g), x: y.map(() => catLabelFn(g)), y,
-        // customdata aligns with y so a clicked point maps back to its source row.
-        customdata: grp.map(r => r.frn),
+        type: 'violin', name: catLabelFn(g), x, y, customdata,
         box: { visible: true }, meanline: { visible: true },
         points: allPoints ? 'all' : 'outliers', ...(allPoints ? { pointpos: 0, jitter: 0.3 } : {}),
-        spanmode: 'soft', opacity: 0.9, marker: { color: ctx.color.group(g) },
+        spanmode: 'soft', opacity: 0.9, marker: { color },
         hovertemplate: '<b>Group:</b> %{x}<br><b>Value:</b> %{y:.2f}<extra></extra>',
       };
     }).filter(t => t.y.length);
@@ -422,23 +457,34 @@ async function fetchCategoryOutliers(ctx, { numCol, table, where, catSql, n = OU
 async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, statRows, series, isDate }) {
   const { q, andWhere } = ctx.sql;
 
-  if (mode === 'violin') {
+  if (mode === 'violin' || mode === 'strip') {
     // Raw rows (no statRows needed - also covers date columns, which skip stats).
-    // Dates are reservoir-sampled to keep the payload bounded.
+    // Dates and strip mode are reservoir-sampled to keep the payload bounded.
     const inner = `SELECT ${catSql} AS cat, ${selectExpr(q, numCol, 'val')}, ${q(FILE_ROW_NUMBER)} AS frn, ${series.sql}
       FROM ${table} ${andWhere(where, `${q(numCol)} IS NOT NULL`)}`;
     const rows = await ctx.queryRows(
-      isDate ? `SELECT * FROM (${inner}) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)` : inner);
+      (isDate || mode === 'strip') ? `SELECT * FROM (${inner}) USING SAMPLE ${MAX_SAMPLE} ROWS (reservoir, 42)` : inner);
     const { groups, colorFn, labelFn } = series.build(rows);
     const cats = sortCats([...new Set(rows.map(r => String(r.cat)))]);
     const traces = groups.map(g => {
       const gr = rows.filter(r => String(r.__group__) === g);
+      const x = gr.map(r => String(r.cat)), y = gr.map(r => valueOf(numCol, r.val));
+      const customdata = gr.map(r => r.frn);  // aligns with y for click-to-inspect
+      const color = colorFn(g);
+      if (mode === 'strip') {
+        return {
+          type: 'box', name: labelFn(g), x, y, customdata,
+          boxpoints: 'all', jitter: 0.3, pointpos: 0,
+          fillcolor: 'rgba(0,0,0,0)', line: { width: 0 },
+          marker: { color, size: 7 },
+          hoveron: 'points',
+          hovertemplate: '<b>Value:</b> %{y:.2f}<extra></extra>',
+        };
+      }
       return {
-        type: 'violin', name: labelFn(g),
-        x: gr.map(r => String(r.cat)), y: gr.map(r => valueOf(numCol, r.val)),
-        customdata: gr.map(r => r.frn),  // aligns with y for click-to-inspect
+        type: 'violin', name: labelFn(g), x, y, customdata,
         box: { visible: true }, meanline: { visible: true }, points: 'outliers',
-        spanmode: 'soft', marker: { color: colorFn(g) },  // smooth tails, not clipped flat
+        spanmode: 'soft', marker: { color },  // smooth tails, not clipped flat
       };
     }).filter(t => t.y.length);
     return { traces, categories: cats, categoryValues: cats };

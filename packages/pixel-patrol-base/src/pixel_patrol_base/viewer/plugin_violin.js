@@ -321,7 +321,10 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
 
   // Per-group summary stats (quartiles, min/max, mean) computed entirely in SQL,
   // so the box-plot fallback scales to any number of underlying rows. Batched
-  // across every metric in one query, then sliced per metric below.
+  // across every metric in one query, then sliced per metric below. GROUP BY
+  // ROLLUP(gc) adds one extra grand-total row (GROUPING(gc) = 1) alongside the
+  // per-group rows, so the overall approx_count_distinct below comes from the
+  // same pass instead of a second full-table scan.
   const statCols = metrics.map(m => `
     COUNT(${q(m)}) AS "${m}__n",
     MIN(${q(m)}) AS "${m}__min",
@@ -332,11 +335,18 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
     approx_quantile(${q(m)}, 0.5) AS "${m}__median",
     approx_quantile(${q(m)}, 0.75) AS "${m}__q3"`).join(',\n');
 
-  const statRows = await ctx.queryRows(`
-    SELECT ${geFn()}, ${statCols}
+  // Distinct-value count per metric, over the whole filtered table (not per
+  // group) - only used for a small-N threshold, so approximate is fine.
+  const ndCols = metrics.map(m => `approx_count_distinct(${q(m)}) AS "${m}__nd"`).join(',\n');
+
+  const rows = await ctx.queryRows(`
+    SELECT ${geFn()}, GROUPING(${gc}) AS __is_total__, ${statCols},
+      ${ndCols}
     FROM ${sourceTable} ${combinedWhere}
-    GROUP BY ${gc}
+    GROUP BY ROLLUP(${gc})
   `);
+  const totalRow = rows.find(r => Number(r.__is_total__) === 1) ?? {};
+  const statRows = rows.filter(r => Number(r.__is_total__) !== 1);
 
   if (!statRows.length) {
     plotRoot.innerHTML += '<div class="no-data">No rows match the current filter.</div>';
@@ -418,6 +428,7 @@ async function renderViolins(plotRoot, ctx, filterMetric, splitDims, fractionWar
         categoriesOrder: groups,
         catLabelFn: ctx.groupLabel,
         stats,
+        distinctCount: Number(totalRow[`${metric}__nd`]),
         sideInfo: sideInfoFor(metric),
         ...(isClipping ? { layout: { yaxis: { tickformat: '.2%', title: label } } } : {}),
       });
