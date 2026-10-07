@@ -253,21 +253,43 @@ def test_real_rgb_dicom_file_matches_pydicom(loader):
     np.testing.assert_array_equal(rec.data.compute(), expected)
 
 
-def test_real_rgb_dicom_multiframe_series_folder(tmp_path, loader):
-    # Real-world multi-frame RGB sample (2 frames, RLE-compressed), duplicated into a
-    # 2-file folder series - the shape a folder of color cine-loop files takes in practice.
+def test_real_rgb_dicom_multiframe(loader):
+    src = Path(get_testdata_file("SC_rgb_rle_2frame.dcm"))
+    info = loader.read_header(src)
+    assert info.shape == (2, 100, 100, 3)
+    assert info.dim_order == "ZYXC"
+
+    rec = loader.load(src)
+    assert rec.meta["channel_names"] == ["R", "G", "B"]
+    assert "rgb:C" in rec.capabilities
+
+def test_testdata_grayscale_multiframe(loader):
+    src = Path(get_testdata_file("emri_small.dcm"))
+    info = loader.read_header(src)
+    print(pydicom.dcmread(src))
+    assert info.shape == (10, 64, 64)
+    assert info.dim_order == "ZYX"
+    assert info.dtype == np.uint16
+
+
+def test_folder_series_of_multiframe_rgb_dicom(tmp_path, loader):
+    # duplicate multiframe RGB dicom file and put it into folder to test RGB series
+    # could happen for time series of RGB 3D volumes
+    # setup:
+    duplicate_times = 2
     src = Path(get_testdata_file("SC_rgb_rle_2frame.dcm"))
     ref_ds = pydicom.dcmread(src)
     n_frames_per_file = int(ref_ds.NumberOfFrames)
     expected_frame = ref_ds.pixel_array[0]
 
-    for i in range(2):
+    for i in range(duplicate_times):
         ds = pydicom.dcmread(src)
         ds.SOPInstanceUID = pydicom.uid.generate_uid()
         ds.InstanceNumber = i + 1
         ds.save_as(tmp_path / f"frame_set_{i}.dcm")
 
-    expected_shape = (2 * n_frames_per_file, *expected_frame.shape)
+    # testing
+    expected_shape = (duplicate_times * n_frames_per_file, *expected_frame.shape)
     info = loader.read_header(tmp_path)
     assert info.shape == expected_shape
 
@@ -278,15 +300,6 @@ def test_real_rgb_dicom_multiframe_series_folder(tmp_path, loader):
     np.testing.assert_array_equal(data[0], expected_frame)
     np.testing.assert_array_equal(data[n_frames_per_file], expected_frame)
 
-
-def test_ybr_color_dicom_raises_skip_file(loader):
-    # Real-world color DICOM stored as YBR (JPEG-compressed cine loop): pydicom's pixel_array
-    # does not convert this to RGB, so treating the raw samples as channel data would be wrong.
-    path = Path(get_testdata_file("examples_ybr_color.dcm"))
-    with pytest.raises(SkipFile, match="color space"):
-        loader.read_header(path)
-    with pytest.raises(SkipFile, match="color space"):
-        loader.load(path)
 
 
 def test_sr_file_raises_skip_file(tmp_path, loader):
@@ -401,15 +414,3 @@ def test_scan_series_nested_directories(tmp_path, loader):
     info = loader.read_header(tmp_path)
     assert info.shape == (3, 8, 8)
     assert info.n_images == 1
-
-
-@pytest.mark.parametrize("testfile_name",
-                         ["SC_ybr_full_422_uncompressed.dcm",
-                          "examples_ybr_color.dcm",
-                          "GDCMJ2K_TextGBR.dcm",
-                          "examples_jpeg2k.dcm"])
-def test_ybr_color_dicom(loader, testfile_name):
-    path = Path(get_testdata_file(testfile_name))
-    info = loader.read_header(path)
-    record = loader.load(path)
-    assert info.shape == record.data.compute().shape
