@@ -9,21 +9,35 @@ on:
       - '**'
 
 jobs:
+  discover-packages:
+    name: Discover Python Packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.find.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find packages with tests
+        id: find
+        run: |
+          shopt -s nullglob
+          # Space-separated packages to skip on purpose, with a comment per entry
+          EXCLUDE=""
+          names=()
+          for tests_dir in packages/*/tests; do
+            pkg=$(basename "$(dirname "$tests_dir")")
+            [[ " $EXCLUDE " == *" $pkg "* ]] || names+=("$pkg")
+          done
+          echo "packages=$(jq -nc '$ARGS.positional' --args "${names[@]}")" | tee -a "$GITHUB_OUTPUT"
+
   test-packages:
     name: Test Python Packages
+    needs: discover-packages
     strategy:
       matrix:
         # If on main (push) OR PR targeting main -> test on 3 OSes, else only ubuntu
         os: ${{ fromJson( (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]' ) }}
-        package:
-          - pixel-patrol-base
-          - pixel-patrol-aqqua
-          - pixel-patrol-geospatial
-          - pixel-patrol-loader-bio
-          - pixel-patrol-loader-medical
-          - pixel-patrol
-          - pixel-patrol-tensorboard
-          - pixel-patrol-loader-video
+        package: ${{ fromJson(needs.discover-packages.outputs.packages) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
