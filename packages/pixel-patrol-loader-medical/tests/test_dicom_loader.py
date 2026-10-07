@@ -414,3 +414,10 @@ def test_scan_series_nested_directories(tmp_path, loader):
     info = loader.read_header(tmp_path)
     assert info.shape == (3, 8, 8)
     assert info.n_images == 1
+
+
+def test_ultrasonic_timeseries_dicom(loader):
+    # example is a 2D time series, ultrasonic
+    path = Path(get_testdata_file("examples_ybr_color.dcm"))
+    info = loader.read_header(path)
+    assert info.dim_order == "TYXC"
