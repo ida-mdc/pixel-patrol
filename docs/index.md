@@ -37,15 +37,6 @@ source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 
-Or with pip:
-
-!!! warning
-    Installing without a virtual environment is not recommended - it can conflict with other packages. If in doubt, use the uv method above.
-
-```bash
-pip install pixel-patrol
-```
-
 Requires Python 3.12+. See [Installation](installation.md) for more options.
 
 ---

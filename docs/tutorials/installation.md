@@ -40,7 +40,7 @@ Answer the questions below and we'll show you the exact commands for your setup.
   <div class="wiz-step wiz-hidden" id="iws-uv">
     <div class="wiz-step-q">Do you have <code>uv</code> installed?</div>
     <div class="wiz-step-hint">
-      <code>uv</code> is a fast Python package manager - we recommend it, but pip works too.
+      <code>uv</code> is a fast Python package manager that sets up everything for you.
       Not sure? Run <code>uv --version</code> in your terminal.
     </div>
     <div class="wiz-options wiz-options-row">
@@ -53,14 +53,6 @@ Answer the questions below and we'll show you the exact commands for your setup.
         <input type="radio" name="inst-uv" value="no"
                onchange="instWiz.pick('uv','no')">
         <div><div class="wiz-opt-title">No, install it for me</div></div>
-      </label>
-      <label class="wiz-option">
-        <input type="radio" name="inst-uv" value="pip"
-               onchange="instWiz.pick('uv','pip')">
-        <div>
-          <div class="wiz-opt-title">I'd rather use pip</div>
-          <div class="wiz-opt-sub">⚠️ Installing without a virtual environment can conflict with other packages in your Python installation. We recommend using uv instead.</div>
-        </div>
       </label>
     </div>
   </div>
@@ -138,26 +130,18 @@ const instWiz = {
       }
     }
 
-    if (s.uv === 'pip') {
-      lines.push('# Install PixelPatrol with pip');
-      lines.push('pip install pixel-patrol');
-      lines.push('');
-      lines.push('# Verify');
-      lines.push('pixel-patrol --version');
-    } else {
-      const step = s.uv === 'no' ? '2' : '1';
-      lines.push('# ' + step + '. Create a virtual environment');
-      lines.push('uv venv --python 3.12 .venv');
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+1) + '. Activate it');
-      lines.push(activate);
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+2) + '. Install PixelPatrol');
-      lines.push('uv pip install pixel-patrol');
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+3) + '. Verify');
-      lines.push('pixel-patrol --version');
-    }
+    const step = s.uv === 'no' ? '2' : '1';
+    lines.push('# ' + step + '. Create a virtual environment');
+    lines.push('uv venv --python 3.12 .venv');
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+1) + '. Activate it');
+    lines.push(activate);
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+2) + '. Install PixelPatrol');
+    lines.push('uv pip install pixel-patrol');
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+3) + '. Verify');
+    lines.push('pixel-patrol --version');
 
     document.getElementById('inst-cmd').textContent = lines.join('\n');
   },

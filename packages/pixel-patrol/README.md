@@ -24,12 +24,6 @@ source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 
-Or with pip:
-
-```bash
-pip install pixel-patrol
-```
-
 For a modular install (core only + selected add-ons):
 
 ```bash

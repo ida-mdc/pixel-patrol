@@ -52,17 +52,6 @@ pixel-patrol --help
 
 ---
 
-## Quick install with pip
-
-!!! warning
-    Installing without a virtual environment is not recommended - it can conflict with other packages in your Python installation. If in doubt, use the uv method above.
-
-```bash
-pip install pixel-patrol
-```
-
----
-
 ## Modular install
 
 PixelPatrol is split into focused packages so you only install what you need. The core package (`pixel-patrol-base`) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.
