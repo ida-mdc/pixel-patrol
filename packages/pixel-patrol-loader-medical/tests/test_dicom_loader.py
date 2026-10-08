@@ -7,6 +7,7 @@ import numpy as np
 import pydicom
 import pydicom.uid
 import pytest
+from pydicom.data import get_testdata_file
 from pydicom.dataset import FileDataset
 
 from pixel_patrol_base.core.contracts import SkipFile
@@ -28,7 +29,8 @@ def _write_dicom_slice(
     rescale_slope: float = 1.0,
     rescale_intercept: float = 0.0,
 ) -> None:
-    rows, cols = pixel_array.shape
+    is_rgb = pixel_array.ndim == 3
+    rows, cols = pixel_array.shape[:2]
     sop_uid = pydicom.uid.generate_uid()
 
     file_meta = pydicom.dataset.FileMetaDataset()
@@ -53,13 +55,21 @@ def _write_dicom_slice(
 
     ds.Rows = rows
     ds.Columns = cols
-    ds.BitsAllocated = 16
-    ds.BitsStored = 16
-    ds.HighBit = 15
+    if is_rgb:
+        ds.BitsAllocated = ds.BitsStored = 8
+        ds.HighBit = 7
+        ds.SamplesPerPixel = 3
+        ds.PhotometricInterpretation = "RGB"
+        ds.PlanarConfiguration = 0
+        ds.PixelData = pixel_array.astype(np.uint8).tobytes()
+    else:
+        ds.BitsAllocated = 16
+        ds.BitsStored = 16
+        ds.HighBit = 15
+        ds.SamplesPerPixel = 1
+        ds.PhotometricInterpretation = "MONOCHROME2"
+        ds.PixelData = pixel_array.astype(np.uint16).tobytes()
     ds.PixelRepresentation = 0
-    ds.SamplesPerPixel = 1
-    ds.PhotometricInterpretation = "MONOCHROME2"
-    ds.PixelData = pixel_array.astype(np.uint16).tobytes()
 
     pydicom.dcmwrite(str(path), ds)
 
@@ -210,6 +220,86 @@ def test_rescale_applied(tmp_path, loader):
     rec = loader.load(path)
     assert rec.data.dtype == np.dtype("float32")
     np.testing.assert_array_equal(rec.data.compute(), arr.astype(np.float32) - 1024.0)
+
+
+def test_rgb_dicom_gets_channel_axis(tmp_path, loader):
+    path = tmp_path / "rgb.dcm"
+    arr = np.zeros((4, 5, 3), dtype=np.uint8)
+    arr[..., 0], arr[..., 1], arr[..., 2] = 1, 2, 3
+    _write_dicom_slice(path, arr, pydicom.uid.generate_uid(), modality="US")
+
+    info = loader.read_header(path)
+    assert info.shape == (4, 5, 3)
+    assert info.dim_order == "YXC"
+
+    rec = loader.load(path)
+    assert rec.meta["channel_names"] == ["R", "G", "B"]
+    assert "rgb:C" in rec.capabilities
+    np.testing.assert_array_equal(rec.data.compute(), arr)
+
+
+def test_real_rgb_dicom_file_matches_pydicom(loader):
+    # Real-world RGB sample bundled with pydicom itself (uncompressed, single frame).
+    path = Path(get_testdata_file("SC_rgb.dcm"))
+    expected = pydicom.dcmread(path).pixel_array  # ground truth straight from pydicom
+
+    info = loader.read_header(path)
+    assert info.shape == expected.shape
+    assert info.dim_order == "YXC"
+
+    rec = loader.load(path)
+    assert rec.meta["channel_names"] == ["R", "G", "B"]
+    assert "rgb:C" in rec.capabilities
+    np.testing.assert_array_equal(rec.data.compute(), expected)
+
+
+def test_real_rgb_dicom_multiframe(loader):
+    src = Path(get_testdata_file("SC_rgb_rle_2frame.dcm"))
+    info = loader.read_header(src)
+    assert info.shape == (2, 100, 100, 3)
+    assert info.dim_order == "ZYXC"
+
+    rec = loader.load(src)
+    assert rec.meta["channel_names"] == ["R", "G", "B"]
+    assert "rgb:C" in rec.capabilities
+
+def test_testdata_grayscale_multiframe(loader):
+    src = Path(get_testdata_file("emri_small.dcm"))
+    info = loader.read_header(src)
+    print(pydicom.dcmread(src))
+    assert info.shape == (10, 64, 64)
+    assert info.dim_order == "ZYX"
+    assert info.dtype == np.uint16
+
+
+def test_folder_series_of_multiframe_rgb_dicom(tmp_path, loader):
+    # duplicate multiframe RGB dicom file and put it into folder to test RGB series
+    # could happen for time series of RGB 3D volumes
+    # setup:
+    duplicate_times = 2
+    src = Path(get_testdata_file("SC_rgb_rle_2frame.dcm"))
+    ref_ds = pydicom.dcmread(src)
+    n_frames_per_file = int(ref_ds.NumberOfFrames)
+    expected_frame = ref_ds.pixel_array[0]
+
+    for i in range(duplicate_times):
+        ds = pydicom.dcmread(src)
+        ds.SOPInstanceUID = pydicom.uid.generate_uid()
+        ds.InstanceNumber = i + 1
+        ds.save_as(tmp_path / f"frame_set_{i}.dcm")
+
+    # testing
+    expected_shape = (duplicate_times * n_frames_per_file, *expected_frame.shape)
+    info = loader.read_header(tmp_path)
+    assert info.shape == expected_shape
+
+    rec = loader.load(tmp_path)
+    assert tuple(rec.data.shape) == expected_shape
+    data = rec.data.compute()
+    assert data.shape == expected_shape
+    np.testing.assert_array_equal(data[0], expected_frame)
+    np.testing.assert_array_equal(data[n_frames_per_file], expected_frame)
+
 
 
 def test_sr_file_raises_skip_file(tmp_path, loader):
