@@ -179,6 +179,9 @@ export async function exportBakedHtml(state, schema, plugins) {
   const mainApp = doc.getElementById(ID_MAIN_APP);
   if (mainApp) mainApp.style.display = 'flex';
 
+  // The toggle is stripped, so a sidebar collapsed at export time would stay hidden
+  doc.getElementById('sidebar')?.classList.remove('sidebar-hidden');
+
   // Populate and show the frozen settings banner
   const banner     = doc.getElementById('sidebar-frozen-banner');
   const bannerBody = doc.getElementById('sidebar-frozen-body');
