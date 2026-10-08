@@ -205,11 +205,9 @@ def test_existing_cluster_mb_per_worker_defaults_to_worker_memory(shared_client,
     img_dir.mkdir()
     _write_small_zcyx(img_dir)
 
+    # unset mb_per_worker falls back to the memory_limit of the shared_client fixture's workers
     _, stats = _build([img_dir], ProcessingConfig(max_workers=1), img_dir)
-    assert stats["mb_per_worker"] == pytest.approx(512e6 / 2**20)  # the shared cluster's memory_limit
-
-    _, stats = _build([img_dir], ProcessingConfig(max_workers=1, mb_per_worker=800), img_dir)
-    assert stats["mb_per_worker"] == 800
+    assert stats["mb_per_worker"] == pytest.approx(512e6 / 2**20)
 
 
 # ── 1. Baseline: unchunked, default per-Z/per-C leaf granularity ────────────

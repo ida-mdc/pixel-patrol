@@ -65,8 +65,8 @@ def cli():
                    '(e.g. tcp://host:8786). Useful for HPC clusters.')
 @click.option('--mb-per-worker', type=float, default=None, show_default=True,
               help='RAM per worker in MB (default: 4096). More RAM per worker means fewer parallel '
-                   'workers. Images larger than 1/8 of this are split into chunks; smaller files '
-                   'are batched up to that size. With --scheduler, defaults to the workers\' memory.')
+                   'workers. Images larger than 1/8 of this (headroom for in-memory expansion) are '
+                   'split into chunks; smaller files are batched up to that size. With --scheduler, defaults to the workers\' memory.')
 @click.option('--max-images-per-task', type=int, default=None, show_default=True,
               help='Max files per batch task or sub-images per container task (default: 200).')
 @click.option('--slice-size', 'slice_size', multiple=True,

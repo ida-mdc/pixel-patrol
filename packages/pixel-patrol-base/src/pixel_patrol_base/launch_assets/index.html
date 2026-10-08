@@ -151,7 +151,7 @@
             <div class="form-group">
               <label for="mb-per-worker">RAM per Worker (MB)</label>
               <input type="number" id="mb-per-worker" name="mb_per_worker" min="0" step="any" placeholder="4096">
-              <p class="form-text">More RAM per worker means fewer parallel workers. Images larger than 1/8 of this are split into chunks; smaller files are batched up to that size. With a scheduler, defaults to the workers' memory.</p>
+              <p class="form-text">More RAM per worker means fewer parallel workers. Images larger than 1/8 of this (headroom for in-memory expansion) are split into chunks; smaller files are batched up to that size. With a scheduler, defaults to the workers' memory.</p>
             </div>
             <div class="form-group">
               <label for="max-images-per-task">Max Images per Task</label>

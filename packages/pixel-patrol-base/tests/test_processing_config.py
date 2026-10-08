@@ -1,5 +1,5 @@
 import pytest
-from pixel_patrol_base.core.processing import _task_budget_mb
+from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.config import DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART
 
@@ -89,9 +89,9 @@ def test_effective_mb_per_worker_falls_back_to_default():
     assert ProcessingConfig(mb_per_worker=2048.0).effective_mb_per_worker() == 2048.0
 
 
-def test_task_budget_is_one_eighth_of_worker_ram():
-    assert _task_budget_mb(ProcessingConfig()) == DEFAULT_MB_PER_WORKER / 8
-    assert _task_budget_mb(ProcessingConfig(mb_per_worker=800.0)) == 100.0
+def test_task_budget_is_worker_ram_over_expansion_factor():
+    assert _task_budget_mb(ProcessingConfig()) == DEFAULT_MB_PER_WORKER / _MAX_SIZE_EXPANSION_FACTOR
+    assert _task_budget_mb(ProcessingConfig(mb_per_worker=800.0)) == 800.0 / _MAX_SIZE_EXPANSION_FACTOR
 
 
 def test_mb_per_worker_zero_raises():

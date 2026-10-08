@@ -99,7 +99,7 @@ Processors fall into two categories that determine what data they receive:
 
 - **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
 
-- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the task size limit (1/8 of `mb_per_worker`), the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
+- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the task size limit (1/8 of `mb_per_worker`, headroom for in-memory expansion), the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
 
 ### `--slice-size`
 
