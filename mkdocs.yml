@@ -41,6 +41,13 @@ extra_css:
   - stylesheets/extra.css
 
 nav:
+  - Tutorials:
+    - tutorials/index.md
+    - Installation: tutorials/installation.md
+    - Processing: tutorials/processing.md
+    - Exploring the Interactive Report: tutorials/interactive_report.md
+    - Sharing a Table: tutorials/sharing.md
+    - Create an Extension: tutorials/extension.md
   - Documentation:
     - Quickstart: index.md
     - Installation: installation.md
@@ -51,13 +58,6 @@ nav:
     - Table Schema: schema.md
     - Extensions: extensions.md
     - Contributing: contributing.md
-  - Tutorials:
-    - tutorials/index.md
-    - Installation: tutorials/installation.md
-    - Processing: tutorials/processing.md
-    - Exploring the Interactive Report: tutorials/interactive_report.md
-    - Sharing a Table: tutorials/sharing.md
-    - Create an Extension: tutorials/extension.md
 
 markdown_extensions:
   - admonition
