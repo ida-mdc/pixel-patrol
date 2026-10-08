@@ -1,3 +1,5 @@
+import { pinnedDims } from './sql.js';
+
 /**
  * Data "resolution" a widget operates on - what one datapoint in the
  * widget represents. Purely descriptive metadata, used to render a small
@@ -52,7 +54,6 @@ export function setScopeBadge(el, scope) {
  */
 export function syncPinnedScopeBadge(container, ctx, runtimeSlice = false) {
   const el = container.closest?.('.widget-card')?.querySelector('.widget-scope-badge');
-  const pinned = Object.values(ctx.state?.dimensions ?? {})
-    .some(idx => idx !== '' && idx != null && Number.isFinite(Number(idx)));
+  const pinned = Object.keys(pinnedDims(ctx.state?.dimensions)).length > 0;
   setScopeBadge(el, (pinned || runtimeSlice) ? 'slice' : 'image');
 }

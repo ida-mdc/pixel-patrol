@@ -116,7 +116,7 @@ Each plugin's `render(container, ctx)` method receives a `ctx` object - the rend
 
 To show your widget correctly in Overview mode (the default tile-gallery view), also define `overviewMessage(ctx)` and `overviewPlot(container, ctx)` - a short summary sentence and a small preview plot shown on the widget's tile. Both are optional.
 
-An optional `scope: 'file' | 'image' | 'slice'` field on the plugin declares what one datapoint represents, shown as a badge on the card. If a runtime control (e.g. a "Slice by" toggle, or a pinned dimension) changes that at render time, call `ctx.plot.setScopeBadge(el, scope)` to keep the badge honest - and make sure `overviewPlot` always reflects the plugin's base scope, since collapsing a widget's tile does not re-run `render()`.
+An optional `scope: 'file' | 'image' | 'slice'` field on the plugin declares what one datapoint represents, shown as a badge on the card. If a runtime control (e.g. a "Slice by" toggle, or a pinned dimension) changes that at render time, call `ctx.plot.setScopeBadge(el, scope)` to keep the badge honest - Card-local toggles do not reach the tile (collapsing it does not re-run `render()`), so `overviewPlot` should show the base scope. Dimensions pinned in the sidebar (`ctx.sql.pinnedDims()`) are different: they should move the tile and the card to the same slice.
 
 See the [`pixel-patrol-example-extension` README](https://github.com/ida-mdc/pixel-patrol-example-extension/blob/main/README.md) for the full `ctx` reference and worked examples.
 

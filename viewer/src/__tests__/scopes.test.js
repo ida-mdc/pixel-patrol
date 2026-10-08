@@ -73,3 +73,10 @@ describe('syncPinnedScopeBadge', () => {
     expect(() => syncPinnedScopeBadge(orphan, { state: { dimensions: {} } })).not.toThrow();
   });
 });
+
+describe('pinnedDims', () => {
+  it('treats empty, blank, null and non-numeric values as not pinned', async () => {
+    const { pinnedDims } = await import('../sql.js');
+    expect(pinnedDims({ c: '1', t: '', z: ' ', y: null, x: 'abc', a: '0' })).toEqual({ c: 1, a: 0 });
+  });
+});

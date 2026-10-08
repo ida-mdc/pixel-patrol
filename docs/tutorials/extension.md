@@ -297,8 +297,9 @@ export default {
                                // describing what one datapoint in this widget represents.
                                // If render() changes this at runtime (e.g. a "Slice by"
                                // toggle), call ctx.plot.setScopeBadge(el, scope) to keep
-                               // it honest - and make sure overviewPlot always reflects
-                               // the base scope, since collapsing a tile doesn't re-run render()
+                               // it honest. Card-local toggles don't reach the tile, so
+                               // overviewPlot should show the base scope; sidebar-pinned
+                               // dims (ctx.sql.pinnedDims()) should move tile and card alike
 
   requires(schema) {
     // return false to hide the widget when its columns are absent

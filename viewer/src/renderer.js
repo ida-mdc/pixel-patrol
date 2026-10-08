@@ -1,6 +1,6 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
-import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere, perFile, fileCount }  from './sql.js';
+import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, pinnedDims, stripWhere, perFile, fileCount }  from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
 import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
@@ -130,6 +130,8 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
        * and `baseWhere` (the active user filter) are injected; callers pass only
        * `{ fixed, split, obsLevel }`. See sql.js dimSubsetWhere.
        */
+      pinnedDims: () => pinnedDims(state.dimensions),
+
       dimSubsetWhere: (opts = {}) => dimSubsetWhere({
         q: _q,
         dimCols:   schema.dimCols ?? [],
