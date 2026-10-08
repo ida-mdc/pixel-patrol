@@ -38,7 +38,7 @@ import threading
 import time
 import warnings
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import (
     Any, Callable, Dict, Generator, Iterator, List,
@@ -101,9 +101,15 @@ _FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
 
-# Worst-case on-disk-to-actual-memory expansion factor; sizes worker RAM and
-# gates the small-file fast path.
+# Worst-case on-disk-to-actual-memory expansion factor; derives the per-task data
+# budget from worker RAM and gates the small-file fast path.
 _MAX_SIZE_EXPANSION_FACTOR = 8
+
+
+def _task_budget_mb(config: ProcessingConfig) -> float:
+    """Data budget per task in MB: a worker's RAM divided by the worst-case expansion factor."""
+    return config.effective_mb_per_worker() / _MAX_SIZE_EXPANSION_FACTOR
+
 
 # Headroom left unused when packing workers into available RAM.
 _AVAILABLE_RAM_PACKING_FRACTION = 0.9
@@ -246,7 +252,7 @@ def _compute_memory_chunk_specs(
     dim_order:        str,
     shape:            Tuple[int, ...],
     dtype:            Any,
-    mb_per_task:      float,
+    task_mb:          float,
     leaf_block_shape: Optional[Dict[str, int]],
     deferred_dims:    Optional[str] = None,
 ) -> Optional[List[MemoryChunkSpec]]:
@@ -259,7 +265,7 @@ def _compute_memory_chunk_specs(
     Returns None when the file already fits within the budget.
     """
     dtype_bytes  = np.dtype(dtype).itemsize
-    budget_bytes = int(mb_per_task * 1024 * 1024)
+    budget_bytes = int(task_mb * 1024 * 1024)
 
     total_bytes = math.prod(shape) * dtype_bytes
     if total_bytes <= budget_bytes:
@@ -376,12 +382,11 @@ def _plan_tasks(
                                    if unsplittable, fall through to batch.
       otherwise     → accumulate in current batch; flush when budget fills.
     """
-    _split_mb_per_task: float = config.mb_per_task
-    budget_bytes: int = int(_split_mb_per_task * 1024 * 1024)
+    task_mb: float = _task_budget_mb(config)
+    budget_bytes: int = int(task_mb * 1024 * 1024)
     _MAX_IMAGES_PER_TASK = config.max_images_per_task
     _container_exts: frozenset = frozenset(getattr(loader, "CONTAINER_EXTENSIONS", ()))
     _small_file_threshold: int = budget_bytes // _MAX_SIZE_EXPANSION_FACTOR
-    _container_hint_done = False  # emit at most once per run
     batch_files: List[_IndexedPath] = []
     batch_bytes: int = 0
 
@@ -430,19 +435,6 @@ def _plan_tasks(
         if info.n_images > 1:
             if pending := _flush_batch():
                 yield pending
-            if not _container_hint_done:
-                _container_hint_done = True
-                image_bytes = int(np.prod(info.shape)) * np.dtype(info.dtype).itemsize
-                if image_bytes > 0:
-                    images_per_task = min(budget_bytes // image_bytes, info.n_images, _MAX_IMAGES_PER_TASK)
-                    if images_per_task > 20:
-                        logger.warning(
-                            "Container file with n_images=%d, ~%.1f MB/image; "
-                            "mb_per_task=%.0f gives ~%d images/task - tasks may take many minutes. "
-                            "Consider --mb-per-task 50 or lower.",
-                            info.n_images, image_bytes / 1024 / 1024,
-                            _split_mb_per_task, images_per_task,
-                        )
             yield from _plan_container_tasks(file_index, str(file_path), info, budget_bytes, _MAX_IMAGES_PER_TASK)
             continue
 
@@ -452,7 +444,7 @@ def _plan_tasks(
             if pending := _flush_batch():
                 yield pending
             specs = _compute_memory_chunk_specs(file_path, info.dim_order, info.shape, info.dtype,
-                                                _split_mb_per_task, config.slice_size, info.deferred_dims)
+                                                task_mb, config.slice_size, info.deferred_dims)
             if specs:
                 n = len(specs)
                 for spec in specs:
@@ -730,7 +722,7 @@ def _execute_container_task(
     results: List[List[MemoryChunkResult]] = []
     start, stop = task.image_slice
     file_path = Path(task.file_path)
-    _split_mb_per_task = config.mb_per_task
+    task_mb = _task_budget_mb(config)
     for child_id, record in loader.load_range(file_path, start, stop):
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
@@ -739,7 +731,7 @@ def _execute_container_task(
         try:
             # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
             specs = _compute_memory_chunk_specs(file_path, record.dim_order, record.data.shape,
-                                                record.data.dtype, _split_mb_per_task, config.slice_size)
+                                                record.data.dtype, task_mb, config.slice_size)
             if specs:
                 results.append([
                     _run_record(record, record.data[spec.slices], spec.origin,
@@ -1104,13 +1096,14 @@ def _coordinate_pipeline(
         "Pipeline started: %d workers, max_pending=%d, rows_per_part=%d",
         n_workers_live, max_pending, config.rows_per_part,
     )
-    logger.info("If workers keep pausing/restarting on memory, raise --mb-per-task (currently %.0f).",
-                config.mb_per_task)
     if is_distributed:
         worker_info = client.scheduler_info().get("workers", {})
         for addr, w in worker_info.items():
             logger.info("  worker %s  memory_limit=%.2f GiB  nthreads=%d",
                         addr, (w.get("memory_limit") or 0) / 2**30, w.get("nthreads", 1))
+    else:
+        logger.info("If workers keep pausing/restarting on memory, raise --mb-per-worker (currently %.0f).",
+                    config.effective_mb_per_worker())
 
     loader_ref     = client.scatter(loader,        broadcast=True)
     processors_ref = client.scatter([processors],  broadcast=True)[0]
@@ -1268,6 +1261,7 @@ def _coordinate_pipeline(
         "n_workers":                 n_workers_actual,
         "worker_nodes":              worker_nodes,
         "is_distributed":            is_distributed,
+        "mb_per_worker":             config.effective_mb_per_worker(),
         "peak_worker_rss_mb":        round(peak_worker_rss_mb, 1),
         "n_memory_pressure_events":  _pause_handler.count,
         "load_cpu_s":                all_timing.get("load", 0.0),
@@ -1468,15 +1462,16 @@ def _get_or_create_client(config: ProcessingConfig) -> Generator[Tuple[Any, bool
         yield client, True
     except ValueError:
         n_workers_cpu = config.max_workers if config.max_workers is not None else os.cpu_count()
-        worker_mem_bytes = config.mb_per_task * 1024 * 1024 * _MAX_SIZE_EXPANSION_FACTOR
+        worker_mem_bytes = config.effective_mb_per_worker() * 1024 * 1024
         usable_ram = psutil.virtual_memory().available * _AVAILABLE_RAM_PACKING_FRACTION
         n_workers_ram = max(1, int(usable_ram / worker_mem_bytes))
         n_workers = min(n_workers_cpu, n_workers_ram)
         if n_workers < n_workers_cpu:
             logger.info(
-                "n_workers capped to %d by available RAM (%.1f GB); requested %d. "
-                "Reduce --mb-per-task for more workers.",
-                n_workers, psutil.virtual_memory().available / 2**30, n_workers_cpu,
+                "Using %d workers instead of %d: each gets %.1f GB (--mb-per-worker) and only "
+                "%.1f GB RAM is free. Lower --mb-per-worker for more workers.",
+                n_workers, n_workers_cpu, config.effective_mb_per_worker() / 1024,
+                psutil.virtual_memory().available / 2**30,
             )
         logger.debug("_get_or_create_client: starting LocalCluster n_workers=%s", n_workers)
         # Ignore SIGINT before forking workers so they inherit SIG_IGN and don't
@@ -1597,6 +1592,12 @@ def build_records_df(
         return _collect_file_metadata_only(bases, cfg, on_progress, base_dir=base_dir)
 
     with _get_or_create_client(cfg) as (client, is_distributed):
+        if is_distributed and cfg.mb_per_worker is None:
+            limits = [w["memory_limit"] for w in client.scheduler_info()["workers"].values()
+                      if w.get("memory_limit")]
+            if limits:
+                cfg = replace(cfg, mb_per_worker=min(limits) / 2**20)
+                logger.info("Existing cluster: tasks sized for %.1f GB workers.", cfg.mb_per_worker / 1024)
         files_meta: List[dict] = []
         unreadable_files: List[str] = []
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)

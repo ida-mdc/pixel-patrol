@@ -91,7 +91,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  "YX",
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 0.5},
+        "config_kw":  {"mb_per_worker": 4.0},
         "modes":      ("memory", "file"),
     },
     {
@@ -102,7 +102,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  "YX",
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 2.0},
+        "config_kw":  {"mb_per_worker": 16.0},
         "modes":      ("memory", "file"),
     },
     {
@@ -113,7 +113,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  "ZYX",
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 1.0, "slice_size": {"Z": 1, "Y": 128}},
+        "config_kw":  {"mb_per_worker": 8.0, "slice_size": {"Z": 1, "Y": 128}},
         "modes":      ("memory", "file"),
     },
     {
@@ -124,7 +124,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  "ZCYX",
         "n_images":   1,
-        "config_kw":  {"mb_per_task": 64, "slice_size": {"Z": 1, "Y": 1024}},
+        "config_kw":  {"mb_per_worker": 512, "slice_size": {"Z": 1, "Y": 1024}},
         "modes":      ("memory",),
     },
     {
@@ -135,7 +135,7 @@ SCENARIOS: List[Dict[str, Any]] = [
         "dtype":      np.float32,
         "dim_order":  "YX",
         "n_images":   5000,
-        "config_kw":  {"mb_per_task": 1.0},
+        "config_kw":  {"mb_per_worker": 8.0},
         "modes":      ("memory",),
     },
 ]
@@ -281,7 +281,7 @@ def run_one(
             "dim_order":         sc["dim_order"],
             "dtype":             np.dtype(sc["dtype"]).name,
             "total_data_mb":     round(total_data_mb, 2),
-            "mb_per_task":       sc["config_kw"].get("mb_per_task"),
+            "mb_per_worker":     sc["config_kw"].get("mb_per_worker"),
             "slice_size":  sc["config_kw"].get("slice_size"),
         },
         "run": {

@@ -30,7 +30,7 @@ def test_corrupted_sub_image_counts_as_failed(tmp_path: Path):
     _write_lmdb(lmdb_path, images)
     _corrupt_entry(lmdb_path, 3)  # break one image outside read_header's 3-sample peek
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800)
     df, stats = build_records_df(
         [tmp_path], loader=LmdbLoader(), processors=[], config=config, base_dir=tmp_path,
     )
@@ -52,7 +52,7 @@ def test_two_corrupted_sub_images_in_one_container_task_both_count_as_failed(tmp
     _corrupt_entry(lmdb_path, 3)
     _corrupt_entry(lmdb_path, 4)
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800)
     df, stats = build_records_df(
         [tmp_path], loader=LmdbLoader(), processors=[], config=config, base_dir=tmp_path,
     )

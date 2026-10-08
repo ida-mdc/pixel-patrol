@@ -23,7 +23,7 @@ def test_corrupted_file_in_batch_counts_as_failed(tmp_path: Path):
     data = bad_path.read_bytes()
     bad_path.write_bytes(data[: len(data) // 2])
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800)
     df, stats = build_records_df(
         [tmp_path], loader=BioIoLoader(), processors=[], config=config, base_dir=tmp_path,
     )
@@ -44,7 +44,7 @@ def test_two_corrupted_files_in_one_batch_both_count_as_failed(tmp_path: Path):
         data = bad_path.read_bytes()
         bad_path.write_bytes(data[: len(data) // 2])
 
-    config = ProcessingConfig(max_workers=1, mb_per_task=100)
+    config = ProcessingConfig(max_workers=1, mb_per_worker=800)
     df, stats = build_records_df(
         [tmp_path], loader=BioIoLoader(), processors=[], config=config, base_dir=tmp_path,
     )

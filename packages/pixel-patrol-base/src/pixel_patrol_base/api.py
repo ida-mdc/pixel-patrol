@@ -39,7 +39,7 @@ def process_files(
         selected_file_extensions: Union[Set[str], str, None] = None,
         # --- Run behaviour ---
         max_workers: Optional[int] = None,
-        mb_per_task: Optional[float] = None,
+        mb_per_worker: Optional[float] = None,
         max_images_per_task: Optional[int] = None,
         slice_size: Optional[Dict[str, int]] = None,
         rows_per_part: Optional[int] = None,
@@ -65,9 +65,10 @@ def process_files(
                                     Defaults to "all".
         max_workers:                Dask worker count. None = auto-detect from CPUs and RAM.
                                     Use 1 to disable parallelism.
-        mb_per_task:                Work budget per Dask task in MB (default: 512). Controls
-                                    batch sizes for small files, spatial splitting for large files,
-                                    and sub-image batching for container files.
+        mb_per_worker:              RAM per worker in MB (default: 4096). More RAM per worker
+                                    means fewer parallel workers. Images larger than 1/8 of this
+                                    are split into chunks; smaller files are batched up to that
+                                    size. On an existing Dask cluster, defaults to the workers' memory.
         max_images_per_task:        Max files per batch task or sub-images per container task
                                     (default: 200).
         slice_size:                 Per-dimension granularity of statistics in the output table.
@@ -93,8 +94,8 @@ def process_files(
     config_kwargs = {}
     if rows_per_part is not None:
         config_kwargs["rows_per_part"] = rows_per_part
-    if mb_per_task is not None:
-        config_kwargs["mb_per_task"] = mb_per_task
+    if mb_per_worker is not None:
+        config_kwargs["mb_per_worker"] = mb_per_worker
     if max_images_per_task is not None:
         config_kwargs["max_images_per_task"] = max_images_per_task
     if slice_size is not None:

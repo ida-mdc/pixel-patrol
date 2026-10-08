@@ -1,6 +1,7 @@
 import pytest
+from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART
+from pixel_patrol_base.config import DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -11,7 +12,7 @@ def test_defaults():
     assert config.processors_excluded == set()
     assert config.selected_file_extensions == "all"
     assert config.max_workers is None
-    assert config.mb_per_task == 512.0
+    assert config.mb_per_worker is None
     assert config.slice_size is None
     assert config.rows_per_part == DEFAULT_ROWS_PER_PART
 
@@ -76,21 +77,31 @@ def test_max_workers_negative_raises():
         ProcessingConfig(max_workers=-1)
 
 
-# --- mb_per_task ---
+# --- mb_per_worker ---
 
-def test_mb_per_task_valid():
-    config = ProcessingConfig(mb_per_task=256.0)
-    assert config.mb_per_task == 256.0
-
-
-def test_mb_per_task_zero_raises():
-    with pytest.raises(ValueError, match="mb_per_task must be positive"):
-        ProcessingConfig(mb_per_task=0)
+def test_mb_per_worker_valid():
+    config = ProcessingConfig(mb_per_worker=2048.0)
+    assert config.mb_per_worker == 2048.0
 
 
-def test_mb_per_task_negative_raises():
-    with pytest.raises(ValueError, match="mb_per_task must be positive"):
-        ProcessingConfig(mb_per_task=-1.0)
+def test_effective_mb_per_worker_falls_back_to_default():
+    assert ProcessingConfig().effective_mb_per_worker() == DEFAULT_MB_PER_WORKER
+    assert ProcessingConfig(mb_per_worker=2048.0).effective_mb_per_worker() == 2048.0
+
+
+def test_task_budget_is_worker_ram_over_expansion_factor():
+    assert _task_budget_mb(ProcessingConfig()) == DEFAULT_MB_PER_WORKER / _MAX_SIZE_EXPANSION_FACTOR
+    assert _task_budget_mb(ProcessingConfig(mb_per_worker=800.0)) == 800.0 / _MAX_SIZE_EXPANSION_FACTOR
+
+
+def test_mb_per_worker_zero_raises():
+    with pytest.raises(ValueError, match="mb_per_worker must be positive"):
+        ProcessingConfig(mb_per_worker=0)
+
+
+def test_mb_per_worker_negative_raises():
+    with pytest.raises(ValueError, match="mb_per_worker must be positive"):
+        ProcessingConfig(mb_per_worker=-1.0)
 
 
 # --- slice_size ---

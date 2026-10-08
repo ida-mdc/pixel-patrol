@@ -402,7 +402,7 @@ def _run_processing(payload: Dict[str, Any], slice_size: Optional[Dict[str, int]
             processors_included=set(payload.get("processors_include") or []) or None,
             processors_excluded=set(payload.get("processors_exclude") or []) or None,
             selected_file_extensions=extensions,
-            mb_per_task=payload.get("mb_per_task"),
+            mb_per_worker=payload.get("mb_per_worker"),
             max_images_per_task=payload.get("max_images_per_task"),
             slice_size=slice_size,
             rows_per_part=payload.get("rows_per_part"),

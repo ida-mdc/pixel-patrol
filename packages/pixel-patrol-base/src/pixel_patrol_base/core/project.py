@@ -193,7 +193,8 @@ class Project:
         expected_parts = [Path(p) for p in stats.pop("part_paths", [])]  # not persisted metadata
 
         if stats:
-            stats.update(_processing_params(config))
+            for k, v in _processing_params(config).items():
+                stats.setdefault(k, v)  # the pipeline's own value wins (e.g. cluster-derived mb_per_worker)
             self.metadata.processing_stats = stats
             _log_processing_summary(self.name, stats)
 
@@ -246,7 +247,7 @@ class Project:
             if n_failed:
                 logger.warning(_output_log_style(
                     "%d image(s) failed and are missing from the table - see errors/warnings "
-                    "above; try raising --mb-per-task or lowering --max-workers.",
+                    "above; try raising --mb-per-worker or lowering --max-workers.",
                     fg="red", bold=True,
                 ), n_failed)
 
@@ -274,7 +275,7 @@ def _processing_params(config) -> Dict[str, Any]:
     granularity, …). Single source of truth for pp_processing_stats and the privacy disclosure.
     """
     return {
-        "mb_per_task":         config.mb_per_task,
+        "mb_per_worker":       config.effective_mb_per_worker(),
         "max_images_per_task": config.max_images_per_task,
         "slice_size":          config.slice_size,
     }

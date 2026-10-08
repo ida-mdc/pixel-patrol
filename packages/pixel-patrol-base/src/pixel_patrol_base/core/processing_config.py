@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
-from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK
+from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class ProcessingConfig:
     max_workers: Optional[int] = None  # None → os.cpu_count() workers, 1 thread each
 
     # ── Task planning ────────────────────────────────────────────────────────
-    mb_per_task:          float                   = 512.0
+    mb_per_worker:        Optional[float]         = None  # None → default, or the cluster's worker memory
     max_images_per_task:  int                     = DEFAULT_MAX_IMAGES_PER_TASK
     slice_size:           Optional[Dict[str, int]] = None
 
@@ -45,8 +45,8 @@ class ProcessingConfig:
             )
         if self.max_workers is not None and self.max_workers < 1:
             raise ValueError("max_workers must be a positive integer or None.")
-        if self.mb_per_task <= 0:
-            raise ValueError("mb_per_task must be positive.")
+        if self.mb_per_worker is not None and self.mb_per_worker <= 0:
+            raise ValueError("mb_per_worker must be positive.")
         if self.max_images_per_task < 1:
             raise ValueError("max_images_per_task must be a positive integer.")
         if self.slice_size is not None:
@@ -56,3 +56,6 @@ class ProcessingConfig:
                     raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")
         if self.rows_per_part < 1:
             raise ValueError("rows_per_part must be a positive integer.")
+
+    def effective_mb_per_worker(self) -> float:
+        return DEFAULT_MB_PER_WORKER if self.mb_per_worker is None else self.mb_per_worker
