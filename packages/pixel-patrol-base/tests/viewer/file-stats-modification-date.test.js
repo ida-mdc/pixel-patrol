@@ -104,4 +104,29 @@ describe('renderModificationDates', () => {
     }], invariants);
     expect(appendCalls[0].layout.xaxis.title).toBe('Month');
   });
+
+  it('reports a dataset where no file has a date as an invariant, not a chart', async () => {
+    const { ctx, appendCalls } = makeCtx();
+    const invariants = [];
+    await renderModificationDates({}, ctx, [{
+      min_fmt: null, max_fmt: null, span_ms: null, n_unique: 0, n_null: 4,
+    }], invariants);
+    expect(invariants).toEqual([['Modification Date', '(no date)']]);
+    expect(appendCalls).toEqual([]);
+  });
+
+  it('charts a shared timestamp with a (no date) bucket when some files lack one', async () => {
+    const { ctx, appendCalls } = makeCtx({
+      '%Y-%m-%d %H:%M:%S': [
+        { bucket: '(no date)', __group__: '__ALL__', count: 2 },
+        { bucket: '2026-07-02 23:00:31', __group__: '__ALL__', count: 3 },
+      ],
+    });
+    const invariants = [];
+    await renderModificationDates({}, ctx, [{
+      min_fmt: '2026-07-02 23:00:31', max_fmt: '2026-07-02 23:00:31', span_ms: 0, n_unique: 1, n_null: 2,
+    }], invariants);
+    expect(invariants).toEqual([]);
+    expect(appendCalls[0].traces.categories).toEqual(['(no date)', '2026-07-02 23:00:31']);
+  });
 });

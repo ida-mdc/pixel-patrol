@@ -54,7 +54,7 @@ export default {
   },
 
   async overviewPlot(container, ctx) {
-    const { groupCol: gcFn, fileCount } = ctx.sql;
+    const { groupCol: gcFn } = ctx.sql;
 
     if (ctx.withinFileGroupVariation) {
       const groupRows = await ctx.queryRows(`
@@ -73,84 +73,36 @@ export default {
       return true;
     }
 
-    const gcExpr  = gcFn();
-    const hasDate = ctx.schema.allCols.includes('modification_date');
-
-    // Fetch lightweight stats in parallel to decide what to show.
-    const [extRows, sizeRange, dateRange] = await Promise.all([
-      ctx.queryRows(`
-        SELECT COALESCE("file_extension", '(none)') AS ext, ${gcExpr} AS __group__, ${fileCount()} AS c
-        FROM pp_data ${ctx.where}
-        GROUP BY 1, 2
-      `),
-      ctx.queryRows(`
-        SELECT MIN("size_bytes") AS min_s, MAX("size_bytes") AS max_s,
-               COUNT(DISTINCT "size_bytes") AS n_unique,
-               ${fileCount()} FILTER (WHERE "size_bytes" IS NULL) AS n_null
-        FROM pp_data ${ctx.where}
-      `),
-      hasDate
-        ? ctx.queryRows(`
-            SELECT STRFTIME(MIN(TRY_CAST("modification_date" AS TIMESTAMP)), '%Y-%m-%d %H:%M:%S') AS min_fmt,
-                   EPOCH_MS(MAX(TRY_CAST("modification_date" AS TIMESTAMP)))
-                     - EPOCH_MS(MIN(TRY_CAST("modification_date" AS TIMESTAMP))) AS span_ms
-            FROM pp_data ${ctx.where}
-          `)
-        : Promise.resolve([]),
-    ]);
-
-    const exts   = [...new Set(extRows.map(r => String(r.ext)))].sort();
-    const nSizes = Number(sizeRange[0]?.n_unique ?? 0);
-    const nSizeNulls = Number(sizeRange[0]?.n_null ?? 0);
-    // span > 0 means >= 1 timestamp; span === 0 means exactly one
-    const spanMs = Number(dateRange[0]?.span_ms ?? 0);
-    const onlyOneDateOccurring = spanMs === 0;
+    const [extRows, sizeRange, dateRange] = await fetchFileStats(ctx);
+    const exts = [...new Set(extRows.map(r => String(r.ext)))].sort();
+    const date = datePlan(dateRange[0]);
+    const miniBars = (cats, getValue) => ctx.plot.appendMini(container,
+      ctx.plot.groupedBarTraces(cats, getValue, { mini: true }),
+      { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
 
     // Show one mini-plot: the most informative varying property (ext > date > size).
     if (exts.length > 1) {
-      const idx = new Map(extRows.map(r => [`${r.ext}\x00${r.__group__}`, Number(r.c)]));
-      ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(exts, (e, g) => idx.get(`${e}\x00${g}`) ?? 0, { mini: true }),
-        { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
+      miniBars(exts, pick(extRows, r => r.ext, 'count'));
       return true;
     }
 
-    if (spanMs >= MS_SECOND) {
-      const fmt = spanMs >= MS_DAY    ? '%Y-%m-%d'
-                : spanMs >= MS_HOUR   ? '%Y-%m-%d %H:00'
-                : spanMs >= MS_MINUTE ? '%Y-%m-%d %H:%M'
-                :                       '%Y-%m-%d %H:%M:%S';
-      let { rows, cats } = await bucketByDateFmt(ctx, fmt);
-      if (fmt === '%Y-%m-%d' && cats.length > MAX_DAYS) ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m'));
-      if (cats.length) {
-        ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(cats, pick(rows, r => r.bucket, 'count'), { mini: true }),
-          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
-        return true;
-      }
+    if (date.chart) {
+      const { rows, cats } = await fetchDateBuckets(ctx, dateRange[0].span_ms);
+      miniBars(cats, pick(rows, r => r.bucket, 'count'));
+      return true;
     }
 
-    if (nSizes > 1 || nSizeNulls > 0) {
-      const minS = Number(sizeRange[0]?.min_s ?? 0);
-      const maxS = Number(sizeRange[0]?.max_s ?? 0);
-      const { breaks, labels } = sizeBinsWithNull(minS, maxS, nSizes, nSizeNulls, ctx.plot.formatBytes);
-      if (labels.length > 1) {
-        const rows = await ctx.queryRows(`
-          SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin,
-                 ${ctx.sql.groupCol()} AS __group__, ${ctx.sql.fileCount()} AS count
-          FROM pp_data ${ctx.where}
-          GROUP BY 1, 2
-        `);
-        ctx.plot.appendMini(container, ctx.plot.groupedBarTraces(labels, pick(rows, r => r.bin, 'count'), { mini: true }),
-          { barmode: 'stack', xaxis: { type: 'category' }, bargap: 0.3 });
-        return true;
-      }
+    const size = await fetchSizeBins(ctx, sizeRange);
+    if (!size.invariant) {
+      miniBars(size.labels, pick(size.rows, r => r.bin, 'count'));
+      return true;
     }
 
     // Nothing varies: invariant summary table.
     const invariants = [];
     if (exts.length === 1) invariants.push(['File Extension', exts[0]]);
-    if (nSizes <= 1) invariants.push(['File Size', nSizeNulls > 0 ? '(no size)' : ctx.plot.formatBytes(Number(sizeRange[0]?.min_s ?? 0))]);
-    if (onlyOneDateOccurring && dateRange[0]?.min_fmt) invariants.push(['Modification Date', dateRange[0].min_fmt]);
-    if (!invariants.length) return false;
+    invariants.push(['File Size', size.invariant]);
+    if (date.invariant) invariants.push(['Modification Date', date.invariant]);
     ctx.plot.tilePreviewTable(container, ['Property', 'Value'], invariants);
     return true;
   },
@@ -264,21 +216,11 @@ function renderExtensions(container, ctx, extRows, invariants, { ungrouped = fal
 // One distinct size (ignoring nulls) → invariant row; otherwise a count-per-size-bin
 // chart, with a trailing '(no size)' bin when any file is missing size_bytes.
 async function renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped = false } = {}) {
-  const minS  = Number(sizeRange[0]?.min_s ?? 0);
-  const maxS  = Number(sizeRange[0]?.max_s ?? 0);
-  const nUniq = Number(sizeRange[0]?.n_unique ?? 0);
-  const nNull = Number(sizeRange[0]?.n_null ?? 0);
-  const { breaks, labels, useLog } = sizeBinsWithNull(minS, maxS, nUniq, nNull, ctx.plot.formatBytes);
-  if (labels.length <= 1) {
-    invariants.push(['File Size', labels[0] ?? ctx.plot.formatBytes(minS)]);
+  const { labels, rows, useLog, invariant } = await fetchSizeBins(ctx, sizeRange, { ungrouped });
+  if (invariant) {
+    invariants.push(['File Size', invariant]);
     return;
   }
-  const gcExpr = gcExprFor(ctx, ungrouped);
-  const rows = await ctx.queryRows(`
-    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${gcExpr} AS __group__, ${ctx.sql.fileCount()} AS count
-    FROM pp_data ${ctx.where}
-    GROUP BY 1, 2
-  `);
   renderGroupedBars(container, {
     categories: labels, getValue: pick(rows, r => r.bin, 'count'),
     title: 'File Count by Size Bin',
@@ -286,48 +228,61 @@ async function renderSizeBins(container, ctx, sizeRange, invariants, { ungrouped
   }, ctx, { ungrouped });
 }
 
+// Size bins (labels + per-bin file counts), or an `invariant` text when sizes don't
+// vary and a table row says it all. Labels drive both the chart categories and the
+// CASE SQL, so the two never drift apart.
+async function fetchSizeBins(ctx, sizeRange, { ungrouped = false } = {}) {
+  const { min_s: minS, max_s: maxS, n_unique: nUniq, n_null: nNull } = sizeRange[0] ?? {};
+  const { breaks, labels, useLog } = sizeBinsWithNull(Number(minS ?? 0), Number(maxS ?? 0), Number(nUniq ?? 0), Number(nNull ?? 0), ctx.plot.formatBytes);
+  if (labels.length <= 1) return { labels, rows: [], useLog, invariant: labels[0] ?? ctx.plot.formatBytes(Number(minS ?? 0)) };
+  const rows = await ctx.queryRows(`
+    SELECT ${buildSizeCaseSQL(breaks, labels)} AS bin, ${gcExprFor(ctx, ungrouped)} AS __group__, ${ctx.sql.fileCount()} AS count
+    FROM pp_data ${ctx.where}
+    GROUP BY 1, 2
+  `);
+  return { labels, rows, useLog, invariant: null };
+}
+
 // One exact timestamp shared by every file → invariant row with full precision.
 // Otherwise a timeline, bucketed at whatever granularity (day/hour/minute/second)
 // actually shows spread - rolled up to months if there are too many distinct days,
 // or collapsed to a compact range if the spread is sub-second and no bucket would help.
 export async function renderModificationDates(container, ctx, dateRange, invariants, { ungrouped = false } = {}) {
-  const { min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMsRaw, n_unique: nUniqueRaw, n_null: nNullRaw } = dateRange[0] ?? {};
-  const nNull = Number(nNullRaw ?? 0);
-  if (minFmt == null) {
-    if (nNull > 0) invariants.push(['Modification Date', '(no date)']);
-    return;
-  }
+  const { invariant, chart } = datePlan(dateRange[0]);
+  if (invariant) invariants.push(['Modification Date', invariant]);
+  if (!chart) return;
 
-  const nUnique = Number(nUniqueRaw);
-  if (nUnique <= 1 && nNull === 0) {
-    invariants.push(['Modification Date', minFmt]);
-    return;
-  }
-
-  const spanMs = Number(spanMsRaw);
-  if (spanMs < MS_SECOND && nNull === 0) {
-    invariants.push(['Modification Date', minFmt === maxFmt
-      ? `${minFmt} (span < 1s)`
-      : `${minFmt} – ${maxFmt} (span < 1s)`]);
-    return;
-  }
-
-  const [fmt, dateLabel] = spanMs >= MS_DAY    ? ['%Y-%m-%d', 'Date']
-                         : spanMs >= MS_HOUR   ? ['%Y-%m-%d %H:00', 'Hour']
-                         : spanMs >= MS_MINUTE ? ['%Y-%m-%d %H:%M', 'Minute']
-                         :                       ['%Y-%m-%d %H:%M:%S', 'Second'];
-
-  let { rows, cats } = await bucketByDateFmt(ctx, fmt, { ungrouped });
-  let finalLabel = dateLabel;
-  if (fmt === '%Y-%m-%d' && cats.length > MAX_DAYS) {
-    ({ rows, cats } = await bucketByDateFmt(ctx, '%Y-%m', { ungrouped }));
-    finalLabel = 'Month';
-  }
-
+  const { rows, cats, label } = await fetchDateBuckets(ctx, dateRange[0].span_ms, { ungrouped });
   renderGroupedBars(container, {
     categories: cats, getValue: pick(rows, r => r.bucket, 'count'),
-    title: 'File Count by Modification Date', xLabel: finalLabel, yLabel: 'File count', showLegend: true,
+    title: 'File Count by Modification Date', xLabel: label, yLabel: 'File count', showLegend: true,
   }, ctx, { ungrouped });
+}
+
+// How to show modification dates: an `invariant` text when they barely vary,
+// `chart: true` when a timeline is worth drawing (any file missing a date gets a
+// '(no date)' bucket, so that alone makes it worth charting), neither when there are none.
+function datePlan({ min_fmt: minFmt, max_fmt: maxFmt, span_ms: spanMs, n_unique: nUnique, n_null: nNull } = {}) {
+  const missing = Number(nNull ?? 0) > 0;
+  if (minFmt == null) return missing ? { invariant: '(no date)' } : {};
+  if (missing) return { chart: true };
+  if (Number(nUnique) <= 1) return { invariant: minFmt };
+  if (Number(spanMs) < MS_SECOND) return { invariant: minFmt === maxFmt ? `${minFmt} (span < 1s)` : `${minFmt} – ${maxFmt} (span < 1s)` };
+  return { chart: true };
+}
+
+// Date buckets at the granularity the span calls for, rolled up to months if there are too many days.
+async function fetchDateBuckets(ctx, spanMs, { ungrouped = false } = {}) {
+  spanMs = Number(spanMs);
+  const [fmt, label] = spanMs >= MS_DAY    ? ['%Y-%m-%d', 'Date']
+                     : spanMs >= MS_HOUR   ? ['%Y-%m-%d %H:00', 'Hour']
+                     : spanMs >= MS_MINUTE ? ['%Y-%m-%d %H:%M', 'Minute']
+                     :                       ['%Y-%m-%d %H:%M:%S', 'Second'];
+  const buckets = await bucketByDateFmt(ctx, fmt, { ungrouped });
+  if (fmt === '%Y-%m-%d' && buckets.cats.length > MAX_DAYS) {
+    return { ...(await bucketByDateFmt(ctx, '%Y-%m', { ungrouped })), label: 'Month' };
+  }
+  return { ...buckets, label };
 }
 
 // Returns the group column SQL expression, or a constant when grouping is suppressed.
