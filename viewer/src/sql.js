@@ -76,6 +76,18 @@ export function sample(n) {
 }
 
 /**
+ * Sidebar dimensions pinned to a slice: { c: '1', t: '' } -> { c: 1 }. The one
+ * definition of "pinned" shared by queries, widgets and the scope badge.
+ */
+export function pinnedDims(dimensions) {
+  return Object.fromEntries(
+    Object.entries(dimensions ?? {})
+      .filter(([, idx]) => idx != null && String(idx).trim() !== '')
+      .map(([letter, idx]) => [letter, Number(idx)])
+      .filter(([, idx]) => Number.isFinite(idx)));
+}
+
+/**
  * WHERE-part strings that pin a single long-format aggregation subset.
  *
  * Long-format parquet carries one row per fixed-dim subset (the power set of the

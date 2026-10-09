@@ -47,6 +47,7 @@
  *   ctx.plot.formatBytes     → human-readable byte size ("1.5 KB")
  *   ctx.plot.statTable       → build a <table class="stat-table"> from headers + rows
  *   ctx.plot.invariantTable  → append a titled two-column "shared properties" table
+ *   ctx.sql.pinnedDims       → { letter: index } for dims pinned in the sidebar ('' / unset = All)
  *   ctx.sql.dimSubsetWhere   → WHERE parts pinning one long-format aggregation
  *                              subset ({ fixed, split, obsLevel }); see sql.js
  */

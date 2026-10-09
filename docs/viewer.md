@@ -111,7 +111,7 @@ Each widget card shows a small badge indicating what one datapoint in that widge
 - 🖼️ **per image** - each datapoint is an image. A file containing multiple images (a stack or container) contributes one datapoint per image (e.g. Image Table, Image Mosaic, Pixel Value Statistics).
 - 🧩 **per slice** - each datapoint is a slice within an image, such as a channel, Z-plane, or timepoint (e.g. Statistics Across Dimensions).
 
-Pixel Value Statistics, Image Quality Metrics, and Custom Plot can switch between **per image** and **per slice** via their **Slice by** toggles - their badge updates accordingly. File Data Summary spans multiple resolutions (files, images, slices) and shows no badge.
+Pixel Value Statistics, Image Quality Metrics, and Custom Plot can switch between **per image** and **per slice** via their **Slice by** toggles - their badge updates accordingly. Pixel Value Statistics, Image Quality Metrics, and Pixel Value Histograms also switch to **per slice** whenever a dimension is pinned in the sidebar. File Data Summary spans multiple resolutions (files, images, slices) and shows no badge.
 
 This helps you reason about what's actually being aggregated or plotted, especially for multi-dimensional or multi-image files.
 

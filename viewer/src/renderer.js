@@ -1,6 +1,6 @@
 import { buildColorMap, groupColor as _groupColor, hexToRgba, getColors, getPaletteNames } from './colors.js';
 import { GROUP_ALL, GROUP_COL_ALIAS, WIDGET_CONTAINER_ID } from './constants.js';
-import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, stripWhere, perFile, fileCount }  from './sql.js';
+import { buildWhere, q as _q, sample, andWhere, groupCol as _groupCol, groupExpr as _groupExpr, dimSubsetWhere, pinnedDims, stripWhere, perFile, fileCount }  from './sql.js';
 import { buildScopedWhere } from './cohort-sql.js';
 import { appendPlot, appendPlots, appendMiniPlot, niceName, escapeHtml, bargap, createFlexGrid, sliceToggles, appendGroupLegend, prependWarning, dtypeRange, dataAvailabilityWarning, groupingLabel, legendWithGrouping, formatBytes, humanList, statTable, appendInvariantTable, tilePreviewTable, renderInfoHtml, LEGEND, LAYOUT } from './plot-utils.js';
 import * as plotEngine from './plot-engine.js';
@@ -10,7 +10,7 @@ import { state } from './state.js';
 import { writeUrlParams } from './url-params.js';
 import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js';
 import { buildGroupLabels } from './group-labels.js';
-import { scopeBadgeHtml, setScopeBadge } from './scopes.js';
+import { scopeBadgeHtml, setScopeBadge, syncPinnedScopeBadge } from './scopes.js';
 import { openInspector } from './point-inspector.js';
 import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 
@@ -125,6 +125,8 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
 
       perFile: (where = '') => perFile(where, schema.allCols ?? []),
 
+      pinnedDims: () => pinnedDims(state.dimensions),
+
       /**
        * WHERE parts pinning one long-format aggregation subset. `q`, `dimCols`
        * and `baseWhere` (the active user filter) are injected; callers pass only
@@ -157,6 +159,7 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
       flexGrid:    createFlexGrid,
       sliceToggles,
       setScopeBadge,
+      syncPinnedScopeBadge,
       prependWarning,
       dtypeRange,
       dataAvailabilityWarning,

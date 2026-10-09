@@ -271,18 +271,9 @@ async function prependFractionWarnings(plotRoot, ctx) {
   }
 }
 
-// Dimensions pinned in the sidebar. A pinned dim narrows every point to one
-// slice, exactly like a Slice by toggle.
-function fixedDims(ctx) {
-  return Object.fromEntries(
-    Object.entries(ctx.state.dimensions ?? {})
-      .map(([letter, idx]) => [letter, Number(idx)])
-      .filter(([, idx]) => Number.isFinite(idx)));
-}
-
 /** Pinned dims as display labels: { c: 1 } -> ['C=1']. */
 function pinnedDims(ctx) {
-  return Object.entries(fixedDims(ctx))
+  return Object.entries(ctx.sql.pinnedDims())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([letter, idx]) => `${letter.toUpperCase()}=${idx}`);
 }
@@ -290,7 +281,7 @@ function pinnedDims(ctx) {
 // Rows one point is drawn from. The tile preview and the full card share it, so
 // a pinned dimension moves both to the same slice.
 function violinSource(ctx, splitDims) {
-  const parts = ctx.sql.dimSubsetWhere({ fixed: fixedDims(ctx), split: splitDims });
+  const parts = ctx.sql.dimSubsetWhere({ fixed: ctx.sql.pinnedDims(), split: splitDims });
   return { table: 'pp_all', where: parts.length ? `WHERE ${parts.join(' AND ')}` : '' };
 }
 
@@ -490,10 +481,7 @@ function makeViolinPlugin(id, label, info, filterMetric, overviewMessage, metric
 
       // The card header already carries a "🖼️ per image" badge (from `scope: 'image'`
       // above) - keep it in sync with the toggles instead of adding a second badge.
-      const headerBadge = container.closest('.widget-card')?.querySelector('.widget-scope-badge');
-      const pinned = pinnedDims(ctx);
-      const syncBadge = () =>
-        ctx.plot.setScopeBadge(headerBadge, (splitDims.size || pinned.length) ? 'slice' : 'image');
+      const syncBadge = () => ctx.plot.syncPinnedScopeBadge(container, ctx, splitDims.size > 0);
       syncBadge();
 
       const draw = async () => {

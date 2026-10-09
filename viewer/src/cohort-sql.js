@@ -3,7 +3,7 @@
  * Shared by the renderer and offline snapshot export.
  */
 
-import { buildWhere, andWhere, q } from './sql.js';
+import { buildWhere, andWhere, q, pinnedDims } from './sql.js';
 import { FILE_ROW_NUMBER } from './constants.js';
 
 export function resolveCohortJoinColumn(schema) {
@@ -16,9 +16,7 @@ export function resolveCohortJoinColumn(schema) {
 
 export function buildDimCohortCondition(schema, dimensions) {
   if (!schema) return '';
-  const selected = Object.entries(dimensions ?? {})
-    .map(([letter, idxRaw]) => [letter, Number(idxRaw)])
-    .filter(([, idx]) => Number.isFinite(idx));
+  const selected = Object.entries(pinnedDims(dimensions));
   if (!selected.length) return '';
 
   const joinCol = resolveCohortJoinColumn(schema);

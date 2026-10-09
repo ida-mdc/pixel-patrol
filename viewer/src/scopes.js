@@ -1,3 +1,5 @@
+import { pinnedDims } from './sql.js';
+
 /**
  * Data "resolution" a widget operates on - what one datapoint in the
  * widget represents. Purely descriptive metadata, used to render a small
@@ -42,4 +44,16 @@ export function setScopeBadge(el, scope) {
   el.style.setProperty('--scope-color', s.color);
   el.title = s.desc;
   el.textContent = `${s.icon} ${s.label}`;
+}
+
+/**
+ * Badge sync for widgets that switch from 'image' to 'slice' when a sidebar
+ * dim is pinned (plugin_violin.js, plugin_histogram.js). Not for widgets
+ * where pinning narrows the cohort without changing granularity (e.g.
+ * plugin_custom_plot.js) - those call setScopeBadge directly.
+ */
+export function syncPinnedScopeBadge(container, ctx, runtimeSlice = false) {
+  const el = container.closest?.('.widget-card')?.querySelector('.widget-scope-badge');
+  const pinned = Object.keys(pinnedDims(ctx.state?.dimensions)).length > 0;
+  setScopeBadge(el, (pinned || runtimeSlice) ? 'slice' : 'image');
 }
