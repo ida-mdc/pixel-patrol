@@ -24,6 +24,7 @@ class MetricContext:
     s_max: float = 0.0
     cache: Dict = field(default_factory=dict)
     all_nan: bool = False
+    nan_count: int = 0
 
 
 def _is_all_nan(arr: np.ndarray) -> bool:
@@ -221,11 +222,9 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
             case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
             case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
             case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
-            case MetricNames.HISTOGRAM_NAN_COUNT:
-                return int(np.sum(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0
+            case MetricNames.HISTOGRAM_NAN_COUNT: return ctx.nan_count
             case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
-            case "nan_fraction":
-                return float(np.mean(np.isnan(arr))) if np.issubdtype(arr.dtype, np.floating) else 0.0
+            case "nan_fraction":                 return ctx.nan_count / arr.size if arr.size else float("nan")
             case _:                              return None
 
 
@@ -245,13 +244,20 @@ class RasterProcessor:
 
     def run_chunk(self, record: Record) -> Dict:
         chunk = record.data.compute() if hasattr(record.data, "compute") else np.asarray(record.data)
-        if _is_all_nan(chunk):
-            ctx = MetricContext(s_min=float("nan"), s_max=float("nan"), all_nan=True)
+        nan_count = int(np.count_nonzero(np.isnan(chunk))) if np.issubdtype(chunk.dtype, np.floating) else 0
+        if chunk.size > 0 and nan_count == chunk.size:
+            ctx = MetricContext(s_min=float("nan"), s_max=float("nan"), all_nan=True, nan_count=nan_count)
         else:
             try:
-                ctx = MetricContext(s_min=float(np.nanmin(chunk)), s_max=float(np.nanmax(chunk)))
+                s_min, s_max = float(np.nanmin(chunk)), float(np.nanmax(chunk))
             except (TypeError, ValueError):
                 return {}
+            if not (np.isfinite(s_min) and np.isfinite(s_max)):
+                # Inf pixels would give the histogram infinite bounds: range over finite pixels only.
+                fin = np.isfinite(chunk)
+                s_min = float(np.min(chunk, where=fin, initial=np.inf)) if fin.any() else float("nan")
+                s_max = float(np.max(chunk, where=fin, initial=-np.inf)) if fin.any() else float("nan")
+            ctx = MetricContext(s_min=s_min, s_max=s_max, nan_count=nan_count)
         return {
             spec.name: val
             for spec in self.METRICS

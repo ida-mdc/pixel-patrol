@@ -162,6 +162,39 @@ def test_mixed_chunks_all_nan_chunk_ignored_in_aggregation(proc):
     assert proc.get_aggregation("mean_intensity")([nan_chunk, real_chunk], ()) == pytest.approx(2.5)
 
 
+def test_inf_chunk_histogram_uses_finite_range(hist_proc):
+    """Inf pixels must not give the histogram infinite bounds; finite pixels still bin correctly."""
+    data = np.array([[0, 1, 2, 3, np.inf, -np.inf, np.nan, 4]], dtype=np.float32)
+    clean = _chunk(hist_proc, np.array([[0, 1, 2, 3, 4]], dtype=np.float32), "YX")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        inf_row = _chunk(hist_proc, data, "YX")
+        merged = hist_proc.get_aggregation("histogram_counts")([inf_row, clean], ())
+    assert (inf_row["histogram_min"], inf_row["histogram_max"]) == (0.0, 4.0)
+    assert inf_row["histogram_counts"].sum() == 5
+    assert inf_row["histogram_nan_count"] == 1
+    assert merged.sum() == 10
+
+
+def test_all_inf_chunk_histogram_empty(hist_proc):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(hist_proc, np.array([[np.inf, -np.inf]], dtype=np.float32), "YX")
+    assert np.isnan(row["histogram_min"]) and row["histogram_counts"].sum() == 0
+
+
+def test_aggregate_histogram_all_nan_chunk_with_real_chunks(hist_proc):
+    """An all-NaN chunk merged with real chunks must add nothing and raise no warnings."""
+    nan_row = _chunk(hist_proc, np.full((2, 5), np.nan, dtype=np.float32), "YX")
+    real_a = _chunk(hist_proc, np.array([[0, 1, 2, 3, 4]], dtype=np.float32), "YX")
+    real_b = _chunk(hist_proc, np.array([[1, 2, 3, 4, 5]], dtype=np.float32), "YX")
+    fn = hist_proc.get_aggregation("histogram_counts")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        merged = fn([nan_row, real_a, real_b], ())
+    assert merged.sum() == 10
+
+
 def test_multi_dim_chunk_reduces_over_all_dims(proc):
     """run_chunk reduces over all dims including leading ones."""
     data = np.array(
