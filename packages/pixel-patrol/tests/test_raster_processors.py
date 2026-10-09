@@ -1,5 +1,7 @@
 """Tests for raster processors - run_chunk and get_aggregation."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -60,7 +62,7 @@ def _blurred(sharp):
 
 def test_basic_processor_keys(proc):
     row = _chunk(proc, np.arange(16, dtype=np.uint8).reshape(4, 4), "YX")
-    for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity", "finite_pixel_count"):
+    for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity", "finite_pixel_count", "nan_fraction"):
         assert k in row, f"Missing key: {k}"
 
 
@@ -90,11 +92,131 @@ def test_mean_std_min_max(proc):
     assert row["std_intensity"]  == pytest.approx(2.5819888, rel=1e-5)
 
 
+@pytest.mark.parametrize("dtype,scale", [(np.float32, 1e20), (np.float16, 300)])
+def test_std_extreme_magnitude_no_overflow(proc, dtype, scale):
+    """Sum-of-squared-deviations can overflow a narrow float dtype even when the true std fits
+    fine - std must be computed with enough precision to avoid a false inf."""
+    rng = np.random.default_rng(0)
+    data = (rng.standard_normal((16, 16)) * scale).astype(dtype)
+    expected = float(np.std(data.astype(np.float64)))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(proc, data, "YX")
+    assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
+
+
+@pytest.mark.parametrize("dtype,value", [(np.float32, 9.97e36), (np.float16, 6e4)])
+def test_mean_large_values_no_overflow(proc, dtype, value):
+    """The sum of many large values overflows a narrow accumulator even when the mean fits."""
+    data = np.full((64, 64), value, dtype=dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(proc, data, "YX")
+    assert row["mean_intensity"] == pytest.approx(float(dtype(value)), rel=1e-6)
+
+
 def test_nan_excluded(proc):
     data = np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32)
     row = _chunk(proc, data, "YX")
     assert row["mean_intensity"]     == pytest.approx(2.0, rel=1e-5)
     assert row["finite_pixel_count"] == 5
+
+
+def test_nan_fraction(proc):
+    row = _chunk(proc, np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32), "YX")
+    assert row["nan_fraction"] == pytest.approx(1 / 6)
+    # Inf is not NaN: nan_fraction stays 0 while finite_pixel_count still drops it.
+    row_inf = _chunk(proc, np.array([[0, 1, np.inf]], dtype=np.float32), "YX")
+    assert row_inf["nan_fraction"] == 0.0
+    assert row_inf["finite_pixel_count"] == 2
+    # Integer dtypes can't hold NaN: always 0, no isnan() dtype error.
+    row_int = _chunk(proc, np.arange(4, dtype=np.uint8).reshape(2, 2), "YX")
+    assert row_int["nan_fraction"] == 0.0
+
+
+def test_nan_fraction_aggregated_across_chunks(proc):
+    """One chunk all-NaN, one chunk clean - aggregated fraction is pixel-count-weighted,
+    not a plain average of per-chunk fractions."""
+    nan_chunk = _chunk(proc, np.full((2, 2), np.nan, dtype=np.float32), "YX")
+    real_chunk = _chunk(proc, np.ones((6, 2), dtype=np.float32), "YX")
+    frac = proc.get_aggregation("nan_fraction")([nan_chunk, real_chunk], ())
+    assert frac == pytest.approx(4 / 16)
+
+
+def test_all_nan_chunk_no_warnings(proc, hist_proc, quality_proc):
+    data = np.full((8, 8), np.nan, dtype=np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        basic = _chunk(proc, data, "YX")
+        hist = _chunk(hist_proc, data, "YX")
+        quality = _chunk(quality_proc, data, "YX")
+    for k in ("mean_intensity", "std_intensity", "min_intensity", "max_intensity"):
+        assert np.isnan(basic[k])
+    assert basic["finite_pixel_count"] == 0
+    assert basic["nan_fraction"] == 1.0
+    assert np.isnan(hist["histogram_min"])
+    assert np.isnan(hist["histogram_max"])
+    assert hist["histogram_nan_count"] == 64
+    assert hist["histogram_counts"].sum() == 0
+    for k in ("laplacian_variance", "spectral_slope", "dark_clipping_fraction", "bright_clipping_fraction"):
+        assert np.isnan(quality[k])
+
+
+def test_mixed_chunks_all_nan_chunk_ignored_in_aggregation(proc):
+    """One memory chunk of an image is all-NaN, another has real data - aggregation
+    across chunks must use the real data, not be poisoned by the all-NaN chunk."""
+    nan_chunk = _chunk(proc, np.full((4, 4), np.nan, dtype=np.float32), "YX")
+    real_chunk = _chunk(proc, np.array([[1, 2], [3, 4]], dtype=np.float32), "YX")
+    assert proc.get_aggregation("min_intensity")([nan_chunk, real_chunk], ()) == pytest.approx(1.0)
+    assert proc.get_aggregation("max_intensity")([nan_chunk, real_chunk], ()) == pytest.approx(4.0)
+    assert proc.get_aggregation("mean_intensity")([nan_chunk, real_chunk], ()) == pytest.approx(2.5)
+
+
+def test_inf_pixels_excluded_from_mean_and_std(proc):
+    """Mean/std cover finite pixels only; min/max still show the Inf; all-Inf chunk is NaN."""
+    clean = _chunk(proc, np.array([[10, 10, 10, 10]], dtype=np.float32), "YX")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        inf_row = _chunk(proc, np.array([[20, 20, 20, np.inf]], dtype=np.float32), "YX")
+        all_inf = _chunk(proc, np.array([[np.inf, -np.inf]], dtype=np.float32), "YX")
+    assert inf_row["mean_intensity"] == pytest.approx(20.0)
+    assert inf_row["std_intensity"] == pytest.approx(0.0)
+    assert inf_row["max_intensity"] == np.inf
+    assert np.isnan(all_inf["mean_intensity"]) and np.isnan(all_inf["std_intensity"])
+    assert proc.get_aggregation("mean_intensity")([clean, inf_row], ()) == pytest.approx(100 / 7)
+
+
+def test_inf_chunk_histogram_uses_finite_range(hist_proc):
+    """Inf pixels must not give the histogram infinite bounds; finite pixels still bin correctly."""
+    data = np.array([[0, 1, 2, 3, np.inf, -np.inf, np.nan, 4]], dtype=np.float32)
+    clean = _chunk(hist_proc, np.array([[0, 1, 2, 3, 4]], dtype=np.float32), "YX")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        inf_row = _chunk(hist_proc, data, "YX")
+        merged = hist_proc.get_aggregation("histogram_counts")([inf_row, clean], ())
+    assert (inf_row["histogram_min"], inf_row["histogram_max"]) == (0.0, 4.0)
+    assert inf_row["histogram_counts"].sum() == 5
+    assert inf_row["histogram_nan_count"] == 1
+    assert merged.sum() == 10
+
+
+def test_all_inf_chunk_histogram_empty(hist_proc):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(hist_proc, np.array([[np.inf, -np.inf]], dtype=np.float32), "YX")
+    assert np.isnan(row["histogram_min"]) and row["histogram_counts"].sum() == 0
+
+
+def test_aggregate_histogram_all_nan_chunk_with_real_chunks(hist_proc):
+    """An all-NaN chunk merged with real chunks must add nothing and raise no warnings."""
+    nan_row = _chunk(hist_proc, np.full((2, 5), np.nan, dtype=np.float32), "YX")
+    real_a = _chunk(hist_proc, np.array([[0, 1, 2, 3, 4]], dtype=np.float32), "YX")
+    real_b = _chunk(hist_proc, np.array([[1, 2, 3, 4, 5]], dtype=np.float32), "YX")
+    fn = hist_proc.get_aggregation("histogram_counts")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        merged = fn([nan_row, real_a, real_b], ())
+    assert merged.sum() == 10
 
 
 def test_multi_dim_chunk_reduces_over_all_dims(proc):
@@ -329,3 +451,27 @@ def test_get_aggregation_mean_is_correct(proc):
 
 def test_get_aggregation_histogram_callable(hist_proc):
     assert callable(hist_proc.get_aggregation("histogram_counts"))
+
+
+def test_get_aggregation_min_max_all_nan_is_null_not_nan(proc, hist_proc):
+    """An all-NaN image must aggregate to None (SQL NULL), not float NaN - NaN in a
+    numeric column poisons downstream SQL MIN/MAX aggregates (treated as the largest
+    value), while NULL is already handled correctly everywhere."""
+    row = _chunk(proc, np.full((4, 4), np.nan, dtype=np.float32), "YX")
+    assert proc.get_aggregation("min_intensity")([row], ()) is None
+    assert proc.get_aggregation("max_intensity")([row], ()) is None
+    hrow = _chunk(hist_proc, np.full((4, 4), np.nan, dtype=np.float32), "YX")
+    assert hist_proc.get_aggregation("histogram_min")([hrow], ()) is None
+    assert hist_proc.get_aggregation("histogram_max")([hrow], ()) is None
+
+
+def test_aggregate_histogram_all_nan_chunks_no_warnings(hist_proc):
+    """All chunks of an all-NaN image carry histogram_min/max=NaN; aggregating
+    them across chunks must not hit numpy's all-NaN nanmin/nanmax warning."""
+    data = np.full((8, 8), np.nan, dtype=np.float32)
+    rows = [_chunk(hist_proc, data, "YX") for _ in range(2)]
+    fn = hist_proc.get_aggregation("histogram_counts")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        counts = fn(rows, ())
+    assert counts.sum() == 0
