@@ -172,6 +172,20 @@ def test_mixed_chunks_all_nan_chunk_ignored_in_aggregation(proc):
     assert proc.get_aggregation("mean_intensity")([nan_chunk, real_chunk], ()) == pytest.approx(2.5)
 
 
+def test_inf_pixels_excluded_from_mean_and_std(proc):
+    """Mean/std cover finite pixels only; min/max still show the Inf; all-Inf chunk is NaN."""
+    clean = _chunk(proc, np.array([[10, 10, 10, 10]], dtype=np.float32), "YX")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        inf_row = _chunk(proc, np.array([[20, 20, 20, np.inf]], dtype=np.float32), "YX")
+        all_inf = _chunk(proc, np.array([[np.inf, -np.inf]], dtype=np.float32), "YX")
+    assert inf_row["mean_intensity"] == pytest.approx(20.0)
+    assert inf_row["std_intensity"] == pytest.approx(0.0)
+    assert inf_row["max_intensity"] == np.inf
+    assert np.isnan(all_inf["mean_intensity"]) and np.isnan(all_inf["std_intensity"])
+    assert proc.get_aggregation("mean_intensity")([clean, inf_row], ()) == pytest.approx(100 / 7)
+
+
 def test_inf_chunk_histogram_uses_finite_range(hist_proc):
     """Inf pixels must not give the histogram infinite bounds; finite pixels still bin correctly."""
     data = np.array([[0, 1, 2, 3, np.inf, -np.inf, np.nan, 4]], dtype=np.float32)

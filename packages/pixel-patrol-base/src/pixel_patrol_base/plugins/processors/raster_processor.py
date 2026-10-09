@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -25,6 +25,7 @@ class MetricContext:
     cache: Dict = field(default_factory=dict)
     all_nan: bool = False
     nan_count: int = 0
+    finite: Optional[np.ndarray] = None   # finite pixel values, set only for chunks containing Inf
 
 
 def _is_all_nan(arr: np.ndarray) -> bool:
@@ -211,15 +212,18 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
         match spec.name:
             case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
             case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
-            case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr, dtype=np.float64))
+            case MetricNames.MEAN_INTENSITY:
+                vals = arr if ctx.finite is None else ctx.finite
+                return float("nan") if ctx.all_nan or vals.size == 0 else float(np.nanmean(vals, dtype=np.float64))
             case MetricNames.STD_INTENSITY:
-                if ctx.all_nan:
+                vals = arr if ctx.finite is None else ctx.finite
+                if ctx.all_nan or vals.size == 0:
                     return float("nan")
                 # Squared deviations can overflow a narrow float dtype: upcast only when values are large enough.
-                if np.issubdtype(arr.dtype, np.floating) and arr.dtype.itemsize < 8 \
-                        and max(abs(ctx.s_min), abs(ctx.s_max)) > np.sqrt(np.finfo(arr.dtype).max) / 2:
-                    arr = arr.astype(np.float64)
-                return float(np.nanstd(arr))
+                if np.issubdtype(vals.dtype, np.floating) and vals.dtype.itemsize < 8 \
+                        and max(abs(ctx.s_min), abs(ctx.s_max)) > np.sqrt(np.finfo(vals.dtype).max) / 2:
+                    vals = vals.astype(np.float64)
+                return float(np.nanstd(vals))
             case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
             case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
             case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
@@ -253,12 +257,12 @@ class RasterProcessor:
                 s_min, s_max = float(np.nanmin(chunk)), float(np.nanmax(chunk))
             except (TypeError, ValueError):
                 return {}
+            finite = None
             if not (np.isfinite(s_min) and np.isfinite(s_max)):
-                # Inf pixels would give the histogram infinite bounds: range over finite pixels only.
-                fin = np.isfinite(chunk)
-                s_min = float(np.min(chunk, where=fin, initial=np.inf)) if fin.any() else float("nan")
-                s_max = float(np.max(chunk, where=fin, initial=-np.inf)) if fin.any() else float("nan")
-            ctx = MetricContext(s_min=s_min, s_max=s_max, nan_count=nan_count)
+                # Inf pixels: mean, std and histogram range cover finite pixels only.
+                finite = chunk[np.isfinite(chunk)]
+                s_min, s_max = (float(finite.min()), float(finite.max())) if finite.size else (float("nan"), float("nan"))
+            ctx = MetricContext(s_min=s_min, s_max=s_max, nan_count=nan_count, finite=finite)
         return {
             spec.name: val
             for spec in self.METRICS
