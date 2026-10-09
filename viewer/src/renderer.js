@@ -125,13 +125,13 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
 
       perFile: (where = '') => perFile(where, schema.allCols ?? []),
 
+      pinnedDims: () => pinnedDims(state.dimensions),
+
       /**
        * WHERE parts pinning one long-format aggregation subset. `q`, `dimCols`
        * and `baseWhere` (the active user filter) are injected; callers pass only
        * `{ fixed, split, obsLevel }`. See sql.js dimSubsetWhere.
        */
-      pinnedDims: () => pinnedDims(state.dimensions),
-
       dimSubsetWhere: (opts = {}) => dimSubsetWhere({
         q: _q,
         dimCols:   schema.dimCols ?? [],
