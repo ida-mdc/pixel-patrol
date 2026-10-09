@@ -37,6 +37,7 @@ class MetricNames(StrEnum):
     MEAN_INTENSITY      = "mean_intensity"
     STD_INTENSITY       = "std_intensity"
     FINITE_PIXEL_COUNT  = "finite_pixel_count"
+    NAN_FRACTION        = "nan_fraction"
     HISTOGRAM_MIN       = "histogram_min"
     HISTOGRAM_MAX       = "histogram_max"
     HISTOGRAM_NAN_COUNT = "histogram_nan_count"
@@ -210,7 +211,7 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
         match spec.name:
             case MetricNames.MIN_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmin(arr))
             case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
-            case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
+            case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr, dtype=np.float64))
             case MetricNames.STD_INTENSITY:
                 if ctx.all_nan:
                     return float("nan")
@@ -224,7 +225,7 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
             case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
             case MetricNames.HISTOGRAM_NAN_COUNT: return ctx.nan_count
             case MetricNames.HISTOGRAM_COUNTS:   return _histogram_counts(arr, *_hist_bounds(arr, ctx.s_min, ctx.s_max))
-            case "nan_fraction":                 return ctx.nan_count / arr.size if arr.size else float("nan")
+            case MetricNames.NAN_FRACTION:       return ctx.nan_count / arr.size if arr.size else float("nan")
             case _:                              return None
 
 
@@ -289,7 +290,7 @@ class BasicMetricsProcessor(RasterProcessor):
                          description="Pooled standard deviation of intensity over the covered extent."),
         RasterMetricSpec(name=MetricNames.FINITE_PIXEL_COUNT, data_type=np.uint64,  aggregate_rows=_integer_sum_agg,
                          description="Number of finite (non-NaN/Inf) pixels contributing to the statistics."),
-        RasterMetricSpec(name="nan_fraction", data_type=np.float32, aggregate_rows=_pixel_weighted_mean_agg,
+        RasterMetricSpec(name=MetricNames.NAN_FRACTION, data_type=np.float32, aggregate_rows=_pixel_weighted_mean_agg,
                          description="Fraction of pixels excluded as NaN."),
     )
     OUTPUT_SCHEMA = {m.name: m.data_type for m in METRICS}

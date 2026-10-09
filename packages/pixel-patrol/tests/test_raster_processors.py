@@ -105,6 +105,16 @@ def test_std_extreme_magnitude_no_overflow(proc, dtype, scale):
     assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
 
 
+@pytest.mark.parametrize("dtype,value", [(np.float32, 9.97e36), (np.float16, 6e4)])
+def test_mean_large_values_no_overflow(proc, dtype, value):
+    """The sum of many large values overflows a narrow accumulator even when the mean fits."""
+    data = np.full((64, 64), value, dtype=dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(proc, data, "YX")
+    assert row["mean_intensity"] == pytest.approx(float(dtype(value)), rel=1e-6)
+
+
 def test_nan_excluded(proc):
     data = np.array([[0, 1, 2, 3, 4, np.nan]], dtype=np.float32)
     row = _chunk(proc, data, "YX")
