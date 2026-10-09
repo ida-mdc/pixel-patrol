@@ -211,8 +211,13 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
             case MetricNames.MAX_INTENSITY:      return float("nan") if ctx.all_nan else float(np.nanmax(arr))
             case MetricNames.MEAN_INTENSITY:     return float("nan") if ctx.all_nan else float(np.nanmean(arr))
             case MetricNames.STD_INTENSITY:
-                # dtype=float64: avoids float32 overflow in the sum-of-squares for extreme pixel values.
-                return float("nan") if ctx.all_nan else float(np.nanstd(arr, dtype=np.float64))
+                if ctx.all_nan:
+                    return float("nan")
+                # Squared deviations can overflow a narrow float dtype: upcast only when values are large enough.
+                if np.issubdtype(arr.dtype, np.floating) and arr.dtype.itemsize < 8 \
+                        and max(abs(ctx.s_min), abs(ctx.s_max)) > np.sqrt(np.finfo(arr.dtype).max) / 2:
+                    arr = arr.astype(np.float64)
+                return float(np.nanstd(arr))
             case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
             case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
             case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])

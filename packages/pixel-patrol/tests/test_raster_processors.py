@@ -92,11 +92,12 @@ def test_mean_std_min_max(proc):
     assert row["std_intensity"]  == pytest.approx(2.5819888, rel=1e-5)
 
 
-def test_std_extreme_magnitude_no_overflow(proc):
-    """Sum-of-squared-deviations can overflow float32 even when the true std fits
+@pytest.mark.parametrize("dtype,scale", [(np.float32, 1e20), (np.float16, 300)])
+def test_std_extreme_magnitude_no_overflow(proc, dtype, scale):
+    """Sum-of-squared-deviations can overflow a narrow float dtype even when the true std fits
     fine - std must be computed with enough precision to avoid a false inf."""
     rng = np.random.default_rng(0)
-    data = (rng.standard_normal((512, 512)) * 1e17).astype(np.float32)
+    data = (rng.standard_normal((16, 16)) * scale).astype(dtype)
     expected = float(np.std(data.astype(np.float64)))
     with warnings.catch_warnings():
         warnings.simplefilter("error")
