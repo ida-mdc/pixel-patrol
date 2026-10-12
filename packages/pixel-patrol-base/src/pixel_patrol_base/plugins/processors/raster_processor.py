@@ -220,10 +220,13 @@ def numpy_compute(spec: RasterMetricSpec, arr: np.ndarray, ctx: MetricContext):
                 if ctx.all_nan or vals.size == 0:
                     return float("nan")
                 # Squared deviations can overflow a narrow float dtype: upcast only when values are large enough.
-                if np.issubdtype(vals.dtype, np.floating) and vals.dtype.itemsize < 8 \
-                        and max(abs(ctx.s_min), abs(ctx.s_max)) > np.sqrt(np.finfo(vals.dtype).max) / 2:
+                is_float = np.issubdtype(vals.dtype, np.floating)
+                is_narrow_float = vals.dtype.itemsize < 8  # float16/32
+                max_absolute_value = max(abs(ctx.s_min), abs(ctx.s_max))
+                # keep is_float first: np.finfo() can only be run on inexact dtypes like float
+                if is_float and is_narrow_float and max_absolute_value > np.sqrt(np.finfo(vals.dtype).max) / 2:
                     vals = vals.astype(np.float64)
-                return float(np.nanstd(vals))
+                return float(np.nanstd(vals, dtype=np.float64))
             case MetricNames.FINITE_PIXEL_COUNT: return int(np.sum(np.isfinite(arr)))
             case MetricNames.HISTOGRAM_MIN:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[0])
             case MetricNames.HISTOGRAM_MAX:      return float(_hist_bounds(arr, ctx.s_min, ctx.s_max)[1])
