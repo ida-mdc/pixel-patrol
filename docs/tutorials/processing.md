@@ -53,11 +53,11 @@ Answer the questions below and we'll walk you through each decision together, bu
       This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
       PixelPatrol will scan it recursively, so you don't need to list subdirectories separately.
       Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
-      No images of your own yet? The repo ships a small example dataset at
-      <a href="https://github.com/ida-mdc/pixel-patrol/tree/main/examples/datasets/WHOI_processed_color"><code>examples/datasets/WHOI_processed_color/</code></a> (40 plankton images, four tampered
-      variants of the same originals, ~1.3 MB total) - point <code>BASE_DIRECTORY</code> there and
-      follow along. It's the very dataset behind the <a href="https://pixelpatrol.app/viewer/?data=../example.parquet" target="_blank">example interactive report</a>
-      used in the next tutorial.
+      No images of your own yet? Download the small
+      <a href="https://syncandshare.desy.de/index.php/s/zQjryd2qmZG4Gc7/download"><code>bbbc006_stacks.tar.gz</code></a>
+      example dataset (U2OS cell focus series from BBBC006, 4 focus conditions, ~75 MB), extract it and point
+      <code>BASE_DIRECTORY</code> at the extracted <code>bbbc006_stacks/</code> folder to follow along. It's the very dataset behind the
+      <a href="https://pixelpatrol.app/viewer/?data=../example.parquet" target="_blank">example interactive report</a>.
     </div>
     <input class="wiz-input" type="text" id="pwi-base_dir"
            placeholder="/path/to/images/"

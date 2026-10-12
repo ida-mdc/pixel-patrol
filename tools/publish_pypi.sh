@@ -82,7 +82,7 @@ done
 # ── regenerate example parquet ────────────────────────────────────────────────
 echo ""
 echo "=== Regenerating example parquet ==="
-uv run python "$REPO_ROOT/examples/datasets/WHOI_processed_color/generate_example_parquet.py"
+uv run python "$REPO_ROOT/tools/generate_example_parquet.py"
 
 # ── commit, tag, push ─────────────────────────────────────────────────────────
 echo ""

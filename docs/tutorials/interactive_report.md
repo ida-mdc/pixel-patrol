@@ -1,8 +1,8 @@
 # Exploring the Interactive Report
 
-Open your interactive report in one browser tab and keep this page in another. No PixelPatrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example dataset</a> used for the screenshots below and follow along with that instead.
+Open your interactive report in one browser tab and keep this page open in another. No PixelPatrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example report</a>, used in this tutorial.
 
-The example screenshots below are from the WHOI plankton microscopy dataset, which we deliberately tampered with to create four synthetic conditions: **original** images, **blurred** images, **JPEG-compressed** images, and **noisy** images. This makes it easy to see what each widget catches.
+The example screenshots below are from a subset of the BBBC006 dataset (human U2OS cells, Hoechst and phalloidin channels, 20x) with four conditions: focus series acquired **far below**, **below**, **near** and **far above** the focal plane, each stored as a multi-channel `.ome.tif` stack. The uneven group sizes, varying Z size, 12-bit data stored in 16 bits and changing sharpness across Z make it easy to see what each widget catches.
 
 A few things to know before you start:
 
@@ -12,28 +12,28 @@ A few things to know before you start:
 
 **Reading the cards:**
 
-<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.75rem 0 1.5rem;font-size:0.82rem;align-items:center">
-  <span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every interactive report &nbsp;&nbsp;
-  <span class="wc-pill wc-pill-loader">needs loader</span> &nbsp;requires an image loader (e.g. <code>pixel-patrol-loader-bio</code>) &nbsp;&nbsp;
-  <span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice
+<div class="wc-legend">
+  <div><span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every interactive report</div>
+  <div><span class="wc-pill wc-pill-loader">needs loader</span> &nbsp;requires an image loader (e.g. <code>bioio</code> or <code>tifffile</code>)</div>
+  <div><span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice</div>
 </div>
 
 Each widget also carries a small **scope badge** telling you what one datapoint represents - hover it for details:
 
-<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.75rem 0 1.5rem;font-size:0.82rem;align-items:center">
-  <span class="wc-scope">📄 per file</span> &nbsp;one datapoint = one file &nbsp;&nbsp;
-  <span class="wc-scope">🖼️ per image</span> &nbsp;one datapoint = one image, even if its file holds several &nbsp;&nbsp;
-  <span class="wc-scope">🧩 per slice</span> &nbsp;one datapoint = one channel / Z-plane / timepoint within an image &nbsp;&nbsp;
-  <span class="wc-scope">🖼️/🧩</span> &nbsp;switchable with the <strong>Slice by</strong> toggle
+<div class="wc-legend">
+  <div><span class="wc-scope">📄 per file</span> &nbsp;one datapoint = one file</div>
+  <div><span class="wc-scope">🖼️ per image</span> &nbsp;one datapoint = one image</div>
+  <div><span class="wc-scope">🧩 per slice</span> &nbsp;one datapoint = one channel / Z-plane / timepoint within an image, or another sliced dimension</div>
+  <div><span class="wc-scope">🖼️/🧩</span> &nbsp;switchable with the <strong>Slice by</strong> toggle</div>
 </div>
 
 ---
 
 ## Overview and Full view
 
-By default the viewer opens in **Overview** mode: widgets appear as a compact grid of tiles, each with a one-line summary and a preview plot. Click any tile to expand it in place and see the full widget. Click it again, or use **Collapse all** in the topbar, to close it.
+The viewer opens in **Overview** mode: a grid of tiles, each with a one-line summary. Click a tile to expand it, or switch to **Full** view with the toggle in the top right to see every widget at once.
 
-If you prefer to see all widgets expanded at once, switch to **Full** view with the **Overview / Full** toggle in the top right.
+Each widget has an **ⓘ** button that briefly explains what it shows and how to read it; a toggle in the topbar opens or closes all of them.
 
 ---
 
@@ -62,7 +62,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
   <div class="wc-setup-title">⚙ What's in your table?</div>
   <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for widgets that don't apply to your setup will dim out as you scroll through the walkthrough - so you can see at a glance which ones are actually relevant to you.</p>
   <div class="wc-setup-row">
-    <span class="wc-setup-q">Did you run processing with an image loader (e.g. <code>pixel-patrol-loader-bio</code>)?</span>
+    <span class="wc-setup-q">Did you run processing with an image loader (e.g. <code>bioio</code> or <code>tifffile</code>)?</span>
     <span class="wc-setup-btns">
       <button class="wc-setup-btn" data-key="loader" data-val="yes" onclick="wcSetup(this)">Yes</button>
       <button class="wc-setup-btn" data-key="loader" data-val="no"  onclick="wcSetup(this)">No</button>
@@ -101,7 +101,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/summary.png" alt="File Data Summary">
-    <figcaption>Summary tiles for the dataset, plus a per-group table - all four groups have the same file count, but <code>condition3_comp</code> is 10× smaller on disk. Already suspicious before looking at a single pixel.</figcaption>
+    <figcaption>Summary tiles for the dataset, plus a per-group table - the groups have 2, 2, 3 and 6 files, and <code>near_focus</code> holds several times more data on disk than the others. Uneven group sizes, visible before looking at a single pixel.</figcaption>
   </div>
 </div>
 
@@ -154,19 +154,15 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div>File metadata only - no pixel data. Sizes from the filesystem; modification timestamps from each file's <code>mtime</code>.</div>
 </details>
 
-<div class="wc-shots two-col">
+<div class="wc-shots">
   <div class="wc-shot">
-    <img src="../../assets/screenshots/ext.png" alt="File Count by Extension">
-    <figcaption>File count by extension - <code>condition3_comp</code> is the only group with <code>.jpeg</code> files. JPEG compression probably explains the smaller file sizes.</figcaption>
-  </div>
-  <div class="wc-shot">
-    <img src="../../assets/screenshots/count_ext.png" alt="File Count by Size Bin">
-    <figcaption>File size distribution - the compressed JPEG images cluster in the small-size bins on the left; originals and noisy images spread to the right.</figcaption>
+    <img src="../../assets/screenshots/file_stats.png" alt="File Statistics">
+    <figcaption>File statistics - the yellow banner flags that file counts differ between conditions (ratio above 1.5×). All files share the single extension <code>.ome.tif</code>, so it appears in the "shared properties" table instead of a chart.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>One condition has a different file format than the others.</strong> In this example, only <code>condition3_comp</code> has <code>.jpeg</code> files. Mixed extensions across groups can mean a mixed dataset - images exported in two formats, or even saved twice.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Mixed file formats, e.g. one condition has a different format than the others.</strong> Mixed extensions can mean a mixed dataset - images exported in two formats, or even saved twice. The example report has a single format, so it does not trigger this.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Modification dates spread across weeks or months - e.g. one condition acquired in March and another in May - you may want to check for a batch effect.</div></div>
 <div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Most properties collapsed to tables and modification dates are clustered together - in many cases, that points to consistent acquisition.</div></div>
 </div>
@@ -179,7 +175,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div class="wc" data-wc-req="" id="wc-sunburst">
 <div class="wc-head">
 <span class="wc-icon">🌀</span>
-<span class="wc-name">File System Structure</span>
+<span class="wc-name">File Structure Sunburst</span>
 <span class="wc-scope" title="One segment = one file">📄 per file</span>
 <span class="wc-pill wc-pill-always">always shown</span>
 <button class="wc-check" data-wc="sunburst" onclick="wcCheck(this)" title="Mark as reviewed"></button>
@@ -191,7 +187,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/burst.png" alt="File Structure Sunburst">
-    <figcaption>The 4 conditions at the second ring, each split into species subfolders - each file appears at the outer edge. Hover any segment to see the path and count.</figcaption>
+    <figcaption>The 4 conditions at the second ring, each holding its stacks directly with no subfolders - each file appears at the outer edge. Hover any segment to see the path and count.</figcaption>
   </div>
 </div>
 
@@ -229,7 +225,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div class="wc" data-wc-req="loader" id="wc-dim-size">
 <div class="wc-head">
 <span class="wc-icon">📐</span>
-<span class="wc-name">Dimension Size Distribution</span>
+<span class="wc-name">Dimensionality</span>
 <span class="wc-scope" title="One point = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="dim-size" onclick="wcCheck(this)" title="Mark as reviewed"></button>
@@ -238,14 +234,10 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 
 <p>X/Y scatter plot (width vs. height, one point per image) plus strip plots for any non-spatial dimensions present (e.g. Z, T, C, S - names depend on your loader). Quickly reveals outliers and whether your images are consistently sized across groups.</p>
 
-<div class="wc-shots two-col match-height">
+<div class="wc-shots small">
   <div class="wc-shot">
-    <img src="../../assets/screenshots/yx.png" alt="X vs Y size scatter">
-    <figcaption>X vs Y size - plankton images vary widely (some organisms are much larger). No tight cluster here is expected for a species-diverse dataset.</figcaption>
-  </div>
-  <div class="wc-shot">
-    <img src="../../assets/screenshots/y_size.png" alt="Y size distribution">
-    <figcaption>Y size violin - <code>condition1_org</code> has the widest spread, including one very tall image (~580px). That outlier is worth investigating.</figcaption>
+    <img src="../../assets/screenshots/z_size.png" alt="Z size distribution">
+    <figcaption>Z size strip plot - X and Y are the same for every image (696×520), but the stacks have between 5 and 8 Z-planes, so the Z size is not constant across files.</figcaption>
   </div>
 </div>
 
@@ -262,7 +254,7 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 <div class="wc" data-wc-req="loader" id="wc-mosaic">
 <div class="wc-head">
 <span class="wc-icon">🖼️</span>
-<span class="wc-name">Image Mosaic</span>
+<span class="wc-name">Image Thumbnails</span>
 <span class="wc-scope" title="One thumbnail = one image">🖼️ per image</span>
 <span class="wc-pill wc-pill-loader">needs loader</span>
 <button class="wc-check" data-wc="mosaic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
@@ -278,8 +270,8 @@ pixel-patrol view results.parquet --significance              # show stat bracke
 
 <div class="wc-shots">
   <div class="wc-shot">
-    <img src="../../assets/screenshots/mos.png" alt="Image Mosaic">
-    <figcaption>Plankton thumbnails from all four conditions - border colors indicate group. Sort by <code>laplacian_variance</code> ascending and the blurred/out-of-focus images will float to the top.</figcaption>
+    <img src="../../assets/screenshots/mos.png" alt="Image Thumbnails">
+    <figcaption>Thumbnails from all four conditions - border colors indicate group. Sort by <code>laplacian_variance</code> ascending and the blurriest, most out-of-focus images float to the top.</figcaption>
   </div>
 </div>
 
@@ -319,12 +311,12 @@ NaN pixels are excluded from all calculations.
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/max_intensity.png" alt="Max Intensity violin">
-    <figcaption><code>max_intensity</code> distribution - <code>condition2_bl</code> (blurred) has a wide, low distribution. <code>condition1_org</code> clusters tightly near 255. Each dot is one image; hover to identify the file.</figcaption>
+    <figcaption><code>max_intensity</code> - most images peak at exactly 4095, the 12-bit ceiling, although the data is stored as <code>uint16</code> (a 16-bit file would reach up to 65535). Only a handful of distinct values exist, so PixelPatrol shows raw points instead of a violin. Each dot is one image; hover to identify the file.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong><code>max_intensity</code> sitting exactly at 255 (or 65535)</strong> is worth a closer look - it can mean those images hit the sensor's ceiling and got clipped. Check the histogram for a spike at the max value to confirm real saturation (a single bright pixel can also legitimately land at 255), then verify visually in the mosaic.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong><code>max_intensity</code> sitting exactly at 255 (or 65535)</strong> is worth a closer look - it can mean those images hit the sensor's ceiling and got clipped. Check the histogram for a spike at the max value to confirm real saturation (a single bright pixel can also legitimately land at 255), then verify visually in Image Thumbnails.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Large spread in <code>mean_intensity</code> within a single group: variable illumination, inconsistent staining, or genuinely variable signal.</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Enable <strong>Show significance</strong> in the sidebar for Mann-Whitney U brackets (Bonferroni corrected). A bracket = statistically distinguishable groups - whether that's meaningful is your call.</div></div>
 </div>
@@ -354,7 +346,7 @@ NaN pixels are excluded from all calculations.
 <div class="wc-shots">
   <div class="wc-shot">
     <img src="../../assets/screenshots/hist.png" alt="Intensity histograms">
-    <figcaption>The four conditions have strikingly different distributions: <code>condition2_bl</code> (blurred, orange) peaks around 190 - much brighter on average. <code>condition3_comp</code> (JPEG, cyan) is spread unusually flat. All four peak at 0 (dark background), but to very different degrees.</figcaption>
+    <figcaption>Average pixel histograms of the four groups, all <code>uint16</code> so in one plot - most pixels sit in a dark background peak around 130 (the camera offset, not 0), with a long tail toward the bright signal that ends at 4095 instead of spanning the 16-bit range. <code>below_focus</code> (purple) has the strongest background peak.</figcaption>
   </div>
 </div>
 
@@ -389,7 +381,7 @@ NaN pixels are excluded from all calculations.
 <div>Apply the discrete Laplacian at every pixel: <code>left + right + up + down − 4 × center</code>. This second-derivative filter fires strongly at edges and fine texture, near-zero in smooth regions. Variance of this response is the score. Clipped pixels create artificial high-frequency edges and inflate it - check clipping fractions when values seem unusually high.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Low outliers → go to the mosaic, sort by <code>laplacian_variance</code> ascending, and confirm visually. If they look out-of-focus, you may want to exclude them.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Low outliers → go to Image Thumbnails, sort by <code>laplacian_variance</code> ascending, and confirm visually. If they look out-of-focus, you may want to exclude them.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition consistently lower: different imaging days, focus protocols, or objective settings?</div></div>
 </div>
 </div>
@@ -452,15 +444,15 @@ NaN pixels are excluded from all calculations.
 
 <div class="wc-shots compact">
   <div class="wc-shot">
-    <img src="../../assets/screenshots/max_per_s_slice.png" alt="Max intensity per S slice">
-    <figcaption>Max intensity across S (channel) slices - different images peak at different channels, and the spread widens at slice 2. The shaded band is the per-group std across images.</figcaption>
+    <img src="../../assets/screenshots/stats_per_dim.png" alt="Max and mean intensity across C and Z slices">
+    <figcaption>Max and mean intensity across C and Z slices - the second channel is brighter than the first in every group. On the Z side the dashed line (right axis) drops below 100% after the 5th plane, because the stacks have between 5 and 8 planes. The shaded band is the per-group std across images.</figcaption>
   </div>
 </div>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><code>mean_intensity</code> declining over T: <strong>photobleaching</strong>. Fluorophores are bleaching over the time course - any time-series analysis must account for this.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>std_intensity</code> increasing over T: growing noise - sample movement, degradation, or instrument drift.</div></div>
-<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal - just noise. Confirm visually in the mosaic for that channel.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal - just noise. Confirm visually in Image Thumbnails for that channel.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Each plot also has a dashed line - the percentage of images that still have a slice at that position, per group. A line dropping below 100% means images in that group don't all have the same number of slices.</div></div>
 </div>
 
@@ -481,6 +473,13 @@ NaN pixels are excluded from all calculations.
 <div class="wc-body">
 
 <p>How quality metrics change across your non-spatial dimensions (e.g. Z, T, C, or S - names depend on your loader). Best for detecting focus drift across a Z-like dimension or photobleaching effects on contrast over a T-like one.</p>
+
+<div class="wc-shots compact">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/lap_per_dim.png" alt="Laplacian variance across C and Z slices">
+    <figcaption>Laplacian variance across C and Z - in <code>near_focus</code> (green) it climbs steeply to a peak at Z=6 and falls again, the signature of a stack passing through focus. The other groups stay low and flat by comparison.</figcaption>
+  </div>
+</div>
 
 <div class="wc-flags">
 <div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Laplacian variance dropping across Z:</strong> focus is unstable across the stack. Find the Z range where sharpness peaks and limit your analysis to that range.</div></div>
