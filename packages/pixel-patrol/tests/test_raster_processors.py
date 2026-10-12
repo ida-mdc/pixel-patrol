@@ -105,6 +105,22 @@ def test_std_extreme_magnitude_no_overflow(proc, dtype, scale):
     assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
 
 
+@pytest.mark.parametrize(
+    "dtype,max_abs,shape",
+    [(np.float32, 9e18, (16, 16)),
+     (np.float16, 100, (8, 8))])
+def test_std_below_upcast_threshold_no_overflow(proc, dtype, max_abs, shape):
+    """Values just below sqrt(dtype max)/2: every squared deviation fits the dtype, but their sum
+    does not - an upcast decided by pixel magnitude alone misses this and std becomes inf."""
+    rng = np.random.default_rng(0)
+    data = rng.uniform(-max_abs, max_abs, shape).astype(dtype)
+    expected = float(np.std(data.astype(np.float64)))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(proc, data, "YX")
+    assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
+
+
 @pytest.mark.parametrize("dtype,value", [(np.float32, 9.97e36), (np.float16, 6e4)])
 def test_mean_large_values_no_overflow(proc, dtype, value):
     """The sum of many large values overflows a narrow accumulator even when the mean fits."""
