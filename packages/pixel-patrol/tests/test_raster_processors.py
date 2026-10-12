@@ -121,6 +121,16 @@ def test_std_below_upcast_threshold_no_overflow(proc, dtype, max_abs, shape):
     assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
 
 
+def test_std_float16_all_ones(proc):
+    """have many values might overflow the std accumulator"""
+    data = np.ones((256, 256), np.float16)  # 256^2=65k > MAX_FLOAT16
+    expected = 0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        row = _chunk(proc, data, "YX")
+    assert row["std_intensity"] == pytest.approx(expected, rel=1e-5)
+
+
 @pytest.mark.parametrize("dtype,value", [(np.float32, 9.97e36), (np.float16, 6e4)])
 def test_mean_large_values_no_overflow(proc, dtype, value):
     """The sum of many large values overflows a narrow accumulator even when the mean fits."""
