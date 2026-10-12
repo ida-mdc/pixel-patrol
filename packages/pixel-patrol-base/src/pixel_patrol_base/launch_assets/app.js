@@ -294,6 +294,7 @@ form.addEventListener("submit", async (e) => {
     parquet_row_group_size: form.parquet_row_group_size.value ? parseInt(form.parquet_row_group_size.value, 10) : null,
     slice_size: form.slice_size.value.trim(),
     log_file: form.log_file.checked,
+    omit_base_dir: form.omit_base_dir.checked,
   };
 
   dismissedWarnings.clear();

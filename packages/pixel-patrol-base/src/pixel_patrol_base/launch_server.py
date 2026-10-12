@@ -410,6 +410,7 @@ def _run_processing(payload: Dict[str, Any], slice_size: Optional[Dict[str, int]
             flavor=(payload.get("flavor") or "").strip(),
             description=(payload.get("description") or "").strip(),
             log_file=bool(payload.get("log_file")),
+            omit_base_dir=bool(payload.get("omit_base_dir")),
         )
 
         if scheduler:
