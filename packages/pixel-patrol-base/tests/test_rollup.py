@@ -200,7 +200,7 @@ def test_spatial_chunks_leaf_rows_pooled():
     assert len(_rows_at(result, 1)) == 2
 
 
-# ── X/Y full-extent-by-default: memory-chunk offsets are not user tiling ─────
+# ── X/Y unsliced-by-default: memory-chunk offsets are not user tiling ─────
 
 def test_xy_varying_from_memory_chunking_not_active_without_slice_size():
     # Simulate two memory chunks at different X positions (memory management split,
@@ -397,7 +397,7 @@ def test_size_fields_correct_per_obs_level():
     assert global_row["size_X"] == 2048
     for row in _rows_at(result, 1):
         assert row["size_Z"] == 1       # one slice
-        assert row["size_Y"] == 1024    # full extent (both Y halves aggregated)
+        assert row["size_Y"] == 1024    # not sliced (both Y halves aggregated)
         assert row["size_X"] == 2048
 
 
@@ -445,3 +445,9 @@ def test_startup_guard_does_not_fire_when_z_larger(tmp_path):
     config = ProcessingConfig(slice_size={"X": 1, "Y": 1, "Z": 5})
     df, stats = build_records_df([tmp_path], loader=None, processors=[], config=config)
     assert "slice_size" not in stats
+
+
+def test_startup_guard_does_not_fire_when_z_unsliced(tmp_path):
+    config = ProcessingConfig(slice_size={"X": 1, "Y": 1, "Z": -1})
+    result = build_records_df([tmp_path], loader=None, processors=[], config=config)
+    assert result != (None, {})

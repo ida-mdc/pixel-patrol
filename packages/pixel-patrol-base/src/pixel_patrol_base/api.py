@@ -78,7 +78,7 @@ def process_files(
         slice_size:                 Per-dimension granularity of statistics in the output table.
                                     {"Z": 1} produces one set of statistics per Z slice;
                                     {"Z": 5} groups every 5 slices. By default X and Y are
-                                    full extent and all other dims step by 1. Use -1 for no
+                                    not sliced and all other dims step by 1. Use -1 for no
                                     slicing along that dimension. None = default.
         rows_per_part:              Rows buffered before flushing to a temporary file (default: 10000).
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).

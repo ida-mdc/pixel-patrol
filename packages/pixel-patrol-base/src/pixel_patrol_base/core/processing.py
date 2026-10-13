@@ -95,8 +95,8 @@ _IMAGE_META_SKIP = frozenset({"shape", "num_pixels"})
 # size_bytes is a cumulative sum across many files and can exceed int32 range.
 _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
 
-# X/Y are the spatial plane dims - never split by default (full extent = -1).
-_FULL_EXTENT_BY_DEFAULT = {"X", "Y"}
+# X/Y are the spatial plane dims - never split by default (no slicing = -1).
+_UNSLICED_BY_DEFAULT = {"X", "Y"}
 
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
@@ -217,13 +217,13 @@ def _resolve_leaf_block_shape(
     Default: X and Y → -1 (never split); all other dims → 1.
     These defaults reflect the conventional 2-D image plane - override any
     dim via user_spec (e.g. leaf_block_shape={'X': 256, 'Z': 1}).
-    -1 means full extent; positive N means split into blocks of N.
+    -1 means no slicing; positive N means split into blocks of N.
     """
     return {
         dim: (
             user_spec[dim]
             if (user_spec and dim in user_spec)
-            else (-1 if dim in _FULL_EXTENT_BY_DEFAULT else 1)
+            else (-1 if dim in _UNSLICED_BY_DEFAULT else 1)
         )
         for dim in dim_order
     }
@@ -261,7 +261,7 @@ def _compute_memory_chunk_specs(
     Splits dims in three tiers (largest first within each):
       primary    - split first; dims with an explicit leaf block size, minus any loader-deferred dims
       deferred   - split only if primary is not enough; loader hint via deferred_dims
-      last_resort - split only if unavoidable; full-extent dims (X/Y by default)
+      last_resort - split only if unavoidable; unsliced dims (X/Y by default)
     Returns None when the file already fits within the budget.
     """
     dtype_bytes  = np.dtype(dtype).itemsize
@@ -786,7 +786,7 @@ def _rollup(
     all_dim_keys = sorted({
         col for row in all_leaf_rows for col in row if col.startswith("dim_")
     })
-    # A dim is full-extent-by-default (X, Y) and was not explicitly requested
+    # A dim is unsliced-by-default (X, Y) and was not explicitly requested
     # in leaf_block_shape - it may still vary across memory-chunk boundaries
     # (which are a memory-management detail, not user-specified tiling), so
     # exclude it from active_dims in that case.
@@ -794,7 +794,7 @@ def _rollup(
     active_dims = [
         d for d in all_dim_keys
         if len({row.get(d) for row in all_leaf_rows}) > 1
-        and (d[4:].upper() not in _FULL_EXTENT_BY_DEFAULT or d[4:].upper() in user_tiled)
+        and (d[4:].upper() not in _UNSLICED_BY_DEFAULT or d[4:].upper() in user_tiled)
     ]
     n = len(active_dims)
 
@@ -1580,9 +1580,9 @@ def build_records_df(
     cfg = config or ProcessingConfig()
 
     _ss = cfg.slice_size or {}
-    if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 for v in _ss.values()):
+    if _ss.get("X") == 1 and _ss.get("Y") == 1 and not any(v > 1 or v == -1 for v in _ss.values()):
         logger.error(
-            "slice_size sets both X and Y to 1 with no other dim larger than 1 — "
+            "slice_size sets both X and Y to 1 with no other dim larger than 1 or unsliced (-1) — "
             "PixelPatrol does not support slicing all dims to 1. "
             "Please set at least one dim to a value larger than 1."
         )
