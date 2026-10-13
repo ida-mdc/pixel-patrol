@@ -38,6 +38,7 @@ from packaging.version import InvalidVersion, Version
 
 from pixel_patrol_base import api
 from pixel_patrol_base import report_library as library
+from pixel_patrol_base.process_args import PROCESS_ARGS
 from pixel_patrol_base.viewer_server import (
     _discover_installed_extensions,
     _js,
@@ -160,6 +161,11 @@ def _get_available_loaders() -> list:
 
     loaders.append({"label": "None (basic file info only)", "value": "", "extensions": []})
     return loaders
+
+
+def _get_process_args() -> dict:
+    """Help text and default of every process arg, keyed by arg name."""
+    return {a.name: {"help": a.help, "default": a.default} for a in PROCESS_ARGS}
 
 
 def _get_available_processors() -> list:
@@ -519,6 +525,8 @@ class _LaunchHandler(_ViewerHandler):
             self._send_json(_get_available_loaders())
         elif path == "/api/processors":
             self._send_json(_get_available_processors())
+        elif path == "/api/process-args":
+            self._send_json(_get_process_args())
         elif path == "/api/status":
             self._send_json(_state_with_messages())
         elif path == "/api/version":

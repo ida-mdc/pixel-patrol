@@ -65,11 +65,12 @@
               <input type="text" id="base-directory" name="base_directory" placeholder="/path/to/your/images" required>
               <button type="button" id="browse-dataset-btn" class="btn btn-secondary">Browse…</button>
             </div>
-            <p class="form-text">Path to the folder containing the images/files you want to inspect.</p>
+            <p class="form-text" data-arg="base_directory"></p>
           </div>
           <div class="form-group">
             <label for="project-name">Project Name</label>
             <input type="text" id="project-name" name="project_name" placeholder="Auto (uses base directory name)">
+            <p class="form-text" data-arg="name"></p>
           </div>
         </div>
 
@@ -108,10 +109,12 @@
           <div class="form-group">
             <label for="flavor">Flavor</label>
             <input type="text" id="flavor" name="flavor" placeholder="Optional label">
+            <p class="form-text" data-arg="flavor"></p>
           </div>
           <div class="form-group">
             <label for="description">Description</label>
             <input type="text" id="description" name="description" placeholder='e.g., "Authors: Annona Buddha and Banana Java"'>
+            <p class="form-text" data-arg="description"></p>
           </div>
         </div>
 
@@ -123,12 +126,19 @@
             <div class="form-group">
               <label for="processors-include">Run only these processors</label>
               <select id="processors-include" name="processors_include" multiple></select>
-              <p class="form-text">Leave empty to run all applicable processors. Overrides "Skip processors" below if set.</p>
+              <p class="form-text" data-arg="processors_include"></p>
             </div>
             <div class="form-group">
               <label for="processors-exclude">Skip these processors</label>
               <select id="processors-exclude" name="processors_exclude" multiple></select>
-              <p class="form-text">Ignored if "Run only these processors" is set.</p>
+              <p class="form-text" data-arg="processors_exclude"></p>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="slice-size">Slice Size</label>
+              <input type="text" id="slice-size" name="slice_size" placeholder="e.g. Z=1, C=2">
+              <p class="form-text"><span data-arg="slice_size"></span> Comma-separated DIM=SIZE pairs.</p>
             </div>
           </div>
 
@@ -137,51 +147,43 @@
             <div class="form-group">
               <label for="max-workers">Max Workers</label>
               <input type="number" id="max-workers" name="max_workers" min="1" step="1" placeholder="Auto (from CPUs / RAM)">
-              <p class="form-text" id="max-workers-help">Number of parallel Dask workers. Use 1 to disable parallelism.</p>
+              <p class="form-text" data-arg="max_workers"></p>
+            </div>
+            <div class="form-group">
+              <label for="mb-per-worker">RAM per Worker (MB)</label>
+              <input type="number" id="mb-per-worker" name="mb_per_worker" min="0" step="any" data-arg="mb_per_worker">
+              <p class="form-text" data-arg="mb_per_worker"></p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="max-images-per-task">Max Images per Task</label>
+              <input type="number" id="max-images-per-task" name="max_images_per_task" min="1" step="1" data-arg="max_images_per_task">
+              <p class="form-text" data-arg="max_images_per_task"></p>
             </div>
             <div class="form-group">
               <label for="scheduler">Dask Scheduler Address</label>
               <input type="text" id="scheduler" name="scheduler" placeholder="e.g. tcp://host:8786">
-              <p class="form-text">Connect to an existing Dask scheduler instead of a local one (e.g. on an HPC cluster).
-              <strong>!</strong> When set, "Max Workers" above is ignored - configure worker count on the scheduler/cluster itself.</p>
+              <p class="form-text" data-arg="scheduler"></p>
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="mb-per-worker">RAM per Worker (MB)</label>
-              <input type="number" id="mb-per-worker" name="mb_per_worker" min="0" step="any" placeholder="4096">
-              <p class="form-text">More RAM per worker means fewer parallel workers. Images larger than 1/8 of this (headroom for in-memory expansion) are split into chunks; smaller files are batched up to that size. With a scheduler, defaults to the workers' memory.</p>
-            </div>
-            <div class="form-group">
-              <label for="max-images-per-task">Max Images per Task</label>
-              <input type="number" id="max-images-per-task" name="max_images_per_task" min="1" step="1" placeholder="200">
-              <p class="form-text">Max files per batch task or sub-images per container task.</p>
-            </div>
-          </div>
-
+          <h3 class="advanced-subheading">Output tuning</h3>
           <div class="form-row">
             <div class="form-group">
               <label for="rows-per-part">Rows per Part</label>
-              <input type="number" id="rows-per-part" name="rows_per_part" min="1" step="1" placeholder="10000">
-              <p class="form-text">Rows buffered in memory before flushing to a temporary file on disk.</p>
+              <input type="number" id="rows-per-part" name="rows_per_part" min="1" step="1" data-arg="rows_per_part">
+              <p class="form-text" data-arg="rows_per_part"></p>
             </div>
             <div class="form-group">
               <label for="parquet-row-group-size">Parquet Row Group Size</label>
-              <input type="number" id="parquet-row-group-size" name="parquet_row_group_size" min="1" step="1" placeholder="2048">
-              <p class="form-text">Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer.</p>
+              <input type="number" id="parquet-row-group-size" name="parquet_row_group_size" min="1" step="1" data-arg="parquet_row_group_size">
+              <p class="form-text" data-arg="parquet_row_group_size"></p>
             </div>
           </div>
 
-          <h3 class="advanced-subheading">Statistics detail</h3>
           <div class="form-row">
-            <div class="form-group">
-              <label for="slice-size">Slice Size</label>
-              <input type="text" id="slice-size" name="slice_size" placeholder="e.g. Z=1, C=2">
-              <p class="form-text">Per-dimension granularity of statistics. Z=1 produces one set of statistics per Z slice;
-              Z=5 groups every 5 slices. By default X and Y are full extent and other dims (Z, T, C, S) step by 1.
-              Use -1 for full extent. Comma-separated DIM=SIZE pairs.</p>
-            </div>
             <div class="form-group form-group-checkbox">
               <label class="checkbox-label">
                 <input type="checkbox" id="log-file" name="log_file">
@@ -197,7 +199,7 @@
                 <input type="checkbox" id="omit-base-dir" name="omit_base_dir">
                 Omit the base directory from the parquet metadata
               </label>
-              <p class="form-text">Useful when sharing tables without revealing local filesystem paths.</p>
+              <p class="form-text" data-arg="omit_base_dir"></p>
             </div>
           </div>
 
