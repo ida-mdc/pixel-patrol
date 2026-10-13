@@ -91,13 +91,15 @@ def test_metric_widgets_connect_only_to_their_metric_family():
     def sources(wid):
         return {e["source"] for e in cat["connections"] if e["target"] == f"widget:{wid}"}
 
-    quality = {"processor:raster-quality"}
+    # nan_fraction is also shown in the quality widgets but comes from raster-basic
+    # (alongside finite_pixel_count), not raster-quality.
+    quality = {"processor:raster-quality", "processor:raster-basic"}
     for basic in ("violin-basic", "stats-across-dims-basic"):
         assert sources(basic) == {"processor:raster-basic"}
     for qual in ("violin-quality", "stats-across-dims-quality"):
         assert sources(qual) == quality
     # custom-plot still accepts any metric column, so it spans every metric processor
-    assert sources("custom-plot") >= {"processor:raster-basic"} | quality
+    assert sources("custom-plot") >= {"processor:raster-basic", "processor:raster-quality"}
 
 
 def test_render_json_schema_includes_loader_string_columns():
