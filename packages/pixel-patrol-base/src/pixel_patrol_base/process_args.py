@@ -70,7 +70,7 @@ PROCESS_ARGS = [
                help="Skip these processors by ID."),
     ProcessArg("slice_size", metavar="DIM=SIZE", multiple=True, help=(
         "Per-dimension granularity of statistics in the output table. Z=1 produces one set of statistics "
-        "per Z slice; Z=5 groups every 5 slices. By default X and Y are full extent and all other dims "
+        "per Z slice; Z=5 groups every 5 slices. By default X and Y are not sliced and all other dims "
         "step by 1. Use -1 for no slicing along that dimension.")),
 
     # ── Speed and memory ──

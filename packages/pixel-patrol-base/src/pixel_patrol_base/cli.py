@@ -272,7 +272,7 @@ def schema(output: Path, print_: bool, no_widgets: bool, fmt: str):
 
 
 def _parse_slice_size(items: tuple) -> dict:
-    """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means full extent."""
+    """Parse ('Z=1', 'Y=256') → {'Z': 1, 'Y': 256}. Values are ints; -1 means no slicing."""
     result = {}
     for item in items:
         if "=" not in item:
