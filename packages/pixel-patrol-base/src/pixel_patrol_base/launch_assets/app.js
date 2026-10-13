@@ -232,6 +232,17 @@ async function loadProcessors() {
   }
 }
 
+// Fill help text (and input placeholders) from the shared process-arg definitions.
+async function loadProcessArgs() {
+  const res = await fetch("/api/process-args");
+  const args = await res.json();
+  for (const el of document.querySelectorAll("[data-arg]")) {
+    const { help, default: dflt } = args[el.dataset.arg];
+    if (el.tagName === "INPUT") el.placeholder = dflt ?? "";
+    else el.textContent = help;
+  }
+}
+
 function updateFileExtensionsHelp() {
   const loader = availableLoaders.find((l) => l.value === loaderSelect.value);
   if (loader && loader.extensions && loader.extensions.length) {
@@ -294,6 +305,7 @@ form.addEventListener("submit", async (e) => {
     parquet_row_group_size: form.parquet_row_group_size.value ? parseInt(form.parquet_row_group_size.value, 10) : null,
     slice_size: form.slice_size.value.trim(),
     log_file: form.log_file.checked,
+    omit_base_dir: form.omit_base_dir.checked,
   };
 
   dismissedWarnings.clear();
@@ -783,7 +795,7 @@ async function installUpdate() {
 // ---------------------------------------------------------------------
 
 (async function init() {
-  await Promise.all([loadLoaders(), loadProcessors()]);
+  await Promise.all([loadLoaders(), loadProcessors(), loadProcessArgs()]);
   const reportCount = await loadReports();
   checkVersion();
   const res = await fetch("/api/status");

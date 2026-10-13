@@ -14,35 +14,7 @@ Scans a directory tree, processes the images, and writes a `.parquet` table with
 pixel-patrol process BASE_DIRECTORY -o OUTPUT.parquet [OPTIONS]
 ```
 
-**Arguments**
-
-| Argument | Description |
-|---|---|
-| `BASE_DIRECTORY` | Root folder containing your dataset. |
-
-**Options**
-
-| Option | Default | Description |
-|---|---|---|
-| `-o, --output PATH` | **required** | Path for the output `.parquet` file. |
-| `--name TEXT` | folder name | Project name embedded in the parquet metadata. |
-| `-p, --paths PATH` | | Subdirectory to process. Repeatable. If specified, only files within those paths are processed and they become the default grouping when the interactive report opens. Paths are relative to `BASE_DIRECTORY`. |
-| `-l, --loader TEXT` | *(none)* | Loader plugin, e.g. `bioio`, `zarr`, `tifffile`, `h5`. Without a loader only basic file info is collected. |
-| `-e, --file-extensions EXT` | *(all supported)* | File extension to include, e.g. `tif`. Repeatable. |
-| `--flavor TEXT` | | Label shown next to the title in the viewer. |
-| `--description TEXT` | | Free-form description shown below the title in the viewer and embedded in the parquet metadata. |
-| `--processors-include NAME` | | Run only these processors by ID. Repeatable. Takes precedence over `--processors-exclude`. See [Available processors](processing.md#available-processors). |
-| `--processors-exclude NAME` | | Skip these processors by ID. Repeatable. See [Available processors](processing.md#available-processors). |
-| `--max-workers N` | auto | Number of parallel Dask workers. Auto-detected from available CPUs and RAM. Use `1` to disable parallelism. |
-| `--scheduler URL` | | Connect to an existing Dask scheduler instead of spawning a local one, e.g. `tcp://host:8786`. |
-| `--mb-per-worker N` | 4096 | RAM per worker in MB. More RAM per worker means fewer parallel workers. Images larger than 1/8 of this (headroom for in-memory expansion) are split into chunks; smaller files are batched up to that size. With `--scheduler`, defaults to the workers' memory. See [Task sizing](processing.md#task-sizing). |
-| `--max-images-per-task N` | 200 | Max files per batch task or sub-images per container task. |
-| `--slice-size DIM=SIZE` | | Per-dimension granularity of statistics in the output table. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices. By default X and Y are full extent and all other dims (Z, T, C, S) step by 1. See [per-dimension observations](processing.md#row-structure). Use `-1` for full extent. Repeatable, e.g. `--slice-size Z=1 --slice-size C=1`. |
-| `--rows-per-part N` | 10000 | Flush intermediate results to disk every N rows. |
-| `--parquet-row-group-size N` | 2048 | Rows per row group in the final parquet. Smaller values speed up thumbnail sampling in the viewer. |
-| `--log-file` | off | Write a debug log file alongside the output parquet. |
-| `--omit-base-dir` | off | Do not store the base directory in the parquet metadata. Useful when sharing tables without revealing local filesystem paths. See the [privacy policy](privacy.md). |
-| `--view` | off | Open the viewer immediately after processing completes, using default viewer settings. Equivalent to running `pixel-patrol view OUTPUT` afterwards. |
+<!-- process-args-table -->
 
 **Examples**
 

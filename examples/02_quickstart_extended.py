@@ -16,7 +16,7 @@ def main():
     # You can specify the paths either as absolute or relevant to base_path.
     paths = [p.name for p in base_path.iterdir() if p.is_dir() and not p.name.startswith('.')]
     # OR e.g.
-    # paths = ['/home/yourusername/work/pixel-patrol/examples/datasets/bioio/pngs', 'tifs', 'jpgs'] # those are relative paths inside the base_path
+    # paths = ['/home/yourusername/work/pixel-patrol/examples/datasets/bioio/pngs', 'tifs', 'jpgs']
 
     loader = 'bioio'  # for image files (e.g. png, jpg, tiff, etc.); requires pixel-patrol-loader-bio package
     # OR e.g.
@@ -28,19 +28,16 @@ def main():
     api.add_paths(project, paths)
     api.process_files(
         project,
-        # --- Parallelism ---
-        max_workers=4,          # Dask worker count; None = auto (all CPUs)
-                                # To use an external Dask cluster (e.g. SLURM):
-                                #   connect before calling: with Client("tcp://host:8786"): api.process_files(...)
-        mb_per_worker=4096,     # RAM per Dask worker in MB (default). Lower = more parallel workers.
-        # --- File selection ---
         selected_file_extensions={"tif", "png", "jpeg"},
         # --- Report metadata ---
         flavor="Example Datasets",
         description="Authors: Annona Buddha and Banana Java",
+        # --- Parallelism ---
+        max_workers=4,          # Max Dask workers; None = auto
+                                # To use an external Dask cluster (e.g. SLURM):
+                                # connect before calling: with Client("tcp://host:8786"): api.process_files(...)
+        mb_per_worker=4096,     # RAM per Dask worker in MB. Lower = more parallel workers.
     )
-    # Tip: run with --log-file from the CLI to write a debug log alongside the parquet:
-    #   pixel-patrol process datasets/bioio --output out/quickstart_extended.parquet --log-file
 
     # --- View with filters and grouping ---
     api.view(

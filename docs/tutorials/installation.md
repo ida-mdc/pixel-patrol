@@ -1,8 +1,26 @@
 # Installation
 
-Answer the questions below and we'll show you the exact commands for your setup.
+## No terminal? Use the app
+
+Download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
+
+[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
+[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
+[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
+
+!!! warning "App only - no terminal commands"
+    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).
+
+!!! note "First time running it?"
+    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
+    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
+    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).
 
 ---
+
+## Terminal
+
+Answer the questions below and we'll show you the exact commands for your setup.
 
 <div class="pp-wizard" id="pp-inst-wizard">
 
@@ -40,7 +58,7 @@ Answer the questions below and we'll show you the exact commands for your setup.
   <div class="wiz-step wiz-hidden" id="iws-uv">
     <div class="wiz-step-q">Do you have <code>uv</code> installed?</div>
     <div class="wiz-step-hint">
-      <code>uv</code> is a fast Python package manager - we recommend it, but pip works too.
+      <code>uv</code> is a fast Python package manager that sets up everything for you.
       Not sure? Run <code>uv --version</code> in your terminal.
     </div>
     <div class="wiz-options wiz-options-row">
@@ -53,14 +71,6 @@ Answer the questions below and we'll show you the exact commands for your setup.
         <input type="radio" name="inst-uv" value="no"
                onchange="instWiz.pick('uv','no')">
         <div><div class="wiz-opt-title">No, install it for me</div></div>
-      </label>
-      <label class="wiz-option">
-        <input type="radio" name="inst-uv" value="pip"
-               onchange="instWiz.pick('uv','pip')">
-        <div>
-          <div class="wiz-opt-title">I'd rather use pip</div>
-          <div class="wiz-opt-sub">⚠️ Installing without a virtual environment can conflict with other packages in your Python installation. We recommend using uv instead.</div>
-        </div>
       </label>
     </div>
   </div>
@@ -138,26 +148,18 @@ const instWiz = {
       }
     }
 
-    if (s.uv === 'pip') {
-      lines.push('# Install PixelPatrol with pip');
-      lines.push('pip install pixel-patrol');
-      lines.push('');
-      lines.push('# Verify');
-      lines.push('pixel-patrol --version');
-    } else {
-      const step = s.uv === 'no' ? '2' : '1';
-      lines.push('# ' + step + '. Create a virtual environment');
-      lines.push('uv venv --python 3.12 .venv');
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+1) + '. Activate it');
-      lines.push(activate);
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+2) + '. Install PixelPatrol');
-      lines.push('uv pip install pixel-patrol');
-      lines.push('');
-      lines.push('# ' + (parseInt(step)+3) + '. Verify');
-      lines.push('pixel-patrol --version');
-    }
+    const step = s.uv === 'no' ? '2' : '1';
+    lines.push('# ' + step + '. Create a virtual environment');
+    lines.push('uv venv --python 3.12 .venv');
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+1) + '. Activate it');
+    lines.push(activate);
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+2) + '. Install PixelPatrol');
+    lines.push('uv pip install pixel-patrol');
+    lines.push('');
+    lines.push('# ' + (parseInt(step)+3) + '. Verify');
+    lines.push('pixel-patrol --version');
 
     document.getElementById('inst-cmd').textContent = lines.join('\n');
   },
@@ -182,17 +184,3 @@ const instWiz = {
 !!! tip "Already installed?"
     Run `pixel-patrol --version` to confirm. Then head to the [Processing tutorial](processing.md) to build your first command.
 
----
-
-## Prefer a one-click app?
-
-If you'd rather skip the command line entirely, download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
-
-[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
-[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
-[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
-
-!!! note "First time running it?"
-    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
-    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
-    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).

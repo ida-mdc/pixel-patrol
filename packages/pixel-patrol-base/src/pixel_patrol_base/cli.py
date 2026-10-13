@@ -12,6 +12,19 @@ from pixel_patrol_base.api import (
 )
 
 from pixel_patrol_base.launch_server import serve_launch
+from pixel_patrol_base.process_args import PROCESS_ARGS
+
+
+def _process_options(command):
+    """Add every arg in PROCESS_ARGS to a click command, in list order."""
+    for arg in reversed(PROCESS_ARGS):
+        if arg.argument:
+            command = click.argument(arg.name, type=arg.type)(command)
+            continue
+        kwargs = (dict(is_flag=True) if arg.flag else
+                  dict(type=arg.type, metavar=arg.metavar, multiple=arg.multiple, required=arg.required))
+        command = click.option(*arg.cli_flags, arg.name, help=arg.full_help, **kwargs)(command)
+    return command
 
 
 @click.group()
@@ -27,81 +40,19 @@ def cli():
     pass
 
 @cli.command()
-@click.argument('base_directory', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True, path_type=Path))
-@click.option('--output', '-o', type=click.Path(exists=False, file_okay=True,  dir_okay=False, writable=True, path_type=Path),
-              help='Path for the output parquet file (e.g., my_project.parquet).',
-              required=True)
-@click.option('--name', type=str, required=False,
-              help='Optional: Name of the project. If not provided, derived from BASE_DIRECTORY.')
-@click.option('--paths', '-p', multiple=True, type=str,
-              help='Subdirectory to process, relative to BASE_DIRECTORY. Repeatable. '
-                   'If specified, only files within those paths are processed and they become '
-                   'the default grouping when the interactive report opens. If omitted, all supported files '
-                   'under BASE_DIRECTORY are processed together.')
-@click.option('--loader', '-l', type=str, show_default=True,
-              help='Loader plugin to use (e.g. bioio, zarr, tifffile). '
-                   'The loader opens image files and extracts image metadata. '
-                   'Without a loader, only basic file info is collected (name, size, extension).')
-@click.option('--file-extensions', '-e', multiple=True,
-              help='File extension to include (e.g. tif, nd2). Repeatable. '
-                   'Defaults to all extensions supported by the loader.')
-@click.option('--flavor', type=str, default="", show_default=True,
-              help='Label shown next to the PixelPatrol title in the viewer.')
-@click.option('--description', type=str, default="",
-              help='Free-form description shown below the title in the viewer and embedded in the parquet metadata.')
-@click.option('--processors-include', multiple=True, type=str,
-              help='Run only these processors by ID (e.g. raster-basic, thumbnail). Repeatable. '
-                   'If specified, --processors-exclude is ignored.')
-@click.option('--processors-exclude', multiple=True, type=str,
-              help='Skip these processors by ID. Repeatable.')
-@click.option('--parquet-row-group-size', type=int, default=None, show_default=True,
-              help='Rows per row group in the final parquet (default: 2048). '
-                   'Smaller values speed up thumbnail sampling in the viewer.')
-@click.option('--max-workers', type=int, default=None, show_default=True,
-              help='Number of parallel Dask workers. Auto-detected from available CPUs and RAM. '
-                   'Use 1 to disable parallelism.')
-@click.option('--scheduler', type=str, default=None,
-              help='Connect to an existing Dask scheduler instead of spawning a local one '
-                   '(e.g. tcp://host:8786). Useful for HPC clusters.')
-@click.option('--mb-per-worker', type=float, default=None, show_default=True,
-              help='RAM per worker in MB (default: 4096). More RAM per worker means fewer parallel '
-                   'workers. Images larger than 1/8 of this (headroom for in-memory expansion) are '
-                   'split into chunks; smaller files are batched up to that size. With --scheduler, defaults to the workers\' memory.')
-@click.option('--max-images-per-task', type=int, default=None, show_default=True,
-              help='Max files per batch task or sub-images per container task (default: 200).')
-@click.option('--slice-size', 'slice_size', multiple=True,
-              help='Per-dimension granularity of statistics in the output table. '
-                   'Z=1 produces one set of statistics per Z slice; Z=5 groups every 5 slices. '
-                   'By default X and Y are full extent and all other dims (Z, T, C, S) step by 1. '
-                   'Use -1 for full extent. Repeatable, e.g. --slice-size Z=1 --slice-size C=1.')
-@click.option('--rows-per-part', type=int, default=None, show_default=True,
-              help='Number of rows buffered in memory before being flushed to a temporary file on disk (default: 10000).')
-@click.option('--log-file', is_flag=True, default=False,
-              help='Write a debug log file alongside the output parquet (auto-named).')
-@click.option('--omit-base-dir', is_flag=True, default=False,
-              help='Do not store the base directory in the parquet metadata. '
-                   'Useful when sharing tables without revealing local filesystem paths.')
-@click.option('--view', 'open_viewer', is_flag=True, default=False,
-              help='Open the viewer immediately after processing completes, using default viewer settings. '
-                   'Equivalent to running `pixel-patrol view OUTPUT` afterwards.')
-def process(base_directory: Path, output: Path, name: str | None, paths: tuple[str, ...],
-              loader: str, file_extensions: tuple[str, ...],
-              flavor: str, description: str,
-              processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
-              parquet_row_group_size: int | None,
-              max_workers: int | None,
-              scheduler: str | None,
-              mb_per_worker: float | None,
-              max_images_per_task: int | None,
-              slice_size: tuple[str, ...],
-              rows_per_part: int | None,
-              log_file: bool,
-              omit_base_dir: bool,
-              open_viewer: bool):
+@_process_options
+def process(base_directory: Path, output: Path, loader: str | None, paths: tuple[str, ...],
+            file_extensions: tuple[str, ...], name: str | None, flavor: str | None, description: str | None,
+            processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
+            slice_size: tuple[str, ...],
+            max_workers: int | None, mb_per_worker: float | None,
+            max_images_per_task: int | None, scheduler: str | None,
+            rows_per_part: int | None, parquet_row_group_size: int | None,
+            log_file: bool, omit_base_dir: bool, open_viewer: bool):
     """
     Scan images in BASE_DIRECTORY, process them, and write a .parquet table.
 
-    The two-step workflow:
+    The two-step workflow (e.g. with the bioio loader):
 
     \b
       pixel-patrol process path/to/images/ -o results.parquet --loader bioio

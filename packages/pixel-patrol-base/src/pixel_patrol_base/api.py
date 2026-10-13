@@ -62,19 +62,24 @@ def process_files(
                                     If set, processors_excluded is ignored.
         processors_excluded:        Skip these processor IDs, e.g. {"raster-quality"}.
         selected_file_extensions:   Extensions to process, e.g. {"tif", "nd2"}, or "all".
-                                    Defaults to "all".
-        max_workers:                Dask worker count. None = auto-detect from CPUs and RAM.
-                                    Use 1 to disable parallelism.
+                                    Defaults to "all": all extensions supported by the loader
+                                    (every file if no loader is set).
+        max_workers:                Maximum number of parallel Dask workers. None = as many
+                                    as fit in free RAM, at most the CPU count. Use 1 to
+                                    disable parallelism.
+                                    Ignored when a Dask client already exists.
         mb_per_worker:              RAM per worker in MB (default: 4096). More RAM per worker
                                     means fewer parallel workers. Images larger than 1/8 of this
-                                    are split into chunks; smaller files are batched up to that
-                                    size. On an existing Dask cluster, defaults to the workers' memory.
-        max_images_per_task:        Max files per batch task or sub-images per container task
+                                    are split into chunks; smaller images are batched up to that
+                                    size. With an existing Dask cluster, defaults to the smallest
+                                    worker's memory.
+        max_images_per_task:        Max images per batch task or sub-images per container task
                                     (default: 200).
         slice_size:                 Per-dimension granularity of statistics in the output table.
                                     {"Z": 1} produces one set of statistics per Z slice;
                                     {"Z": 5} groups every 5 slices. By default X and Y are
-                                    full extent and all other dims step by 1. None = default.
+                                    full extent and all other dims step by 1. Use -1 for no
+                                    slicing along that dimension. None = default.
         rows_per_part:              Rows buffered before flushing to a temporary file (default: 10000).
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
                                     Smaller values speed up thumbnail sampling in the viewer.

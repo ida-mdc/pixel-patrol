@@ -1,8 +1,35 @@
 # Quickstart
 
-## Install
+Choose the path that fits you: the app (no terminal) or the terminal.
 
-We recommend [uv](https://docs.astral.sh/uv/) for fast, clean installs:
+## Path A: the app (no terminal)
+
+1. Download and run the one-click launcher from the [Installation page](installation.md#easiest-one-click-app). No Python needed.
+2. It opens the **report manager** in your browser. Use **+ New Report** to process a folder of images, or **Import Report…** to add a `.parquet` file.
+3. Click any report to open it in the interactive viewer.
+
+!!! warning "App only - no terminal commands"
+    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (Path B below).
+
+Already installed PixelPatrol in the terminal? Run `pixel-patrol launch` to open the same report manager.
+
+---
+
+## Path B: terminal
+
+### Install
+
+If you don't have [uv](https://docs.astral.sh/uv/) installed, install it first (once):
+
+```bash
+# macOS / Linux:
+curl -Ls https://astral.sh/uv/install.sh | sh
+
+# Windows:
+powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Then create an environment and install PixelPatrol:
 
 ```bash
 uv venv --python 3.12 .venv
@@ -10,20 +37,11 @@ source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 uv pip install pixel-patrol
 ```
 
-Or with pip:
-
-!!! warning
-    Installing without a virtual environment is not recommended - it can conflict with other packages. If in doubt, use the uv method above.
-
-```bash
-pip install pixel-patrol
-```
-
 Requires Python 3.12+. See [Installation](installation.md) for more options.
 
 ---
 
-## The two-step workflow
+### The two-step workflow
 
 ```bash
 pixel-patrol process path/to/images/ -o results.parquet
@@ -34,7 +52,7 @@ The first command reads every supported file in `path/to/images/` - including su
 
 ---
 
-## Step 1: Process your dataset
+#### Step 1: Process your dataset
 
 PixelPatrol supports several image loaders, each suited to different formats - see [Loaders](processing.md#loaders) for the full list. For many image formats (TIFF, Zarr, CZI, ND2, PNG, ...) the `bioio` loader covers everything:
 
@@ -57,7 +75,7 @@ To restrict to specific file extensions:
 pixel-patrol process path/to/images/ -o results.parquet --loader bioio -e tif -e nd2
 ```
 
-## Step 2: Open the viewer
+#### Step 2: Open the viewer
 
 ```bash
 pixel-patrol view results.parquet
@@ -65,7 +83,10 @@ pixel-patrol view results.parquet
 
 This starts a local server and opens the viewer in your browser. The viewer shows you plots for exploring your data and lets you filter, group, and compare conditions interactively.
 
-### Sharing PixelPatrol results
+!!! tip
+    Prefer a GUI? `pixel-patrol launch` opens the same app as the launcher in your browser, where you can pick your folder, process it, and open the report with a few clicks, no further commands needed (see [`launch`](cli.md#pixel-patrol-launch)).
+
+#### Sharing PixelPatrol results
 
 The easiest way to share PixelPatrol results is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side. See the [privacy policy](privacy.md) for what's included in that file before sharing it.
 
@@ -74,19 +95,7 @@ The easiest way to share PixelPatrol results is to send the `.parquet` file and 
 
 ---
 
-## Using the report manager
-
-If you prefer a visual interface, `pixel-patrol launch` opens a web UI:
-
-```bash
-pixel-patrol launch
-```
-
-This opens a browser tab listing your reports (stored in `~/pixel-patrol-reports`). Use **+ New Report** to process a folder of images, or **Import Report…** to add a `.parquet` file from anywhere on disk. Any report opens in the interactive viewer.
-
----
-
-## Python API
+### Python API
 
 The same workflow is available as a Python API:
 
@@ -107,14 +116,14 @@ api.process_files(project)
 api.view(project)
 ```
 
-### Loading a saved table
+#### Loading a saved table
 
 ```python
 records_df, metadata = api.load("results.parquet")
 print(f"{metadata.project_name}: {len(records_df)} records")
 ```
 
-### Viewing with filters
+#### Viewing with filters
 
 ```python
 api.view(

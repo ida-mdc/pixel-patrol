@@ -1,10 +1,28 @@
 # Installation
 
-PixelPatrol requires Python 3.12 or higher.
+Choose one: the one-click app (no terminal needed), or an install from the terminal (Python 3.12+).
 
 ---
 
-## Recommended: install with uv
+## Easiest: one-click app
+
+Download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
+
+[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
+[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
+[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
+
+!!! warning "App only - no terminal commands"
+    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).
+
+!!! note "First time running it?"
+    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
+    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
+    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).
+
+---
+
+## Terminal: install with uv
 
 We recommend [uv](https://docs.astral.sh/uv/) for fast, reproducible installs. It handles virtual environments and dependency resolution cleanly.
 
@@ -34,17 +52,6 @@ pixel-patrol --help
 
 ---
 
-## Quick install with pip
-
-!!! warning
-    Installing without a virtual environment is not recommended - it can conflict with other packages in your Python installation. If in doubt, use the uv method above.
-
-```bash
-pip install pixel-patrol
-```
-
----
-
 ## Modular install
 
 PixelPatrol is split into focused packages so you only install what you need. The core package (`pixel-patrol-base`) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.
@@ -67,18 +74,3 @@ uv pip install pixel-patrol-loader-bio     # BioIO + Zarr + Tifffile loaders (CZ
 | `pixel-patrol-loader-bio` | BioIO, Zarr, and Tifffile loaders for scientific image formats |
 
 Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend PixelPatrol by creating your own packages; see [Extensions](extensions.md).
-
----
-
-## Prefer a one-click app?
-
-If you'd rather skip the command line entirely, download the **PixelPatrol Launcher** - a single clickable file for Windows, macOS, or Linux. On first run it sets up a managed Python environment at `~/.pixel-patrol/`, installs PixelPatrol, and opens the app in your browser. No Python required.
-
-[🪟 Windows](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-windows.exe){ .md-button .md-button--primary }
-[🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
-[🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
-
-!!! note "First time running it?"
-    - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
-    - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.
-    - **Linux**: make it executable first - `chmod +x pixel-patrol-launcher-linux`, then double-click it (or run it from a terminal).

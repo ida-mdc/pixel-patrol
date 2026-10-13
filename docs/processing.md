@@ -103,15 +103,11 @@ Processors fall into two categories that determine what data they receive:
 
 ### `--slice-size`
 
-Controls the per-dimension granularity of statistics in the output table. `Z=1` produces one set of statistics per Z slice; `Z=5` groups every 5 slices into one. This is independent of memory budget or file size - it affects what is saved to the table, not how the data is loaded.
-
-By default X and Y are full-extent (one complete 2D plane) and all other dimensions (Z, T, C, S) step by 1. Override to produce coarser statistics:
+Sets how finely statistics are split per dimension, for example coarser steps for a smaller table. It only affects what is saved to the table, not how the data is loaded. See the [CLI reference](cli.md#pixel-patrol-process) for the details.
 
 ```bash
 pixel-patrol process my-data/ -o results.parquet --slice-size Z=5 --slice-size Y=512
 ```
-
-Use `-1` to keep a dimension at full extent.
 
 ---
 
@@ -239,16 +235,16 @@ PixelPatrol groups work into Dask tasks. Three kinds of task exist, each with it
 
 ### `--mb-per-worker`
 
-RAM per worker in MB (default: 4096). Workers are packed into free RAM, so more RAM per worker means fewer parallel workers. Task sizes follow from it: images larger than 1/8 of this are split into chunks, and smaller files are batched up to that size. The factor 8 leaves room for processing copies and decompression.
+The default suits most data. Task sizes follow from it; the factor 8 leaves room for processing copies and decompression.
 
-- **Default** - fine for most data.
-- **Increase** (e.g. `--mb-per-worker 16384`) - keeps large images whole instead of splitting them, and helps if workers keep pausing or restarting on memory. Fewer parallel workers.
+- **Increase** (e.g. `--mb-per-worker 16384`) - keeps large images whole, and helps if workers keep pausing or restarting on memory.
 - **Decrease** (e.g. `--mb-per-worker 1024`) - more parallel workers when RAM is the limit and images are small.
-- **Existing Dask cluster** (`--scheduler`) - defaults to the workers' memory limit, which is set on the cluster (e.g. SLURM `--memory`). Setting it above that can make workers run out of memory.
+
+On an existing cluster, worker memory is set on the cluster (e.g. SLURM `--memory`). Setting this above it can make workers run out of memory.
 
 ### `--max-images-per-task`
 
-Maximum number of files (or sub-images) per task (default: 200).
+Smaller values give smaller, more frequent tasks:
 
 ```bash
 pixel-patrol process my-data/ -o results.parquet --mb-per-worker 2048 --max-images-per-task 50
@@ -259,13 +255,11 @@ pixel-patrol process my-data/ -o results.parquet --mb-per-worker 2048 --max-imag
 
 ## Output options
 
-### `--rows-per-part`
-
-Number of rows buffered in memory before being flushed to a temporary file on disk. The default (10000) is suitable for most datasets.
+Every option, including `--rows-per-part`, is described in the [CLI reference](cli.md#pixel-patrol-process).
 
 ### `--parquet-row-group-size`
 
-Controls how records are grouped in the final parquet file (default: 2048). Smaller values speed up thumbnail loading in the viewer:
+Smaller row groups speed up thumbnail loading in the viewer:
 
 ```bash
 pixel-patrol process my-data/ -o results.parquet --parquet-row-group-size 512

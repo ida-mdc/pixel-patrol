@@ -74,7 +74,7 @@ A PixelPatrol table is a single `.parquet` file holding everything about your da
 </div>
 <div class="wc-body">
 
-<p>Your collaborator will need PixelPatrol installed - a single <code>pip install pixel-patrol</code> away (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
+<p>Your collaborator will need PixelPatrol installed (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
 
 ```bash
 pixel-patrol view results.parquet
