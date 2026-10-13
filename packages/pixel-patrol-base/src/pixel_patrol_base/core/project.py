@@ -358,11 +358,14 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
 
 def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
     """Apply config.processors_included/excluded; included takes precedence over excluded."""
+    selected = config.processors_included or config.processors_excluded
+    unknown = selected - {p.NAME for p in processors}
+    if unknown:
+        raise ValueError(f"Unknown processor(s): {', '.join(sorted(unknown))}. "
+                         f"Available: {', '.join(sorted(p.NAME for p in processors))}.")
     if config.processors_included:
-        return [p for p in processors if p.NAME in config.processors_included]
-    if config.processors_excluded:
-        return [p for p in processors if p.NAME not in config.processors_excluded]
-    return processors
+        return [p for p in processors if p.NAME in selected]
+    return [p for p in processors if p.NAME not in selected]
 
 
 def _resolve_extensions(
