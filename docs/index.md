@@ -83,6 +83,9 @@ pixel-patrol view results.parquet
 
 This starts a local server and opens the viewer in your browser. The viewer shows you plots for exploring your data and lets you filter, group, and compare conditions interactively.
 
+!!! tip
+    Prefer a GUI? `pixel-patrol launch` opens the same app as the launcher in your browser, where you can pick your folder, process it, and open the report with a few clicks, no further commands needed (see [`launch`](cli.md#pixel-patrol-launch)).
+
 #### Sharing PixelPatrol results
 
 The easiest way to share PixelPatrol results is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side. See the [privacy policy](privacy.md) for what's included in that file before sharing it.

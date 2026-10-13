@@ -79,8 +79,7 @@ def process_files(
                                     {"Z": 1} produces one set of statistics per Z slice;
                                     {"Z": 5} groups every 5 slices. By default X and Y are
                                     full extent and all other dims step by 1. Use -1 for no
-                                    slicing along that dimension. At least one dimension must
-                                    have a slice size larger than 1. None = default.
+                                    slicing along that dimension. None = default.
         rows_per_part:              Rows buffered before flushing to a temporary file (default: 10000).
         parquet_row_group_size:     Rows per row group in the final parquet (default: 2048).
                                     Smaller values speed up thumbnail sampling in the viewer.
