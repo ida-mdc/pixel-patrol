@@ -522,7 +522,8 @@ function openBrowser(config) {
   browserFilenameInput.value = config.filename || "";
   importOverlay.hidden = false;
   updateConfirmState();
-  loadBrowser(config.startDir || localStorage.getItem(LAST_BROWSE_DIR_KEY) || "");
+  if (config.startDir) loadBrowser(config.startDir);
+  else loadBrowser(localStorage.getItem(LAST_BROWSE_DIR_KEY) || "", { forgetIfMissing: true });
 }
 
 const browserListsFiles = () => browserConfig.pick === "file" || browserConfig.pick === "save";
@@ -609,7 +610,9 @@ function hideImportDialog() {
   importOverlay.hidden = true;
 }
 
-async function loadBrowser(path) {
+// forgetIfMissing: the path was restored from a previous session, so if it no
+// longer exists, drop it and open the home directory instead of showing an error.
+async function loadBrowser(path, { forgetIfMissing = false } = {}) {
   importError.innerHTML = "";
   if (!isInsideRoot(path)) path = browserConfig.root;
   try {
@@ -617,6 +620,10 @@ async function loadBrowser(path) {
     if (path) params.set("path", path);
     if (!browserListsFiles()) params.set("files", "0");
     const res = await fetch(`/api/browse?${params}`);
+    if (forgetIfMissing && res.status === 404 && path && !browserConfig.root) {
+      localStorage.removeItem(LAST_BROWSE_DIR_KEY);
+      return loadBrowser("");
+    }
     const data = await res.json();
     if (!res.ok || data.error) {
       importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
