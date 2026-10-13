@@ -605,6 +605,10 @@ async function loadBrowser(path) {
     if (path) params.set("path", path);
     if (!browserListsFiles()) params.set("files", "0");
     const res = await fetch(`/api/browse?${params}`);
+    if (res.status === 404 && path && !browserConfig.root) {
+      localStorage.removeItem(LAST_BROWSE_DIR_KEY);
+      return loadBrowser("");
+    }
     const data = await res.json();
     if (!res.ok || data.error) {
       importError.innerHTML = `<div class="alert alert-danger"><span>${escapeHtml(data.error || "Failed to browse folder")}</span></div>`;
