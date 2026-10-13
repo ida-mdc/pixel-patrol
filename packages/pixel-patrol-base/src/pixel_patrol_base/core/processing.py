@@ -53,7 +53,7 @@ import pyarrow.parquet as pq
 from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
-from pixel_patrol_base.config import HISTOGRAM_BINS
+from pixel_patrol_base.config import DEFAULT_PARQUET_ROW_GROUP_SIZE, HISTOGRAM_BINS
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, SkipFile
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 from pixel_patrol_base.utils.df_utils import add_parent_level_columns
@@ -1407,7 +1407,7 @@ def save_parquet_from_parts(
     arrow_schema = with_field_descriptions(unified.to_arrow().schema.with_metadata(arrow_kv))
 
     # ── Step 6: stream-write one part at a time ──
-    rg_size    = row_group_size or 2048
+    rg_size    = row_group_size or DEFAULT_PARQUET_ROW_GROUP_SIZE
     total_rows = 0
     with pq.ParquetWriter(dest, arrow_schema, compression="zstd") as writer:
         for p in parts:
