@@ -109,7 +109,8 @@ def _pixel_weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
             continue
         v = float(r[spec.name])
         if np.isfinite(v):
-            num += v * w; den += w
+            num += v * w
+            den += w
     return (num / den) if den > 0 else None
 
 
@@ -124,7 +125,8 @@ def _weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
             continue
         v = float(r[spec.name])
         if np.isfinite(v):
-            num += v * w; den += w
+            num += v * w
+            den += w
     if den > 0:
         return num / den
     vals = [float(r[spec.name]) for r in rows if spec.name in r and np.isfinite(r[spec.name])]
