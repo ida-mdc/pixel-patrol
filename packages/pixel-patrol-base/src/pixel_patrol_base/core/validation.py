@@ -55,17 +55,14 @@ def resolve_and_validate_project_path(raw_path: Union[str, Path], base_dir: Path
 
         if not is_valid:
             logger.warning(
-                f"Path not valid ('{reason}') and will be skipped: {raw_path} (resolved to {resolved_path})."
+                f"Path not valid ('{reason}'): {raw_path} (resolved to {resolved_path})."
             )
             return None
 
         try:
             resolved_path.relative_to(base_dir)
         except ValueError:
-            logger.warning(
-                f"Path '{resolved_path}' is not within the project base directory "
-                f"'{base_dir}' and will be skipped."
-            )
+            logger.warning(f"Path '{resolved_path}' is not within the project base directory '{base_dir}'.")
             return None
 
         return resolved_path
