@@ -368,24 +368,6 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-adv-title">Advanced options</div>
     <div class="wiz-adv-intro">These options are rarely needed for a first run. They let you fine-tune processing behaviour for specific scenarios.</div>
 
-    <!-- Slice size -->
-    <div class="wiz-adv-field">
-      <div class="wiz-adv-field-label">
-        Slice size <code class="wiz-badge">--slice-size</code>
-        <span class="wiz-optional"> (optional)</span>
-      </div>
-      <div class="wiz-adv-field-hint">
-        Controls the per-dimension granularity of statistics in the table.
-        By default, non-spatial dimensions (Z, T, C, S) each step by 1 - one row of stats per slice.
-        Set a higher step (e.g. <code>Z=5</code>) for coarser, smaller output, or <code>-1</code> to collapse a
-        dimension entirely. Only relevant if you have multidimensional data and care about per-slice statistics.
-        Comma-separated for multiple dims. Example: <code>Z=5, C=1</code>
-      </div>
-      <input class="wiz-input" type="text" id="pwi-slice_size"
-             placeholder="Z=5, C=1"
-             oninput="procWiz.set('slice_size', this.value)">
-    </div>
-
     <!-- Processors include -->
     <div class="wiz-adv-field">
       <div class="wiz-adv-field-label">
@@ -416,6 +398,24 @@ Answer the questions below and we'll walk you through each decision together, bu
       <input class="wiz-input" type="text" id="pwi-processors_exclude"
              placeholder="raster-quality"
              oninput="procWiz.set('processors_exclude', this.value)">
+    </div>
+
+    <!-- Slice size -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Slice size <code class="wiz-badge">--slice-size</code>
+        <span class="wiz-optional"> (optional)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Controls the per-dimension granularity of statistics in the table.
+        By default, non-spatial dimensions (Z, T, C, S) each step by 1 - one row of stats per slice.
+        Set a higher step (e.g. <code>Z=5</code>) for coarser, smaller output, or <code>-1</code> to collapse a
+        dimension entirely. Only relevant if you have multidimensional data and care about per-slice statistics.
+        Comma-separated for multiple dims. Example: <code>Z=5, C=1</code>
+      </div>
+      <input class="wiz-input" type="text" id="pwi-slice_size"
+             placeholder="Z=5, C=1"
+             oninput="procWiz.set('slice_size', this.value)">
     </div>
 
     <!-- Max workers (hidden for SLURM) -->
@@ -717,15 +717,15 @@ const procWiz = {
       pp.push('--scheduler ' + s.scheduler_url.trim());
 
     // Advanced
-    if (s.slice_size && s.slice_size.trim())
-      s.slice_size.split(',').map(e => e.trim()).filter(Boolean)
-        .forEach(sz => pp.push('--slice-size ' + sz));
     if (s.processors_include && s.processors_include.trim())
       s.processors_include.split(',').map(e => e.trim()).filter(Boolean)
         .forEach(p => pp.push('--processors-include ' + p));
     if (s.processors_exclude && s.processors_exclude.trim())
       s.processors_exclude.split(',').map(e => e.trim()).filter(Boolean)
         .forEach(p => pp.push('--processors-exclude ' + p));
+    if (s.slice_size && s.slice_size.trim())
+      s.slice_size.split(',').map(e => e.trim()).filter(Boolean)
+        .forEach(sz => pp.push('--slice-size ' + sz));
     if (!isSlurm && s.max_workers) pp.push('--max-workers ' + s.max_workers);
     if (s.mb_per_worker)       pp.push('--mb-per-worker ' + s.mb_per_worker);
     if (s.max_images_per_task) pp.push('--max-images-per-task ' + s.max_images_per_task);

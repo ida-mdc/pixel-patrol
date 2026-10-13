@@ -40,6 +40,9 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
+hooks:
+  - docs/hooks.py  # fills generated sections (needs pixel-patrol-base installed)
+
 nav:
   - Tutorials:
     - tutorials/index.md
