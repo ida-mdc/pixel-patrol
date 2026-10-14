@@ -58,6 +58,12 @@ class TestProcessorSelection:
         with pytest.raises(ValueError, match=re.escape(f"Unknown processor(s): nope. Available: {available}.")):
             _apply_processor_filter(processors, ProcessingConfig(**{field: {"nope"}}))
 
+    def test_unknown_name_in_ignored_exclude_list_raises(self):
+        processors = discover_processor_plugins()
+        config = ProcessingConfig(processors_included={processors[0].NAME}, processors_excluded={"nope"})
+        with pytest.raises(ValueError, match="Unknown processor"):
+            _apply_processor_filter(processors, config)
+
     def test_configuration_defaults(self):
         """ProcessingConfig starts with empty include/exclude sets."""
         config = ProcessingConfig()
