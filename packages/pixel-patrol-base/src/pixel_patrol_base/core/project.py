@@ -58,7 +58,7 @@ class Project:
 
         validated_paths_to_process = [validation.resolve_and_validate_project_path(p, self.base_dir)
                                       for p in paths_to_add_raw]
-        invalid = [str(p) for p, v in zip(paths_to_add_raw, validated_paths_to_process) if v is None]
+        invalid = [f"'{p}'" for p, v in zip(paths_to_add_raw, validated_paths_to_process) if v is None]
         if invalid:
             raise ValueError(f"Invalid path(s), not a folder inside '{self.base_dir}': {', '.join(invalid)}")
 

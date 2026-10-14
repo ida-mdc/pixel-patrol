@@ -109,6 +109,12 @@ def test_add_paths_file_raises(project_instance: Project, tmp_path: Path, caplog
     assert "Path not valid ('not a directory')" in caplog.text
 
 
+def test_add_paths_empty_path_raises(project_instance: Project, caplog):
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="''"):
+        api.add_paths(project_instance, "")
+    assert "Path is empty" in caplog.text
+
+
 def test_add_paths_path_outside_base_raises(project_instance: Project, tmp_path: Path, caplog):
     outside_dir = tmp_path.parent / "outside_project_dir_2"
     outside_dir.mkdir(exist_ok=True)
