@@ -322,7 +322,7 @@ def _log_privacy_disclosure(lines: List[str]) -> None:
     logger.info(_output_log_style("WHAT'S IN THIS FILE (read before sharing):", fg="yellow", bold=True))
     for line in lines:
         logger.info(line)
-    logger.info("Details: https://pixelpatrol.app/docs/privacy/")
+    logger.info("Details: https://pixelpatrol.app/docs/latest/privacy/")
     logger.info(_output_log_style(banner, fg="yellow", bold=True))
 
 
