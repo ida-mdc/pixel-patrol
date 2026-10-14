@@ -35,7 +35,9 @@ theme:
     - content.code.copy
 
 extra:
-  homepage: ../
+  homepage: https://pixelpatrol.app/
+  version:
+    provider: mike
 
 extra_css:
   - stylesheets/extra.css
