@@ -59,7 +59,7 @@ https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet
 ```
 
 !!! warning
-    The static viewer may not be able to load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large tables.
+    The static viewer may not be able to load parquet files larger than a few GB. Use `pixel-patrol view` for large tables.
 
 ---
 

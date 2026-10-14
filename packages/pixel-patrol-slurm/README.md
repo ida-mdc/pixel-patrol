@@ -1,11 +1,11 @@
-### PixelPatrol SLURM Launcher (pixel-patrol-slurm)
+### PixelPatrol SLURM Cluster (pixel-patrol-slurm)
 
 Launches a [Dask SLURMCluster](https://jobqueue.dask.org/en/latest/generated/dask_jobqueue.SLURMCluster.html), waits for workers to come online, then runs `pixel-patrol process` against the cluster.
 
 #### Installation
 
 ```bash
-pip install pixel-patrol-slurm
+uv pip install pixel-patrol-slurm
 ```
 
 #### Usage

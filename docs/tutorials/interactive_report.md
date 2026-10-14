@@ -43,7 +43,7 @@ Each widget has an **ⓘ** button that briefly explains what it shows and how to
 pixel-patrol view results.parquet
 ```
 
-This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [pixelpatrol.app/viewer/](https://pixelpatrol.app/viewer/) and drag your own `.parquet` in directly (browser-WASM, practical limit ~2 GB).
+This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to [pixelpatrol.app/viewer/](https://pixelpatrol.app/viewer/) and drag your own `.parquet` in directly (runs in browser memory, so tables larger than a few GB may not load).
 
 **Useful launch flags:**
 
@@ -420,8 +420,8 @@ NaN pixels are excluded from all calculations.
 <div>Count how many pixels equal <code>iinfo(dtype).max</code> (e.g. 255 for uint8, 65535 for uint16) and divide by total pixel count. Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095, not 65535) is flagged by a separate warning below if <code>max_intensity</code> is below the dtype ceiling.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling — sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) — data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling - sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) - data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
 </div>
 </div>
 

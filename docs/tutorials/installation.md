@@ -8,8 +8,8 @@ Download the **PixelPatrol Launcher** - a single clickable file for Windows, mac
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
 [🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
 
-!!! warning "App only - no terminal commands"
-    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).
+!!! warning "Launcher limits"
+    The launcher has no `pixel-patrol` terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (terminal steps below).
 
 !!! note "First time running it?"
     - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.

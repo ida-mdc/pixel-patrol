@@ -11,10 +11,10 @@ field metadata, so produced files are self-describing.
 Two companion resources are generated directly from the installed plugins, so
 they always match the build:
 
-- **[Interactive table map](assets/schema.html)** — follow any *producer → column
+- **[Interactive table map](assets/schema.html)** - follow any *producer → column
   → widget* path. Click a node for its description and connections; hover to trace
   its links.
-- **[Full catalog as JSON](assets/schema.json)** — the machine-readable schema and
+- **[Full catalog as JSON](assets/schema.json)** - the machine-readable schema and
   plugin catalog. Also available from the CLI:
 
   ```bash

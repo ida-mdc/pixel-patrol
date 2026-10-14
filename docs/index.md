@@ -8,8 +8,8 @@ Choose the path that fits you: the app (no terminal) or the terminal.
 2. It opens the **report manager** in your browser. Use **+ New Report** to process a folder of images, or **Import Report…** to add a `.parquet` file.
 3. Click any report to open it in the interactive viewer.
 
-!!! warning "App only - no terminal commands"
-    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (Path B below).
+!!! warning "Launcher limits"
+    The launcher has no `pixel-patrol` terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (Path B below).
 
 Already installed PixelPatrol in the terminal? Run `pixel-patrol launch` to open the same report manager.
 
@@ -91,7 +91,7 @@ This starts a local server and opens the viewer in your browser. The viewer show
 The easiest way to share PixelPatrol results is to send the `.parquet` file and open it in the [PixelPatrol viewer](https://pixelpatrol.app/viewer/) - no installation needed on the recipient's side. See the [privacy policy](privacy.md) for what's included in that file before sharing it.
 
 !!! warning
-    The browser-based viewer may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
+    The browser-based viewer may not be able to load parquet files larger than a few GB. For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
 
 ---
 

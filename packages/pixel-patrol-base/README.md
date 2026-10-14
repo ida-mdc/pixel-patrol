@@ -1,32 +1,19 @@
 ### PixelPatrol Base (pixel-patrol-base)
 
-The Core Engine and Framework for the PixelPatrol Ecosystem.
+The core of PixelPatrol: API, CLI, processing framework, viewer, and the plugin system other packages (like pixel-patrol-loader-bio) build on. It includes file-system statistics, thumbnails, and basic image statistics and quality metrics.
 
-This package is the essential, non-optional foundation of PixelPatrol. It provides the API, CLI, PixelPatrol processing, and the plugin system that allows other packages (like pixel-patrol-loader-bio) to integrate seamlessly.
+#### Who should install this?
 
-It also includes the Processing Framework: It defines the official system for reading files, processing data, and generating the final feature sets.
-It includes more universal plug-ins such as basic file-system statistics, as well as plug-ins that don't require additional library installation such as thumbnail generation and standard statistical analysis.
+Most users should install the full package, which includes base and the common loaders:
 
-#### 👥 Who Should Install This?
-
-Most end-users should install the main, consolidated package:
 ```
 uv pip install pixel-patrol
 ```
 
-The main package automatically installs pixel-patrol-base along with the most common loaders and analysis tools.
+Install base directly only if you are building an extension (loader, processor, or widget) or want a minimal setup:
 
-You should install pixel-patrol-base directly only if you are:
-
-* A Developer: You are building your own custom extension (a new loader, processor, or widget) and need the core API.
-* A Power User: You want a minimal installation and plan to manually install other official extensions.
-
-##### 🚀 Installation (Minimal)
-To install just the core framework:
 ```
 uv pip install pixel-patrol-base
 ```
 
-📖 Usage and Documentation  
-For instructions please refer to the main documentation:  
-https://github.com/ida-mdc/pixel-patrol/
+Documentation: https://pixelpatrol.app/docs/latest/

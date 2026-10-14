@@ -12,8 +12,8 @@ Download the **PixelPatrol Launcher** - a single clickable file for Windows, mac
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
 [🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
 
-!!! warning "App only - no terminal commands"
-    The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does **not** add the `pixel-patrol` command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).
+!!! warning "Launcher limits"
+    The launcher has no `pixel-patrol` terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (terminal steps below).
 
 !!! note "First time running it?"
     - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
@@ -47,7 +47,7 @@ uv pip install pixel-patrol
 Verify:
 
 ```bash
-pixel-patrol --help
+pixel-patrol --version
 ```
 
 ---
@@ -58,10 +58,12 @@ PixelPatrol is split into focused packages so you only install what you need. Th
 
 ```bash
 uv pip install pixel-patrol-base           # core, includes image quality metrics
-uv pip install pixel-patrol-loader-bio     # BioIO + Zarr + Tifffile loaders (CZI, ND2, LIF, TIFF, ...)
+uv pip install pixel-patrol-loader-bio     # BioIO + Zarr + Tifffile + H5 loaders (CZI, ND2, LIF, TIFF, ...)
+uv pip install pixel-patrol-loader-medical # NIfTI and DICOM loaders
+uv pip install pixel-patrol-geospatial     # GeoTIFF and NetCDF loader, nodata processor
 ```
 
-`pixel-patrol-base` alone collects basic file metadata (name, size, extension) without reading image data. Add `pixel-patrol-loader-bio` to extract image metadata, pixel statistics, and thumbnails.
+Without a loader, only basic file metadata (name, size, extension) is collected and no image data is read. Install a loader package and choose one of its loaders with `--loader` to also get image metadata, pixel statistics, and thumbnails.
 
 ---
 
@@ -69,8 +71,10 @@ uv pip install pixel-patrol-loader-bio     # BioIO + Zarr + Tifffile loaders (CZ
 
 | Package | What it adds |
 |---|---|
-| `pixel-patrol` | Full bundle - everything below in one install |
+| `pixel-patrol` | Full bundle: base, loader-bio, loader-medical, and geospatial in one install |
 | `pixel-patrol-base` | Core framework, CLI, viewer, image quality metrics |
-| `pixel-patrol-loader-bio` | BioIO, Zarr, and Tifffile loaders for scientific image formats |
+| `pixel-patrol-loader-bio` | BioIO, Zarr, Tifffile, and H5 loaders for scientific image formats |
+| `pixel-patrol-loader-medical` | NIfTI and DICOM loaders |
+| `pixel-patrol-geospatial` | GeoTIFF and NetCDF loader, nodata processor |
 
 Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend PixelPatrol by creating your own packages; see [Extensions](extensions.md).

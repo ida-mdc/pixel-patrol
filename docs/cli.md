@@ -100,7 +100,7 @@ pixel-patrol build-viewer-html -o gh-pages/
 ```
 
 !!! warning
-    The static viewer runs entirely in the browser and may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
+    The static viewer runs entirely in the browser and may not be able to load parquet files larger than a few GB. For large tables use `pixel-patrol view` instead, which is backed by a local Python server with native DuckDB.
 
 ---
 
@@ -114,8 +114,8 @@ pixel-patrol schema [OPTIONS]
 
 Two formats are available:
 
-- **`catalog`** (default) — full plugin catalog: every column with description, type, and producer; loader/processor/widget metadata; and the connection graph between them.
-- **`row-schema`** — a standard [JSON Schema](https://json-schema.org/) document describing one parquet table row. Fixed columns are in `properties`; per-axis families (`size_*`, `dim_*`, `pixel_size_*`) are in `patternProperties`.
+- **`catalog`** (default) - full plugin catalog: every column with description, type, and producer; loader/processor/widget metadata; and the connection graph between them.
+- **`row-schema`** - a standard [JSON Schema](https://json-schema.org/) document describing one parquet table row. Fixed columns are in `properties`; per-axis families (`size_*`, `dim_*`, `pixel_size_*`) are in `patternProperties`.
 
 **Options**
 

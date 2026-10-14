@@ -1,6 +1,6 @@
 # PixelPatrol Bio-Image Loader Extension (`pixel-patrol-loader-bio`)
 
-This extension provides three loaders for multi-dimensional life-science imaging formats.
+This extension provides four loaders for multi-dimensional life-science imaging formats.
 
 ## Loaders
 
@@ -22,6 +22,11 @@ Direct TIFF loading via [tifffile](https://github.com/cgohlke/tifffile) with laz
 Native zarr store loading with OME-NGFF axis support.
 - `.zarr`, `.ome.zarr`
 
+### `h5` - HDF5 (HDF5 / BigDataViewer / Imaris)
+Container loader: each dataset in the file becomes its own image.
+- `.h5`, `.hdf5` - including BigDataViewer (BDV)
+- `.ims` - Imaris
+
 ## Installation
 
 ```bash
@@ -37,4 +42,4 @@ uv pip install pixel-patrol
 ## Getting Started
 
 Please see the `pixel-patrol` documentation for usage instructions.  
-https://github.com/ida-mdc/pixel-patrol/
+https://pixelpatrol.app/docs/latest/

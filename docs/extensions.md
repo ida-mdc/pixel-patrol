@@ -55,13 +55,13 @@ def get_viewer_extension_dir():
 
 If PixelPatrol can't read your file format - or doesn't read it (and its metadata) the way you want - write a loader extension. A loader turns a file into a `Record` (pixel data plus metadata) by implementing the `PixelPatrolLoader` protocol: `NAME`, `SUPPORTED_EXTENSIONS`, `OUTPUT_SCHEMA`, `read_header`, `load`, and `load_range` are required; `FOLDER_EXTENSIONS`, `CONTAINER_EXTENSIONS`, `OUTPUT_SCHEMA_PATTERNS`, and `is_folder_supported` are optional and default to "none of that".
 
-If one dataset is a *directory* rather than a file, implement `is_folder_supported`. If those directories have no meaningful file extension, also set `FOLDER_FILE_EXTENSION` on the class to the extension that should appear in the `file_extension` column. — it is called for every directory found while scanning, so datasets recognised by their contents (rather than by a suffix like `.zarr`) work too. A directory it claims is passed to `read_header` / `load` as-is, and is not descended into, so the files inside it never appear as records of their own.
+If one dataset is a *directory* rather than a file, implement `is_folder_supported`. If those directories have no meaningful file extension, also set `FOLDER_FILE_EXTENSION` on the class to the extension that should appear in the `file_extension` column. - it is called for every directory found while scanning, so datasets recognised by their contents (rather than by a suffix like `.zarr`) work too. A directory it claims is passed to `read_header` / `load` as-is, and is not descended into, so the files inside it never appear as records of their own.
 
-`dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` — the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
+`dim_order` must be set independently in both `read_header` (via `FileInfo`) and in the metadata passed to `record_from()` inside `load` - the pipeline never carries one into the other. For spatial images, `dim_order` must include at least `X` or `Y` (usually both); omitting them causes the pipeline to fall back to generic dim names and process every pixel as a separate leaf block. If your format uses different axis names, map them to the canonical labels: `H` or `height` → `Y`, `W` or `width` → `X`, rows → `Y`, columns → `X`.
 
-To signal that a `C` dim holds RGB data, set `channel_names` in `meta` to names like `["Red", "Green", "Blue"]` — `record_from()` adds an `rgb:C` capability automatically, which processors (e.g. thumbnail) use to process the channels as RGB.
+To signal that a `C` dim holds RGB data, set `channel_names` in `meta` to names like `["Red", "Green", "Blue"]` - `record_from()` adds an `rgb:C` capability automatically, which processors (e.g. thumbnail) use to process the channels as RGB.
 
-If your format stores certain dims in a way that makes spatial splitting inefficient (e.g. packed colour channels that are always decoded together), set `deferred_dims` on the returned `FileInfo` to a string of those dim letters. The pipeline will then avoid splitting those dims in memory chunks until all other dims have been exhausted. This is optional — omit it when all dims can be split equally efficiently.
+If your format stores certain dims in a way that makes spatial splitting inefficient (e.g. packed colour channels that are always decoded together), set `deferred_dims` on the returned `FileInfo` to a string of those dim letters. The pipeline will then avoid splitting those dims in memory chunks until all other dims have been exhausted. This is optional - omit it when all dims can be split equally efficiently.
 
 `dim_order` is the only metadata field that must be correct. `shape` and `dtype` are always derived from the pixel array, not from `meta`. If `dim_order`/`dim_names` doesn't match the array's `ndim`, it's silently dropped and replaced with generic `A`/`B`/`C`… labels - check the length matches.
 
@@ -85,7 +85,7 @@ See [`pixel-patrol-example-extension`](https://github.com/ida-mdc/pixel-patrol-e
 
 If you want to visualize interactive report data in the browser - your own extension's columns or anyone else's - write a viewer widget. A viewer plugin is a small JavaScript module that renders a custom widget in the viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called `pp_data`). Plugins are declared in an `extension.json` manifest, and the `pixel_patrol.viewer_extensions` entry point in `pyproject.toml` points to the directory containing it.
 
-**Option A — explicit list** (recommended for published extensions): list every plugin file by name. Clear and predictable.
+**Option A - explicit list** (recommended for published extensions): list every plugin file by name. Clear and predictable.
 
 ```json
 {
@@ -94,7 +94,7 @@ If you want to visualize interactive report data in the browser - your own exten
 }
 ```
 
-**Option B — auto-detect** (convenient during development): set `"auto_detect": true` and every file matching `plugin_*.js` in the directory is loaded automatically, sorted alphabetically. No list to maintain.
+**Option B - auto-detect** (convenient during development): set `"auto_detect": true` and every file matching `plugin_*.js` in the directory is loaded automatically, sorted alphabetically. No list to maintain.
 
 ```json
 {

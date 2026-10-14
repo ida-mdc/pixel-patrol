@@ -4,7 +4,7 @@
 
 <img src="packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
-**[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/latest/tutorials/) | [Documentation](https://pixelpatrol.app/docs/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
+**[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/latest/tutorials/) | [Documentation](https://pixelpatrol.app/docs/latest/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
 
 Image datasets are rarely as clean or consistent as they appear. PixelPatrol scans your images and builds a shareable, browser-based interactive report - file and image metadata, pixel statistics, quality metrics, and per-dimension slice statistics - so you can compare conditions, catch outliers, and verify batch consistency before you use the data.
 
@@ -29,8 +29,10 @@ uv pip install pixel-patrol
 For a modular install (core only + selected add-ons):
 
 ```bash
-uv pip install pixel-patrol-base         # includes image quality metrics
-uv pip install pixel-patrol-loader-bio   # BioIO, Zarr, Tifffile loaders
+uv pip install pixel-patrol-base           # includes image quality metrics
+uv pip install pixel-patrol-loader-bio     # BioIO, Zarr, Tifffile, H5 loaders
+uv pip install pixel-patrol-loader-medical # NIfTI, DICOM loaders
+uv pip install pixel-patrol-geospatial     # GeoTIFF, NetCDF loader
 ```
 
 ---
@@ -81,7 +83,7 @@ pixel-patrol launch
 ```python
 from pixel_patrol_base import api
 
-project = api.create_project("my-project", base_dir="path/to/images/", loader="bioio")
+project = api.create_project("my-project", base_dir="path/to/images/", loader="bioio", output_path="results.parquet")
 api.add_paths(project, ["condition_a", "condition_b"])  # optional
 api.process_files(project)
 api.view(project)
@@ -114,7 +116,7 @@ pixel-patrol build-viewer-html -o viewer.html             # light (~7 MB), loads
 pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained, works with no network
 ```
 
-> **Note:** The static viewer may not load very large parquet files (e.g. 5 GB+). Use `pixel-patrol view` for large reports.
+> **Note:** The static viewer may not load parquet files larger than a few GB. Use `pixel-patrol view` for large reports.
 
 ---
 

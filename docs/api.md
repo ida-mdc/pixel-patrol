@@ -59,7 +59,7 @@ api.process_files(project, **kwargs) -> Project
 
 Processes all files in the project paths and writes the `.parquet` table. Most parameters correspond directly to the [CLI options](cli.md#pixel-patrol-process). API-specific notes:
 
-- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [slice-size](processing.md#-slice-size).
+- `slice_size` - dict mapping dimension name to block size, e.g. `{"Z": 1, "Y": 512}`. See [How processors see the image](processing.md#how-processors-see-the-image).
 - `processors_included` / `processors_excluded` - sets of processor IDs, e.g. `{"raster-basic", "thumbnail"}`. See [Available processors](processing.md#available-processors).
 - `selected_file_extensions` - set of extensions, e.g. `{"tif", "nd2"}`, or `"all"`.
 - `progress_callback` - `Callable[[int, int], None]` called with `(done, total)` after each completed record. `total` is `-1` until the full count is known.
@@ -143,4 +143,4 @@ api.build_viewer("gh-pages-out/")  # site folder
 ```
 
 !!! warning
-    The static viewer runs entirely in the browser and may not be able to load very large parquet files (e.g. 5 GB+). For large tables use `api.view()` instead, which is backed by a local Python server with native DuckDB.
+    The static viewer runs entirely in the browser and may not be able to load parquet files larger than a few GB. For large tables use `api.view()` instead, which is backed by a local Python server with native DuckDB.

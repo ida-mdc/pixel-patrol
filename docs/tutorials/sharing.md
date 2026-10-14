@@ -13,7 +13,7 @@ A PixelPatrol table is a single `.parquet` file holding everything about your da
     <span class="wc-setup-q">Roughly how big is your table?</span>
     <span class="wc-setup-btns">
       <button class="wc-setup-btn" data-key="size" data-val="small" onclick="shSetup(this)">Under a few GB</button>
-      <button class="wc-setup-btn" data-key="size" data-val="large" onclick="shSetup(this)">5 GB or more</button>
+      <button class="wc-setup-btn" data-key="size" data-val="large" onclick="shSetup(this)">More than a few GB</button>
     </span>
   </div>
   <div class="wc-setup-row">
@@ -56,7 +56,7 @@ A PixelPatrol table is a single `.parquet` file holding everything about your da
 <p>They drag the file into the browser and the full interactive viewer loads. Everything runs locally in their browser - no data is uploaded anywhere.</p>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>Browser memory limits:</strong> the hosted viewer runs DuckDB in a browser WebAssembly context, capped by available browser memory. Files under 1-2 GB typically work fine; 5 GB+ may fail to load or get sluggish - reach for <code>pixel-patrol view</code> instead.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>Browser memory limits:</strong> the hosted viewer runs DuckDB in a browser WebAssembly context, capped by available browser memory. Tables larger than a few GB may fail to load or get sluggish - reach for <code>pixel-patrol view</code> instead.</div></div>
 <div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>No custom widgets:</strong> the hosted viewer only ships with the built-in widgets - your own viewer plugins aren't bundled in. If your collaborator needs to see those, build and host your own viewer instead (see "Host on a static server" below).</div></div>
 <div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium table to one person who doesn't have PixelPatrol installed.</div></div>
 </div>
@@ -111,7 +111,7 @@ pixel-patrol build-viewer-html -o viewer.html
 
 <details class="wc-how">
 <summary>🔬 What's actually inside <code>viewer.html</code></summary>
-<div><code>viewer.html</code> is the application shell, not the data - your collaborator still needs the <code>.parquet</code> file alongside it (same folder is easiest; the viewer offers a file picker on load). Its core - DuckDB, Plotly, your extensions - is bundled directly into the file. Its styling (Bootstrap CSS and icons), however, still loads from a CDN at runtime, so your collaborator needs an internet connection the <em>first</em> time they open it, even though nothing needs installing.</div>
+<div><code>viewer.html</code> is the application shell, not the data - your collaborator still needs the <code>.parquet</code> file alongside it (same folder is easiest; the viewer offers a file picker on load). The viewer app and your extensions are bundled directly into the file. DuckDB's WebAssembly engine and the styling (Bootstrap CSS and icons), however, load from a CDN at runtime.</div>
 </details>
 
 <div class="wc-flags">

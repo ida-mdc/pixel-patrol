@@ -1,9 +1,9 @@
 # Processing
 
 !!! tip "Used the launcher instead?"
-    Double-click it, a browser tab opens, and you can set up your project and start processing from there - no terminal needed. The rest of this page is for the CLI workflow.
+    Double-click it to open the report manager in your browser, then click **+ New Report** to set up your project and start processing - no terminal needed.
 
-`pixel-patrol process` is the first step in the PixelPatrol workflow. It scans your images and produces a `.parquet` table containing everything PixelPatrol knows about your dataset - file metadata, image dimensions, pixel statistics, quality metrics, and thumbnails.
+`pixel-patrol process` is the first step in the PixelPatrol workflow. It scans your images and produces a `.parquet` table containing everything PixelPatrol knows about your dataset - file metadata, image dimensions, and pixel statistics.
 
 Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just *what* to run, but *why* each flag is there.
 
@@ -39,7 +39,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <pre class="wiz-code-pre" id="proc-cmd">pixel-patrol process &lt;path/to/images/&gt; \
   -o results.parquet</pre>
     <div class="wiz-callout wiz-hidden" id="proc-api-slurm-warning" style="margin:0 20px 16px">
-      ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI launcher
+      ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI wrapper
       around <code>dask_jobqueue.SLURMCluster</code>. Switch to the <strong>CLI</strong> tab above for a ready-to-run
       SLURM command, or see <a href="../processing.md#connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</a>
       to wire up a <code>SLURMCluster</code> by hand from a script.
@@ -125,7 +125,7 @@ Answer the questions below and we'll walk you through each decision together, bu
             GeoTIFF or NetCDF
             <code class="wiz-badge">--loader geospatial</code>
           </div>
-          <div class="wiz-opt-sub">Supports .tif, .tiff, and .nc files; reads geospatial metadata (CRS, resolution, no-data values).</div>
+          <div class="wiz-opt-sub">Supports .tif, .tiff, .nc, .txt, .xyz, and .xyz.gz files; reads geospatial metadata (CRS, resolution, no-data values).</div>
         </div>
       </label>
       <label class="wiz-option">
@@ -305,7 +305,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-step-q">SLURM cluster settings</div>
     <div class="wiz-callout">
       First, install the SLURM wrapper in the same environment:<br>
-      <code>pip install pixel-patrol-slurm</code>
+      <code>uv pip install pixel-patrol-slurm</code>
     </div>
     <div class="wiz-grid">
       <div class="wiz-field">
@@ -376,7 +376,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       </div>
       <div class="wiz-adv-field-hint">
         By default all installed processors run: <code>raster-basic</code>, <code>raster-histogram</code>,
-        <code>thumbnail</code>, <code>raster-quality</code>.
+        <code>thumbnail</code>, <code>raster-quality</code> (plus <code>nodata-statistics</code> if <code>pixel-patrol-geospatial</code> is installed).
         List specific ones here to run only those - takes precedence over exclude.
         Useful for speeding up processing when you only need a subset of metrics.
       </div>

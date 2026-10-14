@@ -40,16 +40,18 @@ Without a loader, only file-system metadata is collected (`name`, `file_extensio
 
 Some loaders support **container files** - single files that hold multiple images. Each sub-image in a container generates its own rows in the parquet, identified by a `child_id` column.
 
-| Loader ID | What it reads | Package required |
+All loaders available when pixel-patrol is installed:
+
+| Loader ID | What it reads | Package |
 |---|---|---|
 | `bioio` | TIFF, CZI, ND2, LIF, PNG, JPG, and more via BioIO | `pixel-patrol-loader-bio` |
 | `zarr` | Zarr datasets | `pixel-patrol-loader-bio` |
 | `h5` | HDF5, BigDataViewer/BDV, and Imaris IMS files | `pixel-patrol-loader-bio` |
 | `tifffile` | TIFF only, lightweight | `pixel-patrol-loader-bio` |
+| `nifti` | NIfTI volumes | `pixel-patrol-loader-medical` |
+| `dicom` | DICOM files and series | `pixel-patrol-loader-medical` |
+| `geospatial` | GeoTIFF, NetCDF, and other geospatial rasters | `pixel-patrol-geospatial` |
 | *(none)* | Basic file info only (name, size, extension) | `pixel-patrol-base` |
-
-!!! note
-    `pixel-patrol-loader-bio` is included in the `pixel-patrol` bundle. If you installed with `pip install pixel-patrol` or `uv pip install pixel-patrol`, all loaders are already available.
 
 Additional loaders are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol), and you can build your own - see [Extensions](extensions.md).
 
@@ -90,6 +92,7 @@ pixel-patrol process my-data/ -o results.parquet --processors-exclude raster-qua
 | `raster-histogram` | `pixel-patrol-base` | `histogram_min`, `histogram_max`, `histogram_nan_count`, `histogram_counts` |
 | `thumbnail` | `pixel-patrol-base` | `thumbnail`, `thumbnail_norm_min`, `thumbnail_norm_max`, `thumbnail_dtype` |
 | `raster-quality` | `pixel-patrol-base` | `laplacian_variance`, `spectral_slope`, `dark_clipping_fraction`, `bright_clipping_fraction` |
+| `nodata-statistics` | `pixel-patrol-geospatial` | `nodata_count` |
 
 Additional processors are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol). You can also build your own - see [Extensions](extensions.md).
 
@@ -97,17 +100,9 @@ Additional processors are available in the [GitHub repository](https://github.co
 
 Processors fall into two categories that determine what data they receive:
 
-- **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape is controlled by `--slice-size`.
+- **Leaf processors** (`raster-basic`, `raster-histogram`, `raster-quality`) run on individual **leaf blocks** - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (`obs_level=0`). The leaf block shape (CLI arg: `--slice-size`) sets the block size per dimension.
 
-- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit within the task size limit (1/8 of `mb_per_worker`, headroom for in-memory expansion), the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at `obs_level=0`.
-
-### `--slice-size`
-
-Sets how finely statistics are split per dimension, for example coarser steps for a smaller table. It only affects what is saved to the table, not how the data is loaded. See the [CLI reference](cli.md#pixel-patrol-process) for the details.
-
-```bash
-pixel-patrol process my-data/ -o results.parquet --slice-size Z=5 --slice-size Y=512
-```
+- **Memory processors** (`thumbnail`) run once per **memory chunk**. For images that fit the task size, the memory chunk is the full image. For larger images, the results are assembled before writing the table. Memory processors always produce a result at `obs_level=0`.
 
 ---
 
@@ -117,7 +112,7 @@ The output `.parquet` file is the PixelPatrol table. Its columns come from three
 
 ### Row structure
 
-A file does not always map to a single row. The parquet uses an `obs_level` column to represent a hierarchy of observations:
+An image does not always map to a single row. The parquet uses an `obs_level` column to represent a hierarchy of observations:
 
 - **`obs_level = 0`** - full-image aggregate: one row per image (or per sub-image in a container), with statistics aggregated over all dimensions.
 - **`obs_level = 1`** - per single dimension: one row per Z slice (aggregated over all other dims), one row per C slice (aggregated over all other dims), etc. The `dim_z`, `dim_t`, `dim_c`, `dim_s` columns identify which dimension value the row belongs to; the others are `null`.
