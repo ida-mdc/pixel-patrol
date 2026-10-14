@@ -1,0 +1,1680 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://pixelpatrol.app/docs/0.9.3/tutorials/interactive_report/">
+      
+      
+        <link rel="prev" href="../processing/">
+      
+      
+        <link rel="next" href="../sharing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Exploring the Interactive Report - Pixel Patrol Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#exploring-the-interactive-report" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-header__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Pixel Patrol Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Exploring the Interactive Report
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-nav__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    Pixel Patrol Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview-and-full-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview and Full view
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#opening-your-interactive-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Opening your interactive report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#widget-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Widget walkthrough
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-the-sidebar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with the sidebar
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sharing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extension/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create an Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Report Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="exploring-the-interactive-report">Exploring the Interactive Report</h1>
+<p>Open your interactive report in one browser tab and keep this page open in another. No PixelPatrol table of your own yet? <a href="https://pixelpatrol.app/viewer/?data=../example.parquet&group=imported_path_short" target="_blank">Open the example report</a>, used in this tutorial.</p>
+<p>The example screenshots below are from a subset of the BBBC006 dataset (human U2OS cells, Hoechst and phalloidin channels, 20x) with four conditions: focus series acquired <strong>far below</strong>, <strong>below</strong>, <strong>near</strong> and <strong>far above</strong> the focal plane, each stored as a multi-channel <code>.ome.tif</code> stack. The uneven group sizes, varying Z size, 12-bit data stored in 16 bits and changing sharpness across Z make it easy to see what each widget catches.</p>
+<p>A few things to know before you start:</p>
+<ul>
+<li><strong>Some charts collapse into a table.</strong> If all your images share the same value for a property (e.g. they're all the same size, or all the same dtype), PixelPatrol shows a summary table instead of a chart.</li>
+<li><strong>Widget availability depends on what was processed.</strong> Widgets that need data not collected simply don't appear. The colored pill on each card tells you what's required.</li>
+<li><strong>Everything reacts to the sidebar.</strong> Grouping, filters, and dimension selectors update all widgets instantly - we'll cover the sidebar <a href="#working-with-the-sidebar">at the end</a>.</li>
+</ul>
+<p><strong>Reading the cards:</strong></p>
+<div class="wc-legend">
+  <div><span class="wc-pill wc-pill-always">always shown</span> &nbsp;visible in every interactive report</div>
+  <div><span class="wc-pill wc-pill-loader">needs loader</span> &nbsp;requires an image loader (e.g. <code>bioio</code> or <code>tifffile</code>)</div>
+  <div><span class="wc-pill wc-pill-dim">multidim only</span> &nbsp;non-spatial dimensions (e.g. Z/T/C/S) with &gt;1 slice</div>
+</div>
+
+<p>Each widget also carries a small <strong>scope badge</strong> telling you what one datapoint represents - hover it for details:</p>
+<div class="wc-legend">
+  <div><span class="wc-scope">📄 per file</span> &nbsp;one datapoint = one file</div>
+  <div><span class="wc-scope">🖼️ per image</span> &nbsp;one datapoint = one image</div>
+  <div><span class="wc-scope">🧩 per slice</span> &nbsp;one datapoint = one channel / Z-plane / timepoint within an image, or another sliced dimension</div>
+  <div><span class="wc-scope">🖼️/🧩</span> &nbsp;switchable with the <strong>Slice by</strong> toggle</div>
+</div>
+
+<hr />
+<h2 id="overview-and-full-view">Overview and Full view</h2>
+<p>The viewer opens in <strong>Overview</strong> mode: a grid of tiles, each with a one-line summary. Click a tile to expand it, or switch to <strong>Full</strong> view with the toggle in the top right to see every widget at once.</p>
+<p>Each widget has an <strong>ⓘ</strong> button that briefly explains what it shows and how to read it; a toggle in the topbar opens or closes all of them.</p>
+<hr />
+<h2 id="opening-your-interactive-report">Opening your interactive report</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet
+</code></pre></div>
+<p>This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to <a href="https://pixelpatrol.app/viewer/">pixelpatrol.app/viewer/</a> and drag your own <code>.parquet</code> in directly (browser-WASM, practical limit ~2 GB).</p>
+<p><strong>Useful launch flags:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--group-by<span class="w"> </span>file_extension<span class="w">   </span><span class="c1"># start grouped differently</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--filter-col<span class="w"> </span>dtype<span class="w"> </span>--filter-op<span class="w"> </span>eq<span class="w"> </span>--filter-val<span class="w"> </span>uint16
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--dim<span class="w"> </span><span class="nv">z</span><span class="o">=</span><span class="m">5</span><span class="w">                   </span><span class="c1"># lock to a Z slice on load</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--significance<span class="w">              </span><span class="c1"># show stat brackets from the start</span>
+</code></pre></div>
+<hr />
+<h2 id="widget-walkthrough">Widget walkthrough</h2>
+<div class="wc-setup" id="wc-setup-panel">
+  <div class="wc-setup-title">⚙ What's in your table?</div>
+  <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for widgets that don't apply to your setup will dim out as you scroll through the walkthrough - so you can see at a glance which ones are actually relevant to you.</p>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Did you run processing with an image loader (e.g. <code>bioio</code> or <code>tifffile</code>)?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="loader" data-val="yes" onclick="wcSetup(this)">Yes</button>
+      <button class="wc-setup-btn" data-key="loader" data-val="no"  onclick="wcSetup(this)">No</button>
+    </span>
+  </div>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Are your images multidimensional (e.g. Z, T, C, or S axes)?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="dim" data-val="yes" onclick="wcSetup(this)">Yes</button>
+      <button class="wc-setup-btn" data-key="dim" data-val="no"  onclick="wcSetup(this)">No</button>
+    </span>
+  </div>
+</div>
+
+<p style="font-size:0.82rem;margin:0.5rem 0;opacity:0.8">Click the ✓ in the corner of each widget card to mark it as reviewed and track your progress through the walkthrough.</p>
+
+<div class="wc-progress-wrap">
+  <div class="wc-progress-label" id="wc-prog-label">0 / 13 widgets reviewed</div>
+  <div class="wc-progress-bar"><div class="wc-progress-fill" id="wc-prog-fill"></div></div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="" id="wc-summary">
+<div class="wc-head">
+<span class="wc-icon">📋</span>
+<span class="wc-name">File Data Summary</span>
+<span class="wc-scope" title="One datapoint = one file">📄 per file</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="summary" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Your first sanity check: a summary for the whole dataset (files, images, total size, file extensions) - when grouped, a per-group breakdown table of file count and size.</p>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/summary.png" alt="File Data Summary">
+    <figcaption>Summary tiles for the dataset, plus a per-group table - the groups have 2, 2, 3 and 6 files, and <code>near_focus</code> holds several times more data on disk than the others. Uneven group sizes, visible before looking at a single pixel.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Uneven group sizes can skew statistics and significance tests.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition being much smaller on disk than the others (same file count, much less data) is a hint of a possible issue - images that differ in size or dtype, or compression. The next few widgets will help you tell which it is.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="" id="wc-image-table">
+<div class="wc-head">
+<span class="wc-icon">📋</span>
+<span class="wc-name">Image Table</span>
+<span class="wc-scope" title="One row = one image">🖼️ per image</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="image-table" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>A sortable, searchable table with one row per image, showing every column except thumbnails and other binary/array data. Click a column header to sort; press Enter in the search box to search by substring - across all columns for datasets under 10,000 images, or just <code>path</code>/<code>child_id</code> for larger ones.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>The fastest way to find a specific file or check raw values before trusting a chart - sort by a metric to see the exact numbers behind the most extreme points in the violin plots.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use <strong>Save as CSV</strong> in the sidebar if you want the full table (filtered or not) outside the browser.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="" id="wc-file-stats">
+<div class="wc-head">
+<span class="wc-icon">📁</span>
+<span class="wc-name">File Statistics</span>
+<span class="wc-scope" title="One datapoint = one file">📄 per file</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="file-stats" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>File count and total size by extension, file size distribution, and a modification timeline.</p>
+
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>File metadata only - no pixel data. Sizes from the filesystem; modification timestamps from each file's <code>mtime</code>.</div>
+</details>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/file_stats.png" alt="File Statistics">
+    <figcaption>File statistics - the yellow banner flags that file counts differ between conditions (ratio above 1.5×). All files share the single extension <code>.ome.tif</code>, so it appears in the "shared properties" table instead of a chart.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Mixed file formats, e.g. one condition has a different format than the others.</strong> Mixed extensions can mean a mixed dataset - images exported in two formats, or even saved twice. The example report has a single format, so it does not trigger this.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Modification dates spread across weeks or months - e.g. one condition acquired in March and another in May - you may want to check for a batch effect.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Most properties collapsed to tables and modification dates are clustered together - in many cases, that points to consistent acquisition.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="" id="wc-sunburst">
+<div class="wc-head">
+<span class="wc-icon">🌀</span>
+<span class="wc-name">File Structure Sunburst</span>
+<span class="wc-scope" title="One segment = one file">📄 per file</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="sunburst" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>An interactive sunburst of your folder hierarchy. A toggle lets you size the segments by <strong>file count</strong> or by <strong>total size</strong> - the screenshot below shows the by-size view. Only files that were actually scanned into the table are included. <strong>Click any segment to zoom in; click the center ring to zoom out.</strong></p>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/burst.png" alt="File Structure Sunburst">
+    <figcaption>The 4 conditions at the second ring, each holding its stacks directly with no subfolders - each file appears at the outer edge. Hover any segment to see the path and count.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use this to verify your dataset is structured as expected.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-metadata">
+<div class="wc-head">
+<span class="wc-icon">🧬</span>
+<span class="wc-name">Metadata</span>
+<span class="wc-scope" title="One datapoint = one image">🖼️ per image</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="metadata" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Distribution of <code>dtype</code> and <code>dim_order</code> across groups, plus a summary table of other properties - <code>ndim</code> and pixel size, where available - for the cases where every file shares the same value.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>If <code>dtype</code>, <code>dim_order</code>, or <code>ndim</code> vary across your files</strong>, that points to inconsistent acquisition - possibly different instruments or different acquisition parameters - and is worth verifying before you compare groups. Mixed-<code>dtype</code> example: <code>uint8</code> lives in [0, 255] while <code>uint16</code> lives in [0, 65535], so a pixel value of 100 means something completely different in each.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Single <code>dtype</code>, <code>dim_order</code>, and <code>ndim</code> across the whole dataset - format-level consistency confirmed.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-dim-size">
+<div class="wc-head">
+<span class="wc-icon">📐</span>
+<span class="wc-name">Dimensionality</span>
+<span class="wc-scope" title="One point = one image">🖼️ per image</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="dim-size" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>X/Y scatter plot (width vs. height, one point per image) plus strip plots for any non-spatial dimensions present (e.g. Z, T, C, S - names depend on your loader). Quickly reveals outliers and whether your images are consistently sized across groups.</p>
+
+<div class="wc-shots small">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/z_size.png" alt="Z size distribution">
+    <figcaption>Z size strip plot - X and Y are the same for every image (696×520), but the stacks have between 5 and 8 Z-planes, so the Z size is not constant across files.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Two distinct clusters in the X/Y scatter - e.g. a 1024×1024 group and a separate 512×512 group - often indicates images from different instruments, different acquisition parameters, or accidentally included thumbnails.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Hover over any point to see the file path. A single size outlier is often a misplaced metadata file or a preview image saved alongside real data.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-mosaic">
+<div class="wc-head">
+<span class="wc-icon">🖼️</span>
+<span class="wc-name">Image Thumbnails</span>
+<span class="wc-scope" title="One thumbnail = one image">🖼️ per image</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="mosaic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>A thumbnail grid - one patch per image, border color = group. Sort by any metric and your statistics become something you can actually look at and verify with your own eyes.</p>
+
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>The thumbnail processor extracts a 64×64-pixel patch per image. For large images it samples across the full spatial extent. For Z-stacks it takes the middle slice. For multi-channel images it picks the most informative channel (RGB if present, otherwise the first). Each patch is independently intensity-normalized so details are visible regardless of absolute brightness.</div>
+</details>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/mos.png" alt="Image Thumbnails">
+    <figcaption>Thumbnails from all four conditions - border colors indicate group. Sort by <code>laplacian_variance</code> ascending and the blurriest, most out-of-focus images float to the top.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Sort by <code>laplacian_variance</code> ascending</strong> → blurriest images appear first. If they look visually out-of-focus, they are. This is the fastest path to finding focus-drift candidates for exclusion.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Sort by <code>bright_clipping_fraction</code> descending to surface overexposed images. Sort by <code>dark_clipping_fraction</code> descending to surface images with heavy background or underexposure.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Hover over any thumbnail to see the exact file path.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-violin-basic">
+<div class="wc-head">
+<span class="wc-icon">📈</span>
+<span class="wc-name">Pixel Value Statistics</span>
+<span class="wc-scope" title="Switch with the Slice by toggle">🖼️/🧩 per image / slice</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="violin-basic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Violin + box plots for four per-image statistics: <code>mean_intensity</code>, <code>std_intensity</code>, <code>min_intensity</code>, <code>max_intensity</code>. Each dot is one image; each violin is one group. Use the <strong>Slice by</strong> toggles above the plots to switch to one point per (image × dimension slice) instead.</p>
+
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>
+<strong>mean:</strong> <code>np.nanmean</code> over all pixels, pixel-count-weighted across 2D planes.<br>
+<strong>std:</strong> pooled - <code>√(Σnᵢ(σᵢ² + (μᵢ − μ̄)²) / Σnᵢ)</code> - accounts for both within-plane and between-plane variance.<br>
+<strong>min / max:</strong> <code>np.nanmin</code> / <code>np.nanmax</code> per plane, then min/max across planes.<br>
+NaN pixels are excluded from all calculations.
+</div>
+</details>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/max_intensity.png" alt="Max Intensity violin">
+    <figcaption><code>max_intensity</code> - most images peak at exactly 4095, the 12-bit ceiling, although the data is stored as <code>uint16</code> (a 16-bit file would reach up to 65535). Only a handful of distinct values exist, so PixelPatrol shows raw points instead of a violin. Each dot is one image; hover to identify the file.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong><code>max_intensity</code> sitting exactly at 255 (or 65535)</strong> is worth a closer look - it can mean those images hit the sensor's ceiling and got clipped. Check the histogram for a spike at the max value to confirm real saturation (a single bright pixel can also legitimately land at 255), then verify visually in Image Thumbnails.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Large spread in <code>mean_intensity</code> within a single group: variable illumination, inconsistent staining, or genuinely variable signal.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Enable <strong>Show significance</strong> in the sidebar for Mann-Whitney U brackets (Bonferroni corrected). A bracket = statistically distinguishable groups - whether that's meaningful is your call.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-histogram">
+<div class="wc-head">
+<span class="wc-icon">📊</span>
+<span class="wc-name">Pixel Value Histograms</span>
+<span class="wc-scope" title="One histogram = one image, then averaged per group">🖼️ per image</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="histogram" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>The mean pixel intensity histogram per group - a more in-depth look at whether your pixel intensity distribution looks the way you'd expect. If the dataset has both integer and float images, each type gets its own plot. For integer images, toggle between actual pixel values and a dtype-normalized range to compare across bit depths.</p>
+
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>Each image gets a 256-bin histogram of its pixel values, normalized to area 1. Per-group, the normalized histograms are averaged equally across images (image size does not affect the result). The bin range uses the actual pixel value range of each image, not a fixed 0-255 range.</div>
+</details>
+
+<div class="wc-shots">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/hist.png" alt="Intensity histograms">
+    <figcaption>Average pixel histograms of the four groups, all <code>uint16</code> so in one plot - most pixels sit in a dark background peak around 130 (the camera offset, not 0), with a long tail toward the bright signal that ends at 4095 instead of spanning the 16-bit range. <code>below_focus</code> (purple) has the strongest background peak.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Comparing histograms across groups side by side is a quick way to look at conditions in more depth than a single summary statistic can show.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Distributions shifted between groups: could be real biology, or different acquisition settings on different days.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Distribution looks the way you'd expect for your sample, and is consistent across groups that should be comparable. (Not every dataset should be bell-shaped, and not every condition should look alike - judge against your own expectations, not a generic template.)</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader" id="wc-violin-quality">
+<div class="wc-head">
+<span class="wc-icon">🎯</span>
+<span class="wc-name">Image Quality Metrics</span>
+<span class="wc-scope" title="Switch with the Slice by toggle">🖼️/🧩 per image / slice</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<button class="wc-check" data-wc="violin-quality" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Four quality metrics computed per leaf slice, aggregated by pixel-count-weighted mean. They surface blur, noise, and exposure clipping at the whole-image level - not localized defects. <strong>Only compare images at the same magnification and pixel size</strong> - laplacian_variance and spectral_slope are scale-dependent.</p>
+
+<div class="wc-metric">
+<div class="wc-metric-name">Laplacian Variance <small style="font-weight:400;opacity:0.65">- high-frequency content</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score.</p>
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>Apply the discrete Laplacian at every pixel: <code>left + right + up + down − 4 × center</code>. This second-derivative filter fires strongly at edges and fine texture, near-zero in smooth regions. Variance of this response is the score. Clipped pixels create artificial high-frequency edges and inflate it - check clipping fractions when values seem unusually high.</div>
+</details>
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Low outliers → go to Image Thumbnails, sort by <code>laplacian_variance</code> ascending, and confirm visually. If they look out-of-focus, you may want to exclude them.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>One condition consistently lower: different imaging days, focus protocols, or objective settings?</div></div>
+</div>
+</div>
+
+<div class="wc-metric">
+<div class="wc-metric-name">Spectral Slope <small style="font-weight:400;opacity:0.65">- blur vs noise distinction</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance. Most interpretable when comparing images of similar content type.</p>
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>Apply a 2D Hanning window, compute the FFT, average power in radial frequency bins, then fit a line to log(power) vs log(frequency) over the mid-frequency band (5–40% of Nyquist). The slope of that line is the score.</div>
+</details>
+<div class="wc-flags">
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Steeper (more negative) than expected for one condition: more blur or more structured/textured content than others - check laplacian_variance to tell them apart.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Flatter (toward zero) than expected: noise or low-signal images. NaN for images smaller than 32×32 pixels.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Most interpretable when comparing images of similar content type. Differences between conditions with very different subjects (e.g. cells vs tissue) may reflect content, not quality.</div></div>
+</div>
+</div>
+
+<div class="wc-metric">
+<div class="wc-metric-name">Dark Clipping Fraction <small style="font-weight:400;opacity:0.65">- underexposure / background</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end.</p>
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>Count how many pixels equal <code>iinfo(dtype).min</code> (0 for unsigned integers, e.g. −32768 for int16) and divide by total pixel count.</div>
+</details>
+<div class="wc-flags">
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>High fraction in unsigned-integer images: heavy dark background, underexposure, or nodata regions. In signed-integer images: signal clipped at the lower bound - real values there are lost.</div></div>
+</div>
+</div>
+
+<div class="wc-metric">
+<div class="wc-metric-name">Bright Clipping Fraction <small style="font-weight:400;opacity:0.65">- bright-end clipping</small></div>
+<p style="font-size:0.9rem;margin:0 0 0.5rem">Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float, which has no fixed upper bound).</p>
+<details class="wc-how">
+<summary>🔬 How it's computed</summary>
+<div>Count how many pixels equal <code>iinfo(dtype).max</code> (e.g. 255 for uint8, 65535 for uint16) and divide by total pixel count. Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095, not 65535) is flagged by a separate warning below if <code>max_intensity</code> is below the dtype ceiling.</div>
+</details>
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling — sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) — data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
+</div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="dim" id="wc-stats-basic">
+<div class="wc-head">
+<span class="wc-icon">📉</span>
+<span class="wc-name">Basic Statistics Across Dimensions</span>
+<span class="wc-scope" title="One point = one dimension slice, averaged across images">🧩 per slice</span>
+<span class="wc-pill wc-pill-dim">multidim only</span>
+<button class="wc-check" data-wc="stats-basic" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>How <code>mean</code>, <code>std</code>, <code>min</code>, and <code>max</code> change as you move along your non-spatial dimensions (e.g. Z, T, C, or S - the exact names depend on your loader) - averaged across all images in each group.</p>
+
+<div class="wc-shots compact">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/stats_per_dim.png" alt="Max and mean intensity across C and Z slices">
+    <figcaption>Max and mean intensity across C and Z slices - the second channel is brighter than the first in every group. On the Z side the dashed line (right axis) drops below 100% after the 5th plane, because the stacks have between 5 and 8 planes. The shaded band is the per-group std across images.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><code>mean_intensity</code> declining over T: <strong>photobleaching</strong>. Fluorophores are bleaching over the time course - any time-series analysis must account for this.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><code>std_intensity</code> increasing over T: growing noise - sample movement, degradation, or instrument drift.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>A channel with very low mean and high relative std likely has no real signal - just noise. Confirm visually in Image Thumbnails for that channel.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Each plot also has a dashed line - the percentage of images that still have a slice at that position, per group. A line dropping below 100% means images in that group don't all have the same number of slices.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="loader,dim" id="wc-stats-quality">
+<div class="wc-head">
+<span class="wc-icon">🎨</span>
+<span class="wc-name">Quality Metrics Across Dimensions</span>
+<span class="wc-scope" title="One point = one dimension slice, averaged across images">🧩 per slice</span>
+<span class="wc-pill wc-pill-loader">needs loader</span>
+<span class="wc-pill wc-pill-dim" style="margin-left:4px">multidim only</span>
+<button class="wc-check" data-wc="stats-quality" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>How quality metrics change across your non-spatial dimensions (e.g. Z, T, C, or S - names depend on your loader). Best for detecting focus drift across a Z-like dimension or photobleaching effects on contrast over a T-like one.</p>
+
+<div class="wc-shots compact">
+  <div class="wc-shot">
+    <img src="../../assets/screenshots/lap_per_dim.png" alt="Laplacian variance across C and Z slices">
+    <figcaption>Laplacian variance across C and Z - in <code>near_focus</code> (green) it climbs steeply to a peak at Z=6 and falls again, the signature of a stack passing through focus. The other groups stay low and flat by comparison.</figcaption>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div><strong>Laplacian variance dropping across Z:</strong> focus is unstable across the stack. Find the Z range where sharpness peaks and limit your analysis to that range.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Spectral slope becoming flatter (toward zero) over T: noise increasing over the time course - possible sample degradation or instrument drift.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>Dark or bright clipping fraction rising in one condition across C: channel-specific exposure problem or a detector offset artifact.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Find the Z of peak Laplacian variance here, then set that Z in the sidebar dimension selector - all widgets update to show your data at its sharpest.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>As with Basic Statistics Across Dimensions, the dashed line shows the per-group percentage of images that still have a slice at that position - check it before reading too much into a quality metric at the far end of a dimension.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-wc-req="" id="wc-custom-plot">
+<div class="wc-head">
+<span class="wc-icon">🧪</span>
+<span class="wc-name">Custom Plot</span>
+<span class="wc-scope" title="Depends on the columns and Slice by toggle you pick">📄/🖼️/🧩 varies</span>
+<span class="wc-pill wc-pill-always">always shown</span>
+<button class="wc-check" data-wc="custom-plot" onclick="wcCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Build your own plot from any columns in the table - pick an X column, a Y column (or <code>(count)</code>), and PixelPatrol picks a sensible chart type:</p>
+
+<ul style="font-size:0.9rem;line-height:1.6">
+<li><strong>Two numerics</strong> → scatter</li>
+<li><strong>Categorical × numeric</strong> → violin or bar (mean ± sd)</li>
+<li><strong>Any column × <code>(count)</code></strong> → count bar</li>
+<li><strong>Two categoricals</strong> → count heatmap</li>
+</ul>
+
+<p><strong>Color by</strong> defaults to the app-wide group column, but you can color/split by any other column instead - or, for scatter plots, by a numeric column on a continuous colormap. Each plot has its own <strong>Slice by</strong> toggles and a per-image / per-slice badge, just like Pixel Value Statistics. Click <strong>＋ Add plot</strong> for as many independent plots as you need.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>Use this for anything not covered by the built-in widgets - e.g. plotting a loader-specific metadata column against a quality metric, or checking whether two metrics correlate.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>↓ Export plugin</strong> downloads the current plot as a standalone viewer plugin <code>.js</code> file - drop it into an extension's <code>viewer/</code> folder and list it in <code>extension.json</code> to make it a permanent part of your reports. See <a href="../extension/">Create an Extension</a>.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<h2 id="working-with-the-sidebar">Working with the sidebar</h2>
+<div class="wc-ctrl-grid">
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>🗂️</span> Group by</div>
+<div class="wc-ctrl-body">Split images into groups by any column. Default: <code>path</code> (your <code>-p</code> conditions). Try <code>file_extension</code>, <code>dtype</code>, or any loader metadata column to ask different questions.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>🔍</span> Filter</div>
+<div class="wc-ctrl-body">Restrict all widgets to rows matching a column + operator + value. Filters stack with grouping - filter to a dtype, then group by path to compare conditions within it.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>📏</span> Dimension selectors</div>
+<div class="wc-ctrl-body">For multidimensional data: a slider per non-spatial dimension (e.g. Z, T, C, S - names depend on your loader) that sets which slice all widgets display. Set the Z-like dimension to its peak Laplacian variance for the sharpest cross-condition comparison.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>✨</span> Show significance</div>
+<div class="wc-ctrl-body">Mann-Whitney U test brackets on violin plots, Bonferroni corrected. Non-parametric - no normality assumption. A bracket = statistically distinguishable. Biological meaningfulness is your judgment.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>💾</span> Save</div>
+<div class="wc-ctrl-body"><strong>CSV:</strong> the filtered file list with all metrics, in a plain spreadsheet format - use it to pick files to include or exclude in your pipeline, or just to browse and sort the full table yourself.<br><strong>Parquet:</strong> creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>☰</span> Widget list</div>
+<div class="wc-ctrl-body">Collapse or expand individual widgets. Grayed-out = required columns not in this table (processor wasn't run).</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>💬</span> Feedback</div>
+<div class="wc-ctrl-body">Send feedback directly from the viewer. If something looks wrong, a metric is confusing, or you'd like a new feature - tell us here. All feedback is read.</div>
+</div>
+
+</div>
+
+<p><strong>Common filter examples:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Goal</th>
+<th>Column</th>
+<th>Op</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Only 16-bit images</td>
+<td><code>dtype</code></td>
+<td><code>eq</code></td>
+<td><code>uint16</code></td>
+</tr>
+<tr>
+<td>One condition only</td>
+<td><code>path</code></td>
+<td><code>eq</code></td>
+<td><code>condition_A</code></td>
+</tr>
+<tr>
+<td>Sharp images only</td>
+<td><code>laplacian_variance</code></td>
+<td><code>gt</code></td>
+<td><code>500</code></td>
+</tr>
+<tr>
+<td>Remove dark images</td>
+<td><code>mean_intensity</code></td>
+<td><code>gt</code></td>
+<td><code>10</code></td>
+</tr>
+<tr>
+<td>Find saturated images</td>
+<td><code>max_intensity</code></td>
+<td><code>ge</code></td>
+<td><code>254</code></td>
+</tr>
+<tr>
+<td>Exclude a format</td>
+<td><code>file_extension</code></td>
+<td><code>not_contains</code></td>
+<td><code>.tif</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Saving filtered subsets:</strong> <strong>Save as CSV</strong> gives you the filtered data as a spreadsheet - the same table as the parquet, in a plain, human-readable format. Use it to build an include or exclude list for your pipeline, or just open it and explore the numbers yourself. <strong>Save as Parquet</strong> creates a new parquet file (PixelPatrol table) with only the filtered data. You can open it as an interactive report - the standard way to share a curated, clean version of your dataset. See the <a href="../../privacy/">privacy policy</a> for what's included before sharing it.</p>
+<hr />
+<script>
+/* ── Setup toggle ─────────────────────────────────────────── */
+const wcState = { loader: null, dim: null };
+
+function wcSetup(btn) {
+  const key = btn.dataset.key;
+  const val = btn.dataset.val;
+  wcState[key] = val;
+  document.querySelectorAll('.wc-setup-btn[data-key="' + key + '"]').forEach(b => {
+    b.classList.toggle('sel', b.dataset.val === val);
+  });
+  wcApply();
+}
+
+function wcApply() {
+  document.querySelectorAll('.wc[data-wc-req]').forEach(card => {
+    const req = card.dataset.wcReq;
+    let unavail = false;
+    if (req.includes('loader') && wcState.loader === 'no') unavail = true;
+    if (req.includes('dim')    && wcState.dim    === 'no') unavail = true;
+    card.classList.toggle('wc-unavailable', unavail);
+  });
+}
+
+/* ── Progress tracker ─────────────────────────────────────── */
+const WC_TOTAL = 13;
+const WC_KEY   = 'pp-report-progress';
+
+function wcCheck(btn) {
+  const id = btn.dataset.wc;
+  const on = btn.classList.toggle('checked');
+  btn.textContent = on ? '✓' : '';
+  const saved = JSON.parse(localStorage.getItem(WC_KEY) || '{}');
+  saved[id] = on;
+  localStorage.setItem(WC_KEY, JSON.stringify(saved));
+  wcUpdateProgress();
+}
+
+function wcUpdateProgress() {
+  const saved = JSON.parse(localStorage.getItem(WC_KEY) || '{}');
+  const done  = Object.values(saved).filter(Boolean).length;
+  const pct   = Math.round(done / WC_TOTAL * 100);
+  const fill  = document.getElementById('wc-prog-fill');
+  const label = document.getElementById('wc-prog-label');
+  if (fill)  fill.style.width  = pct + '%';
+  if (label) label.textContent = done + ' / ' + WC_TOTAL + ' widgets reviewed';
+}
+
+function wcInit() {
+  const saved = JSON.parse(localStorage.getItem(WC_KEY) || '{}');
+  document.querySelectorAll('.wc-check').forEach(btn => {
+    if (saved[btn.dataset.wc]) {
+      btn.classList.add('checked');
+      btn.textContent = '✓';
+    }
+  });
+  wcUpdateProgress();
+}
+
+document.addEventListener('DOMContentLoaded', wcInit);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+      <div class="md-copyright" style="margin-top:4px">
+        <a href="../../impressum/" style="color:var(--md-footer-fg-color--light)">Impressum</a>
+        &nbsp;&middot;&nbsp;
+        <a href="../../privacy/" style="color:var(--md-footer-fg-color--light)">Privacy Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
