@@ -1,11 +1,11 @@
 [project]
 name = "pixel-patrol-geospatial"
-version = "0.9.2"
+version = "0.9.3"
 description = "Extension for geospatial data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pixel-patrol-base==0.9.2",
+    "pixel-patrol-base==0.9.3",
     "rasterio==1.5.0",
     "shapely==2.1.2",
 ]
