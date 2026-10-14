@@ -1,7 +1,7 @@
 import pytest
 from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART, MIN_MB_PER_WORKER, MIN_ROWS_PER_PART
+from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART, MIN_MB_PER_WORKER, MIN_PARQUET_ROW_GROUP_SIZE, MIN_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -116,6 +116,22 @@ def test_from_user_args_rows_per_part_below_minimum_falls_back_to_default(value)
 
 def test_from_user_args_keeps_rows_per_part_at_minimum():
     assert ProcessingConfig.from_user_args(rows_per_part=MIN_ROWS_PER_PART).rows_per_part == MIN_ROWS_PER_PART
+
+
+@pytest.mark.parametrize("value", [-5, 0, 1, MIN_PARQUET_ROW_GROUP_SIZE - 1])
+def test_from_user_args_row_group_size_below_minimum_falls_back_to_default(value):
+    assert ProcessingConfig.from_user_args(parquet_row_group_size=value).parquet_row_group_size is None
+
+
+def test_from_user_args_row_group_size_capped_at_rows_per_part():
+    config = ProcessingConfig.from_user_args(rows_per_part=100, parquet_row_group_size=500)
+    assert config.parquet_row_group_size == 100
+    assert ProcessingConfig.from_user_args(rows_per_part=100).parquet_row_group_size == 100  # default 2048 is larger
+
+
+def test_from_user_args_row_group_size_kept_when_it_fits():
+    assert ProcessingConfig.from_user_args().parquet_row_group_size is None
+    assert ProcessingConfig.from_user_args(rows_per_part=1000, parquet_row_group_size=500).parquet_row_group_size == 500
 
 
 # --- mb_per_worker ---

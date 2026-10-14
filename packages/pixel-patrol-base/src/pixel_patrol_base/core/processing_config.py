@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
 from pixel_patrol_base.config import (
-    DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER,
-    MIN_MB_PER_WORKER, MIN_ROWS_PER_PART,
+    DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_PARQUET_ROW_GROUP_SIZE,
+    MIN_MB_PER_WORKER, MIN_PARQUET_ROW_GROUP_SIZE, MIN_ROWS_PER_PART,
 )
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
@@ -20,6 +20,7 @@ _USER_MINIMUMS = {
     "max_images_per_task": 1,
     "mb_per_worker": MIN_MB_PER_WORKER,
     "rows_per_part": MIN_ROWS_PER_PART,
+    "parquet_row_group_size": MIN_PARQUET_ROW_GROUP_SIZE,
 }
 
 
@@ -76,6 +77,10 @@ class ProcessingConfig:
             if kwargs.get(name, minimum) < minimum:
                 logger.warning("%s=%s is below %g, using the default.", name, kwargs[name], minimum)
                 del kwargs[name]
+        rows_per_part = kwargs.get("rows_per_part", DEFAULT_ROWS_PER_PART)
+        if kwargs.get("parquet_row_group_size", DEFAULT_PARQUET_ROW_GROUP_SIZE) > rows_per_part:
+            logger.info("parquet_row_group_size capped at rows_per_part (%d).", rows_per_part)
+            kwargs["parquet_row_group_size"] = rows_per_part
         return cls(**kwargs)
 
     def effective_mb_per_worker(self) -> float:

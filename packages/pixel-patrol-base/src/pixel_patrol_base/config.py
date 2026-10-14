@@ -17,6 +17,7 @@ DEFAULT_MB_PER_WORKER: float = 4096.0
 MIN_MB_PER_WORKER: float = 50.0
 # rows per row group in the final parquet
 DEFAULT_PARQUET_ROW_GROUP_SIZE: int = 2048
+MIN_PARQUET_ROW_GROUP_SIZE: int = MIN_ROWS_PER_PART
 
 # Legacy alias - kept so any direct import still works during the transition
 DEFAULT_RECORDS_FLUSH_EVERY_N: int = DEFAULT_ROWS_PER_PART
