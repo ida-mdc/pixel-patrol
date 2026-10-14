@@ -6,10 +6,22 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
-from pixel_patrol_base.config import DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER
+from pixel_patrol_base.config import (
+    DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_PARQUET_ROW_GROUP_SIZE,
+    MIN_MB_PER_WORKER, MIN_PARQUET_ROW_GROUP_SIZE, MIN_ROWS_PER_PART,
+)
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
+
+# User-facing args that fall back to their default when set below this minimum.
+USER_MINIMUMS = {
+    "max_workers": 1,
+    "max_images_per_task": 1,
+    "mb_per_worker": MIN_MB_PER_WORKER,
+    "rows_per_part": MIN_ROWS_PER_PART,
+    "parquet_row_group_size": MIN_PARQUET_ROW_GROUP_SIZE,
+}
 
 
 @dataclass
@@ -56,6 +68,20 @@ class ProcessingConfig:
                     raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")
         if self.rows_per_part < 1:
             raise ValueError("rows_per_part must be a positive integer.")
+
+    @classmethod
+    def from_user_args(cls, **kwargs) -> ProcessingConfig:
+        """Build a config from user input: None means unset, a value below its minimum is dropped with a warning."""
+        kwargs = {name: value for name, value in kwargs.items() if value is not None}
+        for name, minimum in USER_MINIMUMS.items():
+            if kwargs.get(name, minimum) < minimum:
+                logger.warning("%s=%s is below %g, using the default.", name, kwargs[name], minimum)
+                del kwargs[name]
+        rows_per_part = kwargs.get("rows_per_part", DEFAULT_ROWS_PER_PART)
+        if kwargs.get("parquet_row_group_size", DEFAULT_PARQUET_ROW_GROUP_SIZE) > rows_per_part:
+            logger.info("parquet_row_group_size capped at rows_per_part (%d).", rows_per_part)
+            kwargs["parquet_row_group_size"] = rows_per_part
+        return cls(**kwargs)
 
     def effective_mb_per_worker(self) -> float:
         return DEFAULT_MB_PER_WORKER if self.mb_per_worker is None else self.mb_per_worker

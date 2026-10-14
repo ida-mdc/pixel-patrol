@@ -47,6 +47,9 @@ def resolve_and_validate_project_path(raw_path: Union[str, Path], base_dir: Path
     Resolves and validates a path for inclusion in a project.
     Logs warnings and returns None if invalid, or if outside base_dir.
     """
+    if raw_path == "":
+        logger.warning("Path is empty.")
+        return None
     try:
         candidate_path = Path(raw_path)
         resolved_path = candidate_path.resolve() if candidate_path.is_absolute() else (base_dir / candidate_path).resolve()
@@ -55,17 +58,14 @@ def resolve_and_validate_project_path(raw_path: Union[str, Path], base_dir: Path
 
         if not is_valid:
             logger.warning(
-                f"Path not valid ('{reason}') and will be skipped: {raw_path} (resolved to {resolved_path})."
+                f"Path not valid ('{reason}'): {raw_path} (resolved to {resolved_path})."
             )
             return None
 
         try:
             resolved_path.relative_to(base_dir)
         except ValueError:
-            logger.warning(
-                f"Path '{resolved_path}' is not within the project base directory "
-                f"'{base_dir}' and will be skipped."
-            )
+            logger.warning(f"Path '{resolved_path}' is not within the project base directory '{base_dir}'.")
             return None
 
         return resolved_path

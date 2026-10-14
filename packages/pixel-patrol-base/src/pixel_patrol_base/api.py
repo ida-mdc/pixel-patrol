@@ -96,27 +96,21 @@ def process_files(
     """
     if log_file:
         _setup_file_logging(project)
-    config_kwargs = {}
-    if rows_per_part is not None:
-        config_kwargs["rows_per_part"] = rows_per_part
-    if mb_per_worker is not None:
-        config_kwargs["mb_per_worker"] = mb_per_worker
-    if max_images_per_task is not None:
-        config_kwargs["max_images_per_task"] = max_images_per_task
-    if slice_size is not None:
-        config_kwargs["slice_size"] = slice_size
-    processing_config = ProcessingConfig(
+    processing_config = ProcessingConfig.from_user_args(
         processors_included=processors_included or set(),
         processors_excluded=processors_excluded or set(),
         selected_file_extensions=selected_file_extensions or "all",
         max_workers=max_workers,
+        mb_per_worker=mb_per_worker,
+        max_images_per_task=max_images_per_task,
+        slice_size=slice_size,
+        rows_per_part=rows_per_part,
         parquet_row_group_size=parquet_row_group_size,
         metadata=ProjectMetadata(
             flavor=flavor or "",
             description=description or "",
             omit_base_dir=omit_base_dir,
         ),
-        **config_kwargs,
     )
     logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)

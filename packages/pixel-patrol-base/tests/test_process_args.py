@@ -9,7 +9,8 @@ import pytest
 
 import pixel_patrol_base
 from pixel_patrol_base import api
-from pixel_patrol_base.core.processing_config import ProcessingConfig
+from pixel_patrol_base.core.processing_config import USER_MINIMUMS, ProcessingConfig
+from pixel_patrol_base.launch_server import _get_process_args
 from pixel_patrol_base.process_args import PROCESS_ARGS
 
 ARG_NAMES = [a.name for a in PROCESS_ARGS]
@@ -49,6 +50,15 @@ def test_process_arg_is_documented_api_argument(arg):
 def test_process_arg_is_a_launcher_field(arg):
     form_name = ARG_TO_FORM.get(arg, arg)
     assert f'name="{form_name}"' in LAUNCHER_HTML, f"launcher form has no field '{form_name}'"
+
+
+@pytest.mark.parametrize("arg, minimum", USER_MINIMUMS.items())
+def test_launcher_gets_the_enforced_minimum(arg, minimum):
+    assert _get_process_args()[arg]["minimum"] == minimum
+
+
+def test_launcher_gets_no_minimum_for_unlimited_args():
+    assert _get_process_args()["description"]["minimum"] is None
 
 
 def test_launcher_help_refers_to_real_args():

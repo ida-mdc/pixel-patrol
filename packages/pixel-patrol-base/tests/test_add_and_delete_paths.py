@@ -49,19 +49,12 @@ def test_add_paths_multiple_to_initial_base_dir_only(project_instance: Project, 
     assert len(updated_project.paths) == len(temp_test_dirs)
 
 
-def test_add_paths_no_change_if_invalid_paths_and_only_base_dir(project_instance: Project, tmp_path: Path, caplog):
-    """
-    Test that if only base_dir is present and invalid paths are added,
-    the paths list remains unchanged (i.e., still contains only base_dir).
-    """
-    assert project_instance.paths == [project_instance.base_dir]  # Initial state from fixture
-
+def test_add_paths_invalid_path_raises_and_leaves_paths_unchanged(project_instance: Project, tmp_path: Path, temp_test_dirs: List[Path]):
     non_existent_path = tmp_path / "non_existent_dir_2"
-    with caplog.at_level(logging.INFO):
-        api.add_paths(project_instance, str(non_existent_path))
+    with pytest.raises(ValueError, match="non_existent_dir_2"):
+        api.add_paths(project_instance, [temp_test_dirs[0], non_existent_path])
 
-    assert project_instance.paths == [project_instance.base_dir]  # Should still only contain base_dir
-    assert "No valid or non-redundant paths provided" in caplog.text
+    assert project_instance.paths == [project_instance.base_dir]  # the valid path was not added either
 
 
 def test_add_paths_single_string(project_instance: Project, temp_test_dirs: List[Path]):
@@ -101,35 +94,32 @@ def test_add_paths_multiple_mixed_types(project_instance: Project, temp_test_dir
     assert len(updated_project.paths) == 2  # No new path was added from temp_test_dirs[0] which was already there
 
 
-def test_add_paths_non_existent_path_is_skipped(project_instance: Project, tmp_path: Path, caplog):
-    # This test should now verify that if base_dir is present and invalid paths are added, base_dir remains.
-    assert project_instance.paths == [project_instance.base_dir]
+def test_add_paths_non_existent_path_raises(project_instance: Project, tmp_path: Path, caplog):
     non_existent_path = tmp_path / "non_existent_dir_3"
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="non_existent_dir_3"):
         api.add_paths(project_instance, str(non_existent_path))
-    assert project_instance.paths == [project_instance.base_dir]  # Path should not be added, base_dir preserved
-    assert "Path not valid ('not found') and will be skipped" in caplog.text
+    assert "Path not valid ('not found')" in caplog.text
 
 
-def test_add_paths_file_is_skipped(project_instance: Project, tmp_path: Path, caplog):
-    # This test should now verify that if base_dir is present and files are added, base_dir remains.
-    assert project_instance.paths == [project_instance.base_dir]
+def test_add_paths_file_raises(project_instance: Project, tmp_path: Path, caplog):
     test_file = tmp_path / "test_file_2.txt"
     test_file.touch()
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="test_file_2.txt"):
         api.add_paths(project_instance, str(test_file))
-    assert project_instance.paths == [project_instance.base_dir]  # File should not be added, base_dir preserved
-    assert "Path not valid ('not a directory') and will be skipped" in caplog.text
+    assert "Path not valid ('not a directory')" in caplog.text
 
 
-def test_add_paths_path_outside_base_is_skipped(project_instance: Project, tmp_path: Path, caplog):
-    # This test should now verify that if base_dir is present and outside paths are added, base_dir remains.
-    assert project_instance.paths == [project_instance.base_dir]
+def test_add_paths_empty_path_raises(project_instance: Project, caplog):
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="''"):
+        api.add_paths(project_instance, "")
+    assert "Path is empty" in caplog.text
+
+
+def test_add_paths_path_outside_base_raises(project_instance: Project, tmp_path: Path, caplog):
     outside_dir = tmp_path.parent / "outside_project_dir_2"
     outside_dir.mkdir(exist_ok=True)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="outside_project_dir_2"):
         api.add_paths(project_instance, str(outside_dir))
-    assert project_instance.paths == [project_instance.base_dir]  # Path should not be added, base_dir preserved
     assert "is not within the project base directory" in caplog.text
     outside_dir.rmdir()
 

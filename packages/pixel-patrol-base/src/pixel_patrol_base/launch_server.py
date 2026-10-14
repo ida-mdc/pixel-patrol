@@ -38,6 +38,7 @@ from packaging.version import InvalidVersion, Version
 
 from pixel_patrol_base import api
 from pixel_patrol_base import report_library as library
+from pixel_patrol_base.core.processing_config import USER_MINIMUMS
 from pixel_patrol_base.process_args import PROCESS_ARGS
 from pixel_patrol_base.viewer_server import (
     _discover_installed_extensions,
@@ -164,8 +165,8 @@ def _get_available_loaders() -> list:
 
 
 def _get_process_args() -> dict:
-    """Help text and default of every process arg, keyed by arg name."""
-    return {a.name: {"help": a.help, "default": a.default} for a in PROCESS_ARGS}
+    """Help text, default and minimum (None if unlimited) of every process arg, keyed by arg name."""
+    return {a.name: {"help": a.help, "default": a.default, "minimum": USER_MINIMUMS.get(a.name)} for a in PROCESS_ARGS}
 
 
 def _get_available_processors() -> list:

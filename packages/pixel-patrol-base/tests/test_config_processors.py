@@ -5,6 +5,10 @@ Uses processor NAME values ("raster-basic", "raster-histogram", "thumbnail") whi
 what the production filtering code in project.py matches against, not class names.
 """
 
+import re
+
+import pytest
+
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.project import _filter_processors as _apply_processor_filter
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
@@ -46,6 +50,19 @@ class TestProcessorSelection:
 
         assert len(filtered) == 1
         assert filtered[0].NAME == "raster-basic"
+
+    @pytest.mark.parametrize("field", ["processors_included", "processors_excluded"])
+    def test_unknown_processor_raises_with_available_names(self, field):
+        processors = discover_processor_plugins()
+        available = ", ".join(sorted(p.NAME for p in processors))
+        with pytest.raises(ValueError, match=re.escape(f"Unknown processor(s): nope. Available: {available}.")):
+            _apply_processor_filter(processors, ProcessingConfig(**{field: {"nope"}}))
+
+    def test_unknown_name_in_ignored_exclude_list_raises(self):
+        processors = discover_processor_plugins()
+        config = ProcessingConfig(processors_included={processors[0].NAME}, processors_excluded={"nope"})
+        with pytest.raises(ValueError, match="Unknown processor"):
+            _apply_processor_filter(processors, config)
 
     def test_configuration_defaults(self):
         """ProcessingConfig starts with empty include/exclude sets."""

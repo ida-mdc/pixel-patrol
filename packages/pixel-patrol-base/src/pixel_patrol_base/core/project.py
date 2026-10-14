@@ -56,14 +56,14 @@ class Project:
 
         paths_to_add_raw = validation.validate_paths_type(paths)
 
-        validated_paths_to_process = []
-        for p_input in paths_to_add_raw:
-            validated_path = validation.resolve_and_validate_project_path(p_input, self.base_dir)
-            if validated_path:
-                validated_paths_to_process.append(validated_path)
+        validated_paths_to_process = [validation.resolve_and_validate_project_path(p, self.base_dir)
+                                      for p in paths_to_add_raw]
+        invalid = [f"'{p}'" for p, v in zip(paths_to_add_raw, validated_paths_to_process) if v is None]
+        if invalid:
+            raise ValueError(f"Invalid path(s), not a folder inside '{self.base_dir}': {', '.join(invalid)}")
 
         if not validated_paths_to_process:
-            logger.info(f"Project Core: No valid or non-redundant paths provided to add to project '{self.name}'. No change.")
+            logger.info(f"Project Core: No paths provided to add to project '{self.name}'. No change.")
             return self
 
         initial_paths_set = set(self.paths)
@@ -358,11 +358,13 @@ def _log_processing_summary(project_name: str, stats: dict) -> None:
 
 def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
     """Apply config.processors_included/excluded; included takes precedence over excluded."""
+    unknown = (config.processors_included | config.processors_excluded) - {p.NAME for p in processors}
+    if unknown:
+        raise ValueError(f"Unknown processor(s): {', '.join(sorted(unknown))}. "
+                         f"Available: {', '.join(sorted(p.NAME for p in processors))}.")
     if config.processors_included:
         return [p for p in processors if p.NAME in config.processors_included]
-    if config.processors_excluded:
-        return [p for p in processors if p.NAME not in config.processors_excluded]
-    return processors
+    return [p for p in processors if p.NAME not in config.processors_excluded]
 
 
 def _resolve_extensions(

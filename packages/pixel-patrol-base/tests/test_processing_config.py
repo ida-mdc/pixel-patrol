@@ -1,7 +1,7 @@
 import pytest
 from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART
+from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART, MIN_MB_PER_WORKER, MIN_PARQUET_ROW_GROUP_SIZE, MIN_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -75,6 +75,63 @@ def test_max_workers_zero_raises():
 def test_max_workers_negative_raises():
     with pytest.raises(ValueError, match="max_workers must be a positive integer"):
         ProcessingConfig(max_workers=-1)
+
+
+# --- from_user_args ---
+
+def test_from_user_args_ignores_unset_args():
+    config = ProcessingConfig.from_user_args(max_workers=None, mb_per_worker=None, slice_size=None)
+    assert (config.max_workers, config.mb_per_worker, config.slice_size) == (None, None, None)
+
+
+def test_from_user_args_keeps_valid_max_workers():
+    assert ProcessingConfig.from_user_args(max_workers=4).max_workers == 4
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_from_user_args_max_workers_below_one_falls_back_to_default(value, caplog):
+    assert ProcessingConfig.from_user_args(max_workers=value).max_workers is None
+    assert f"max_workers={value} is below 1" in caplog.text
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_from_user_args_max_images_per_task_below_one_falls_back_to_default(value):
+    config = ProcessingConfig.from_user_args(max_images_per_task=value)
+    assert config.max_images_per_task == DEFAULT_MAX_IMAGES_PER_TASK
+
+
+@pytest.mark.parametrize("value", [-5.0, 0, MIN_MB_PER_WORKER - 0.1])
+def test_from_user_args_mb_per_worker_below_minimum_falls_back_to_default(value):
+    assert ProcessingConfig.from_user_args(mb_per_worker=value).effective_mb_per_worker() == DEFAULT_MB_PER_WORKER
+
+
+def test_from_user_args_keeps_mb_per_worker_at_minimum():
+    assert ProcessingConfig.from_user_args(mb_per_worker=MIN_MB_PER_WORKER).mb_per_worker == MIN_MB_PER_WORKER
+
+
+@pytest.mark.parametrize("value", [-10, 0, 1, MIN_ROWS_PER_PART - 1])
+def test_from_user_args_rows_per_part_below_minimum_falls_back_to_default(value):
+    assert ProcessingConfig.from_user_args(rows_per_part=value).rows_per_part == DEFAULT_ROWS_PER_PART
+
+
+def test_from_user_args_keeps_rows_per_part_at_minimum():
+    assert ProcessingConfig.from_user_args(rows_per_part=MIN_ROWS_PER_PART).rows_per_part == MIN_ROWS_PER_PART
+
+
+@pytest.mark.parametrize("value", [-5, 0, 1, MIN_PARQUET_ROW_GROUP_SIZE - 1])
+def test_from_user_args_row_group_size_below_minimum_falls_back_to_default(value):
+    assert ProcessingConfig.from_user_args(parquet_row_group_size=value).parquet_row_group_size is None
+
+
+def test_from_user_args_row_group_size_capped_at_rows_per_part():
+    config = ProcessingConfig.from_user_args(rows_per_part=100, parquet_row_group_size=500)
+    assert config.parquet_row_group_size == 100
+    assert ProcessingConfig.from_user_args(rows_per_part=100).parquet_row_group_size == 100  # default 2048 is larger
+
+
+def test_from_user_args_row_group_size_kept_when_it_fits():
+    assert ProcessingConfig.from_user_args().parquet_row_group_size is None
+    assert ProcessingConfig.from_user_args(rows_per_part=1000, parquet_row_group_size=500).parquet_row_group_size == 500
 
 
 # --- mb_per_worker ---
