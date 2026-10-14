@@ -1396,12 +1396,12 @@
     {
       "source": "file",
       "target": "widget:file-stats",
-      "via": "size_bytes"
+      "via": "modification_date"
     },
     {
       "source": "processor:raster-histogram",
       "target": "widget:histogram",
-      "via": "histogram_min"
+      "via": "histogram_nan_count"
     },
     {
       "source": "file",
@@ -1414,11 +1414,6 @@
       "via": "dtype"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
       "source": "loader:bioio",
       "target": "widget:histogram",
       "via": "dtype"
@@ -1429,34 +1424,54 @@
       "via": "dtype"
     },
     {
-      "source": "loader:h5",
-      "target": "widget:image-table",
-      "via": "h5_attributes"
-    },
-    {
-      "source": "processor:raster-basic",
-      "target": "widget:image-table",
-      "via": "nan_fraction"
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
     },
     {
       "source": "file",
       "target": "widget:image-table",
-      "via": "imported_path_short"
+      "via": "name"
     },
     {
       "source": "derived",
       "target": "widget:image-table",
-      "via": "size_<axis>"
+      "via": "ndim"
     },
     {
       "source": "processor:thumbnail",
       "target": "widget:image-table",
-      "via": "thumbnail_dtype"
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "processor:raster-quality",
       "target": "widget:image-table",
-      "via": "dark_clipping_fraction"
+      "via": "bright_clipping_fraction"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:image-table",
+      "via": "std_intensity"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:image-table",
+      "via": "dim_order"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:image-table",
+      "via": "dim_order"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "dim_order"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:image-table",
+      "via": "dim_order"
     },
     {
       "source": "agg",
@@ -1464,37 +1479,22 @@
       "via": "dim_<axis>"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
       "source": "loader:h5",
       "target": "widget:metadata",
       "via": "dim_order"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
       "source": "loader:bioio",
       "target": "widget:metadata",
       "via": "dim_order"
     },
     {
       "source": "loader:tifffile",
+      "target": "widget:metadata",
+      "via": "dim_order"
+    },
+    {
+      "source": "loader:zarr",
       "target": "widget:metadata",
       "via": "dim_order"
     },
@@ -1526,7 +1526,7 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-basic",
-      "via": "min_intensity"
+      "via": "max_intensity"
     },
     {
       "source": "processor:raster-basic",
@@ -1536,22 +1536,22 @@
     {
       "source": "processor:raster-quality",
       "target": "widget:stats-across-dims-quality",
-      "via": "bright_clipping_fraction"
+      "via": "dark_clipping_fraction"
     },
     {
       "source": "file",
       "target": "widget:summary",
-      "via": "path"
+      "via": "size_bytes"
     },
     {
       "source": "file",
       "target": "widget:sunburst",
-      "via": "path"
+      "via": "size_bytes"
     },
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-basic",
-      "via": "min_intensity"
+      "via": "max_intensity"
     },
     {
       "source": "processor:raster-basic",
@@ -1561,7 +1561,7 @@
     {
       "source": "processor:raster-quality",
       "target": "widget:violin-quality",
-      "via": "bright_clipping_fraction"
+      "via": "dark_clipping_fraction"
     }
   ]
 }
