@@ -11,6 +11,11 @@ from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
 logger = logging.getLogger(__name__)
 
+# User-facing args that fall back to their default when set below this minimum.
+_USER_MINIMUMS = {
+    "max_workers": 1,
+}
+
 
 @dataclass
 class ProcessingConfig:
@@ -56,6 +61,16 @@ class ProcessingConfig:
                     raise ValueError(f"slice_size['{dim}'] must be -1 or a positive integer.")
         if self.rows_per_part < 1:
             raise ValueError("rows_per_part must be a positive integer.")
+
+    @classmethod
+    def from_user_args(cls, **kwargs) -> ProcessingConfig:
+        """Build a config from user input: None means unset, a value below its minimum is dropped with a warning."""
+        kwargs = {name: value for name, value in kwargs.items() if value is not None}
+        for name, minimum in _USER_MINIMUMS.items():
+            if kwargs.get(name, minimum) < minimum:
+                logger.warning("%s=%s is below %g, using the default.", name, kwargs[name], minimum)
+                del kwargs[name]
+        return cls(**kwargs)
 
     def effective_mb_per_worker(self) -> float:
         return DEFAULT_MB_PER_WORKER if self.mb_per_worker is None else self.mb_per_worker

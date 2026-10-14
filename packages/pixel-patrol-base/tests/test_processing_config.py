@@ -77,6 +77,23 @@ def test_max_workers_negative_raises():
         ProcessingConfig(max_workers=-1)
 
 
+# --- from_user_args ---
+
+def test_from_user_args_ignores_unset_args():
+    config = ProcessingConfig.from_user_args(max_workers=None, mb_per_worker=None, slice_size=None)
+    assert (config.max_workers, config.mb_per_worker, config.slice_size) == (None, None, None)
+
+
+def test_from_user_args_keeps_valid_max_workers():
+    assert ProcessingConfig.from_user_args(max_workers=4).max_workers == 4
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_from_user_args_max_workers_below_one_falls_back_to_default(value, caplog):
+    assert ProcessingConfig.from_user_args(max_workers=value).max_workers is None
+    assert f"max_workers={value} is below 1" in caplog.text
+
+
 # --- mb_per_worker ---
 
 def test_mb_per_worker_valid():
