@@ -1,7 +1,7 @@
 import pytest
 from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART, MIN_MB_PER_WORKER
+from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART, MIN_MB_PER_WORKER, MIN_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -107,6 +107,15 @@ def test_from_user_args_mb_per_worker_below_minimum_falls_back_to_default(value)
 
 def test_from_user_args_keeps_mb_per_worker_at_minimum():
     assert ProcessingConfig.from_user_args(mb_per_worker=MIN_MB_PER_WORKER).mb_per_worker == MIN_MB_PER_WORKER
+
+
+@pytest.mark.parametrize("value", [-10, 0, 1, MIN_ROWS_PER_PART - 1])
+def test_from_user_args_rows_per_part_below_minimum_falls_back_to_default(value):
+    assert ProcessingConfig.from_user_args(rows_per_part=value).rows_per_part == DEFAULT_ROWS_PER_PART
+
+
+def test_from_user_args_keeps_rows_per_part_at_minimum():
+    assert ProcessingConfig.from_user_args(rows_per_part=MIN_ROWS_PER_PART).rows_per_part == MIN_ROWS_PER_PART
 
 
 # --- mb_per_worker ---

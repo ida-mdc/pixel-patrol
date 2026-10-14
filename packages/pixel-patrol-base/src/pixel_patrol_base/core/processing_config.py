@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
 
 from pixel_patrol_base.config import (
-    DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, MIN_MB_PER_WORKER,
+    DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER,
+    MIN_MB_PER_WORKER, MIN_ROWS_PER_PART,
 )
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
 
@@ -18,6 +19,7 @@ _USER_MINIMUMS = {
     "max_workers": 1,
     "max_images_per_task": 1,
     "mb_per_worker": MIN_MB_PER_WORKER,
+    "rows_per_part": MIN_ROWS_PER_PART,
 }
 
 

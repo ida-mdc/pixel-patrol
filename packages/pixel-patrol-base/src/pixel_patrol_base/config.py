@@ -8,6 +8,7 @@ SPRITE_SIZE = 64
 ## Processing defaults
 # rows accumulated per output part file before flushing to disk
 DEFAULT_ROWS_PER_PART: int = 10_000
+MIN_ROWS_PER_PART: int = 100
 # max images per task (applies to both batch tasks and container sub-images);
 # caps task size to keep workers returning results frequently
 DEFAULT_MAX_IMAGES_PER_TASK: int = 200
