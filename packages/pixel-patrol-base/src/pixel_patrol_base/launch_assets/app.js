@@ -232,14 +232,16 @@ async function loadProcessors() {
   }
 }
 
-// Fill help text (and input placeholders) from the shared process-arg definitions.
+// Fill help text, input placeholders and minimums from the shared process-arg definitions.
 async function loadProcessArgs() {
   const res = await fetch("/api/process-args");
   const args = await res.json();
   for (const el of document.querySelectorAll("[data-arg]")) {
-    const { help, default: dflt } = args[el.dataset.arg];
-    if (el.tagName === "INPUT") el.placeholder = dflt ?? "";
-    else el.textContent = help;
+    const { help, default: dflt, minimum } = args[el.dataset.arg];
+    if (el.tagName === "INPUT") {
+      el.placeholder = dflt ?? "";
+      if (minimum != null) el.min = minimum;
+    } else el.textContent = help;
   }
 }
 

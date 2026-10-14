@@ -15,7 +15,7 @@ from pixel_patrol_base.core.project_metadata import ProjectMetadata
 logger = logging.getLogger(__name__)
 
 # User-facing args that fall back to their default when set below this minimum.
-_USER_MINIMUMS = {
+USER_MINIMUMS = {
     "max_workers": 1,
     "max_images_per_task": 1,
     "mb_per_worker": MIN_MB_PER_WORKER,
@@ -73,7 +73,7 @@ class ProcessingConfig:
     def from_user_args(cls, **kwargs) -> ProcessingConfig:
         """Build a config from user input: None means unset, a value below its minimum is dropped with a warning."""
         kwargs = {name: value for name, value in kwargs.items() if value is not None}
-        for name, minimum in _USER_MINIMUMS.items():
+        for name, minimum in USER_MINIMUMS.items():
             if kwargs.get(name, minimum) < minimum:
                 logger.warning("%s=%s is below %g, using the default.", name, kwargs[name], minimum)
                 del kwargs[name]
