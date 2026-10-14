@@ -12,7 +12,7 @@ on:
       - 'packages/**'
       - 'docs/**'
       - 'mkdocs.yml'
-      - '.github/workflows/deploy-viewer.yml'
+      - '.github/workflows/deploy-site.yml'
   workflow_dispatch:
 
 permissions:
@@ -75,8 +75,9 @@ jobs:
       - name: Generate extensions list
         run: python docs/gen_extensions_docs.py
 
-      # 4. Deploy the versioned docs to gh-pages/docs/ with mike. "latest" is
-      #    a redirect alias because GitHub Pages does not serve symlinks.
+      # 4. Commit the versioned docs to the local gh-pages branch with mike
+      #    ("latest" is a redirect alias: GitHub Pages does not serve symlinks).
+      #    Everything is pushed once at the end, so Pages runs a single build.
       - name: Configure git for mike
         run: |
           git config user.name "github-actions[bot]"
@@ -84,13 +85,13 @@ jobs:
 
       - name: Deploy docs (dev)
         if: github.ref_type == 'branch'
-        run: mike deploy --push $MIKE_PREFIX dev
+        run: mike deploy $MIKE_PREFIX dev
 
       - name: Deploy docs (release)
         if: github.ref_type == 'tag'
         run: |
-          mike deploy --push $MIKE_PREFIX --alias-type redirect --update-aliases "${GITHUB_REF_NAME#v}" latest
-          mike set-default --push $MIKE_PREFIX latest
+          mike deploy $MIKE_PREFIX --alias-type redirect --update-aliases "${GITHUB_REF_NAME#v}" latest
+          mike set-default $MIKE_PREFIX latest
 
       # 5. Releases only: assemble the landing page + viewer (the site minus
       #    docs/) and sync it into the gh-pages root, leaving docs/ to mike.
@@ -112,7 +113,7 @@ jobs:
             gh-pages-site/ gh-pages-branch/
           cd gh-pages-branch
           git add -A
-          git diff --cached --quiet || {
-            git commit -m "Update landing page and viewer for ${GITHUB_REF_NAME}"
-            git push origin gh-pages
-          }
+          git diff --cached --quiet || git commit -m "Update landing page and viewer for ${GITHUB_REF_NAME}"
+
+      - name: Push gh-pages
+        run: git push origin gh-pages
