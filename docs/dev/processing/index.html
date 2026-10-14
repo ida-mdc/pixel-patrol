@@ -806,17 +806,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#-slice-size" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        --slice-size
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1239,12 +1228,13 @@
 <p>Loaders are responsible for opening image files and reading their metadata - they determine which file formats are supported. Each piece of image metadata a loader extracts becomes a column in the parquet (e.g. <code>dtype</code>, pixel size, dimension sizes, acquisition metadata, ...). If multiple loaders support the same format, the metadata they extract may differ, so it is worth choosing the one best suited to your format.</p>
 <p>Without a loader, only file-system metadata is collected (<code>name</code>, <code>file_extension</code>, <code>size_bytes</code>, <code>path</code>, ...).</p>
 <p>Some loaders support <strong>container files</strong> - single files that hold multiple images. Each sub-image in a container generates its own rows in the parquet, identified by a <code>child_id</code> column.</p>
+<p>All loaders available when pixel-patrol is installed:</p>
 <table>
 <thead>
 <tr>
 <th>Loader ID</th>
 <th>What it reads</th>
-<th>Package required</th>
+<th>Package</th>
 </tr>
 </thead>
 <tbody>
@@ -1269,16 +1259,27 @@
 <td><code>pixel-patrol-loader-bio</code></td>
 </tr>
 <tr>
+<td><code>nifti</code></td>
+<td>NIfTI volumes</td>
+<td><code>pixel-patrol-loader-medical</code></td>
+</tr>
+<tr>
+<td><code>dicom</code></td>
+<td>DICOM files and series</td>
+<td><code>pixel-patrol-loader-medical</code></td>
+</tr>
+<tr>
+<td><code>geospatial</code></td>
+<td>GeoTIFF, NetCDF, and other geospatial rasters</td>
+<td><code>pixel-patrol-geospatial</code></td>
+</tr>
+<tr>
 <td><em>(none)</em></td>
 <td>Basic file info only (name, size, extension)</td>
 <td><code>pixel-patrol-base</code></td>
 </tr>
 </tbody>
 </table>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><code>pixel-patrol-loader-bio</code> is included in the <code>pixel-patrol</code> bundle. If you installed with <code>pip install pixel-patrol</code> or <code>uv pip install pixel-patrol</code>, all loaders are already available.</p>
-</div>
 <p>Additional loaders are available in the <a href="https://github.com/ida-mdc/pixel-patrol">GitHub repository</a>, and you can build your own - see <a href="../extensions/">Extensions</a>.</p>
 <h3 id="file-extensions">File extensions</h3>
 <p>By default, the loader processes all file extensions it supports. Restrict to specific types with <code>-e</code>:</p>
@@ -1327,6 +1328,11 @@
 <td><code>pixel-patrol-base</code></td>
 <td><code>laplacian_variance</code>, <code>spectral_slope</code>, <code>dark_clipping_fraction</code>, <code>bright_clipping_fraction</code></td>
 </tr>
+<tr>
+<td><code>nodata-statistics</code></td>
+<td><code>pixel-patrol-geospatial</code></td>
+<td><code>nodata_count</code></td>
+</tr>
 </tbody>
 </table>
 <p>Additional processors are available in the <a href="https://github.com/ida-mdc/pixel-patrol">GitHub repository</a>. You can also build your own - see <a href="../extensions/">Extensions</a>.</p>
@@ -1334,21 +1340,17 @@
 <p>Processors fall into two categories that determine what data they receive:</p>
 <ul>
 <li>
-<p><strong>Leaf processors</strong> (<code>raster-basic</code>, <code>raster-histogram</code>, <code>raster-quality</code>) run on individual <strong>leaf blocks</strong> - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (<code>obs_level=0</code>). The leaf block shape is controlled by <code>--slice-size</code>.</p>
+<p><strong>Leaf processors</strong> (<code>raster-basic</code>, <code>raster-histogram</code>, <code>raster-quality</code>) run on individual <strong>leaf blocks</strong> - the smallest spatial unit, by default one 2D plane at a time (one Z slice, one channel, etc.). Their results are aggregated up into the full-image summary (<code>obs_level=0</code>). The leaf block shape (CLI arg: <code>--slice-size</code>) sets the block size per dimension.</p>
 </li>
 <li>
-<p><strong>Memory processors</strong> (<code>thumbnail</code>) run once per <strong>memory chunk</strong>. For images that fit within the task size limit (1/8 of <code>mb_per_worker</code>, headroom for in-memory expansion), the memory chunk is the full image. For larger images that are split into spatial sub-regions, each sub-region is one memory chunk and the results are assembled before writing. Memory processors always produce a result at <code>obs_level=0</code>.</p>
+<p><strong>Memory processors</strong> (<code>thumbnail</code>) run once per <strong>memory chunk</strong>. For images that fit the task size, the memory chunk is the full image. For larger images, the results are assembled before writing the table. Memory processors always produce a result at <code>obs_level=0</code>.</p>
 </li>
 </ul>
-<h3 id="-slice-size"><code>--slice-size</code></h3>
-<p>Sets how finely statistics are split per dimension, for example coarser steps for a smaller table. It only affects what is saved to the table, not how the data is loaded. See the <a href="../cli/#pixel-patrol-process">CLI reference</a> for the details.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--slice-size<span class="w"> </span><span class="nv">Z</span><span class="o">=</span><span class="m">5</span><span class="w"> </span>--slice-size<span class="w"> </span><span class="nv">Y</span><span class="o">=</span><span class="m">512</span>
-</code></pre></div>
 <hr />
 <h2 id="the-parquet-file">The parquet file</h2>
 <p>The output <code>.parquet</code> file is the PixelPatrol table. Its columns come from three sources: the file system (always), the loader (if specified), and each processor.</p>
 <h3 id="row-structure">Row structure</h3>
-<p>A file does not always map to a single row. The parquet uses an <code>obs_level</code> column to represent a hierarchy of observations:</p>
+<p>An image does not always map to a single row. The parquet uses an <code>obs_level</code> column to represent a hierarchy of observations:</p>
 <ul>
 <li><strong><code>obs_level = 0</code></strong> - full-image aggregate: one row per image (or per sub-image in a container), with statistics aggregated over all dimensions.</li>
 <li><strong><code>obs_level = 1</code></strong> - per single dimension: one row per Z slice (aggregated over all other dims), one row per C slice (aggregated over all other dims), etc. The <code>dim_z</code>, <code>dim_t</code>, <code>dim_c</code>, <code>dim_s</code> columns identify which dimension value the row belongs to; the others are <code>null</code>.</li>
@@ -1508,36 +1510,36 @@
 <h3 id="project-metadata">Project metadata</h3>
 <p>Project metadata (name, description, version, processing stats, base directory, paths) is embedded in the parquet file's own metadata fields, not as data columns. It is accessible via <code>api.load()</code> and shown in the viewer footer. See the <a href="../privacy/">privacy policy</a> for what a table contains before sharing it.</p>
 <p>To omit the base directory from the parquet metadata (for example when sharing a table without revealing local filesystem paths):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--omit-base-dir
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--omit-base-dir
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="n">omit_base_dir</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="n">omit_base_dir</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 <hr />
 <h2 id="parallelism">Parallelism</h2>
 <p>Processing runs in parallel using Dask workers. On a local machine (laptop or workstation), PixelPatrol auto-detects an appropriate number of worker processes based on available CPUs and RAM. On an HPC cluster you connect to an existing Dask scheduler instead and workers are whatever the cluster provides.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Override the default worker count:</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--max-workers<span class="w"> </span><span class="m">8</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Disable parallelism (single process, useful for debugging):</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--max-workers<span class="w"> </span><span class="m">1</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Override the default worker count:</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--max-workers<span class="w"> </span><span class="m">8</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Disable parallelism (single process, useful for debugging):</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--max-workers<span class="w"> </span><span class="m">1</span>
 </code></pre></div>
 <h3 id="connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--scheduler<span class="w"> </span>tcp://hostname:8786
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--scheduler<span class="w"> </span>tcp://hostname:8786
 </code></pre></div>
 <p>From the Python API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dask.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pixel_patrol_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">api</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">project</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">create_project</span><span class="p">(</span><span class="s2">"my-project"</span><span class="p">,</span> <span class="n">base_dir</span><span class="o">=</span><span class="s2">"my-data/"</span><span class="p">,</span> <span class="n">loader</span><span class="o">=</span><span class="s2">"bioio"</span><span class="p">)</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="k">with</span> <span class="n">Client</span><span class="p">(</span><span class="s2">"tcp://hostname:8786"</span><span class="p">):</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dask.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pixel_patrol_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">api</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">project</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">create_project</span><span class="p">(</span><span class="s2">"my-project"</span><span class="p">,</span> <span class="n">base_dir</span><span class="o">=</span><span class="s2">"my-data/"</span><span class="p">,</span> <span class="n">loader</span><span class="o">=</span><span class="s2">"bioio"</span><span class="p">)</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">with</span> <span class="n">Client</span><span class="p">(</span><span class="s2">"tcp://hostname:8786"</span><span class="p">):</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="slurm-clusters-pixel-patrol-slurm">SLURM clusters (<code>pixel-patrol-slurm</code>)</h3>
 <p>The <code>pixel-patrol-slurm</code> package provides a single command that launches a Dask <code>SLURMCluster</code>, waits for workers to come online, and then runs <code>pixel-patrol process</code> - no manual cluster setup needed.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pixel-patrol-slurm<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--jobs<span class="w"> </span><span class="m">8</span><span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span><span class="w"> </span>--memory<span class="w"> </span>16GB<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>--partition<span class="w"> </span>gpu<span class="w"> </span>--walltime<span class="w"> </span><span class="m">02</span>:00:00<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>--<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--loader<span class="w"> </span>bioio
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>pixel-patrol-slurm<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>--jobs<span class="w"> </span><span class="m">8</span><span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span><span class="w"> </span>--memory<span class="w"> </span>16GB<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--partition<span class="w"> </span>gpu<span class="w"> </span>--walltime<span class="w"> </span><span class="m">02</span>:00:00<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span>--<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--loader<span class="w"> </span>bioio
 </code></pre></div>
 <p>Everything before <code>--</code> controls the SLURM cluster (number of jobs, cores per job, memory, partition, walltime). Everything after <code>--</code> is forwarded verbatim to <code>pixel-patrol process</code>; the <code>--scheduler</code> argument is injected automatically.</p>
 <hr />
@@ -1557,33 +1559,33 @@
 <p>On an existing cluster, worker memory is set on the cluster (e.g. SLURM <code>--memory</code>). Setting this above it can make workers run out of memory.</p>
 <h3 id="-max-images-per-task"><code>--max-images-per-task</code></h3>
 <p>Smaller values give smaller, more frequent tasks:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--mb-per-worker<span class="w"> </span><span class="m">2048</span><span class="w"> </span>--max-images-per-task<span class="w"> </span><span class="m">50</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--mb-per-worker<span class="w"> </span><span class="m">2048</span><span class="w"> </span>--max-images-per-task<span class="w"> </span><span class="m">50</span>
 </code></pre></div>
 <hr />
 <h2 id="output-options">Output options</h2>
 <p>Every option, including <code>--rows-per-part</code>, is described in the <a href="../cli/#pixel-patrol-process">CLI reference</a>.</p>
 <h3 id="-parquet-row-group-size"><code>--parquet-row-group-size</code></h3>
 <p>Smaller row groups speed up thumbnail loading in the viewer:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--parquet-row-group-size<span class="w"> </span><span class="m">512</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--parquet-row-group-size<span class="w"> </span><span class="m">512</span>
 </code></pre></div>
 <h3 id="-log-file"><code>--log-file</code></h3>
 <p>Write a debug log alongside the output parquet for troubleshooting:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--log-file
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span>--log-file
 </code></pre></div>
 <hr />
 <h2 id="parquet-metadata">Parquet metadata</h2>
 <p>Embed project metadata into the parquet file - some fields are shown in the viewer header, all are accessible via <code>api.load()</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>--name<span class="w"> </span><span class="s2">"Experiment 42"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span>--description<span class="w"> </span><span class="s2">"Treated vs control, 3 replicates"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span>--flavor<span class="w"> </span><span class="s2">"fluorescence"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>my-data/<span class="w"> </span>-o<span class="w"> </span>results.parquet<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span>--name<span class="w"> </span><span class="s2">"Experiment 42"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span>--description<span class="w"> </span><span class="s2">"Treated vs control, 3 replicates"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span>--flavor<span class="w"> </span><span class="s2">"fluorescence"</span>
 </code></pre></div>
 <p>From the API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="n">project</span><span class="p">,</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="n">flavor</span><span class="o">=</span><span class="s2">"fluorescence"</span><span class="p">,</span>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">"Treated vs control, 3 replicates"</span><span class="p">,</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">api</span><span class="o">.</span><span class="n">process_files</span><span class="p">(</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="n">project</span><span class="p">,</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="n">flavor</span><span class="o">=</span><span class="s2">"fluorescence"</span><span class="p">,</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">"Treated vs control, 3 replicates"</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="p">)</span>
 </code></pre></div>
 
 

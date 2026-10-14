@@ -973,8 +973,8 @@
 <a class="md-button md-button--primary" href="https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos">🍎 macOS</a>
 <a class="md-button md-button--primary" href="https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux">🐧 Linux</a></p>
 <div class="admonition warning">
-<p class="admonition-title">App only - no terminal commands</p>
-<p>The launcher gives you PixelPatrol's full workflow in your browser: process a folder of images and explore the interactive report. It does <strong>not</strong> add the <code>pixel-patrol</code> command to your terminal, and it has no Python API or add-on packages (extensions, SLURM). For scripting or extensions, install with uv (terminal steps below).</p>
+<p class="admonition-title">Launcher limits</p>
+<p>The launcher has no <code>pixel-patrol</code> terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (terminal steps below).</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">First time running it?</p>
@@ -1000,15 +1000,17 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol
 </code></pre></div>
 <p>Verify:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pixel-patrol<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pixel-patrol<span class="w"> </span>--version
 </code></pre></div>
 <hr />
 <h2 id="modular-install">Modular install</h2>
 <p>PixelPatrol is split into focused packages so you only install what you need. The core package (<code>pixel-patrol-base</code>) provides the CLI, viewer, and processing framework. Loaders and extra processors are optional add-ons.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol-base<span class="w">           </span><span class="c1"># core, includes image quality metrics</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol-loader-bio<span class="w">     </span><span class="c1"># BioIO + Zarr + Tifffile loaders (CZI, ND2, LIF, TIFF, ...)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol-loader-bio<span class="w">     </span><span class="c1"># BioIO + Zarr + Tifffile + H5 loaders (CZI, ND2, LIF, TIFF, ...)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol-loader-medical<span class="w"> </span><span class="c1"># NIfTI and DICOM loaders</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pixel-patrol-geospatial<span class="w">     </span><span class="c1"># GeoTIFF and NetCDF loader, nodata processor</span>
 </code></pre></div>
-<p><code>pixel-patrol-base</code> alone collects basic file metadata (name, size, extension) without reading image data. Add <code>pixel-patrol-loader-bio</code> to extract image metadata, pixel statistics, and thumbnails.</p>
+<p>Without a loader, only basic file metadata (name, size, extension) is collected and no image data is read. Install a loader package and choose one of its loaders with <code>--loader</code> to also get image metadata, pixel statistics, and thumbnails.</p>
 <hr />
 <h2 id="packages-overview">Packages overview</h2>
 <table>
@@ -1021,7 +1023,7 @@
 <tbody>
 <tr>
 <td><code>pixel-patrol</code></td>
-<td>Full bundle - everything below in one install</td>
+<td>Full bundle: base, loader-bio, loader-medical, and geospatial in one install</td>
 </tr>
 <tr>
 <td><code>pixel-patrol-base</code></td>
@@ -1029,7 +1031,15 @@
 </tr>
 <tr>
 <td><code>pixel-patrol-loader-bio</code></td>
-<td>BioIO, Zarr, and Tifffile loaders for scientific image formats</td>
+<td>BioIO, Zarr, Tifffile, and H5 loaders for scientific image formats</td>
+</tr>
+<tr>
+<td><code>pixel-patrol-loader-medical</code></td>
+<td>NIfTI and DICOM loaders</td>
+</tr>
+<tr>
+<td><code>pixel-patrol-geospatial</code></td>
+<td>GeoTIFF and NetCDF loader, nodata processor</td>
 </tr>
 </tbody>
 </table>

@@ -104,7 +104,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .col-section .node { background:var(--panel); margin:.25rem 0; }
   .col-section-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
                        font-weight:700; margin-bottom:.3rem; }
-  /* Bottom-sheet handle — hidden on desktop, shown on mobile */
+  /* Bottom-sheet handle - hidden on desktop, shown on mobile */
   .sheet-handle { display: none; }
   @media (max-width: 700px) {
     #graph { grid-template-columns: 1fr; gap: .8rem; }
@@ -519,7 +519,7 @@ def _write_columns_block(table: str) -> None:
 def main() -> None:
     catalog = build_catalog()
     if not catalog["widgets"]:
-        print("WARNING: Node not found or no widgets loaded — widget nodes omitted from schema map.")
+        print("WARNING: Node not found or no widgets loaded - widget nodes omitted from schema map.")
     HTML_OUT.parent.mkdir(parents=True, exist_ok=True)
     JSON_OUT.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
     ROW_SCHEMA_OUT.write_text(json.dumps(render_json_schema(catalog), indent=2), encoding="utf-8")

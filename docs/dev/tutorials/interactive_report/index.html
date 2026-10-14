@@ -996,7 +996,7 @@
 <h2 id="opening-your-interactive-report">Opening your interactive report</h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet
 </code></pre></div>
-<p>This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to <a href="https://pixelpatrol.app/viewer/">pixelpatrol.app/viewer/</a> and drag your own <code>.parquet</code> in directly (browser-WASM, practical limit ~2 GB).</p>
+<p>This starts a local server with native DuckDB and opens the viewer in your browser - recommended for any non-trivial dataset. You can also go to <a href="https://pixelpatrol.app/viewer/">pixelpatrol.app/viewer/</a> and drag your own <code>.parquet</code> in directly (runs in browser memory, so tables larger than a few GB may not load).</p>
 <p><strong>Useful launch flags:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--group-by<span class="w"> </span>file_extension<span class="w">   </span><span class="c1"># start grouped differently</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet<span class="w"> </span>--filter-col<span class="w"> </span>dtype<span class="w"> </span>--filter-op<span class="w"> </span>eq<span class="w"> </span>--filter-val<span class="w"> </span>uint16
@@ -1357,8 +1357,8 @@ NaN pixels are excluded from all calculations.
 <div>Count how many pixels equal <code>iinfo(dtype).max</code> (e.g. 255 for uint8, 65535 for uint16) and divide by total pixel count. Sub-dtype clipping (e.g. 12-bit data in uint16 peaking at 4095, not 65535) is flagged by a separate warning below if <code>max_intensity</code> is below the dtype ceiling.</div>
 </details>
 <div class="wc-flags">
-<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling — sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
-<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) — data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">🚩</span><div>Non-zero and rising: pixels at the dtype ceiling - sensor saturation. Real signal there is lost. Check exposure/gain settings.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div>The widget shows a separate warning if images peak at a known bit-depth boundary below the dtype ceiling (e.g. uint16 peaking at 4095 = 12-bit) - data stored in a wider type than acquired. This metric won't catch clipping at those sub-dtype ceilings.</div></div>
 </div>
 </div>
 

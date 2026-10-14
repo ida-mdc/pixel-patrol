@@ -1217,7 +1217,7 @@
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>The static viewer runs entirely in the browser and may not be able to load very large parquet files (e.g. 5 GB+). For large tables use <code>pixel-patrol view</code> instead, which is backed by a local Python server with native DuckDB.</p>
+<p>The static viewer runs entirely in the browser and may not be able to load parquet files larger than a few GB. For large tables use <code>pixel-patrol view</code> instead, which is backed by a local Python server with native DuckDB.</p>
 </div>
 <hr />
 <h2 id="pixel-patrol-schema"><code>pixel-patrol schema</code></h2>
@@ -1226,8 +1226,8 @@
 </code></pre></div>
 <p>Two formats are available:</p>
 <ul>
-<li><strong><code>catalog</code></strong> (default) — full plugin catalog: every column with description, type, and producer; loader/processor/widget metadata; and the connection graph between them.</li>
-<li><strong><code>row-schema</code></strong> — a standard <a href="https://json-schema.org/">JSON Schema</a> document describing one parquet table row. Fixed columns are in <code>properties</code>; per-axis families (<code>size_*</code>, <code>dim_*</code>, <code>pixel_size_*</code>) are in <code>patternProperties</code>.</li>
+<li><strong><code>catalog</code></strong> (default) - full plugin catalog: every column with description, type, and producer; loader/processor/widget metadata; and the connection graph between them.</li>
+<li><strong><code>row-schema</code></strong> - a standard <a href="https://json-schema.org/">JSON Schema</a> document describing one parquet table row. Fixed columns are in <code>properties</code>; per-axis families (<code>size_*</code>, <code>dim_*</code>, <code>pixel_size_*</code>) are in <code>patternProperties</code>.</li>
 </ul>
 <p><strong>Options</strong></p>
 <table>

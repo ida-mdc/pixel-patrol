@@ -1065,7 +1065,7 @@
 </code></pre></div>
 <p>Processes all files in the project paths and writes the <code>.parquet</code> table. Most parameters correspond directly to the <a href="../cli/#pixel-patrol-process">CLI options</a>. API-specific notes:</p>
 <ul>
-<li><code>slice_size</code> - dict mapping dimension name to block size, e.g. <code>{"Z": 1, "Y": 512}</code>. See <a href="../processing/#-slice-size">slice-size</a>.</li>
+<li><code>slice_size</code> - dict mapping dimension name to block size, e.g. <code>{"Z": 1, "Y": 512}</code>. See <a href="../processing/#how-processors-see-the-image">How processors see the image</a>.</li>
 <li><code>processors_included</code> / <code>processors_excluded</code> - sets of processor IDs, e.g. <code>{"raster-basic", "thumbnail"}</code>. See <a href="../processing/#available-processors">Available processors</a>.</li>
 <li><code>selected_file_extensions</code> - set of extensions, e.g. <code>{"tif", "nd2"}</code>, or <code>"all"</code>.</li>
 <li><code>progress_callback</code> - <code>Callable[[int, int], None]</code> called with <code>(done, total)</code> after each completed record. <code>total</code> is <code>-1</code> until the full count is known.</li>
@@ -1126,7 +1126,7 @@
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>The static viewer runs entirely in the browser and may not be able to load very large parquet files (e.g. 5 GB+). For large tables use <code>api.view()</code> instead, which is backed by a local Python server with native DuckDB.</p>
+<p>The static viewer runs entirely in the browser and may not be able to load parquet files larger than a few GB. For large tables use <code>api.view()</code> instead, which is backed by a local Python server with native DuckDB.</p>
 </div>
 
 
