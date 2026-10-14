@@ -1396,7 +1396,27 @@
     {
       "source": "file",
       "target": "widget:file-stats",
-      "via": "modification_date"
+      "via": "file_extension"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:histogram",
+      "via": "dtype"
     },
     {
       "source": "processor:raster-histogram",
@@ -1409,39 +1429,29 @@
       "via": "name"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:histogram",
-      "via": "dtype"
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "child_id"
     },
     {
-      "source": "loader:tifffile",
-      "target": "widget:histogram",
-      "via": "dtype"
+      "source": "loader:zarr",
+      "target": "widget:image-table",
+      "via": "child_id"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:image-table",
+      "via": "child_id"
     },
     {
       "source": "loader:bioio",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:h5",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:h5",
       "target": "widget:image-table",
-      "via": "h5_attributes"
+      "via": "child_id"
     },
     {
-      "source": "file",
+      "source": "processor:raster-quality",
       "target": "widget:image-table",
-      "via": "modification_date"
-    },
-    {
-      "source": "derived",
-      "target": "widget:image-table",
-      "via": "num_pixels"
+      "via": "laplacian_variance"
     },
     {
       "source": "processor:raster-basic",
@@ -1449,9 +1459,19 @@
       "via": "max_intensity"
     },
     {
-      "source": "processor:raster-quality",
+      "source": "file",
       "target": "widget:image-table",
-      "via": "spectral_slope"
+      "via": "path"
+    },
+    {
+      "source": "derived",
+      "target": "widget:image-table",
+      "via": "num_pixels"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:image-table",
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "agg",
@@ -1459,42 +1479,12 @@
       "via": "dim_<axis>"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:image-table",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:image-table",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:image-table",
-      "via": "dim_order"
-    },
-    {
-      "source": "processor:thumbnail",
-      "target": "widget:image-table",
-      "via": "thumbnail_dtype"
-    },
-    {
-      "source": "derived",
-      "target": "widget:metadata",
-      "via": "ndim"
-    },
-    {
-      "source": "loader:zarr",
-      "target": "widget:metadata",
-      "via": "dtype"
-    },
-    {
       "source": "loader:tifffile",
       "target": "widget:metadata",
       "via": "dtype"
     },
     {
-      "source": "loader:bioio",
+      "source": "loader:zarr",
       "target": "widget:metadata",
       "via": "dtype"
     },
@@ -1504,14 +1494,24 @@
       "via": "dtype"
     },
     {
-      "source": "processor:thumbnail",
-      "target": "widget:mosaic",
-      "via": "thumbnail_norm_max"
+      "source": "loader:bioio",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "derived",
+      "target": "widget:metadata",
+      "via": "ndim"
     },
     {
       "source": "file",
       "target": "widget:mosaic",
       "via": "name"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:mosaic",
+      "via": "thumbnail_norm_max"
     },
     {
       "source": "processor:raster-basic",
@@ -1541,7 +1541,7 @@
     {
       "source": "file",
       "target": "widget:summary",
-      "via": "path"
+      "via": "file_extension"
     },
     {
       "source": "file",
