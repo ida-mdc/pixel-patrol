@@ -1,7 +1,7 @@
 import pytest
 from pixel_patrol_base.core.processing import _MAX_SIZE_EXPANSION_FACTOR, _task_budget_mb
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.config import DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART
+from pixel_patrol_base.config import DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_ROWS_PER_PART
 
 
 # --- Defaults ---
@@ -92,6 +92,12 @@ def test_from_user_args_keeps_valid_max_workers():
 def test_from_user_args_max_workers_below_one_falls_back_to_default(value, caplog):
     assert ProcessingConfig.from_user_args(max_workers=value).max_workers is None
     assert f"max_workers={value} is below 1" in caplog.text
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_from_user_args_max_images_per_task_below_one_falls_back_to_default(value):
+    config = ProcessingConfig.from_user_args(max_images_per_task=value)
+    assert config.max_images_per_task == DEFAULT_MAX_IMAGES_PER_TASK
 
 
 # --- mb_per_worker ---

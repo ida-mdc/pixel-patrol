@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # User-facing args that fall back to their default when set below this minimum.
 _USER_MINIMUMS = {
     "max_workers": 1,
+    "max_images_per_task": 1,
 }
 
 
