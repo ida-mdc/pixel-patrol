@@ -41,7 +41,7 @@ Answer the questions below and we'll walk you through each decision together, bu
     <div class="wiz-callout wiz-hidden" id="proc-api-slurm-warning" style="margin:0 20px 16px">
       ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI wrapper
       around <code>dask_jobqueue.SLURMCluster</code>. Switch to the <strong>CLI</strong> tab above for a ready-to-run
-      SLURM command, or see <a href="../processing.md#connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</a>
+      SLURM command, or see <a href="../../processing/#connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</a>
       to wire up a <code>SLURMCluster</code> by hand from a script.
     </div>
   </div>
@@ -219,7 +219,7 @@ Answer the questions below and we'll walk you through each decision together, bu
       A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
       This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
       who can open it in the <a href="https://pixelpatrol.app/viewer/" target="_blank">online viewer</a> without installing anything.
-      See the <a href="../privacy.md">privacy policy</a> for what's included before sharing it.
+      See the <a href="../../privacy/">privacy policy</a> for what's included before sharing it.
     </div>
     <input class="wiz-input" type="text" id="pwi-output"
            value="results.parquet"

@@ -74,7 +74,7 @@ A PixelPatrol table is a single `.parquet` file holding everything about your da
 </div>
 <div class="wc-body">
 
-<p>Your collaborator will need PixelPatrol installed (see the <a href="installation.md">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
+<p>Your collaborator will need PixelPatrol installed (see the <a href="../installation/">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
 
 ```bash
 pixel-patrol view results.parquet
@@ -134,7 +134,7 @@ pixel-patrol build-viewer-html -o viewer.html
 <p>Want to publish results online - on GitHub Pages, an institutional server, an S3 bucket, or any static host? Deploy the viewer as a site folder and link straight to your parquet.</p>
 
 <div class="wc-flags">
-<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>This is also the natural way to share a <strong>custom viewer</strong>: any extensions installed in your environment - including your own <a href="extension.md">viewer plugins</a> - are discovered and bundled into the site folder automatically, so your collaborators get your custom widgets without installing anything.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>This is also the natural way to share a <strong>custom viewer</strong>: any extensions installed in your environment - including your own <a href="../extension/">viewer plugins</a> - are discovered and bundled into the site folder automatically, so your collaborators get your custom widgets without installing anything.</div></div>
 </div>
 
 <p><strong>Step 1 - build a viewer site folder:</strong></p>
