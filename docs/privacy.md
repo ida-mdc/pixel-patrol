@@ -26,6 +26,10 @@ If your dataset contains sensitive information - such as patient data, proprieta
 
 This website is hosted on GitHub Pages (GitHub, Inc., a Microsoft subsidiary). GitHub automatically collects server logs including your IP address when you visit. We have no control over this data. See [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) for details.
 
+## Third-party requests
+
+Your files and tables are never uploaded. Loading the website or viewer requests fonts and libraries from third-party servers (jsdelivr, Google Fonts), which can see your IP address. The map widget also loads map tiles from a third-party server, and `pixel-patrol launch` checks PyPI for updates.
+
 ## Feedback form
 
 The feedback form on this website and in the viewer is powered by **Formspree** (Formspree, Inc.). When you submit feedback, your name, email address, and message are transmitted to Formspree and forwarded to our email inbox. We use this data only to respond to your feedback and do not share it further. Submission is entirely voluntary. See [Formspree's privacy policy](https://formspree.io/legal/privacy-policy/) for details.
