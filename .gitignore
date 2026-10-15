@@ -22,3 +22,4 @@ packages/pixel-patrol-base/src/pixel_patrol_base/viewer_dist/
 docs/assets/schema.html
 docs/assets/schema.json
 docs/assets/row-schema.json
+/schema.json
