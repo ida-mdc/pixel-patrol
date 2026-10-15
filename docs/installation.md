@@ -12,9 +12,6 @@ Download the **PixelPatrol Launcher** - a single clickable file for Windows, mac
 [🍎 macOS](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-macos){ .md-button .md-button--primary }
 [🐧 Linux](https://github.com/ida-mdc/pixel-patrol/releases/latest/download/pixel-patrol-launcher-linux){ .md-button .md-button--primary }
 
-!!! warning "Launcher limits"
-    The launcher has no `pixel-patrol` terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (terminal steps below).
-
 !!! note "First time running it?"
     - **Windows**: if SmartScreen shows a warning, click **More info** → **Run anyway**.
     - **macOS**: right-click the file → **Open** → confirm **Open** when macOS warns about an unidentified developer.

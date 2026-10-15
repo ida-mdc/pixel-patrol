@@ -8,9 +8,6 @@ Choose the path that fits you: the app (no terminal) or the terminal.
 2. It opens the **report manager** in your browser. Use **+ New Report** to process a folder of images, or **Import Report…** to add a `.parquet` file.
 3. Click any report to open it in the interactive viewer.
 
-!!! warning "Launcher limits"
-    The launcher has no `pixel-patrol` terminal command, Python API, or add-on packages (extensions, SLURM). For those, install with uv (Path B below).
-
 Already installed PixelPatrol in the terminal? Run `pixel-patrol launch` to open the same report manager.
 
 ---
