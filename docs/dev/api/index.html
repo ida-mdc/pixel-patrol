@@ -1119,10 +1119,10 @@
 <p>Builds a static viewer for sharing or hosting.</p>
 <ul>
 <li>If <code>output</code> ends in <code>.html</code> / <code>.htm</code>: writes a single self-contained HTML file.</li>
-<li>Otherwise: writes a GitHub Pages-style site folder.</li>
+<li>Otherwise: writes a GitHub Pages-style site folder with the viewer in <code>output/viewer/</code>.</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">api</span><span class="o">.</span><span class="n">build_viewer</span><span class="p">(</span><span class="s2">"viewer.html"</span><span class="p">)</span>     <span class="c1"># single file</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">api</span><span class="o">.</span><span class="n">build_viewer</span><span class="p">(</span><span class="s2">"gh-pages-out/"</span><span class="p">)</span>  <span class="c1"># site folder</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">api</span><span class="o">.</span><span class="n">build_viewer</span><span class="p">(</span><span class="s2">"viewer.html"</span><span class="p">)</span>  <span class="c1"># single file</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">api</span><span class="o">.</span><span class="n">build_viewer</span><span class="p">(</span><span class="s2">"site/"</span><span class="p">)</span>        <span class="c1"># site folder (viewer in site/viewer/)</span>
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>

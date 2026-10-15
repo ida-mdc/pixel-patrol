@@ -1204,16 +1204,16 @@
 <p>Packages the viewer as a self-contained static file for sharing or hosting without a running server.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>OUTPUT<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
-<p>If <code>OUTPUT</code> ends in <code>.html</code> or <code>.htm</code>, writes a single self-contained HTML file with all JS, CSS, and extensions inlined. Otherwise writes a GitHub Pages-style site folder.</p>
+<p>If <code>OUTPUT</code> ends in <code>.html</code> or <code>.htm</code>, writes a single self-contained HTML file with all JS, CSS, and extensions inlined. Otherwise writes a GitHub Pages-style site folder with the viewer in <code>OUTPUT/viewer/</code>.</p>
 <p><strong>Examples</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Single file - share alongside your .parquet:</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>viewer.html
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Site folder - deploy to any static host:</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>gh-pages/
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Load a remote parquet via URL:</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Open: gh-pages/index.html?data=https://yourserver.com/results.parquet</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Load a remote parquet via URL (the viewer is in site/viewer/):</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># https://your-host.com/site/viewer/?data=https://yourserver.com/results.parquet</span>
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>

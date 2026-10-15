@@ -1073,16 +1073,16 @@
 
 <p><strong>Step 1 - build a viewer site folder:</strong></p>
 
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>my-report-site/
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
 </code></pre></div>
 
-<p>This creates a <code>my-report-site/</code> directory with <code>index.html</code> and all viewer assets.</p>
+<p>This creates a <code>site/</code> directory with the viewer (<code>index.html</code> and all assets) in <code>site/viewer/</code>.</p>
 
 <p><strong>Step 2 - upload your parquet alongside the site</strong> (or to any public URL).</p>
 
 <p><strong>Step 3 - link to the viewer with a <code>?data=</code> parameter:</strong></p>
 
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>https://your-host.com/my-report-site/?data=https://your-host.com/results.parquet
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>https://your-host.com/site/viewer/?data=https://your-host.com/results.parquet
 </code></pre></div>
 
 <p>The viewer fetches the parquet from the URL, so it can live anywhere publicly reachable - S3, GitHub releases, institutional storage, you name it.</p>
@@ -1091,13 +1091,13 @@
 <summary>🔬 GitHub Pages, end to end</summary>
 <div>
 
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Build the viewer into your gh-pages output</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>docs/viewer/
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Build the viewer site</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Add the parquet to the same repo (or reference an external URL)</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>cp<span class="w"> </span>results.parquet<span class="w"> </span>docs/viewer/
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Add the parquet next to the viewer (or reference an external URL)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>cp<span class="w"> </span>results.parquet<span class="w"> </span>site/viewer/
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># After deploying to GitHub Pages, share:</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># After publishing the contents of site/ with GitHub Pages, share:</span>
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># https://your-org.github.io/your-repo/viewer/?data=https://your-org.github.io/your-repo/viewer/results.parquet</span>
 </code></pre></div>
 

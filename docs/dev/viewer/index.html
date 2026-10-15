@@ -1042,9 +1042,9 @@ for any installed version and needs an internet connection only for DuckDB.</p>
 <p>Open <code>viewer.html</code> in any browser and load your parquet from there. To share with someone, send them both files. See the <a href="../privacy/">privacy policy</a> for what's included in the parquet file before sharing it.</p>
 <p><strong>Hosted on a static server:</strong></p>
 <p>Deploy a viewer site folder and load a remote parquet via URL parameter:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>my-site/
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># deploy my-site/ to any static host, then open:</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># https://your-host.com/my-site/?data=https://your-host.com/results.parquet</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># the viewer is in site/viewer/; deploy site/ to any static host, then open:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># https://your-host.com/site/viewer/?data=https://your-host.com/results.parquet</span>
 </code></pre></div>
 <p><strong>Via URL parameter (hosted viewer):</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet
