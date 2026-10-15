@@ -1,0 +1,1456 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://pixelpatrol.app/docs/1.0.0/schema/">
+      
+      
+        <link rel="prev" href="../api/">
+      
+      
+        <link rel="next" href="../extensions/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Table Schema - Pixel Patrol Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#table-schema" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-header__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../assets/icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Pixel Patrol Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Table Schema
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tutorials/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href=".." class="md-tabs__link">
+          
+  
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-nav__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../assets/icon.png" alt="logo">
+
+    </a>
+    Pixel Patrol Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/interactive_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/sharing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/extension/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create an Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Report Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#all-table-columns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        All table columns
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="table-schema">Table Schema</h1>
+<p>Every PixelPatrol table is a single <code>.parquet</code> file. Its columns are assembled
+from the registered <strong>loaders</strong> (image metadata), <strong>processors</strong> (metrics), and a
+set of pipeline-generated columns; the <strong>viewer widgets</strong> then consume those
+columns to draw the interactive report.</p>
+<p>The same per-column descriptions below are embedded into each table's parquet
+field metadata, so produced files are self-describing.</p>
+<p>Two companion resources are generated directly from the installed plugins, so
+they always match the build:</p>
+<ul>
+<li><strong><a href="../assets/schema.html">Interactive table map</a></strong> - follow any <em>producer → column
+  → widget</em> path. Click a node for its description and connections; hover to trace
+  its links.</li>
+<li><strong><a href="../assets/schema.json">Full catalog as JSON</a></strong> - the machine-readable schema and
+  plugin catalog. Also available from the CLI:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pixel-patrol<span class="w"> </span>schema<span class="w">              </span><span class="c1"># writes schema.json in the current directory</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>pixel-patrol<span class="w"> </span>schema<span class="w"> </span>-o<span class="w"> </span>my/path/schema.json<span class="w">  </span><span class="c1"># custom output path</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>pixel-patrol<span class="w"> </span>schema<span class="w"> </span>--print<span class="w">      </span><span class="c1"># print to stdout (e.g. for piping)</span>
+</code></pre></div>
+<h2 id="all-table-columns">All table columns</h2>
+<p>Every column that can appear in a table, with the source that produces it. The
+table is generated from the installed plugins.</p>
+<!-- BEGIN GENERATED COLUMNS (docs/gen_schema_docs.py) -->
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+<th>Source</th>
+<th>Created by</th>
+<th>Package</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>common_base</code></td>
+<td><code>str</code></td>
+<td>Name of the longest path prefix shared by all import bases.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>depth</code></td>
+<td><code>int</code></td>
+<td>Depth of the path below the imported base directory.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>file_extension</code></td>
+<td><code>str</code></td>
+<td>Lower-cased file extension without the leading dot.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>imported_path</code></td>
+<td><code>str</code></td>
+<td>Path of the import base (the -p path or base directory) under which this file was found, relative to the project base directory ('.' when no -p paths were specified).</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>imported_path_short</code></td>
+<td><code>str</code></td>
+<td>Shortened, disambiguated label for the import base (only when several -p paths were used).</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>modification_date</code></td>
+<td><code>datetime</code></td>
+<td>Last modification timestamp of the file.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><code>str</code></td>
+<td>File or folder name, including extension.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>parent&lt;N&gt;</code></td>
+<td><code>str</code></td>
+<td>Name of one directory level of the containing directory, counted from the top: parent0 is the first directory below the base directory, parent1 the one below that; null when the file is not that deep.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td><code>str</code></td>
+<td>Path of the file (or folder), relative to the project base directory.</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>size_bytes</code></td>
+<td><code>int</code></td>
+<td>Size on disk in bytes (aggregated for folders).</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td><code>str</code></td>
+<td>Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container).</td>
+<td>File system</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>channel_names</code></td>
+<td><code>list</code></td>
+<td>Names of the image channels, if available.</td>
+<td>Loaders</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>child_id</code></td>
+<td><code>string</code></td>
+<td>Identifier of a sub-image within a container file (null for single-image files).</td>
+<td>Loaders</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>crs_epsg</code></td>
+<td><code>Optional</code></td>
+<td>EPSG code of the CRS; None if not EPSG-registered.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>crs_str</code></td>
+<td><code>Optional</code></td>
+<td>Coordinate reference system as a WKT string.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>dim_names</code></td>
+<td><code>list</code></td>
+<td>Human-readable names of the image axes.</td>
+<td>Loaders</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>dim_order</code></td>
+<td><code>string</code></td>
+<td>Axis order of the image, e.g. 'TCZYX'.</td>
+<td>Loaders</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>dtype</code></td>
+<td><code>string</code></td>
+<td>Pixel data type of the source image (e.g. 'uint8', 'float32').</td>
+<td>Loaders</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>footprint</code></td>
+<td><code>Optional</code></td>
+<td>Bounding-box footprint as a GeoJSON polygon in EPSG:4326.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>h5_attributes</code></td>
+<td><code>dict</code></td>
+<td>Raw HDF5 attributes of the dataset, merged with file root attributes.</td>
+<td>Loaders</td>
+<td>h5</td>
+<td>pixel-patrol-loader-bio</td>
+</tr>
+<tr>
+<td><code>h5_dataset_path</code></td>
+<td><code>string</code></td>
+<td>Path of the dataset within the HDF5 file.</td>
+<td>Loaders</td>
+<td>h5</td>
+<td>pixel-patrol-loader-bio</td>
+</tr>
+<tr>
+<td><code>latitude</code></td>
+<td><code>Optional</code></td>
+<td>Centroid latitude in WGS-84 degrees.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>longitude</code></td>
+<td><code>Optional</code></td>
+<td>Centroid longitude in WGS-84 degrees.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>nifti_intent</code></td>
+<td><code>string</code></td>
+<td>NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL').</td>
+<td>Loaders</td>
+<td>nifti</td>
+<td>pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>nodata_value</code></td>
+<td><code>Union</code></td>
+<td>Declared nodata/fill value from the file metadata.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>pixel_size_&lt;axis&gt;</code></td>
+<td><code>float</code></td>
+<td>Physical pixel size along the given axis, in the image's spatial unit.</td>
+<td>Loaders</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>shape</code></td>
+<td><code>list</code></td>
+<td>Raster dimensions as [bands, height, width].</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>zarr_attributes</code></td>
+<td><code>dict</code></td>
+<td>Raw key-value attributes stored in the Zarr/OME-Zarr group metadata.</td>
+<td>Loaders</td>
+<td>zarr</td>
+<td>pixel-patrol-loader-bio</td>
+</tr>
+<tr>
+<td><code>ndim</code></td>
+<td><code>int</code></td>
+<td>Number of image dimensions, derived from dim_order.</td>
+<td>Pipeline</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>num_pixels</code></td>
+<td><code>int</code></td>
+<td>Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels).</td>
+<td>Pipeline</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>size_&lt;axis&gt;</code></td>
+<td><code>int</code></td>
+<td>Extent (number of elements) of this row along the given axis.</td>
+<td>Pipeline</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>dim_&lt;axis&gt;</code></td>
+<td><code>int</code></td>
+<td>Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis.</td>
+<td>Aggregation</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>obs_level</code></td>
+<td><code>int</code></td>
+<td>Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns.</td>
+<td>Aggregation</td>
+<td>base processing</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>bright_clipping_fraction</code></td>
+<td><code>float32</code></td>
+<td>Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling.</td>
+<td>raster-quality</td>
+<td>raster-quality</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>dark_clipping_fraction</code></td>
+<td><code>float32</code></td>
+<td>Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end.</td>
+<td>raster-quality</td>
+<td>raster-quality</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>finite_pixel_count</code></td>
+<td><code>uint64</code></td>
+<td>Number of finite (non-NaN/Inf) pixels contributing to the statistics.</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>histogram_counts</code></td>
+<td><code>array</code></td>
+<td>Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins).</td>
+<td>raster-histogram</td>
+<td>raster-histogram</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>histogram_max</code></td>
+<td><code>float32</code></td>
+<td>Upper bound of the histogram's value range.</td>
+<td>raster-histogram</td>
+<td>raster-histogram</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>histogram_min</code></td>
+<td><code>float32</code></td>
+<td>Lower bound of the histogram's value range.</td>
+<td>raster-histogram</td>
+<td>raster-histogram</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>histogram_nan_count</code></td>
+<td><code>uint64</code></td>
+<td>Number of NaN pixels excluded from the histogram.</td>
+<td>raster-histogram</td>
+<td>raster-histogram</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>laplacian_variance</code></td>
+<td><code>float32</code></td>
+<td>High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score.</td>
+<td>raster-quality</td>
+<td>raster-quality</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>max_intensity</code></td>
+<td><code>float32</code></td>
+<td>Maximum pixel intensity over the covered extent (ignoring NaNs).</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>mean_intensity</code></td>
+<td><code>float32</code></td>
+<td>Pixel-count-weighted mean intensity over the covered extent.</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>min_intensity</code></td>
+<td><code>float32</code></td>
+<td>Minimum pixel intensity over the covered extent (ignoring NaNs).</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>nan_fraction</code></td>
+<td><code>float32</code></td>
+<td>Fraction of pixels excluded as NaN.</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>nodata_count</code></td>
+<td><code>int</code></td>
+<td>Number of pixels equal to the declared nodata value.</td>
+<td>nodata-statistics</td>
+<td>nodata-statistics</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>spectral_slope</code></td>
+<td><code>float32</code></td>
+<td>Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5–40% of Nyquist). Typical range: −2 to −4. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance.</td>
+<td>raster-quality</td>
+<td>raster-quality</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>std_intensity</code></td>
+<td><code>float32</code></td>
+<td>Pooled standard deviation of intensity over the covered extent.</td>
+<td>raster-basic</td>
+<td>raster-basic</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>thumbnail</code></td>
+<td><code>bytes</code></td>
+<td>Raw RGBA bytes of the assembled thumbnail sprite (fixed sprite size).</td>
+<td>thumbnail</td>
+<td>thumbnail</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>thumbnail_dtype</code></td>
+<td><code>string</code></td>
+<td>Original pixel dtype of the source image the thumbnail was built from.</td>
+<td>thumbnail</td>
+<td>thumbnail</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>thumbnail_norm_max</code></td>
+<td><code>float</code></td>
+<td>Upper intensity bound used to normalize the thumbnail.</td>
+<td>thumbnail</td>
+<td>thumbnail</td>
+<td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>thumbnail_norm_min</code></td>
+<td><code>float</code></td>
+<td>Lower intensity bound used to normalize the thumbnail.</td>
+<td>thumbnail</td>
+<td>thumbnail</td>
+<td>pixel-patrol-base</td>
+</tr>
+</tbody>
+</table>
+<!-- END GENERATED COLUMNS -->
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+      <div class="md-copyright" style="margin-top:4px">
+        <a href="../impressum/" style="color:var(--md-footer-fg-color--light)">Impressum</a>
+        &nbsp;&middot;&nbsp;
+        <a href="../privacy/" style="color:var(--md-footer-fg-color--light)">Privacy Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

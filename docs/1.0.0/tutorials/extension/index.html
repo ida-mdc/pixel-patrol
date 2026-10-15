@@ -1,0 +1,1455 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://pixelpatrol.app/docs/1.0.0/tutorials/extension/">
+      
+      
+        <link rel="prev" href="../sharing/">
+      
+      
+        <link rel="next" href="../..">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Create an Extension - Pixel Patrol Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#create-an-extension" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-header__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Pixel Patrol Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Create an Extension
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-nav__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    Pixel Patrol Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interactive_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sharing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create an Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Report Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="create-an-extension">Create an Extension</h1>
+<p><img src="../../assets/shark.png" alt="A softly glowing cartoon shark" width="220" align="right"></p>
+<p>PixelPatrol is built to be extended - without forking it. An <strong>extension</strong> is a regular, installable Python package that can add any combination of:</p>
+<ul>
+<li>a custom <strong>loader</strong> - read a file format PixelPatrol doesn't support out of the box</li>
+<li>a custom <strong>processor</strong> - compute new metrics and add them as table columns</li>
+<li>custom <strong>viewer plugins</strong> - visualize anything in the interactive report with your own widgets</li>
+</ul>
+<p>All three are optional, and one package can mix and match freely. The contracts for each (<code>PixelPatrolLoader</code>, <code>PixelPatrolProcessor</code>, the plugin object shape) are defined as <a href="https://docs.python.org/3/library/typing.html#typing.Protocol"><code>typing.Protocol</code></a>s in <code>pixel_patrol_base.core.contracts</code>, not base classes - your classes just need to match the expected shape (the right <code>NAME</code>, methods, attributes, ...), with no import or inheritance from <code>pixel_patrol_base</code> required. That's what keeps extensions standalone, decoupled packages.</p>
+<p>This page walks through all three pieces using <strong><a href="https://github.com/ida-mdc/pixel-patrol-example-extension">Pixel HAI Watch</a></strong> - a complete, working, slightly playful standalone example. Its twist: there are no real images. <code>.parquet</code> <em>tables</em> are read as if they were tiny snapshots from a deep-sea shark camera - each table's numeric columns become a pixel grid, and a key/value pair tucked into the file's metadata stands in for the kind of instrument metadata real loaders extract (channel names, pixel sizes, acquisition stamps, ...). Every snippet below is taken directly from it - clone <a href="https://github.com/ida-mdc/pixel-patrol-example-extension">pixel-patrol-example-extension</a> alongside this page and follow along.</p>
+<hr />
+<div class="wc-setup" id="ext-setup-panel">
+  <div class="wc-setup-title">⚙ What are you building?</div>
+  <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for pieces you don't need will dim out - so you can focus on the ones that matter for your extension.</p>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Do you need to read a file format PixelPatrol doesn't support yet?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="loader" data-val="yes" onclick="extSetup(this)">Yes</button>
+      <button class="wc-setup-btn" data-key="loader" data-val="no"  onclick="extSetup(this)">No</button>
+    </span>
+  </div>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Do you want to compute your own metrics from the image data?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="processor" data-val="yes" onclick="extSetup(this)">Yes</button>
+      <button class="wc-setup-btn" data-key="processor" data-val="no"  onclick="extSetup(this)">No</button>
+    </span>
+  </div>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Do you want a custom chart or visualization in the report viewer?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="viewer" data-val="yes" onclick="extSetup(this)">Yes</button>
+      <button class="wc-setup-btn" data-key="viewer" data-val="no"  onclick="extSetup(this)">No</button>
+    </span>
+  </div>
+</div>
+
+<p style="font-size:0.82rem;margin:0.5rem 0;opacity:0.8">Click the ✓ in the corner of each card to mark it as reviewed and track your progress.</p>
+
+<div class="wc-progress-wrap">
+  <div class="wc-progress-label" id="ext-prog-label">0 / 5 pieces reviewed</div>
+  <div class="wc-progress-bar"><div class="wc-progress-fill" id="ext-prog-fill"></div></div>
+</div>
+
+<hr />
+<div class="wc" data-ext-req="" id="ext-anatomy">
+<div class="wc-head">
+<span class="wc-icon">📦</span>
+<span class="wc-name">Anatomy of an Extension</span>
+<span class="wc-pill wc-pill-always">always relevant</span>
+<button class="wc-check" data-ext="anatomy" onclick="extCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Any extension is a regular, installable Python package. Here's Pixel HAI Watch's layout - the role of each file is the blueprint for your own:</p>
+
+<pre class="wiz-code-pre">pixel_patrol_hai_watch/
+├── my_loader.py             custom loader      - reads .parquet "dive patches"
+├── my_processor.py          custom processor   - counts the glows in each patch
+├── plugin_registry.py       registers loader, processor, and viewer extension
+└── viewer/
+    ├── extension.json                manifest listing the viewer plugins
+    ├── plugin_dives_logged.js        metadata widget    - dives logged, by depth zone &amp; site
+    └── plugin_glow_by_depth.js       image-data widget  - glow sightings, by depth zone</pre>
+
+<p>PixelPatrol finds all of this through Python <strong>entry points</strong>: three optional groups in <code>pyproject.toml</code>, each pointing at a function in your <code>plugin_registry</code> module.</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[project.entry-points.</span><span class="s2">"pixel_patrol.loader_plugins"</span><span class="k">]</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">my_extension_loaders</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.plugin_registry:register_loader_plugins"</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">[project.entry-points.</span><span class="s2">"pixel_patrol.processor_plugins"</span><span class="k">]</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">my_extension_processors</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.plugin_registry:register_processor_plugins"</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">[project.entry-points.</span><span class="s2">"pixel_patrol.viewer_extensions"</span><span class="k">]</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">my_extension_viewer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.plugin_registry:get_viewer_extension_dir"</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># plugin_registry.py</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">my_package.my_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">MyLoader</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">my_package.my_processor</span><span class="w"> </span><span class="kn">import</span> <span class="n">MyProcessor</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_loader_plugins</span><span class="p">():</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">MyLoader</span><span class="p">]</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_processor_plugins</span><span class="p">():</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">MyProcessor</span><span class="p">]</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_viewer_extension_dir</span><span class="p">():</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"viewer"</span>
+</code></pre></div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>You only need to declare the entry-point groups your extension actually uses. A viewer-only extension can omit the loader/processor groups entirely - and a loader-only one can skip the viewer group just as easily.</div></div>
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Once your package is installed in the same environment as <code>pixel_patrol_base</code>, everything is discovered automatically at runtime - no explicit registration or path needed when you call <code>create_project(..., loader="your-loader-name")</code> or <code>serve_viewer(report_path)</code>.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-ext-req="loader" id="ext-loader">
+<div class="wc-head">
+<span class="wc-icon">📥</span>
+<span class="wc-name">The Loader</span>
+<button class="wc-check" data-ext="loader" onclick="extCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> PixelPatrol can't read your file format - or doesn't read it (and its metadata) the way you want. Maybe your images live in a proprietary instrument format, a database export, or - like here - something delightfully unconventional.</div></div>
+</div>
+
+<p>A loader turns a file into a <code>Record</code> - pixel data plus metadata - that the rest of the pipeline can work with. Implement the <code>PixelPatrolLoader</code> protocol:</p>
+
+<table>
+<thead><tr><th>Member</th><th>Type</th><th>Required?</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>NAME</code></td><td><code>str</code></td><td>yes</td><td>unique identifier passed to <code>create_project(..., loader=...)</code></td></tr>
+<tr><td><code>SUPPORTED_EXTENSIONS</code></td><td><code>set[str]</code></td><td>yes</td><td>file extensions this loader can read (lower-case, no dot)</td></tr>
+<tr><td><code>DESCRIPTION</code></td><td><code>str</code></td><td>yes</td><td>one-line description of the loader, shown in the schema catalog</td></tr>
+<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>yes</td><td>extra metadata columns this loader adds to the table, with their types</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_DESCRIPTIONS</code></td><td><code>dict[str, str]</code></td><td>yes</td><td>one-line description for each column declared in <code>OUTPUT_SCHEMA</code></td></tr>
+<tr><td><code>read_header(path)</code></td><td><code>(Path) -> FileInfo</code></td><td>yes</td><td>cheap shape/dtype/dim-order probe, <strong>no pixel data loaded</strong>. Optionally set <code>deferred_dims</code> on the returned <code>FileInfo</code> to hint dims that should be split last in memory chunking (e.g. packed colour channels)</td></tr>
+<tr><td><code>load(path)</code></td><td><code>(Path) -> Record</code></td><td>yes</td><td>loads one image and returns a <code>Record</code>; the metadata passed to <code>record_from()</code> must include <code>dim_order</code> with at least <code>X</code> and/or <code>Y</code> for spatial images</td></tr>
+<tr><td><code>load_range(path, start, stop)</code></td><td><code>(Path, int, int) -> Iterator[(str, Record)]</code></td><td>yes</td><td>yields sub-images for container formats; raise <code>NotImplementedError</code> otherwise</td></tr>
+<tr><td><code>FOLDER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>no</td><td>"extensions" that mark a <em>folder</em> as one loadable unit (e.g. OME-Zarr stores); defaults to empty</td></tr>
+<tr><td><code>CONTAINER_EXTENSIONS</code></td><td><code>set[str]</code></td><td>no</td><td>extensions that may contain more than one image (multi-series OME-TIFF, LMDB, ...); defaults to empty</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_PATTERNS</code></td><td><code>list[tuple[str, type]]</code></td><td>no</td><td>regex/type pairs for dynamically-named metadata columns (e.g. <code>pixel_size_X</code>); defaults to empty</td></tr>
+<tr><td><code>is_folder_supported(path)</code></td><td><code>(Path) -> bool</code></td><td>no</td><td>whether a <em>folder</em> (not a file) should be treated as one image; only relevant if <code>FOLDER_EXTENSIONS</code> is non-empty</td></tr>
+</tbody>
+</table>
+
+<p><code>SharkCamLoader</code> (<code>NAME = "shark-cam"</code>) reads each table with <code>pyarrow.parquet</code>, stacks its columns into a 2-D array, decodes one field out of the schema metadata, and wraps it all with <code>record_from(...)</code>:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">SharkCamLoader</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">NAME</span> <span class="o">=</span> <span class="s2">"shark-cam"</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">SUPPORTED_EXTENSIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"parquet"</span><span class="p">}</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">FOLDER_EXTENSIONS</span>    <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">CONTAINER_EXTENSIONS</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">DESCRIPTION</span> <span class="o">=</span> <span class="s2">"Loads SharkCam dive-patch parquet files."</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">OUTPUT_SCHEMA</span>              <span class="o">=</span> <span class="p">{</span><span class="s2">"depth_zone"</span><span class="p">:</span> <span class="nb">str</span><span class="p">}</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">OUTPUT_SCHEMA_DESCRIPTIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"depth_zone"</span><span class="p">:</span> <span class="s2">"Ocean depth zone of the dive patch."</span><span class="p">}</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">OUTPUT_SCHEMA_PATTERNS</span>     <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">is_folder_supported</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="k">return</span> <span class="kc">False</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">read_header</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">):</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>        <span class="n">meta</span> <span class="o">=</span> <span class="n">pq</span><span class="o">.</span><span class="n">ParquetFile</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="k">return</span> <span class="n">FileInfo</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">num_columns</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">dim_order</span><span class="o">=</span><span class="p">(</span><span class="s2">"Y"</span><span class="p">,</span> <span class="s2">"X"</span><span class="p">))</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">):</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>        <span class="n">table</span> <span class="o">=</span> <span class="n">pq</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="c1"># Each column is one pixel column (X); stacking them rebuilds the YX grid.</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">column_names</span><span class="p">]</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="n">pixels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>        <span class="n">raw_meta</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>        <span class="n">log_entry</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">():</span> <span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">raw_meta</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>        <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>            <span class="s2">"depth_zone"</span><span class="p">:</span> <span class="n">log_entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"depth_zone"</span><span class="p">,</span> <span class="s2">"unknown"</span><span class="p">),</span>
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>            <span class="s2">"dim_order"</span><span class="p">:</span>  <span class="s2">"YX"</span><span class="p">,</span>
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a>        <span class="p">}</span>
+<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a>        <span class="k">return</span> <span class="n">record_from</span><span class="p">(</span><span class="n">pixels</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"intensity"</span><span class="p">)</span>
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">):</span>
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a>        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"shark-cam is not a container format"</span><span class="p">)</span>
+</code></pre></div>
+
+<details class="wc-how">
+<summary>🔬 How a parquet table becomes a "dive patch"</summary>
+<div>Each file holds a small grid of <code>uint8</code> columns - read column-by-column and stacked side by side, the table <em>is</em> the pixel grid (rows → Y, columns → X). The playful field, <code>depth_zone</code> (sunlit/twilight/midnight/abyss - which layer of the ocean the snapshot was taken in), is decoded straight out of <code>table.schema.metadata</code> - exactly the slot real formats (OME-XML in TIFFs, EXIF in JPEGs, ...) use to carry instrument and acquisition info.</div>
+</details>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Declaring <code>kind="intensity"</code> and <code>dim_order="YX"</code> is what makes the <em>built-in</em> processors (basic metrics, histogram, thumbnail) pick the patches up automatically, right alongside your custom one. To a PixelPatrol pipeline, a "dive patch" parquet table behaves just like any other 2-D image - that's the whole point of the exercise.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>read_header</code> is called for every file during the initial scan and must stay cheap - it's your chance to report shape, dtype, and dimension order without paying the cost of loading pixel data.</div></div>
+<div class="wc-flag wc-flag-red"><span class="fi">⚠️</span><div><strong>Set <code>dim_order</code> in both <code>read_header</code> and <code>load</code> - they are independent.</strong> The <code>dim_order</code> you pass to <code>FileInfo</code> in <code>read_header</code> is used only for task planning and is never carried into the record that <code>load</code> returns. You must also include <code>dim_order</code> in the metadata dict passed to <code>record_from()</code>. For spatial images it must contain at least <code>X</code> or <code>Y</code> (usually both) - without them the pipeline falls back to generic dim names and processes every pixel as a separate leaf block, which produces wrong results by default. If your format uses different axis names, map them to the canonical labels before passing them in: <code>H</code> / <code>height</code> → <code>Y</code>, <code>W</code> / <code>width</code> → <code>X</code>, rows → <code>Y</code>, columns → <code>X</code>. If both methods use the same logic to determine dim_order, extract a shared helper rather than duplicating it.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>dim_order</code> is the only metadata field that must be correct. <code>shape</code>/<code>dtype</code> are always derived from the pixel array, not from <code>meta</code>. The pipeline also overwrites <code>ndim</code>, <code>num_pixels</code>, <code>size_&lt;axis&gt;</code>, <code>dim_&lt;axis&gt;</code>, and the filesystem columns (<code>path</code>, <code>name</code>, <code>type</code>, <code>parent&lt;N&gt;</code>, <code>depth</code>, <code>size_bytes</code>, <code>file_extension</code>, <code>modification_date</code>, <code>imported_path</code>, <code>common_base</code>, <code>child_id</code>) - don't bother setting these. <code>OUTPUT_SCHEMA</code> itself is documentation only: any other field in <code>meta</code> reaches the table whether or not it's declared there, so a loader can pass through metadata it doesn't fully understand.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>To signal that a <code>C</code> dim holds RGB data, set <code>channel_names</code> in <code>meta</code> to a list of names like <code>["Red", "Green", "Blue"]</code> - <code>record_from()</code> picks this up and adds an <code>rgb:C</code> capability automatically, which processors (e.g. thumbnail) use to process the channels as RGB.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-ext-req="processor" id="ext-processor">
+<div class="wc-head">
+<span class="wc-icon">⚙️</span>
+<span class="wc-name">The Processor</span>
+<button class="wc-check" data-ext="processor" onclick="extCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to compute a metric on images - any images, regardless of who loaded them. Quality scores, object counts, anything beyond what the built-in processors already cover.</div></div>
+</div>
+
+<p>A processor receives loaded records and returns derived values that get merged into the table as new columns. Implement the <code>PixelPatrolProcessor</code> protocol - every member below is required:</p>
+
+<table>
+<thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>NAME</code></td><td><code>str</code></td><td>unique identifier (shown in pipeline logs)</td></tr>
+<tr><td><code>CHUNK_KIND</code></td><td><code>ChunkKind</code></td><td><code>LEAF</code> (user-configured tiles/slices) or <code>MEMORY</code> (whole record, memory-safe chunking)</td></tr>
+<tr><td><code>INPUT</code></td><td><code>RecordSpec</code></td><td>which records this processor runs on (<code>kinds</code>, <code>axes</code>, <code>capabilities</code>, ...)</td></tr>
+<tr><td><code>OUTPUT</code></td><td><code>"features" | "record"</code></td><td>whether <code>run_chunk</code> returns columns to merge, or a brand-new <code>Record</code></td></tr>
+<tr><td><code>DESCRIPTION</code></td><td><code>str</code></td><td>one-line description of the processor, shown in the schema catalog</td></tr>
+<tr><td><code>OUTPUT_SCHEMA</code></td><td><code>dict[str, type]</code></td><td>the columns this processor adds, with their types</td></tr>
+<tr><td><code>OUTPUT_SCHEMA_DESCRIPTIONS</code></td><td><code>dict[str, str]</code></td><td>one-line description for each column declared in <code>OUTPUT_SCHEMA</code></td></tr>
+<tr><td><code>run_chunk(record)</code></td><td><code>(Record) -> dict</code></td><td>does the actual computation on one chunk</td></tr>
+<tr><td><code>get_aggregation(name)</code></td><td><code>(str) -> Callable | None</code></td><td>how to combine multiple chunks' values for column <code>name</code> into the per-image value</td></tr>
+</tbody>
+</table>
+
+<p><code>GlowSpotterProcessor</code> (<code>NAME = "glow-spotter"</code>) runs on every <code>intensity</code> record with <code>X</code>/<code>Y</code> axes, uses <code>CHUNK_KIND.LEAF</code>, and adds one column - <code>glow_count</code>:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">GlowSpotterProcessor</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">NAME</span>       <span class="o">=</span> <span class="s2">"glow-spotter"</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">CHUNK_KIND</span> <span class="o">=</span> <span class="n">ChunkKind</span><span class="o">.</span><span class="n">LEAF</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">INPUT</span>      <span class="o">=</span> <span class="n">RecordSpec</span><span class="p">(</span><span class="n">axes</span><span class="o">=</span><span class="p">{</span><span class="s2">"X"</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">},</span> <span class="n">kinds</span><span class="o">=</span><span class="p">{</span><span class="s2">"intensity"</span><span class="p">})</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">OUTPUT</span>     <span class="o">=</span> <span class="s2">"features"</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">DESCRIPTION</span> <span class="o">=</span> <span class="s2">"Counts bright-spot (glow) pixels per image."</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">OUTPUT_SCHEMA</span>              <span class="o">=</span> <span class="p">{</span><span class="s2">"glow_count"</span><span class="p">:</span> <span class="nb">int</span><span class="p">}</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">OUTPUT_SCHEMA_DESCRIPTIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"glow_count"</span><span class="p">:</span> <span class="s2">"Number of pixels brighter than median + 60."</span><span class="p">}</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">OUTPUT_SCHEMA_PATTERNS</span>     <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">run_chunk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">):</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="n">arr</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="s2">"compute"</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="n">arr</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="n">threshold</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="o">+</span> <span class="mf">60.0</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="n">glow_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">arr</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">))</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="k">return</span> <span class="p">{</span><span class="s2">"glow_count"</span><span class="p">:</span> <span class="n">glow_count</span><span class="p">}</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_aggregation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">col</span><span class="p">):</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>        <span class="k">if</span> <span class="n">col</span> <span class="o">!=</span> <span class="s2">"glow_count"</span><span class="p">:</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>            <span class="k">return</span> <span class="kc">None</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="c1"># Glows are independent per pixel, so chunk counts simply add up.</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="k">return</span> <span class="k">lambda</span> <span class="n">rows</span><span class="p">,</span> <span class="n">g_dims</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"glow_count"</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">)</span>
+</code></pre></div>
+
+<details class="wc-how">
+<summary>🔬 How "glows" get counted</summary>
+<div>A pixel counts as part of a glow when it stands out clearly from the patch's overall brightness - brighter than its median by more than 60. Sunlit patches have almost none; the deeper and darker it gets, the more glows light up - exactly the way real bioluminescence concentrates in the dark, by construction. <code>get_aggregation</code> sums each chunk's <code>glow_count</code> into the per-image total - a pattern that works whenever the thing you're counting is independent per pixel, so splitting an image into pieces and adding the pieces' counts back up reconstructs the whole.</div>
+</details>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>CHUNK_KIND</code> shapes how your data arrives, and which unit your computation needs to handle. <code>LEAF</code> - the more common pick for metric processors - tiles large images into memory-safe pieces and runs your computation on each one; <code>MEMORY</code> hands you the whole record at once, which is only safe when you know it comfortably fits in memory.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><code>OUTPUT = "features"</code> merges your columns into the existing table - the right choice for almost any custom metric. <code>"record"</code> is for processors that produce a brand-new derived image instead (a mask, a projection, ...).</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-ext-req="viewer" id="ext-viewer">
+<div class="wc-head">
+<span class="wc-icon">📊</span>
+<span class="wc-name">The Viewer Plugin</span>
+<button class="wc-check" data-ext="viewer" onclick="extCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">🧭</span><div><strong>Build this if</strong> you want to visualise interactive report data in the browser - your own extension's columns, anyone else's, or any mix - with a chart the built-in widgets don't cover.</div></div>
+</div>
+
+<p>A viewer plugin is a small JavaScript module that renders a custom widget in the report viewer's sidebar, with full access to the interactive report's data through an in-browser DuckDB instance (the table is always called <code>pp_data</code>). It exports one default object:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nx">id</span><span class="o">:</span><span class="w">    </span><span class="s1">'my-widget'</span><span class="p">,</span><span class="w">          </span><span class="c1">// unique across all loaded plugins</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'My Widget'</span><span class="p">,</span><span class="w">          </span><span class="c1">// shown in the sidebar widget list</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nx">group</span><span class="o">:</span><span class="w"> </span><span class="s1">'My Extension Name'</span><span class="p">,</span><span class="w">  </span><span class="c1">// optional - gives the widget its own sidebar section</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nx">scope</span><span class="o">:</span><span class="w"> </span><span class="s1">'image'</span><span class="p">,</span><span class="w">              </span><span class="c1">// optional - 'file' | 'image' | 'slice', shown as a badge</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">                               </span><span class="c1">// describing what one datapoint in this widget represents.</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">                               </span><span class="c1">// If render() changes this at runtime (e.g. a "Slice by"</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">                               </span><span class="c1">// toggle), call ctx.plot.setScopeBadge(el, scope) to keep</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">                               </span><span class="c1">// it honest. Card-local toggles don't reach the tile, so</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">                               </span><span class="c1">// overviewPlot should show the base scope; sidebar-pinned</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">                               </span><span class="c1">// dims (ctx.sql.pinnedDims()) should move tile and card alike</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span><span class="nx">requires</span><span class="p">(</span><span class="nx">schema</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">    </span><span class="c1">// return false to hide the widget when its columns are absent</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">schema</span><span class="p">.</span><span class="nx">allCols</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="s1">'my_column'</span><span class="p">);</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">render</span><span class="p">(</span><span class="nx">container</span><span class="p">,</span><span class="w"> </span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">queryRows</span><span class="p">(</span><span class="sb">`</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="sb">      SELECT my_column, COUNT(*) AS cnt</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="sb">      FROM pp_data</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="sb">      </span><span class="si">${</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">where</span><span class="si">}</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="sb">      GROUP BY 1 ORDER BY 2 DESC</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="sb">    `</span><span class="p">);</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">    </span><span class="c1">// write into `container` using plain DOM, Plotly (window.Plotly), or any CDN library</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">  </span><span class="c1">// To show your widget correctly in Overview mode (the default tile-gallery view),</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">  </span><span class="c1">// also define these. Both optional:</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">overviewMessage</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="w">    </span><span class="c1">// one short summary sentence shown on the tile, e.g. "Found 42 matches."</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="s1">'Found some matches.'</span><span class="p">;</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">overviewPlot</span><span class="p">(</span><span class="nx">container</span><span class="p">,</span><span class="w"> </span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="w">    </span><span class="c1">// small preview plot drawn into the tile; return false to skip it.</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="w">    </span><span class="c1">// Apply ctx.where here too - it's a separate query path from render(),</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a><span class="w">    </span><span class="c1">// so filters aren't inherited automatically.</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="p">};</span>
+</code></pre></div>
+
+<table>
+<thead><tr><th><code>ctx</code> field</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>ctx.queryRows(sql)</code></td><td><code>async → object[]</code></td><td>query returning plain JS objects</td></tr>
+<tr><td><code>ctx.query(sql)</code></td><td><code>async → Arrow Table</code></td><td>raw Arrow result (for binary/blob columns)</td></tr>
+<tr><td><code>ctx.querySample(cols, n)</code></td><td><code>async → object[]</code></td><td>sampled scalar shorthand</td></tr>
+<tr><td><code>ctx.schema</code></td><td><code>object</code></td><td><code>{ metricCols, groupCols, dimensionInfo, allCols, blobCols }</code></td></tr>
+<tr><td><code>ctx.state</code></td><td><code>object</code></td><td><code>{ palette, groupCol, filter, dimensions }</code></td></tr>
+<tr><td><code>ctx.colorMap</code></td><td><code>object</code></td><td><code>{ groupValue: hexColor }</code> - matches the colors used everywhere else in the interactive report</td></tr>
+<tr><td><code>ctx.color.getColors(palette, n)</code></td><td><code>(string, number) -&gt; string[]</code></td><td><code>n</code> colors from the named palette - for ad-hoc groupings (e.g. a column other than the active group-by) not covered by <code>colorMap</code></td></tr>
+<tr><td><code>ctx.color.getPaletteNames()</code></td><td><code>() -&gt; string[]</code></td><td>palette names accepted by <code>ctx.color.getColors</code></td></tr>
+<tr><td><code>ctx.where</code></td><td><code>string</code></td><td>SQL <code>WHERE</code> clause for the active filter (or <code>''</code>) - merge with <code>AND</code> if your query needs its own</td></tr>
+<tr><td><code>ctx.groups</code></td><td><code>string[]</code></td><td>distinct values of the active group column</td></tr>
+<tr><td><code>ctx.filteredCount</code> / <code>ctx.totalRows</code></td><td><code>number</code></td><td>row counts</td></tr>
+<tr><td><code>ctx.plot</code></td><td><code>object</code></td><td>plotting/DOM helpers (<code>appendMini</code>, <code>setScopeBadge</code>, <code>niceName</code>, ...)</td></tr>
+</tbody>
+</table>
+
+<p>Pixel HAI Watch ships <strong>two</strong> plugins on purpose - one per kind of data a loader can surface. <code>plugin_glow_by_depth.js</code> plots <code>glow_count</code> (computed by the processor, from real pixel data) against <code>depth_zone</code> (read straight from the loader's metadata), as a jittered scatter colored by site:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">DEPTH_ORDER</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'sunlit'</span><span class="p">,</span><span class="w"> </span><span class="s1">'twilight'</span><span class="p">,</span><span class="w"> </span><span class="s1">'midnight'</span><span class="p">,</span><span class="w"> </span><span class="s1">'abyss'</span><span class="p">];</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nx">id</span><span class="o">:</span><span class="w">    </span><span class="s1">'glow-by-depth'</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'Glow Sightings by Depth'</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nx">group</span><span class="o">:</span><span class="w"> </span><span class="s1">'Pixel HAI Watch'</span><span class="p">,</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nx">scope</span><span class="o">:</span><span class="w"> </span><span class="s1">'image'</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nx">requires</span><span class="p">(</span><span class="nx">schema</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="s1">'depth_zone'</span><span class="p">,</span><span class="w"> </span><span class="s1">'glow_count'</span><span class="p">].</span><span class="nx">every</span><span class="p">(</span><span class="nx">c</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">schema</span><span class="p">.</span><span class="nx">allCols</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">c</span><span class="p">));</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">render</span><span class="p">(</span><span class="nx">container</span><span class="p">,</span><span class="w"> </span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">queryRows</span><span class="p">(</span><span class="sb">`</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="sb">      SELECT "depth_zone" AS depth_zone, "imported_path_short" AS site, "glow_count" AS glows</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="sb">      FROM pp_data</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="sb">      WHERE "depth_zone" IS NOT NULL AND "glow_count" IS NOT NULL</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="sb">        </span><span class="si">${</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">where</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">'AND '</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">where</span><span class="p">.</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/^WHERE\s+/i</span><span class="p">,</span><span class="w"> </span><span class="s1">''</span><span class="p">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="sb">    `</span><span class="p">);</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">zones</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nx">DEPTH_ORDER</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nx">z</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">rows</span><span class="p">.</span><span class="nx">some</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">depth_zone</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">z</span><span class="p">));</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">sites</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="p">[...</span><span class="ow">new</span><span class="w"> </span><span class="nb">Set</span><span class="p">(</span><span class="nx">rows</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">site</span><span class="p">))].</span><span class="nx">sort</span><span class="p">();</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">xJitter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nx">random</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">0.5</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">0.5</span><span class="p">;</span><span class="w">   </span><span class="c1">// keeps overlapping points visible</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">    </span><span class="c1">// A scatter (rather than a box/violin) because each category holds only a</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="w">    </span><span class="c1">// handful of points - exactly where distributional summaries would mislead.</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="w">    </span><span class="nx">Plotly</span><span class="p">.</span><span class="nx">newPlot</span><span class="p">(</span><span class="nx">container</span><span class="p">,</span><span class="w"> </span><span class="nx">sites</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">site</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">sub</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">rows</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">site</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">site</span><span class="p">);</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a><span class="w">      </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="w">        </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'scatter'</span><span class="p">,</span><span class="w"> </span><span class="nx">mode</span><span class="o">:</span><span class="w"> </span><span class="s1">'markers'</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="nx">site</span><span class="p">,</span>
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="w">        </span><span class="nx">x</span><span class="o">:</span><span class="w"> </span><span class="nx">sub</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">zones</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">depth_zone</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">xJitter</span><span class="p">()),</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="w">        </span><span class="nx">y</span><span class="o">:</span><span class="w"> </span><span class="nx">sub</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nb">Number</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">glows</span><span class="p">)),</span>
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a><span class="w">        </span><span class="nx">marker</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">size</span><span class="o">:</span><span class="w"> </span><span class="mf">12</span><span class="p">,</span><span class="w"> </span><span class="nx">color</span><span class="o">:</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">colorMap</span><span class="p">[</span><span class="nx">site</span><span class="p">]</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">'#888'</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a><span class="w">      </span><span class="p">};</span>
+<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a><span class="w">    </span><span class="p">}),</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">title</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s1">'How much bioluminescent glow shows up at each depth?'</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a><span class="p">};</span>
+</code></pre></div>
+
+<p>Both plugins are picked up automatically from a small manifest file (<code>extension.json</code>). With <code>"auto_detect": true</code>, every <code>plugin_*.js</code> file in the directory is loaded - no list to maintain. Just drop a new file in and it appears:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Pixel HAI Watch Extension"</span><span class="p">,</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">"auto_detect"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">}</span>
+</code></pre></div>
+
+<p>If you prefer to be explicit, list the files instead:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Pixel HAI Watch Extension"</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">"plugins"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"./plugin_dives_logged.js"</span><span class="p">,</span><span class="w"> </span><span class="s2">"./plugin_glow_by_depth.js"</span><span class="p">]</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">}</span>
+</code></pre></div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>Both plugins declare <code>group: 'Pixel HAI Watch'</code>, so they appear under their own named section in the sidebar instead of being grouped under "Other Widgets".</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div>See the <a href="https://github.com/ida-mdc/pixel-patrol/blob/main/viewer/README.md" target="_blank">viewer README</a> for the full plugin-writing guide, the complete <code>ctx</code> reference, and the extension-manifest format.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" data-ext-req="" id="ext-run">
+<div class="wc-head">
+<span class="wc-icon">🚀</span>
+<span class="wc-name">Run, Package &amp; Share</span>
+<span class="wc-pill wc-pill-always">always relevant</span>
+<button class="wc-check" data-ext="run" onclick="extCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>PixelPatrol discovers loaders, processors, and viewer extensions through Python entry points - which only works if your package is installed in the <em>same environment</em> as <code>pixel_patrol_base</code>. So first, make sure you're in that environment, then install this package into it:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+</code></pre></div>
+
+<p>Then try it locally - this (re)generates the tiny dataset (if missing), processes it with the custom loader and processor, and opens the viewer with both widgets loaded:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>create_and_show_report.py
+</code></pre></div>
+
+<p>Once it works, two ways to get it in front of others:</p>
+
+<div class="wc-shots two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+  <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
+    <div style="font-weight:700;margin-bottom:0.35rem">📦 Pip package</div>
+    <div style="font-size:0.85rem;line-height:1.6">Because the JS viewer plugins are bundled <em>inside</em> the Python package, a recipient just installs it - <code>pip install pixel-patrol-hai-watch</code> - and any interactive report opened with <code>serve_viewer(...)</code> picks up the plugins automatically. No extra arguments, no separate hosting.</div>
+  </div>
+  <div class="wc-shot" style="border:1px solid var(--wc-border);border-radius:8px;padding:0.9rem 1rem">
+    <div style="font-weight:700;margin-bottom:0.35rem">🌐 GitHub Pages</div>
+    <div style="font-size:0.85rem;line-height:1.6">No Python required on the recipient's side. A bundled GitHub Actions workflow deploys the <code>viewer/</code> folder; the manifest then lives at a public URL you can pass straight to the hosted viewer:<br><code>?extension=https://&lt;org&gt;.github.io/&lt;repo&gt;/extension.json</code> (repeat <code>&amp;extension=</code> to chain several).</div>
+  </div>
+</div>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">🌱</span><div><strong>Ready to grow your own?</strong> Clone <a href="https://github.com/ida-mdc/pixel-patrol-example-extension">pixel-patrol-example-extension</a>, decide which piece(s) you actually need (see the questions at the top of this page), update the <code>pyproject.toml</code> metadata, and replace the example identifiers with your own - one piece at a time. The protocols will tell you exactly what's still missing as you go, and nothing stops you from running an unfinished extension while you build it out.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<script>
+/* ── Setup toggle (mirrors the Exploring the Report tutorial) ── */
+const extState = { loader: null, processor: null, viewer: null };
+
+function extSetup(btn) {
+  const key = btn.dataset.key;
+  const val = btn.dataset.val;
+  extState[key] = val;
+  document.querySelectorAll('.wc-setup-btn[data-key="' + key + '"]').forEach(b => {
+    b.classList.toggle('sel', b.dataset.val === val);
+  });
+  extApply();
+}
+
+function extApply() {
+  document.querySelectorAll('.wc[data-ext-req]').forEach(card => {
+    const req = card.dataset.extReq;
+    card.classList.toggle('wc-unavailable', !!req && extState[req] === 'no');
+  });
+}
+
+/* ── Progress tracker ─────────────────────────────────────── */
+const EXT_TOTAL = 5;
+const EXT_KEY   = 'pp-extension-progress';
+
+function extCheck(btn) {
+  const id = btn.dataset.ext;
+  const on = btn.classList.toggle('checked');
+  btn.textContent = on ? '✓' : '';
+  const saved = JSON.parse(localStorage.getItem(EXT_KEY) || '{}');
+  saved[id] = on;
+  localStorage.setItem(EXT_KEY, JSON.stringify(saved));
+  extUpdateProgress();
+}
+
+function extUpdateProgress() {
+  const saved = JSON.parse(localStorage.getItem(EXT_KEY) || '{}');
+  const done  = Object.values(saved).filter(Boolean).length;
+  const pct   = Math.round(done / EXT_TOTAL * 100);
+  const fill  = document.getElementById('ext-prog-fill');
+  const label = document.getElementById('ext-prog-label');
+  if (fill)  fill.style.width  = pct + '%';
+  if (label) label.textContent = done + ' / ' + EXT_TOTAL + ' pieces reviewed';
+}
+
+function extInit() {
+  const saved = JSON.parse(localStorage.getItem(EXT_KEY) || '{}');
+  document.querySelectorAll('.wc-check').forEach(btn => {
+    if (saved[btn.dataset.ext]) {
+      btn.classList.add('checked');
+      btn.textContent = '✓';
+    }
+  });
+  extUpdateProgress();
+}
+
+document.addEventListener('DOMContentLoaded', extInit);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+      <div class="md-copyright" style="margin-top:4px">
+        <a href="../../impressum/" style="color:var(--md-footer-fg-color--light)">Impressum</a>
+        &nbsp;&middot;&nbsp;
+        <a href="../../privacy/" style="color:var(--md-footer-fg-color--light)">Privacy Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

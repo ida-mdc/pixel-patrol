@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PixelPatrol Table Row",
+  "description": "One row in a PixelPatrol table. Fixed columns are in properties; per-axis families (size_*, dim_*, pixel_size_*) are in patternProperties.",
+  "type": "object",
+  "properties": {
+    "common_base": {
+      "type": "string",
+      "description": "Name of the longest path prefix shared by all import bases."
+    },
+    "depth": {
+      "type": "integer",
+      "description": "Depth of the path below the imported base directory."
+    },
+    "file_extension": {
+      "type": "string",
+      "description": "Lower-cased file extension without the leading dot."
+    },
+    "imported_path": {
+      "type": "string",
+      "description": "Path of the import base (the -p path or base directory) under which this file was found, relative to the project base directory ('.' when no -p paths were specified)."
+    },
+    "imported_path_short": {
+      "type": "string",
+      "description": "Shortened, disambiguated label for the import base (only when several -p paths were used)."
+    },
+    "modification_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modification timestamp of the file."
+    },
+    "name": {
+      "type": "string",
+      "description": "File or folder name, including extension."
+    },
+    "path": {
+      "type": "string",
+      "description": "Path of the file (or folder), relative to the project base directory."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "description": "Size on disk in bytes (aggregated for folders)."
+    },
+    "type": {
+      "type": "string",
+      "description": "Row kind: 'file', 'folder', or 'sub_file' (a sub-image inside a container)."
+    },
+    "channel_names": {
+      "type": "array",
+      "description": "Names of the image channels, if available."
+    },
+    "child_id": {
+      "type": "string",
+      "description": "Identifier of a sub-image within a container file (null for single-image files)."
+    },
+    "dim_names": {
+      "type": "array",
+      "description": "Human-readable names of the image axes."
+    },
+    "dim_order": {
+      "type": "string",
+      "description": "Axis order of the image, e.g. 'TCZYX'."
+    },
+    "dtype": {
+      "type": "string",
+      "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+    },
+    "h5_attributes": {
+      "type": "object",
+      "description": "Raw HDF5 attributes of the dataset, merged with file root attributes."
+    },
+    "h5_dataset_path": {
+      "type": "string",
+      "description": "Path of the dataset within the HDF5 file."
+    },
+    "nifti_intent": {
+      "type": "string",
+      "description": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL')."
+    },
+    "shape": {
+      "type": "array",
+      "description": "Raster dimensions as [bands, height, width]."
+    },
+    "zarr_attributes": {
+      "type": "object",
+      "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata."
+    },
+    "ndim": {
+      "type": "integer",
+      "description": "Number of image dimensions, derived from dim_order."
+    },
+    "num_pixels": {
+      "type": "integer",
+      "description": "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels)."
+    },
+    "obs_level": {
+      "type": "integer",
+      "description": "Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns."
+    },
+    "bright_clipping_fraction": {
+      "type": "number",
+      "description": "Fraction of pixels at the dtype's maximum representable value (integer types only; NaN for float). Detects sensor saturation at the dtype ceiling."
+    },
+    "dark_clipping_fraction": {
+      "type": "number",
+      "description": "Fraction of pixels at the dtype's minimum representable value (0 for unsigned integers; NaN for float). Detects underexposure, background, and nodata at the dark end."
+    },
+    "finite_pixel_count": {
+      "type": "integer",
+      "description": "Number of finite (non-NaN/Inf) pixels contributing to the statistics."
+    },
+    "histogram_counts": {
+      "type": "array",
+      "description": "Per-bin pixel counts over the histogram value range (fixed number of bins; integer data uses one-level-wide bins)."
+    },
+    "histogram_max": {
+      "type": "number",
+      "description": "Upper bound of the histogram's value range."
+    },
+    "histogram_min": {
+      "type": "number",
+      "description": "Lower bound of the histogram's value range."
+    },
+    "histogram_nan_count": {
+      "type": "integer",
+      "description": "Number of NaN pixels excluded from the histogram."
+    },
+    "laplacian_variance": {
+      "type": "number",
+      "description": "High-frequency content measure. Blur and heavy compression push values down; sharpness, noise, and fine texture push values up. A smooth, featureless scene will score low regardless of focus quality. Clipped pixels inflate the score."
+    },
+    "max_intensity": {
+      "type": "number",
+      "description": "Maximum pixel intensity over the covered extent (ignoring NaNs)."
+    },
+    "mean_intensity": {
+      "type": "number",
+      "description": "Pixel-count-weighted mean intensity over the covered extent."
+    },
+    "min_intensity": {
+      "type": "number",
+      "description": "Minimum pixel intensity over the covered extent (ignoring NaNs)."
+    },
+    "nan_fraction": {
+      "type": "number",
+      "description": "Fraction of pixels excluded as NaN."
+    },
+    "nodata_count": {
+      "type": "integer",
+      "description": "Number of pixels equal to the declared nodata value."
+    },
+    "spectral_slope": {
+      "type": "number",
+      "description": "Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5\u201340% of Nyquist). Typical range: \u22122 to \u22124. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance."
+    },
+    "std_intensity": {
+      "type": "number",
+      "description": "Pooled standard deviation of intensity over the covered extent."
+    },
+    "thumbnail_dtype": {
+      "type": "string",
+      "description": "Original pixel dtype of the source image the thumbnail was built from."
+    },
+    "thumbnail_norm_max": {
+      "type": "number",
+      "description": "Upper intensity bound used to normalize the thumbnail."
+    },
+    "thumbnail_norm_min": {
+      "type": "number",
+      "description": "Lower intensity bound used to normalize the thumbnail."
+    }
+  },
+  "patternProperties": {
+    "^parent\\d+$": {
+      "type": "string",
+      "description": "Name of one directory level of the containing directory, counted from the top: parent0 is the first directory below the base directory, parent1 the one below that; null when the file is not that deep.",
+      "title": "parent<N>"
+    },
+    "^pixel_size_[A-Za-z]$": {
+      "type": "number",
+      "description": "Physical pixel size along the given axis, in the image's spatial unit.",
+      "title": "pixel_size_<axis>"
+    },
+    "^size_[A-Za-z]$": {
+      "type": "integer",
+      "description": "Extent (number of elements) of this row along the given axis.",
+      "title": "size_<axis>"
+    },
+    "^dim_[A-Za-z]+$": {
+      "type": "integer",
+      "description": "Coordinate of this row along the given axis (e.g. dim_z = Z index); null when the row spans the whole axis.",
+      "title": "dim_<axis>"
+    }
+  }
+}
