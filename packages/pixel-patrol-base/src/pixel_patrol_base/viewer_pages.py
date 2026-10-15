@@ -163,6 +163,22 @@ def _duckdb_cdn_urls(dist_dir: Path) -> tuple[str, str]:
     )
 
 
+_RELATIVE_IMPORT = re.compile(r"""(\bfrom\s*)(['"])(\.{1,2}/[^'"]+)\2""")
+
+
+def _inline_js(path: Path, importers: tuple[Path, ...] = ()) -> str:
+    """Read a JS module, inlining relative `from './x.js'` imports as data: URLs (a data: URL can't resolve relative paths)."""
+    if path in importers:
+        raise ValueError(f"Circular import in viewer plugin: {path.name}")
+
+    def inline_import(match: re.Match[str]) -> str:
+        target = (path.parent / match.group(3)).resolve()
+        url = _text_to_data_url(_inline_js(target, importers + (path,)), "application/javascript")
+        return f'{match.group(1)}"{url}"'
+
+    return _RELATIVE_IMPORT.sub(inline_import, path.read_text(encoding="utf-8"))
+
+
 def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
     urls: list[str] = []
     for ext_dir in extension_dirs:
@@ -176,9 +192,7 @@ def _build_inline_extension_urls(extension_dirs: list[Path]) -> list[str]:
             plugin_path = (ext_dir / rel).resolve()
             if not plugin_path.is_file():
                 continue
-            inline_plugins.append(
-                _text_to_data_url(plugin_path.read_text(encoding="utf-8"), "application/javascript")
-            )
+            inline_plugins.append(_text_to_data_url(_inline_js(plugin_path), "application/javascript"))
         manifest["plugins"] = inline_plugins
         urls.append(_text_to_data_url(json.dumps(manifest), "application/json"))
     return urls
