@@ -1,7 +1,9 @@
 """
 Tests for the static viewer builders in ``viewer_pages``.
 """
+import base64
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -57,3 +59,33 @@ def test_site_build_bakes_plugins_into_manifest(
     ext_out = manifests[0].parent
     for rel in manifest["plugins"]:
         assert (ext_out / rel.lstrip("./")).is_file()
+
+
+def _decode_data_url(url: str) -> str:
+    return base64.b64decode(url.split(",", 1)[1]).decode("utf-8")
+
+
+def test_inline_js_replaces_relative_imports_with_data_urls(tmp_path: Path):
+    (tmp_path / "shared.js").write_text("export const A = 1;")
+    (tmp_path / "plugin_a.js").write_text("import { A } from './shared.js';\nexport default A;")
+
+    code = viewer_pages._inline_js(tmp_path / "plugin_a.js")
+
+    assert "./shared.js" not in code
+    url = re.search(r'from "(data:[^"]+)"', code).group(1)
+    assert _decode_data_url(url) == "export const A = 1;"
+
+
+def test_inline_js_rejects_circular_imports(tmp_path: Path):
+    (tmp_path / "a.js").write_text("import { b } from './b.js';")
+    (tmp_path / "b.js").write_text("import { a } from './a.js';")
+
+    with pytest.raises(ValueError, match="Circular import"):
+        viewer_pages._inline_js(tmp_path / "a.js")
+
+
+def test_base_plugins_only_use_static_relative_imports():
+    """The single-file build can only inline `from './x.js'`; other relative imports would break offline."""
+    for ext_dir in viewer_pages._discover_installed_extensions():
+        for js_file in ext_dir.glob("*.js"):
+            assert not re.search(r"""\bimport\s*\(?\s*['"]\.""", js_file.read_text(encoding="utf-8")), js_file

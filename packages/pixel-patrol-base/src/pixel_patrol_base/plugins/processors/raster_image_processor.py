@@ -85,7 +85,7 @@ class RasterImageProcessor:
 class QualityMetricsProcessor(RasterImageProcessor):
     NAME        = "raster-quality"
     DESCRIPTION = "Computes no-reference image quality metrics (sharpness, noise, spectral characteristics, clipping) over the 2D spatial extent of each image."
-    # Cosmetic order only - actual widget order is qualityMetricRank in plugin_violin.js
+    # Cosmetic order only - actual widget order is qualityMetricRank in quality_metrics.js
     # (kept in sync by hand); parquet columns get alphabetized upstream regardless.
     METRICS = (
         RasterMetricSpec(name="laplacian_variance", data_type=np.float32, aggregate_rows=_weighted_mean_agg,

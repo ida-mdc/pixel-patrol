@@ -1,4 +1,4 @@
-import { QUALITY_METRIC_INFO, describeQualityMetric, qualityMetricRank } from './plugin_violin.js';
+import { QUALITY_METRIC_BASES, describeQualityMetric, qualityMetricRank } from './quality_metrics.js';
 
 const MAX_MARKER_POINTS = 300;
 
@@ -7,7 +7,6 @@ const lineMode = (n) => (n > MAX_MARKER_POINTS ? 'lines' : 'lines+markers');
 const BASIC_METRIC_BASES = new Set([
   'mean_intensity', 'std_intensity', 'min_intensity', 'max_intensity',
 ]);
-const QUALITY_METRIC_BASES = new Set(Object.keys(QUALITY_METRIC_INFO));
 
 const COL_BG    = ['#ffffff', '#f4f6f9'];
 const MIN_COL_PX = 180;  // min width per "Across 'X' slices" column in the grid
