@@ -140,17 +140,17 @@ pixel-patrol build-viewer-html -o viewer.html
 <p><strong>Step 1 - build a viewer site folder:</strong></p>
 
 ```bash
-pixel-patrol build-viewer-html -o my-report-site/
+pixel-patrol build-viewer-html -o site/
 ```
 
-<p>This creates a <code>my-report-site/</code> directory with <code>index.html</code> and all viewer assets.</p>
+<p>This creates a <code>site/</code> directory with the viewer (<code>index.html</code> and all assets) in <code>site/viewer/</code>.</p>
 
 <p><strong>Step 2 - upload your parquet alongside the site</strong> (or to any public URL).</p>
 
 <p><strong>Step 3 - link to the viewer with a <code>?data=</code> parameter:</strong></p>
 
 ```
-https://your-host.com/my-report-site/?data=https://your-host.com/results.parquet
+https://your-host.com/site/viewer/?data=https://your-host.com/results.parquet
 ```
 
 <p>The viewer fetches the parquet from the URL, so it can live anywhere publicly reachable - S3, GitHub releases, institutional storage, you name it.</p>
@@ -160,13 +160,13 @@ https://your-host.com/my-report-site/?data=https://your-host.com/results.parquet
 <div>
 
 ```bash
-# Build the viewer into your gh-pages output
-pixel-patrol build-viewer-html -o docs/viewer/
+# Build the viewer site
+pixel-patrol build-viewer-html -o site/
 
-# Add the parquet to the same repo (or reference an external URL)
-cp results.parquet docs/viewer/
+# Add the parquet next to the viewer (or reference an external URL)
+cp results.parquet site/viewer/
 
-# After deploying to GitHub Pages, share:
+# After publishing the contents of site/ with GitHub Pages, share:
 # https://your-org.github.io/your-repo/viewer/?data=https://your-org.github.io/your-repo/viewer/results.parquet
 ```
 

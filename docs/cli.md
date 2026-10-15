@@ -84,7 +84,7 @@ Packages the viewer as a self-contained static file for sharing or hosting witho
 pixel-patrol build-viewer-html -o OUTPUT [OPTIONS]
 ```
 
-If `OUTPUT` ends in `.html` or `.htm`, writes a single self-contained HTML file with all JS, CSS, and extensions inlined. Otherwise writes a GitHub Pages-style site folder.
+If `OUTPUT` ends in `.html` or `.htm`, writes a single self-contained HTML file with all JS, CSS, and extensions inlined. Otherwise writes a GitHub Pages-style site folder with the viewer in `OUTPUT/viewer/`.
 
 **Examples**
 
@@ -93,10 +93,10 @@ If `OUTPUT` ends in `.html` or `.htm`, writes a single self-contained HTML file 
 pixel-patrol build-viewer-html -o viewer.html
 
 # Site folder - deploy to any static host:
-pixel-patrol build-viewer-html -o gh-pages/
+pixel-patrol build-viewer-html -o site/
 
-# Load a remote parquet via URL:
-# Open: gh-pages/index.html?data=https://yourserver.com/results.parquet
+# Load a remote parquet via URL (the viewer is in site/viewer/):
+# https://your-host.com/site/viewer/?data=https://yourserver.com/results.parquet
 ```
 
 !!! warning

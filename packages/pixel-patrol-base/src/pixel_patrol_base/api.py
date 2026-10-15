@@ -182,8 +182,9 @@ def build_viewer(
     that works with no network access.
 
     Otherwise OUTPUT is treated as a directory and a GitHub Pages-style site
-    is written there (index.html + assets + extensions folders) - deploy to
-    any static host and open with a ?data= URL pointing to your parquet.
+    is written there, with the viewer (index.html + assets + extensions) in
+    OUTPUT/viewer/ - deploy to any static host and open it with a ?data= URL
+    pointing to your parquet.
     (offline does not apply to the directory build.)
 
     Args:
@@ -198,7 +199,7 @@ def build_viewer(
         >>> api.build_viewer("viewer.html")                 # light single file
         >>> api.build_viewer("viewer.html", offline=True)   # self-contained
         # OR
-        >>> api.build_viewer("gh-pages-out/")               # site folder
+        >>> api.build_viewer("site/")                       # site folder
     """
 
     output = Path(output)

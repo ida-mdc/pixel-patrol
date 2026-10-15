@@ -47,9 +47,9 @@ Open `viewer.html` in any browser and load your parquet from there. To share wit
 Deploy a viewer site folder and load a remote parquet via URL parameter:
 
 ```bash
-pixel-patrol build-viewer-html -o my-site/
-# deploy my-site/ to any static host, then open:
-# https://your-host.com/my-site/?data=https://your-host.com/results.parquet
+pixel-patrol build-viewer-html -o site/
+# the viewer is in site/viewer/; deploy site/ to any static host, then open:
+# https://your-host.com/site/viewer/?data=https://your-host.com/results.parquet
 ```
 
 **Via URL parameter (hosted viewer):**

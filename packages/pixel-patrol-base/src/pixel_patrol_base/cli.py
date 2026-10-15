@@ -199,7 +199,7 @@ def view(parquet_file, port, no_browser,
     type=click.Path(exists=False, file_okay=True, dir_okay=True, writable=True, path_type=Path),
     required=True,
     help='Output path. Use .html/.htm for a single HTML file, '
-         'or a directory for a GitHub Pages-style site folder.')
+         'or a directory for a GitHub Pages-style site folder (viewer in OUTPUT/viewer/).')
 @click.option(
     "--offline/--no-offline",
     default=False,
@@ -212,7 +212,8 @@ def build_viewer_html(output: Path, offline: bool):
 
     If OUTPUT ends in .html/.htm, writes a single HTML file (light by default;
     pass --offline to inline all dependencies).
-    Otherwise, writes a GitHub Pages-style site folder (index.html + assets + extensions).
+    Otherwise, writes a GitHub Pages-style site folder; the viewer (index.html + assets +
+    extensions) is in OUTPUT/viewer/.
     """
     api_build_viewer(output, offline=offline)
 

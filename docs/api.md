@@ -135,11 +135,11 @@ api.build_viewer(output) -> Path
 Builds a static viewer for sharing or hosting.
 
 - If `output` ends in `.html` / `.htm`: writes a single self-contained HTML file.
-- Otherwise: writes a GitHub Pages-style site folder.
+- Otherwise: writes a GitHub Pages-style site folder with the viewer in `output/viewer/`.
 
 ```python
-api.build_viewer("viewer.html")     # single file
-api.build_viewer("gh-pages-out/")  # site folder
+api.build_viewer("viewer.html")  # single file
+api.build_viewer("site/")        # site folder (viewer in site/viewer/)
 ```
 
 !!! warning
