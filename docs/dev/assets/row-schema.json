@@ -73,6 +73,14 @@
       "type": "string",
       "description": "Path of the dataset within the HDF5 file."
     },
+    "nifti_intent": {
+      "type": "string",
+      "description": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL')."
+    },
+    "shape": {
+      "type": "array",
+      "description": "Raster dimensions as [bands, height, width]."
+    },
     "zarr_attributes": {
       "type": "object",
       "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata."
@@ -136,6 +144,10 @@
     "nan_fraction": {
       "type": "number",
       "description": "Fraction of pixels excluded as NaN."
+    },
+    "nodata_count": {
+      "type": "integer",
+      "description": "Number of pixels equal to the declared nodata value."
     },
     "spectral_slope": {
       "type": "number",

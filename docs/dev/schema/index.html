@@ -1060,40 +1060,64 @@ table is generated from the installed plugins.</p>
 <td><code>list</code></td>
 <td>Names of the image channels, if available.</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
 </tr>
 <tr>
 <td><code>child_id</code></td>
 <td><code>string</code></td>
 <td>Identifier of a sub-image within a container file (null for single-image files).</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>crs_epsg</code></td>
+<td><code>Optional</code></td>
+<td>EPSG code of the CRS; None if not EPSG-registered.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>crs_str</code></td>
+<td><code>Optional</code></td>
+<td>Coordinate reference system as a WKT string.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
 </tr>
 <tr>
 <td><code>dim_names</code></td>
 <td><code>list</code></td>
 <td>Human-readable names of the image axes.</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
 </tr>
 <tr>
 <td><code>dim_order</code></td>
 <td><code>string</code></td>
 <td>Axis order of the image, e.g. 'TCZYX'.</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
 </tr>
 <tr>
 <td><code>dtype</code></td>
 <td><code>string</code></td>
 <td>Pixel data type of the source image (e.g. 'uint8', 'float32').</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, geospatial, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-geospatial, pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>footprint</code></td>
+<td><code>Optional</code></td>
+<td>Bounding-box footprint as a GeoJSON polygon in EPSG:4326.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
 </tr>
 <tr>
 <td><code>h5_attributes</code></td>
@@ -1112,12 +1136,52 @@ table is generated from the installed plugins.</p>
 <td>pixel-patrol-loader-bio</td>
 </tr>
 <tr>
+<td><code>latitude</code></td>
+<td><code>Optional</code></td>
+<td>Centroid latitude in WGS-84 degrees.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>longitude</code></td>
+<td><code>Optional</code></td>
+<td>Centroid longitude in WGS-84 degrees.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
+<td><code>nifti_intent</code></td>
+<td><code>string</code></td>
+<td>NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL').</td>
+<td>Loaders</td>
+<td>nifti</td>
+<td>pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>nodata_value</code></td>
+<td><code>Union</code></td>
+<td>Declared nodata/fill value from the file metadata.</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
+</tr>
+<tr>
 <td><code>pixel_size_&lt;axis&gt;</code></td>
 <td><code>float</code></td>
 <td>Physical pixel size along the given axis, in the image's spatial unit.</td>
 <td>Loaders</td>
-<td>bioio, h5, tifffile, zarr</td>
-<td>pixel-patrol-loader-bio</td>
+<td>bioio, dicom, h5, nifti, tifffile, zarr</td>
+<td>pixel-patrol-loader-bio, pixel-patrol-loader-medical</td>
+</tr>
+<tr>
+<td><code>shape</code></td>
+<td><code>list</code></td>
+<td>Raster dimensions as [bands, height, width].</td>
+<td>Loaders</td>
+<td>geospatial</td>
+<td>pixel-patrol-geospatial</td>
 </tr>
 <tr>
 <td><code>zarr_attributes</code></td>
@@ -1262,6 +1326,14 @@ table is generated from the installed plugins.</p>
 <td>raster-basic</td>
 <td>raster-basic</td>
 <td>pixel-patrol-base</td>
+</tr>
+<tr>
+<td><code>nodata_count</code></td>
+<td><code>int</code></td>
+<td>Number of pixels equal to the declared nodata value.</td>
+<td>nodata-statistics</td>
+<td>nodata-statistics</td>
+<td>pixel-patrol-geospatial</td>
 </tr>
 <tr>
 <td><code>spectral_slope</code></td>
