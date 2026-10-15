@@ -1,4 +1,4 @@
-# <img src="viewer/public/pixel-patrol.png" width="80">  PixelPatrol
+# <img src="packages/pixel-patrol/readme_assets/pixel-patrol-logo.png" width="80">  PixelPatrol
 
 ### Image Dataset Quality Control and Exploration
 
