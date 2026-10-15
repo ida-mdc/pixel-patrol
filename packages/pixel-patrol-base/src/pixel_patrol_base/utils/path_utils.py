@@ -99,6 +99,7 @@ def resolve_parquet_output_path(path: Union[str, Path]) -> Path:
     Normalise and validate a user-supplied output path:
       - Converts to absolute Path
       - Ensures .parquet suffix
+      - Rejects glob characters ('[', '*', '?'), which break reading the temporary part files
       - Creates parent directory (mkdir -p)
       - Checks parent is writable
     Returns the clean Path; raises ValueError / PermissionError on failure.
@@ -107,6 +108,8 @@ def resolve_parquet_output_path(path: Union[str, Path]) -> Path:
     if p.suffix.lower() != ".parquet":
         p = p.with_suffix(".parquet")
         logger.warning("Output path has no .parquet extension; using: '%s'", p)
+    if any(c in str(p) for c in "[*?"):
+        raise ValueError(f"Output path must not contain '[', '*' or '?': {p}")
     p.parent.mkdir(parents=True, exist_ok=True)
     if not os.access(p.parent, os.W_OK):
         raise PermissionError(f"Output directory is not writable: {p.parent}")

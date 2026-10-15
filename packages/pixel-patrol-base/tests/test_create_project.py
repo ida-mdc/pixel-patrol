@@ -99,6 +99,13 @@ def test_output_path_parent_dir_created(mock_project_name: str, tmp_path: Path):
     assert project.output_path == output.resolve()
 
 
+@pytest.mark.parametrize("output", ["out [1].parquet", "out*.parquet", "out?.parquet", "a[b]/out.parquet"])
+def test_output_path_glob_chars_rejected(mock_project_name: str, tmp_path: Path, output: str):
+    with pytest.raises(ValueError, match="must not contain"):
+        api.create_project(mock_project_name, tmp_path, output_path=tmp_path / output)
+    assert not (tmp_path / "a[b]").exists()
+
+
 def test_output_path_relative_resolved(mock_project_name: str, tmp_path: Path):
     """A relative output_path is resolved against the current working directory."""
     original_cwd = os.getcwd()
@@ -139,3 +146,17 @@ def test_output_path_independent_of_base_dir(mock_project_name: str, tmp_path: P
     project = api.create_project(mock_project_name, base, output_path=output)
     assert project.output_path == output.resolve()
     assert not project.output_path.is_relative_to(base)
+
+
+@pytest.mark.parametrize("files, expected", [([], False), (["a.txt"], True)])
+def test_output_written(mock_project_name: str, tmp_path: Path, files: list, expected: bool):
+    base = tmp_path / "data"
+    base.mkdir()
+    for name in files:
+        (base / name).touch()
+    project = api.create_project(mock_project_name, base, output_path=tmp_path / "out.parquet")
+
+    api.process_files(project, max_workers=1)
+
+    assert project.output_written is expected
+    assert project.output_path.exists() is expected

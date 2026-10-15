@@ -32,6 +32,7 @@ class Project:
 
         self.loader: Optional[PixelPatrolLoader] = discover_loader(loader_id=loader) if loader else None
         self.paths: List[Path] = [self.base_dir]
+        self.output_written: bool = False
 
         if loader is None:
             logger.warning(f"Project Core: No loader specified for project '{self.name}'. Only basic file information will be extracted.")
@@ -241,6 +242,7 @@ class Project:
                 logger.warning("Project Core: Could not save parquet to '%s': %s", self.output_path, e)
 
         if saved:
+            self.output_written = True
             _log_privacy_disclosure(self.metadata.privacy_summary)
             logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
             n_failed = stats.get("n_images_failed", 0)

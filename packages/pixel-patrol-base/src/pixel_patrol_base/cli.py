@@ -104,8 +104,12 @@ def process(base_directory: Path, output: Path, loader: str | None, paths: tuple
         click.echo("\nCancelled.")
         raise SystemExit(1)
 
+    if not my_project.output_written:
+        click.echo("No output written, see warnings above.", err=True)
+        raise SystemExit(1)
+
     resolved_output = output if output.suffix.lower() == ".parquet" else output.with_suffix(".parquet")
-    if open_viewer and resolved_output.exists():
+    if open_viewer:
         api_view(resolved_output)
 
 
