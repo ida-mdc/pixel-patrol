@@ -51,12 +51,12 @@ Starts a local HTTP server and opens the viewer. SQL runs server-side via native
 | `?data=<url>` | Load a remote parquet file on startup |
 | `?extension=<url>` | Load an extension manifest (repeatable) |
 | `?view=full` | Start in Full mode instead of Overview |
-| `?opened=<id>,<id>` | Comma-separated widget IDs to expand on load (Overview mode) |
+| `?opened=<id>.<id>` | Dot-separated widget IDs to expand on load (Overview mode) |
 
 Example:
 
 ```
-https://pixelpatrol.app/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
+https://pixelpatrol.app/viewer/?data=https://example.com/data.parquet&extension=https://example.com/my-extension/extension.json
 ```
 
 ---
