@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import sys
 from pathlib import Path
-from typing import Any, Union, Iterable
+from typing import Union, Iterable
 
 from click.testing import CliRunner
 
@@ -14,9 +14,12 @@ sys.modules.pop("pixel_patrol_base", None)
 from pixel_patrol_base import cli as cli_module
 
 
-def _setup_fake_cli(monkeypatch, dataset_root: Path, create_output: bool = False):
+def _setup_fake_cli(monkeypatch, dataset_root: Path, create_output: bool = True):
     """Wire the CLI entry points to lightweight fakes for deterministic assertions."""
-    dummy_project: dict[str, Any] = {}
+    class _FakeProject(dict):
+        output_written = False
+
+    dummy_project = _FakeProject()
     added_paths: list[Path] = []
     view_calls: list[Path] = []
 
@@ -45,7 +48,8 @@ def _setup_fake_cli(monkeypatch, dataset_root: Path, create_output: bool = False
 
     def fake_process_files(project, **kwargs):
         if create_output and dummy_project.get("output_path"):
-            dummy_project["output_path"].touch()
+            dummy_project["output_path"].with_suffix(".parquet").touch()
+            project.output_written = True
         return project
 
     def fake_view(path, **kwargs):
@@ -157,7 +161,7 @@ def test_process_view_flag_skipped_when_no_output(monkeypatch, tmp_path):
         catch_exceptions=False,
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert view_calls == []
 
 
@@ -169,9 +173,7 @@ def test_process_view_flag_corrects_missing_extension(monkeypatch, tmp_path):
     output_no_ext = tmp_path / "out"  # no .parquet
     output_corrected = tmp_path / "out.parquet"
 
-    _, view_calls = _setup_fake_cli(monkeypatch, dataset_root, create_output=False)
-    # fake_process_files won't create the file; touch it manually to simulate the corrected path
-    output_corrected.touch()
+    _, view_calls = _setup_fake_cli(monkeypatch, dataset_root)
 
     result = runner.invoke(
         cli_module.cli,
@@ -187,3 +189,13 @@ def test_list():
     result = CliRunner().invoke(cli_module.cli, ["list"])
     assert result.exit_code == 0
     assert "raster-basic" in result.output  # always registered by pixel-patrol-base
+
+
+def test_process_exits_1_when_nothing_written(tmp_path):
+    (tmp_path / "data").mkdir()
+    output_path = tmp_path / "out.parquet"
+
+    result = CliRunner().invoke(cli_module.cli, ["process", str(tmp_path / "data"), "-o", str(output_path)])
+
+    assert result.exit_code == 1
+    assert not output_path.exists()
