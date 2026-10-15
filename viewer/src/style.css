@@ -484,6 +484,14 @@ canvas { image-rendering: pixelated; max-width: 100%; }
 .topbar-brand {
   font-weight: 600; font-size: 16px; white-space: nowrap;
 }
+.topbar-flavor {
+  color: #d9534f; font-weight: 700; font-size: 20px; white-space: nowrap;
+  font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Neue", "Comic Sans MS", cursive;
+  transform: rotate(-6deg); margin-left: 6px;
+}
+@media (max-width: 1000px) {
+  .topbar-flavor { display: none; }
+}
 
 /* ── Export popover: one button per option, each with a description ── */
 .export-btn-list { display: flex; flex-direction: column; gap: 8px; }

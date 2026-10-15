@@ -21,6 +21,8 @@ let projectName  = null;
 let description  = null;
 let reportMeta   = null;
 
+const FLAVOR_MAX_CHARS = 20;
+
 /** Serialize render passes so concurrent triggers cannot interleave (duplicate widgets / stale cards). */
 let renderQueue = Promise.resolve();
 
@@ -325,6 +327,12 @@ function afterLoad(options = {}) {
     frozenSidebar: snapshotBundle?.frozenSidebar,
     onExportBakedHtml: state.sidebarLocked ? undefined : handleExportBakedHtml,
   });
+
+  const flavorEl = document.getElementById('topbar-flavor');
+  if (flavorEl) {
+    flavorEl.textContent = [...(reportMeta?.flavor ?? '')].slice(0, FLAVOR_MAX_CHARS).join('');
+    flavorEl.hidden = !reportMeta?.flavor;
+  }
 
   const nameEl = document.getElementById('project-name');
   if (nameEl) {
