@@ -49,8 +49,7 @@ jobs:
           npm ci
           npm run build
 
-      # 2. Install Python packages after the viewer is built so that the
-      #    editable install of pixel-patrol-base exposes the fresh viewer_dist/.
+      # 2. Install pixel-patrol (the set users get) after the viewer is built.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -58,11 +57,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
 
       - name: Install Python packages
-        run: |
-          uv pip install --system -e packages/pixel-patrol-base
-          uv pip install --system \
-            -e packages/pixel-patrol-loader-bio \
-            mkdocs-material mike
+        run: uv pip install --system -e packages/pixel-patrol mkdocs-material mike "mkdocs<2"
 
       # 3. Regenerate the interactive schema/plugin reference from the installed
       #    plugins (the widget metadata is read from the JS plugins via Node,
