@@ -102,18 +102,19 @@ The same workflow is available as a Python API:
 ```python
 from pixel_patrol_base import api
 
-project = api.create_project(
-    "my-project",
-    base_dir="path/to/images/",
-    loader="bioio",
-    output_path="results.parquet",
-)
+if __name__ == "__main__":
+    project = api.create_project(
+        "my-project",
+        base_dir="path/to/images/",
+        loader="bioio",
+        output_path="results.parquet",
+    )
 
-# Optional: define conditions as subdirectory paths
-api.add_paths(project, ["condition_a", "condition_b"])
+    # Optional: define conditions as subdirectory paths
+    api.add_paths(project, ["condition_a", "condition_b"])
 
-api.process_files(project)
-api.view(project)
+    api.process_files(project)
+    api.view(project)
 ```
 
 #### Loading a saved table

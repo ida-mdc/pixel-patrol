@@ -83,10 +83,11 @@ pixel-patrol launch
 ```python
 from pixel_patrol_base import api
 
-project = api.create_project("my-project", base_dir="path/to/images/", loader="bioio", output_path="results.parquet")
-api.add_paths(project, ["condition_a", "condition_b"])  # optional
-api.process_files(project)
-api.view(project)
+if __name__ == "__main__":
+    project = api.create_project("my-project", base_dir="path/to/images/", loader="bioio", output_path="results.parquet")
+    api.add_paths(project, ["condition_a", "condition_b"])  # optional
+    api.process_files(project)
+    api.view(project)
 ```
 
 ---

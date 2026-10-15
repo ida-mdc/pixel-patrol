@@ -763,6 +763,7 @@ const procWiz = {
     lines.push('from pixel_patrol_base import api');
     if (hasDask) lines.push('from dask.distributed import Client');
     lines.push('');
+    const nHeader = lines.length;
     lines.push('project = api.create_project(');
     lines.push('    "' + projName + '",');
     lines.push('    base_dir="' + pyBase + '",');
@@ -835,7 +836,8 @@ const procWiz = {
       lines.push('api.view(project)');
     }
 
-    return lines.join('\n');
+    const body = lines.slice(nHeader).map(l => l ? '    ' + l : l);
+    return [...lines.slice(0, nHeader), 'if __name__ == "__main__":', ...body].join('\n');
   },
 
   copy() {
