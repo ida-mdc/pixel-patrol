@@ -1,4 +1,4 @@
-import { MIXED_GROUP_WARNING } from './plugin_file_stats.js';
+import { MIXED_GROUP_WARNING } from './shared.js';
 
 export default {
   id: 'summary',

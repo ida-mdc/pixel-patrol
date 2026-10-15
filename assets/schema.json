@@ -15,7 +15,10 @@
           "description": "Image properties the loaders extract into the shared raster-image schema.",
           "loaders": [
             "bioio",
+            "dicom",
+            "geospatial",
             "h5",
+            "nifti",
             "tifffile",
             "zarr"
           ]
@@ -36,6 +39,11 @@
       "id": "processors",
       "label": "Processors",
       "children": [
+        {
+          "id": "processor:nodata-statistics",
+          "label": "nodata-statistics",
+          "description": "Counts pixels matching the declared nodata value."
+        },
         {
           "id": "processor:raster-basic",
           "label": "raster-basic",
@@ -212,12 +220,15 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
       ]
     },
     {
@@ -228,12 +239,41 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
+      ]
+    },
+    {
+      "name": "crs_epsg",
+      "dtype": "Optional",
+      "description": "EPSG code of the CRS; None if not EPSG-registered.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "crs_str",
+      "dtype": "Optional",
+      "description": "Coordinate reference system as a WKT string.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
       ]
     },
     {
@@ -244,12 +284,17 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
+        "geospatial",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
       ]
     },
     {
@@ -260,12 +305,17 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
+        "geospatial",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
       ]
     },
     {
@@ -276,12 +326,30 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
+        "geospatial",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-geospatial",
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
+      ]
+    },
+    {
+      "name": "footprint",
+      "dtype": "Optional",
+      "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
       ]
     },
     {
@@ -311,6 +379,58 @@
       ]
     },
     {
+      "name": "latitude",
+      "dtype": "Optional",
+      "description": "Centroid latitude in WGS-84 degrees.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "longitude",
+      "dtype": "Optional",
+      "description": "Centroid longitude in WGS-84 degrees.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
+      "name": "nifti_intent",
+      "dtype": "string",
+      "description": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL').",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "nifti"
+      ],
+      "packages": [
+        "pixel-patrol-loader-medical"
+      ]
+    },
+    {
+      "name": "nodata_value",
+      "dtype": "Union",
+      "description": "Declared nodata/fill value from the file metadata.",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
       "name": "pixel_size_<axis>",
       "dtype": "float",
       "description": "Physical pixel size along the given axis, in the image's spatial unit.",
@@ -318,14 +438,30 @@
       "category": "image",
       "creators": [
         "bioio",
+        "dicom",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ],
       "packages": [
-        "pixel-patrol-loader-bio"
+        "pixel-patrol-loader-bio",
+        "pixel-patrol-loader-medical"
       ],
       "regex": "^pixel_size_[A-Za-z]$"
+    },
+    {
+      "name": "shape",
+      "dtype": "list",
+      "description": "Raster dimensions as [bands, height, width].",
+      "producer": "image",
+      "category": "image",
+      "creators": [
+        "geospatial"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
     },
     {
       "name": "zarr_attributes",
@@ -564,6 +700,19 @@
       ]
     },
     {
+      "name": "nodata_count",
+      "dtype": "int",
+      "description": "Number of pixels equal to the declared nodata value.",
+      "producer": "processor:nodata-statistics",
+      "category": "metric",
+      "creators": [
+        "nodata-statistics"
+      ],
+      "packages": [
+        "pixel-patrol-geospatial"
+      ]
+    },
+    {
       "name": "spectral_slope",
       "dtype": "float32",
       "description": "Log-log slope of the radially averaged power spectrum, fit over the mid-frequency band (5\u201340% of Nyquist). Typical range: \u22122 to \u22124. Closer to 0 indicates noise or uniform content. More negative values indicate blur or stronger low-frequency dominance.",
@@ -687,7 +836,10 @@
       ],
       "loaders": [
         "bioio",
+        "dicom",
+        "geospatial",
         "h5",
+        "nifti",
         "tifffile",
         "zarr"
       ]
@@ -749,6 +901,167 @@
         }
       ],
       "extra_columns": [],
+      "extra_patterns": []
+    },
+    {
+      "name": "dicom",
+      "description": "Loads DICOM images (.dcm, .dicom), assembling multi-slice series from folders into 3D volumes.",
+      "package": "pixel-patrol-loader-medical",
+      "extensions": [
+        "dcm",
+        "dicom"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [],
+      "extra_patterns": []
+    },
+    {
+      "name": "geospatial",
+      "description": "Loads geospatial raster files (GeoTIFF, NetCDF) via rasterio, extracting CRS, spatial extent, and band metadata.",
+      "package": "pixel-patrol-geospatial",
+      "extensions": [
+        "nc",
+        "tif",
+        "tiff",
+        "txt",
+        "xyz",
+        "xyz.gz"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "crs_str",
+          "dtype": "Optional",
+          "description": "Coordinate reference system as a WKT string."
+        },
+        {
+          "name": "crs_epsg",
+          "dtype": "Optional",
+          "description": "EPSG code of the CRS; None if not EPSG-registered."
+        },
+        {
+          "name": "latitude",
+          "dtype": "Optional",
+          "description": "Centroid latitude in WGS-84 degrees."
+        },
+        {
+          "name": "longitude",
+          "dtype": "Optional",
+          "description": "Centroid longitude in WGS-84 degrees."
+        },
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "num_pixels",
+          "dtype": "int",
+          "description": "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels)."
+        },
+        {
+          "name": "shape",
+          "dtype": "list",
+          "description": "Raster dimensions as [bands, height, width]."
+        },
+        {
+          "name": "ndim",
+          "dtype": "int",
+          "description": "Number of image dimensions, derived from dim_order."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "footprint",
+          "dtype": "Optional",
+          "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326."
+        },
+        {
+          "name": "nodata_value",
+          "dtype": "Union",
+          "description": "Declared nodata/fill value from the file metadata."
+        }
+      ],
+      "patterns": [],
+      "extra_columns": [
+        {
+          "name": "crs_str",
+          "dtype": "Optional",
+          "description": "Coordinate reference system as a WKT string."
+        },
+        {
+          "name": "crs_epsg",
+          "dtype": "Optional",
+          "description": "EPSG code of the CRS; None if not EPSG-registered."
+        },
+        {
+          "name": "latitude",
+          "dtype": "Optional",
+          "description": "Centroid latitude in WGS-84 degrees."
+        },
+        {
+          "name": "longitude",
+          "dtype": "Optional",
+          "description": "Centroid longitude in WGS-84 degrees."
+        },
+        {
+          "name": "shape",
+          "dtype": "list",
+          "description": "Raster dimensions as [bands, height, width]."
+        },
+        {
+          "name": "footprint",
+          "dtype": "Optional",
+          "description": "Bounding-box footprint as a GeoJSON polygon in EPSG:4326."
+        },
+        {
+          "name": "nodata_value",
+          "dtype": "Union",
+          "description": "Declared nodata/fill value from the file metadata."
+        }
+      ],
       "extra_patterns": []
     },
     {
@@ -815,6 +1128,63 @@
           "name": "h5_attributes",
           "dtype": "dict",
           "description": "Raw HDF5 attributes of the dataset, merged with file root attributes."
+        }
+      ],
+      "extra_patterns": []
+    },
+    {
+      "name": "nifti",
+      "description": "Loads NIfTI images (.nii, .nii.gz), reading voxel data and header metadata.",
+      "package": "pixel-patrol-loader-medical",
+      "extensions": [
+        "nii",
+        "nii.gz"
+      ],
+      "schema": "raster-image",
+      "columns": [
+        {
+          "name": "dim_order",
+          "dtype": "string",
+          "description": "Axis order of the image, e.g. 'TCZYX'."
+        },
+        {
+          "name": "dtype",
+          "dtype": "string",
+          "description": "Pixel data type of the source image (e.g. 'uint8', 'float32')."
+        },
+        {
+          "name": "dim_names",
+          "dtype": "list",
+          "description": "Human-readable names of the image axes."
+        },
+        {
+          "name": "channel_names",
+          "dtype": "list",
+          "description": "Names of the image channels, if available."
+        },
+        {
+          "name": "child_id",
+          "dtype": "string",
+          "description": "Identifier of a sub-image within a container file (null for single-image files)."
+        },
+        {
+          "name": "nifti_intent",
+          "dtype": "string",
+          "description": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL')."
+        }
+      ],
+      "patterns": [
+        {
+          "pattern": "^pixel_size_[A-Za-z]$",
+          "dtype": "float",
+          "description": "Physical pixel size along the given axis, in the image's spatial unit."
+        }
+      ],
+      "extra_columns": [
+        {
+          "name": "nifti_intent",
+          "dtype": "string",
+          "description": "NIfTI intent code describing the data type (e.g. 'NIFTI_INTENT_NONE', 'NIFTI_INTENT_LABEL')."
         }
       ],
       "extra_patterns": []
@@ -926,6 +1296,29 @@
     }
   ],
   "processors": [
+    {
+      "name": "nodata-statistics",
+      "description": "Counts pixels matching the declared nodata value.",
+      "package": "pixel-patrol-geospatial",
+      "input": {
+        "axes": [
+          "X",
+          "Y"
+        ],
+        "kinds": [
+          "intensity"
+        ],
+        "capabilities": []
+      },
+      "output": "features",
+      "columns": [
+        {
+          "name": "nodata_count",
+          "dtype": "int",
+          "description": "Number of pixels equal to the declared nodata value."
+        }
+      ]
+    },
     {
       "name": "raster-basic",
       "description": "Computes basic per-image intensity statistics (min, max, mean, std), the finite-pixel count, and the NaN fraction, aggregated across chunks and dimensions.",
@@ -1159,6 +1552,12 @@
       ]
     },
     {
+      "id": "map-points",
+      "group": "Geospatial extension",
+      "scope": "image",
+      "label": "Locations"
+    },
+    {
       "id": "metadata",
       "group": "Metadata",
       "scope": "image",
@@ -1191,6 +1590,13 @@
       "required_inputs": [
         "thumbnail"
       ]
+    },
+    {
+      "id": "nodata-value-count",
+      "group": "no-data",
+      "scope": "image",
+      "label": "NoData",
+      "info": "NoData value frequency, nodata-pixel percentage, and non-finite pixels (float images)."
     },
     {
       "id": "stats-across-dims-basic",
@@ -1280,6 +1686,11 @@
   "connections": [
     {
       "source": "loader:bioio",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:bioio",
       "target": "processor:raster-basic",
       "via": "raster image"
     },
@@ -1304,6 +1715,71 @@
       "via": "image data"
     },
     {
+      "source": "loader:dicom",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:h5",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
       "source": "loader:h5",
       "target": "processor:raster-basic",
       "via": "raster image"
@@ -1329,6 +1805,41 @@
       "via": "image data"
     },
     {
+      "source": "loader:nifti",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "processor:raster-basic",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "processor:raster-histogram",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "processor:raster-quality",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "processor:thumbnail",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "derived",
+      "via": "image data"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
       "source": "loader:tifffile",
       "target": "processor:raster-basic",
       "via": "raster image"
@@ -1355,6 +1866,11 @@
     },
     {
       "source": "loader:zarr",
+      "target": "processor:nodata-statistics",
+      "via": "raster image"
+    },
+    {
+      "source": "loader:zarr",
       "target": "processor:raster-basic",
       "via": "raster image"
     },
@@ -1377,6 +1893,11 @@
       "source": "loader:zarr",
       "target": "derived",
       "via": "image data"
+    },
+    {
+      "source": "processor:nodata-statistics",
+      "target": "widget:custom-plot",
+      "via": "metrics"
     },
     {
       "source": "processor:raster-basic",
@@ -1396,25 +1917,15 @@
     {
       "source": "file",
       "target": "widget:file-stats",
-      "via": "modification_date"
+      "via": "size_bytes"
     },
     {
       "source": "processor:raster-histogram",
       "target": "widget:histogram",
-      "via": "histogram_nan_count"
+      "via": "histogram_max"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:h5",
+      "source": "loader:dicom",
       "target": "widget:histogram",
       "via": "dtype"
     },
@@ -1424,24 +1935,99 @@
       "via": "dtype"
     },
     {
+      "source": "loader:nifti",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
       "source": "file",
       "target": "widget:histogram",
       "via": "name"
     },
     {
-      "source": "processor:raster-quality",
+      "source": "loader:h5",
       "target": "widget:image-table",
-      "via": "dark_clipping_fraction"
+      "via": "h5_attributes"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "processor:raster-basic",
+      "target": "widget:image-table",
+      "via": "max_intensity"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:image-table",
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "file",
       "target": "widget:image-table",
-      "via": "common_base"
+      "via": "file_extension"
     },
     {
-      "source": "loader:h5",
+      "source": "processor:raster-quality",
       "target": "widget:image-table",
-      "via": "h5_dataset_path"
+      "via": "laplacian_variance"
+    },
+    {
+      "source": "processor:nodata-statistics",
+      "target": "widget:image-table",
+      "via": "nodata_count"
+    },
+    {
+      "source": "derived",
+      "target": "widget:image-table",
+      "via": "num_pixels"
     },
     {
       "source": "agg",
@@ -1449,34 +2035,39 @@
       "via": "dim_<axis>"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:image-table",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:image-table",
-      "via": "dim_order"
+      "source": "loader:dicom",
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
       "source": "loader:bioio",
-      "target": "widget:image-table",
-      "via": "dim_order"
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
-      "source": "processor:raster-basic",
-      "target": "widget:image-table",
-      "via": "finite_pixel_count"
+      "source": "loader:nifti",
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
-      "source": "derived",
-      "target": "widget:image-table",
-      "via": "size_<axis>"
+      "source": "loader:tifffile",
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
-      "source": "processor:thumbnail",
-      "target": "widget:image-table",
-      "via": "thumbnail_norm_max"
+      "source": "loader:geospatial",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
       "source": "derived",
@@ -1484,34 +2075,19 @@
       "via": "ndim"
     },
     {
-      "source": "loader:zarr",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:h5",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
       "source": "processor:thumbnail",
       "target": "widget:mosaic",
-      "via": "thumbnail_dtype"
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "file",
       "target": "widget:mosaic",
       "via": "name"
+    },
+    {
+      "source": "processor:nodata-statistics",
+      "target": "widget:mosaic",
+      "via": "metrics"
     },
     {
       "source": "processor:raster-basic",
@@ -1526,12 +2102,7 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-basic",
-      "via": "mean_intensity"
-    },
-    {
-      "source": "processor:raster-quality",
-      "target": "widget:stats-across-dims-quality",
-      "via": "dark_clipping_fraction"
+      "via": "std_intensity"
     },
     {
       "source": "processor:raster-basic",
@@ -1539,9 +2110,14 @@
       "via": "nan_fraction"
     },
     {
+      "source": "processor:raster-quality",
+      "target": "widget:stats-across-dims-quality",
+      "via": "bright_clipping_fraction"
+    },
+    {
       "source": "file",
       "target": "widget:summary",
-      "via": "path"
+      "via": "size_bytes"
     },
     {
       "source": "file",
@@ -1551,17 +2127,17 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-basic",
-      "via": "mean_intensity"
-    },
-    {
-      "source": "processor:raster-quality",
-      "target": "widget:violin-quality",
-      "via": "dark_clipping_fraction"
+      "via": "std_intensity"
     },
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-quality",
       "via": "nan_fraction"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:violin-quality",
+      "via": "bright_clipping_fraction"
     }
   ]
 }

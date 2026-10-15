@@ -1,3 +1,4 @@
 [
-  "./extensions/00-viewer/extension.json"
+  "./extensions/00-viewer/extension.json",
+  "./extensions/01-viewer/extension.json"
 ]
