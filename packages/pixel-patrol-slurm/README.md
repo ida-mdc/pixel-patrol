@@ -29,7 +29,7 @@ pixel-patrol-slurm --jobs 16 --cores 4 --memory 32GB --partition gpu \
 
 # Short walltime, fewer jobs
 pixel-patrol-slurm --walltime 04:00:00 --jobs 8 \
-  -- /data/images -o out.parquet --processors-exclude histogram
+  -- /data/images -o out.parquet --processors-exclude raster-histogram
 ```
 
 #### Options

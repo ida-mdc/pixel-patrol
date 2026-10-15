@@ -8,7 +8,7 @@ Usage:
 Examples:
   pixel-patrol-slurm -- /data/images --output results.parquet
   pixel-patrol-slurm --jobs 16 --cores 4 --memory 32GB --partition gpu -- /data/images --output results.parquet --flavor myproject
-  pixel-patrol-slurm --walltime 04:00:00 --jobs 8 -- /data/images -o out.parquet --processors-exclude histogram
+  pixel-patrol-slurm --walltime 04:00:00 --jobs 8 -- /data/images -o out.parquet --processors-exclude raster-histogram
 
 All arguments after -- are passed verbatim to `pixel-patrol process` (with --scheduler injected automatically).
 Arguments before -- control the Slurm cluster.
