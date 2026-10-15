@@ -56,7 +56,7 @@ _IMG_HELMHOLTZ = _b64_png("Helmholtz-Imaging_Mark.png")
 # ── Version ────────────────────────────────────────────────────────────────────
 
 # Kept in sync with packages/pixel-patrol's version by tools/bump_toml_version.py.
-LAUNCHER_VERSION = "0.9.3"
+LAUNCHER_VERSION = "0.9.4"
 
 # ── App directories ────────────────────────────────────────────────────────────
 

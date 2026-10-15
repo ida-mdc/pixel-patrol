@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol-aqqua"
-version = "0.9.3"
+version = "0.9.4"
 description = "PixelPatrol add-on package for Aqqua"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 dependencies = [
     "lmdb==1.7.5",
     "blosc2==4.0.0",
-    "pixel-patrol-base==0.9.3",
+    "pixel-patrol-base==0.9.4",
 ]
 
 [project.urls]
