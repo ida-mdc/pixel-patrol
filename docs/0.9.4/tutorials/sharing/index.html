@@ -1,0 +1,1268 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://pixelpatrol.app/docs/0.9.4/tutorials/sharing/">
+      
+      
+        <link rel="prev" href="../interactive_report/">
+      
+      
+        <link rel="next" href="../extension/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Sharing a Table - Pixel Patrol Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sharing-a-table" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-header__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Pixel Patrol Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Sharing a Table
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-nav__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    Pixel Patrol Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interactive_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#which-method-fits-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which method fits you?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bonus-share-exactly-what-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bonus: share exactly what matters
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extension/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create an Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Report Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="sharing-a-table">Sharing a Table</h1>
+<p>A PixelPatrol table is a single <code>.parquet</code> file holding everything about your dataset - metrics, thumbnails, schema, the works. Open it in a viewer and you get the full interactive report; this page covers all the ways to get the viewer to your collaborators (or the other way around). Before sharing a table with anyone, check the <a href="../../privacy/">privacy policy</a> for what's actually in it.</p>
+<hr />
+<h2 id="which-method-fits-you">Which method fits you?</h2>
+<div class="wc-setup" id="sh-setup-panel">
+  <div class="wc-setup-title">📤 Tell us about your situation</div>
+  <p style="font-size:0.82rem;margin:0 0 0.7rem;opacity:0.8">Answer the three questions below and the cards for methods that don't fit will dim out - so the right one stands out at a glance.</p>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Roughly how big is your table?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="size" data-val="small" onclick="shSetup(this)">Under a few GB</button>
+      <button class="wc-setup-btn" data-key="size" data-val="large" onclick="shSetup(this)">More than a few GB</button>
+    </span>
+  </div>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Does your collaborator need to see any custom widgets you've built?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="custom" data-val="yes" onclick="shSetup(this)">Yes, I have custom widgets</button>
+      <button class="wc-setup-btn" data-key="custom" data-val="no"  onclick="shSetup(this)">No, the built-ins are enough</button>
+    </span>
+  </div>
+  <div class="wc-setup-row">
+    <span class="wc-setup-q">Is this for one person (or a small group), or for anyone to find online?</span>
+    <span class="wc-setup-btns">
+      <button class="wc-setup-btn" data-key="goal" data-val="person"  onclick="shSetup(this)">One person / small group</button>
+      <button class="wc-setup-btn" data-key="goal" data-val="publish" onclick="shSetup(this)">Publishing publicly</button>
+    </span>
+  </div>
+</div>
+
+<p style="font-size:0.82rem;margin:0.5rem 0;opacity:0.8">Click the ✓ in the corner of each card to mark it as reviewed and track your progress.</p>
+
+<div class="wc-progress-wrap">
+  <div class="wc-progress-label" id="sh-prog-label">0 / 4 methods reviewed</div>
+  <div class="wc-progress-bar"><div class="wc-progress-fill" id="sh-prog-fill"></div></div>
+</div>
+
+<hr />
+<div class="wc" id="sh-dragdrop">
+<div class="wc-head">
+<span class="wc-icon">🖱️</span>
+<span class="wc-name">Drag &amp; drop into the hosted viewer</span>
+<button class="wc-check" data-sh="dragdrop" onclick="shCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>The zero-effort option. No installation required on either end - send your collaborator the <code>.parquet</code> file and point them to:</p>
+
+<p style="text-align:center;font-size:1.05rem;margin:0.9rem 0"><strong><a href="https://pixelpatrol.app/viewer/" target="_blank">pixelpatrol.app/viewer/</a></strong></p>
+
+<p>They drag the file into the browser and the full interactive viewer loads. Everything runs locally in their browser - no data is uploaded anywhere.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>Browser memory limits:</strong> the hosted viewer runs DuckDB in a browser WebAssembly context, capped by available browser memory. Tables larger than a few GB may fail to load or get sluggish - reach for <code>pixel-patrol view</code> instead.</div></div>
+<div class="wc-flag wc-flag-yellow"><span class="fi">⚠️</span><div><strong>No custom widgets:</strong> the hosted viewer only ships with the built-in widgets - your own viewer plugins aren't bundled in. If your collaborator needs to see those, build and host your own viewer instead (see "Host on a static server" below).</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> a quick look together over a call, or sending a small/medium table to one person who doesn't have PixelPatrol installed.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" id="sh-view">
+<div class="wc-head">
+<span class="wc-icon">💻</span>
+<span class="wc-name">Run <code>pixel-patrol view</code> locally</span>
+<button class="wc-check" data-sh="view" onclick="shCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Your collaborator will need PixelPatrol installed (see the <a href="../installation/">installation tutorial</a>). Once it's there, they can open any <code>.parquet</code> file directly:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet
+</code></pre></div>
+
+<p>This starts a local server backed by <strong>native DuckDB</strong> - no browser memory ceiling, fast even for very large reports.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div><strong>The recommended method for files above a few gigabytes.</strong> No upload, no waiting on browser WASM - just your data and your collaborator's machine.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Custom widgets:</strong> they'll show up here too, but only if your collaborator also installs your extension package - it isn't bundled into <code>pixel-patrol view</code> the way it is into a self-contained HTML or hosted site (see below).</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> labmates, frequent collaborators, or anyone already in the PixelPatrol ecosystem - and the best option once your table gets big, custom widgets and all.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" id="sh-html">
+<div class="wc-head">
+<span class="wc-icon">📄</span>
+<span class="wc-name">Build a self-contained HTML viewer</span>
+<button class="wc-check" data-sh="html" onclick="shCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Package the viewer into a single HTML file that works with any parquet:</p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>viewer.html
+</code></pre></div>
+
+<p>Send both <code>viewer.html</code> and <code>results.parquet</code> to your collaborator. They open <code>viewer.html</code> in any browser, pick the parquet from the file picker, and get the full interactive report - with nothing to install and no external link to track down.</p>
+
+<details class="wc-how">
+<summary>🔬 What's actually inside <code>viewer.html</code></summary>
+<div><code>viewer.html</code> is the application shell, not the data - your collaborator still needs the <code>.parquet</code> file alongside it (same folder is easiest; the viewer offers a file picker on load). The viewer app and your extensions are bundled directly into the file. DuckDB's WebAssembly engine and the styling (Bootstrap CSS and icons), however, load from a CDN at runtime.</div>
+</details>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> handing someone a self-sufficient package - by email, drive, or USB stick - without needing them to find or trust an external URL.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<div class="wc" id="sh-static">
+<div class="wc-head">
+<span class="wc-icon">🌐</span>
+<span class="wc-name">Host on a static server</span>
+<button class="wc-check" data-sh="static" onclick="shCheck(this)" title="Mark as reviewed"></button>
+</div>
+<div class="wc-body">
+
+<p>Want to publish results online - on GitHub Pages, an institutional server, an S3 bucket, or any static host? Deploy the viewer as a site folder and link straight to your parquet.</p>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-green"><span class="fi">✅</span><div>This is also the natural way to share a <strong>custom viewer</strong>: any extensions installed in your environment - including your own <a href="../extension/">viewer plugins</a> - are discovered and bundled into the site folder automatically, so your collaborators get your custom widgets without installing anything.</div></div>
+</div>
+
+<p><strong>Step 1 - build a viewer site folder:</strong></p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
+</code></pre></div>
+
+<p>This creates a <code>site/</code> directory with the viewer (<code>index.html</code> and all assets) in <code>site/viewer/</code>.</p>
+
+<p><strong>Step 2 - upload your parquet alongside the site</strong> (or to any public URL).</p>
+
+<p><strong>Step 3 - link to the viewer with a <code>?data=</code> parameter:</strong></p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>https://your-host.com/site/viewer/?data=https://your-host.com/results.parquet
+</code></pre></div>
+
+<p>The viewer fetches the parquet from the URL, so it can live anywhere publicly reachable - S3, GitHub releases, institutional storage, you name it.</p>
+
+<details class="wc-how">
+<summary>🔬 GitHub Pages, end to end</summary>
+<div>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Build the viewer site</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>pixel-patrol<span class="w"> </span>build-viewer-html<span class="w"> </span>-o<span class="w"> </span>site/
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Add the parquet next to the viewer (or reference an external URL)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>cp<span class="w"> </span>results.parquet<span class="w"> </span>site/viewer/
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># After publishing the contents of site/ with GitHub Pages, share:</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># https://your-org.github.io/your-repo/viewer/?data=https://your-org.github.io/your-repo/viewer/results.parquet</span>
+</code></pre></div>
+
+</div>
+</details>
+
+<div class="wc-flags">
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Skip the deploy entirely:</strong> if your parquet is already publicly accessible, the hosted PixelPatrol viewer accepts a <code>?data=</code> URL too - <code>https://pixelpatrol.app/viewer/?data=https://your-server.com/results.parquet</code>. Anyone with that link opens the full interactive report immediately, no deployment required.</div></div>
+<div class="wc-flag wc-flag-blue"><span class="fi">💡</span><div><strong>Best for:</strong> publishing results alongside a paper, a project page, or a team dashboard that anyone can land on.</div></div>
+</div>
+
+</div>
+</div>
+
+<hr />
+<h2 id="bonus-share-exactly-what-matters">Bonus: share exactly what matters</h2>
+<div class="wc-ctrl-grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>✂️</span> Share a filtered subset</div>
+<div class="wc-ctrl-body">After exploring your interactive report, <strong>apply your filters</strong> in the sidebar (by quality metric, condition, file type, ...), then <strong>Save as Parquet</strong> to create a new parquet file (pp table) with only the filtered data - you can open it as an interactive report - or <strong>Save as CSV</strong> for the same data as a plain spreadsheet, handy for building include/exclude lists or just browsing the numbers yourself. Share either via any method above. Useful for sending a "clean" dataset after removing outliers, handing a teammate just their relevant subset, or publishing a curated, low-noise version of your results.</div>
+</div>
+
+<div class="wc-ctrl">
+<div class="wc-ctrl-head"><span>🏷️</span> Name it before you share it</div>
+<div class="wc-ctrl-body">If you're processing specifically to share, set <code>--name</code> and <code>--description</code> so recipients aren't left guessing what they're looking at - both appear at the top of every viewer session:<br><br>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pixel-patrol<span class="w"> </span>process<span class="w"> </span>/data/my_experiment<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span>-o<span class="w"> </span>experiment_results.parquet<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span>--name<span class="w"> </span><span class="s2">"Experiment 42 - Drug Screen"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span>--description<span class="w"> </span><span class="s2">"Round 1, n=384, 20x brightfield. Processed 2026-06-07."</span>
+</code></pre></div>
+</div>
+</div>
+
+</div>
+
+<hr />
+<script>
+/* ── Setup toggle ─────────────────────────────────────────── */
+const shState = { size: null, custom: null, goal: null };
+
+function shSetup(btn) {
+  const key = btn.dataset.key;
+  const val = btn.dataset.val;
+  shState[key] = val;
+  document.querySelectorAll('.wc-setup-btn[data-key="' + key + '"]').forEach(b => {
+    b.classList.toggle('sel', b.dataset.val === val);
+  });
+  shApply();
+}
+
+function shApply() {
+  const dim = (id, unavailable) => {
+    const card = document.getElementById(id);
+    if (card) card.classList.toggle('wc-unavailable', unavailable);
+  };
+  dim('sh-dragdrop', shState.size === 'large' || shState.custom === 'yes' || shState.goal === 'publish');
+  dim('sh-view',     shState.goal === 'publish');
+  dim('sh-html',     shState.size === 'large' || shState.goal === 'publish');
+  dim('sh-static',   shState.goal === 'person');
+}
+
+/* ── Progress tracker ─────────────────────────────────────── */
+const SH_TOTAL = 4;
+const SH_KEY   = 'pp-sharing-progress';
+
+function shCheck(btn) {
+  const id = btn.dataset.sh;
+  const on = btn.classList.toggle('checked');
+  btn.textContent = on ? '✓' : '';
+  const saved = JSON.parse(localStorage.getItem(SH_KEY) || '{}');
+  saved[id] = on;
+  localStorage.setItem(SH_KEY, JSON.stringify(saved));
+  shUpdateProgress();
+}
+
+function shUpdateProgress() {
+  const saved = JSON.parse(localStorage.getItem(SH_KEY) || '{}');
+  const done  = Object.values(saved).filter(Boolean).length;
+  const pct   = Math.round(done / SH_TOTAL * 100);
+  const fill  = document.getElementById('sh-prog-fill');
+  const label = document.getElementById('sh-prog-label');
+  if (fill)  fill.style.width  = pct + '%';
+  if (label) label.textContent = done + ' / ' + SH_TOTAL + ' methods reviewed';
+}
+
+function shInit() {
+  const saved = JSON.parse(localStorage.getItem(SH_KEY) || '{}');
+  document.querySelectorAll('.wc-check').forEach(btn => {
+    if (saved[btn.dataset.sh]) {
+      btn.classList.add('checked');
+      btn.textContent = '✓';
+    }
+  });
+  shUpdateProgress();
+}
+
+document.addEventListener('DOMContentLoaded', shInit);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+      <div class="md-copyright" style="margin-top:4px">
+        <a href="../../impressum/" style="color:var(--md-footer-fg-color--light)">Impressum</a>
+        &nbsp;&middot;&nbsp;
+        <a href="../../privacy/" style="color:var(--md-footer-fg-color--light)">Privacy Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
