@@ -1273,13 +1273,13 @@
 </code></pre></div>
 <hr />
 <h2 id="pixel-patrol-list"><code>pixel-patrol list</code></h2>
-<p>Lists available loaders and processors from installed plugins, including the file extensions each loader supports.</p>
+<p>Lists available loaders and processors from installed plugins.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>pixel-patrol<span class="w"> </span>list<span class="w"> </span><span class="o">[</span>--loaders<span class="o">]</span><span class="w"> </span><span class="o">[</span>--processors<span class="o">]</span>
 </code></pre></div>
 <p>With no flags, lists both. Use <code>--loaders</code> or <code>--processors</code> to narrow down.</p>
 <p><strong>Example output</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Loaders:    bioio (czi, jpeg, jpg, lif, nd2, ome.tif, ome.zarr, png, tif, tiff, zarr), tifffile (ome.tif, tif, tiff), zarr (ome.zarr, zarr)
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Processors: raster-basic, raster-histogram, raster-quality, raster-compression
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Loaders:    nifti, dicom, bioio, h5, tifffile, zarr, geospatial
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Processors: raster-basic, raster-histogram, thumbnail, raster-quality, nodata-statistics
 </code></pre></div>
 <hr />
 <h2 id="pixel-patrol-launch"><code>pixel-patrol launch</code></h2>
