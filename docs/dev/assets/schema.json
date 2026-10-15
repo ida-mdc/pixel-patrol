@@ -1396,7 +1396,7 @@
     {
       "source": "file",
       "target": "widget:file-stats",
-      "via": "file_extension"
+      "via": "modification_date"
     },
     {
       "source": "processor:raster-histogram",
@@ -1404,22 +1404,22 @@
       "via": "histogram_min"
     },
     {
-      "source": "loader:tifffile",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
       "source": "loader:bioio",
       "target": "widget:histogram",
       "via": "dtype"
     },
     {
-      "source": "loader:h5",
+      "source": "loader:tifffile",
       "target": "widget:histogram",
       "via": "dtype"
     },
     {
       "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:h5",
       "target": "widget:histogram",
       "via": "dtype"
     },
@@ -1429,34 +1429,14 @@
       "via": "name"
     },
     {
-      "source": "processor:raster-basic",
-      "target": "widget:image-table",
-      "via": "min_intensity"
-    },
-    {
-      "source": "agg",
-      "target": "widget:image-table",
-      "via": "dim_<axis>"
-    },
-    {
       "source": "file",
       "target": "widget:image-table",
-      "via": "type"
+      "via": "modification_date"
     },
     {
-      "source": "derived",
+      "source": "processor:raster-basic",
       "target": "widget:image-table",
-      "via": "size_<axis>"
-    },
-    {
-      "source": "processor:thumbnail",
-      "target": "widget:image-table",
-      "via": "thumbnail_dtype"
-    },
-    {
-      "source": "loader:h5",
-      "target": "widget:image-table",
-      "via": "h5_attributes"
+      "via": "max_intensity"
     },
     {
       "source": "processor:raster-quality",
@@ -1464,14 +1444,14 @@
       "via": "laplacian_variance"
     },
     {
+      "source": "processor:thumbnail",
+      "target": "widget:image-table",
+      "via": "thumbnail_norm_min"
+    },
+    {
       "source": "loader:zarr",
       "target": "widget:image-table",
       "via": "zarr_attributes"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:image-table",
-      "via": "dim_names"
     },
     {
       "source": "loader:bioio",
@@ -1479,9 +1459,29 @@
       "via": "dim_names"
     },
     {
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:image-table",
+      "via": "dim_names"
+    },
+    {
+      "source": "agg",
+      "target": "widget:image-table",
+      "via": "dim_<axis>"
+    },
+    {
       "source": "derived",
+      "target": "widget:image-table",
+      "via": "size_<axis>"
+    },
+    {
+      "source": "loader:bioio",
       "target": "widget:metadata",
-      "via": "ndim"
+      "via": "dtype"
     },
     {
       "source": "loader:tifffile",
@@ -1489,7 +1489,7 @@
       "via": "dtype"
     },
     {
-      "source": "loader:bioio",
+      "source": "loader:zarr",
       "target": "widget:metadata",
       "via": "dtype"
     },
@@ -1499,14 +1499,14 @@
       "via": "dtype"
     },
     {
-      "source": "loader:zarr",
+      "source": "derived",
       "target": "widget:metadata",
-      "via": "dtype"
+      "via": "ndim"
     },
     {
       "source": "processor:thumbnail",
       "target": "widget:mosaic",
-      "via": "thumbnail"
+      "via": "thumbnail_dtype"
     },
     {
       "source": "file",
@@ -1526,17 +1526,17 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-basic",
-      "via": "min_intensity"
-    },
-    {
-      "source": "processor:raster-quality",
-      "target": "widget:stats-across-dims-quality",
-      "via": "dark_clipping_fraction"
+      "via": "max_intensity"
     },
     {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-quality",
       "via": "nan_fraction"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:stats-across-dims-quality",
+      "via": "laplacian_variance"
     },
     {
       "source": "file",
@@ -1551,17 +1551,17 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-basic",
-      "via": "min_intensity"
-    },
-    {
-      "source": "processor:raster-quality",
-      "target": "widget:violin-quality",
-      "via": "dark_clipping_fraction"
+      "via": "max_intensity"
     },
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-quality",
       "via": "nan_fraction"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:violin-quality",
+      "via": "laplacian_variance"
     }
   ]
 }
