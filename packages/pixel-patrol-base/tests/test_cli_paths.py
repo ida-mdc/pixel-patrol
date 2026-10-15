@@ -192,6 +192,7 @@ def test_list():
 
 
 def test_process_exits_1_when_nothing_written(tmp_path):
+    """Empty data dir: nothing is processed or written, so the CLI exits 1."""
     (tmp_path / "data").mkdir()
     output_path = tmp_path / "out.parquet"
 
