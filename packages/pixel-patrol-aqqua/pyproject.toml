@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://ida-mdc.github.io/pixel-patrol/"
+Homepage = "https://pixelpatrol.app/"
 Repository = "https://github.com/ida-mdc/pixel-patrol"
 
 [build-system]
