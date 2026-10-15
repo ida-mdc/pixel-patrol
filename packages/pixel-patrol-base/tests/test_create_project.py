@@ -99,6 +99,13 @@ def test_output_path_parent_dir_created(mock_project_name: str, tmp_path: Path):
     assert project.output_path == output.resolve()
 
 
+@pytest.mark.parametrize("output", ["out [1].parquet", "out*.parquet", "out?.parquet", "a[b]/out.parquet"])
+def test_output_path_glob_chars_rejected(mock_project_name: str, tmp_path: Path, output: str):
+    with pytest.raises(ValueError, match="must not contain"):
+        api.create_project(mock_project_name, tmp_path, output_path=tmp_path / output)
+    assert not (tmp_path / "a[b]").exists()
+
+
 def test_output_path_relative_resolved(mock_project_name: str, tmp_path: Path):
     """A relative output_path is resolved against the current working directory."""
     original_cwd = os.getcwd()
