@@ -9,6 +9,7 @@ import argparse
 import fnmatch
 import os
 import shlex
+import shutil
 import tomllib
 from pathlib import Path
 
@@ -22,7 +23,6 @@ def data_root() -> Path:
 
 
 def fetch_zip_whole(entry: dict, out: Path) -> None:
-    import shutil
     import urllib.request
     import zipfile
     archive = out.with_name(out.name + ".zip")
@@ -36,7 +36,10 @@ def fetch_zip_whole(entry: dict, out: Path) -> None:
 def fetch_zip(entry: dict, out: Path, sample: int | None) -> None:
     if not sample:
         return fetch_zip_whole(entry, out)
-    from remotezip import RemoteZip
+    try:
+        from remotezip import RemoteZip
+    except ModuleNotFoundError:
+        raise SystemExit("--sample needs remotezip:  pip install remotezip")
     with RemoteZip(entry["url"]) as z:
         members = [i for i in z.infolist() if not i.is_dir()]
         if sample:
@@ -72,10 +75,13 @@ def main() -> None:
     if args.pp_args:
         print(shlex.join(pixel_patrol_args(entry)))
         return
-    out = data_root() / args.dataset / ("sample" if args.sample else "full")
-    out.mkdir(parents=True, exist_ok=True)
-    FETCHERS[entry["kind"]](entry, out, args.sample)
-    print(out)
+    final = data_root() / args.dataset / ("sample" if args.sample else "full")
+    partial = final.with_name(final.name + ".partial")
+    shutil.rmtree(partial, ignore_errors=True)
+    partial.mkdir(parents=True)
+    FETCHERS[entry["kind"]](entry, partial, args.sample)
+    partial.rename(final)  # only a complete fetch ever appears under the final name
+    print(final)
 
 
 if __name__ == "__main__":
