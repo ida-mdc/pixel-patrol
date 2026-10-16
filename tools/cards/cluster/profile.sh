@@ -2,7 +2,7 @@
 # Profile one manifest dataset with PixelPatrol.
 #   local test:  ./profile.sh <id> sample    fetches 3 member files, runs pixel-patrol locally
 #   cluster:     sbatch profile.sh <id> full  fetches everything, runs pixel-patrol via pixel-patrol-slurm
-# Env: PP_CARDS_DATA (data root), PP_CARDS_OUT (parquet dir),
+# Env: PP_CARDS_HOME (only if you sbatch from somewhere other than the repo root), PP_CARDS_DATA (data root), PP_CARDS_OUT (parquet dir),
 #      PP_SLURM_ARGS (default "--jobs 8 --cores 4 --memory 16GB --walltime 12:00:00", add --partition=... here)
 #SBATCH --job-name=pp-card
 #SBATCH --time=24:00:00
@@ -11,7 +11,13 @@
 #SBATCH --output=pp-card-%j.log
 set -euo pipefail
 ID=${1:?dataset id}; MODE=${2:?sample|full}
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# sbatch runs a copy of this script from the Slurm spool dir, so locate our siblings explicitly there.
+if [[ -n ${SLURM_JOB_ID:-} ]]; then
+  HERE=${PP_CARDS_HOME:-${SLURM_SUBMIT_DIR:?}/tools/cards/cluster}   # submit from the repo root, or set PP_CARDS_HOME
+else
+  HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+[[ -f "$HERE/prepare.py" ]] || { echo "prepare.py not found in $HERE - set PP_CARDS_HOME to tools/cards/cluster" >&2; exit 2; }
 export PP_CARDS_DATA=${PP_CARDS_DATA:-$HERE/data}
 OUT=${PP_CARDS_OUT:-$HERE/out}; mkdir -p "$OUT"
 SRC="$PP_CARDS_DATA/$ID/$MODE"
