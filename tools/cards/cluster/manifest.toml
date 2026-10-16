@@ -36,6 +36,8 @@ loader = "bioio"
 extensions = ["jpg"]
 pp_args = []
 
+# SKIPPED: not profiled for cards because the dataset is about segmentation labels, which PixelPatrol does not support.
+# Kept so the fetch/profile path (tested on a sample) is available if label support arrives.
 [medical-segmentation-decathlon]
 kind = "tar"
 # MONAI-hosted mirror of the 10 official task archives (~76 GB in total: needs ~80 GB free); same CC-BY-SA 4.0 licence.txt.
