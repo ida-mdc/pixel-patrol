@@ -7,6 +7,7 @@ Downloaded archives are untrusted data: this script only writes files, it never 
 """
 import argparse
 import fnmatch
+import io
 import os
 import shlex
 import shutil
@@ -89,7 +90,70 @@ def fetch_tar(entry: dict, out: Path, sample: int | None) -> None:
     print(f"  {done:,} files extracted")
 
 
-FETCHERS = {"zip": fetch_zip, "hf": fetch_hf, "tar": fetch_tar}
+class RangeFile(io.RawIOBase):
+    """Read-only seekable view of an HTTP resource, fetched with Range requests (lets py7zr read a remote archive)."""
+
+    def __init__(self, url: str):
+        import urllib.request
+        self._open = urllib.request.Request
+        head = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"))
+        self.url, self.size, self.pos, self.cache = head.url, int(head.headers["Content-Length"]), 0, {}
+
+    def readable(self): return True
+    def seekable(self): return True
+    def tell(self): return self.pos
+
+    def seek(self, offset, whence=0):
+        self.pos = {0: offset, 1: self.pos + offset, 2: self.size + offset}[whence]
+        return self.pos
+
+    def read(self, n=-1):
+        import urllib.request
+        n = self.size - self.pos if n < 0 or self.pos + n > self.size else n
+        if n <= 0:
+            return b""
+        if (self.pos, n) not in self.cache:
+            req = urllib.request.Request(self.url, headers={"Range": f"bytes={self.pos}-{self.pos + n - 1}"})
+            self.cache[(self.pos, n)] = urllib.request.urlopen(req).read()
+        data = self.cache[(self.pos, n)]
+        self.pos += len(data)
+        return data
+
+    def readinto(self, buf):
+        data = self.read(len(buf))
+        buf[:len(data)] = data
+        return len(data)
+
+
+def fetch_7z(entry: dict, out: Path, sample: int | None) -> None:
+    """Download each .7z to disk, extract it, delete it (7z needs random access, so it cannot be streamed).
+    --sample N reads the header remotely and extracts the first N files of each wanted extension (the solid stream is
+    decompressed only up to there)."""
+    try:
+        import py7zr
+    except ModuleNotFoundError:
+        raise SystemExit("7z datasets need py7zr:  pip install py7zr")
+    wanted = tuple(f".{e}" for e in entry["extensions"])
+    for url in entry["urls"]:
+        if sample:
+            with py7zr.SevenZipFile(RangeFile(url)) as archive:
+                names = [i.filename for i in archive.list() if i.filename.endswith(wanted)]
+                targets = [n for ext in wanted for n in [x for x in names if x.endswith(ext)][:sample]]
+            with py7zr.SevenZipFile(RangeFile(url)) as archive:
+                archive.extract(out, targets=targets)
+            print(f"  {len(targets)} files from {url.rsplit('/', 2)[-2]}")
+            break
+        import urllib.request
+        archive_path = out / "archive.7z"
+        with urllib.request.urlopen(url) as r, open(archive_path, "wb") as f:
+            shutil.copyfileobj(r, f, 1 << 22)
+        with py7zr.SevenZipFile(archive_path) as archive:
+            archive.extractall(out)
+        archive_path.unlink()
+        print(f"  extracted {url.rsplit('/', 2)[-2]}", flush=True)
+
+
+FETCHERS = {"zip": fetch_zip, "hf": fetch_hf, "tar": fetch_tar, "7z": fetch_7z}
 
 
 def pixel_patrol_args(entry: dict, only_existing_in: Path | None = None) -> list[str]:

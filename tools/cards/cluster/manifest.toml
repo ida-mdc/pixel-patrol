@@ -1,4 +1,5 @@
 # One table per dataset. `kind` decides how prepare.py fetches it.
+#   7z  : .7z archives (downloaded to disk, extracted, then deleted; needs ~2x the archive size free at peak)
 #   zip : single zip over HTTP(S); --sample reads single members via range requests (no full download)
 #   tar : single .tar.gz over HTTP(S), streamed and extracted on the fly; --sample takes the first N files
 #   hf  : Hugging Face dataset repo (allow = glob patterns to fetch)
@@ -55,3 +56,13 @@ extensions = ["nii.gz"]
 # images only: every task archive also holds labelsTr (masks), which are fetched but not profiled.
 # One row per volume (Z=-1, T=-1): per-slice rows would be ~1M rows with thumbnails.
 pp_args = ["--slice-size", "Z=-1", "--slice-size", "T=-1", "-p", "Task01_BrainTumour/imagesTr", "-p", "Task01_BrainTumour/imagesTs", "-p", "Task02_Heart/imagesTr", "-p", "Task02_Heart/imagesTs", "-p", "Task03_Liver/imagesTr", "-p", "Task03_Liver/imagesTs", "-p", "Task04_Hippocampus/imagesTr", "-p", "Task04_Hippocampus/imagesTs", "-p", "Task05_Prostate/imagesTr", "-p", "Task05_Prostate/imagesTs", "-p", "Task06_Lung/imagesTr", "-p", "Task06_Lung/imagesTs", "-p", "Task07_Pancreas/imagesTr", "-p", "Task07_Pancreas/imagesTs", "-p", "Task08_HepaticVessel/imagesTr", "-p", "Task08_HepaticVessel/imagesTs", "-p", "Task09_Spleen/imagesTr", "-p", "Task09_Spleen/imagesTs", "-p", "Task10_Colon/imagesTr", "-p", "Task10_Colon/imagesTs"]
+
+[uxo-recordings]
+kind = "7z"
+# Only the record's "main dataset" archive (16.7 GB, ~19 GB unpacked, 74,437 .pgm sonar + 48,462 .jpg camera frames + json/csv).
+# NOT included: data_export_polar.7z (74,437 polar-transformed .png of the same sonar frames) and data_processed.7z
+# (64.9 GB: 98,937 unmatched .pgm + 98,937 .png + 228 .mp4). See specs/uxo-recordings.toml.
+urls = ["https://zenodo.org/api/records/11068046/files/data_export_recordings.7z/content"]
+loader = "bioio"
+extensions = ["pgm", "jpg"]
+pp_args = []
