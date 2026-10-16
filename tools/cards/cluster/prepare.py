@@ -66,29 +66,40 @@ def fetch_hf(entry: dict, out: Path, sample: int | None) -> None:
 
 
 def fetch_tar(entry: dict, out: Path, sample: int | None) -> None:
-    """Stream a tar (plain or compressed; LILA's cct_images.tar.gz is uncompressed) from HTTP and extract as it arrives: the archive itself is never stored.
-    --sample N takes the first N files in archive order (cheap: the stream is abandoned after them)."""
+    """Stream tar archive(s) (plain or compressed; LILA's cct_images.tar.gz is uncompressed) from HTTP and extract as
+    they arrive: archives are never stored. `url` may be one URL or `urls` a list.
+    --sample N takes the first N image-like files of the first archive (cheap: the stream is abandoned after them)."""
     import tarfile
     import urllib.request
     done = 0
-    with urllib.request.urlopen(entry["url"]) as r, tarfile.open(fileobj=r, mode="r|*") as tar:
-        for member in tar:
-            if member.isfile() and sample and done >= sample:
-                break
-            tar.extract(member, out, filter="data")  # 'data' filter rejects absolute paths, .. and special files
-            if member.isfile():
-                done += 1
-                if done % 10000 == 0:
-                    print(f"  {done:,} files", flush=True)
+    for url in entry.get("urls", [entry.get("url")]):
+        with urllib.request.urlopen(url) as r, tarfile.open(fileobj=r, mode="r|*") as tar:
+            for member in tar:
+                if member.isfile() and sample and done >= sample:
+                    break
+                if member.name.rsplit("/", 1)[-1].startswith("._"):  # macOS resource forks inside archives are not data
+                    continue
+                tar.extract(member, out, filter="data")  # 'data' filter rejects absolute paths, .. and special files
+                if member.isfile():
+                    done += 1
+                    if done % 10000 == 0:
+                        print(f"  {done:,} files", flush=True)
+        if sample:
+            break
     print(f"  {done:,} files extracted")
 
 
 FETCHERS = {"zip": fetch_zip, "hf": fetch_hf, "tar": fetch_tar}
 
 
-def pixel_patrol_args(entry: dict) -> list[str]:
+def pixel_patrol_args(entry: dict, only_existing_in: Path | None = None) -> list[str]:
+    """only_existing_in: drop `-p <dir>` pairs whose dir is missing there (sample runs only; full runs stay strict)."""
+    extra = entry.get("pp_args", [])
+    if only_existing_in is not None:
+        pairs = [extra[i:i + 2] for i in range(0, len(extra), 2)]  # every pp_args entry is a flag + value
+        extra = [a for pair in pairs if pair[0] != "-p" or (only_existing_in / pair[1]).is_dir() for a in pair]
     exts = [a for ext in entry["extensions"] for a in ("-e", ext)]
-    return ["--loader", entry["loader"], *exts, *entry.get("pp_args", [])]
+    return ["--loader", entry["loader"], *exts, *extra]
 
 
 def main() -> None:
@@ -96,10 +107,11 @@ def main() -> None:
     ap.add_argument("dataset")
     ap.add_argument("--sample", type=int, metavar="N")
     ap.add_argument("--pp-args", action="store_true")
+    ap.add_argument("--existing-in", type=Path, help="with --pp-args: drop -p paths that do not exist under this dir")
     args = ap.parse_args()
     entry = tomllib.loads(MANIFEST.read_text())[args.dataset]
     if args.pp_args:
-        print(shlex.join(pixel_patrol_args(entry)))
+        print(shlex.join(pixel_patrol_args(entry, args.existing_in)))
         return
     final = data_root() / args.dataset / ("sample" if args.sample else "full")
     partial = final.with_name(final.name + ".partial")

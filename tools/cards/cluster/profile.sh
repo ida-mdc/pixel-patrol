@@ -25,7 +25,9 @@ SRC="$PP_CARDS_DATA/$ID/$MODE"
 if [[ ! -d "$SRC" ]]; then
   if [[ $MODE == sample ]]; then python3 "$HERE/prepare.py" "$ID" --sample 3; else python3 "$HERE/prepare.py" "$ID"; fi
 fi
-eval "PP_ARGS=($(python3 "$HERE/prepare.py" "$ID" --pp-args))"
+# samples hold only a few files, so skip -p folders they lack; full runs keep every -p (a missing folder must fail)
+if [[ $MODE == sample ]]; then EXISTING=(--existing-in "$SRC"); else EXISTING=(); fi
+eval "PP_ARGS=($(python3 "$HERE/prepare.py" "$ID" --pp-args "${EXISTING[@]}"))"
 PP_ARGS+=(--name "$ID" -o "$OUT/$ID-$MODE.parquet" --log-file)
 
 if [[ $MODE == sample ]]; then

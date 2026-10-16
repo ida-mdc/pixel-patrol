@@ -34,3 +34,24 @@ url = "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/cc
 loader = "bioio"
 extensions = ["jpg"]
 pp_args = []
+
+[medical-segmentation-decathlon]
+kind = "tar"
+# MONAI-hosted mirror of the 10 official task archives (~76 GB in total: needs ~80 GB free); same CC-BY-SA 4.0 licence.txt.
+urls = [
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task01_BrainTumour.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task02_Heart.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task03_Liver.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task04_Hippocampus.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task05_Prostate.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task06_Lung.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task07_Pancreas.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task08_HepaticVessel.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task09_Spleen.tar",
+  "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task10_Colon.tar",
+]
+loader = "nifti"
+extensions = ["nii.gz"]
+# images only: every task archive also holds labelsTr (masks), which are fetched but not profiled.
+# One row per volume (Z=-1, T=-1): per-slice rows would be ~1M rows with thumbnails.
+pp_args = ["--slice-size", "Z=-1", "--slice-size", "T=-1", "-p", "Task01_BrainTumour/imagesTr", "-p", "Task01_BrainTumour/imagesTs", "-p", "Task02_Heart/imagesTr", "-p", "Task02_Heart/imagesTs", "-p", "Task03_Liver/imagesTr", "-p", "Task03_Liver/imagesTs", "-p", "Task04_Hippocampus/imagesTr", "-p", "Task04_Hippocampus/imagesTs", "-p", "Task05_Prostate/imagesTr", "-p", "Task05_Prostate/imagesTs", "-p", "Task06_Lung/imagesTr", "-p", "Task06_Lung/imagesTs", "-p", "Task07_Pancreas/imagesTr", "-p", "Task07_Pancreas/imagesTs", "-p", "Task08_HepaticVessel/imagesTr", "-p", "Task08_HepaticVessel/imagesTs", "-p", "Task09_Spleen/imagesTr", "-p", "Task09_Spleen/imagesTs", "-p", "Task10_Colon/imagesTr", "-p", "Task10_Colon/imagesTs"]
