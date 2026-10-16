@@ -1,5 +1,6 @@
 # One table per dataset. `kind` decides how prepare.py fetches it.
 #   zip : single zip over HTTP(S); --sample reads single members via range requests (no full download)
+#   tar : single .tar.gz over HTTP(S), streamed and extracted on the fly; --sample takes the first N files
 #   hf  : Hugging Face dataset repo (allow = glob patterns to fetch)
 # Every entry mirrors a card spec in ../specs (same slug); citation/licence live there, not here.
 
@@ -23,6 +24,13 @@ pp_args = ["--slice-size", "Z=-1"]   # one row per stack, not per Z plane (3 emb
 kind = "hf"
 repo = "MBARI-org/DeepSea-MOT"
 allow = ["data/*/images/*.jpg"]   # the annotated frames of all 11 sequences; .mov sources, labels and xml are not profiled
+loader = "bioio"
+extensions = ["jpg"]
+pp_args = []
+
+[caltech-camera-traps]
+kind = "tar"
+url = "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/cct_images.tar.gz"   # 112.5 GB: needs ~115 GB free
 loader = "bioio"
 extensions = ["jpg"]
 pp_args = []

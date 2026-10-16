@@ -65,7 +65,25 @@ def fetch_hf(entry: dict, out: Path, sample: int | None) -> None:
         print(f"  {name}")
 
 
-FETCHERS = {"zip": fetch_zip, "hf": fetch_hf}
+def fetch_tar(entry: dict, out: Path, sample: int | None) -> None:
+    """Stream a tar (plain or compressed; LILA's cct_images.tar.gz is uncompressed) from HTTP and extract as it arrives: the archive itself is never stored.
+    --sample N takes the first N files in archive order (cheap: the stream is abandoned after them)."""
+    import tarfile
+    import urllib.request
+    done = 0
+    with urllib.request.urlopen(entry["url"]) as r, tarfile.open(fileobj=r, mode="r|*") as tar:
+        for member in tar:
+            if member.isfile() and sample and done >= sample:
+                break
+            tar.extract(member, out, filter="data")  # 'data' filter rejects absolute paths, .. and special files
+            if member.isfile():
+                done += 1
+                if done % 10000 == 0:
+                    print(f"  {done:,} files", flush=True)
+    print(f"  {done:,} files extracted")
+
+
+FETCHERS = {"zip": fetch_zip, "hf": fetch_hf, "tar": fetch_tar}
 
 
 def pixel_patrol_args(entry: dict) -> list[str]:
