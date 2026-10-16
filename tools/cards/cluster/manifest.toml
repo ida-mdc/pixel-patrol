@@ -22,7 +22,7 @@ pp_args = ["--slice-size", "Z=-1"]   # one row per stack, not per Z plane (3 emb
 [deepsea-mot]
 kind = "hf"
 repo = "MBARI-org/DeepSea-MOT"
-allow = ["data/*/img1/*.jpg", "data/*/gt.txt", "data/*/seqinfo.ini"]
+allow = ["data/*/images/*.jpg"]   # the annotated frames of all 11 sequences; .mov sources, labels and xml are not profiled
 loader = "bioio"
 extensions = ["jpg"]
 pp_args = []

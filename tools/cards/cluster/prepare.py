@@ -2,7 +2,7 @@
 
   prepare.py <id>              full download + unpack
   prepare.py <id> --pp-args    print the pixel-patrol loader/extension/extra args (shell-quoted)
-  prepare.py <id> --sample N   N evenly spaced member files only (zip: range requests, no full download)
+  prepare.py <id> --sample N   N evenly spaced files only (zip: range requests; hf: single-file downloads)
 Downloaded archives are untrusted data: this script only writes files, it never executes them.
 """
 import argparse
@@ -51,10 +51,18 @@ def fetch_zip(entry: dict, out: Path, sample: int | None) -> None:
 
 
 def fetch_hf(entry: dict, out: Path, sample: int | None) -> None:
-    from huggingface_hub import snapshot_download
-    if sample:
-        raise SystemExit("--sample is not supported for hf datasets yet")
-    snapshot_download(entry["repo"], repo_type="dataset", allow_patterns=entry["allow"], local_dir=out)
+    try:
+        from huggingface_hub import HfApi, hf_hub_download, snapshot_download
+    except ModuleNotFoundError:
+        raise SystemExit("hf datasets need huggingface_hub:  pip install huggingface_hub")
+    if not sample:
+        snapshot_download(entry["repo"], repo_type="dataset", allow_patterns=entry["allow"], local_dir=out)
+        return
+    names = sorted(f for f in HfApi().list_repo_files(entry["repo"], repo_type="dataset")
+                   if any(fnmatch.fnmatch(f, pat) for pat in entry["allow"]))
+    for name in [names[k] for k in np.linspace(0, len(names) - 1, sample).astype(int)]:
+        hf_hub_download(entry["repo"], name, repo_type="dataset", local_dir=out)
+        print(f"  {name}")
 
 
 FETCHERS = {"zip": fetch_zip, "hf": fetch_hf}
