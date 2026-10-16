@@ -128,7 +128,7 @@ class BioIoLoader:
     NAME = "bioio"
     DESCRIPTION = "Opens a wide range of microscopy and standard image formats via BioIO, extracting pixel data and image metadata (dimensions, channels, pixel sizes)."
 
-    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "ome.tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "ome.zarr", "zarr"}
+    SUPPORTED_EXTENSIONS: Set[str] = {"czi", "tif", "tiff", "ome.tif", "ome.tiff", "nd2", "lif", "jpg", "jpeg", "png", "bmp", "pgm", "ome.zarr", "zarr"}
 
     OUTPUT_SCHEMA: Dict[str, Any] = dict(RASTER_IMAGE_LOADER_SCHEMA)
     OUTPUT_SCHEMA_PATTERNS: List[tuple[str, Any]] = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
