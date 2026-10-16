@@ -11,6 +11,7 @@ import io
 import os
 import shlex
 import shutil
+import sys
 import tomllib
 from pathlib import Path
 
@@ -125,6 +126,20 @@ class RangeFile(io.RawIOBase):
         return len(data)
 
 
+def extract_7z(archive: Path, out: Path) -> None:
+    """Prefer a 7-Zip command-line tool: it streams. py7zr buffers solid blocks and ran a 16.7 GB archive out of an 8 GB job."""
+    import subprocess
+    cli = next((c for c in ("7zz", "7z", "7za", "7zr") if shutil.which(c)), None)
+    if cli:
+        subprocess.run([cli, "x", str(archive), f"-o{out}", "-y", "-bso0", "-bsp0"], check=True)
+        return
+    import py7zr
+    print("WARNING: no 7z/7zz/7za/7zr on PATH, extracting with py7zr (needs RAM ~ the archive size; "
+          "install one: micromamba install -c conda-forge 7zip)", file=sys.stderr, flush=True)
+    with py7zr.SevenZipFile(archive) as sz:
+        sz.extractall(out)
+
+
 def fetch_7z(entry: dict, out: Path, sample: int | None) -> None:
     """Download each .7z to disk, extract it, delete it (7z needs random access, so it cannot be streamed).
     --sample N reads the header remotely and extracts the first N files of each wanted extension (the solid stream is
@@ -147,8 +162,7 @@ def fetch_7z(entry: dict, out: Path, sample: int | None) -> None:
         archive_path = out / "archive.7z"
         with urllib.request.urlopen(url) as r, open(archive_path, "wb") as f:
             shutil.copyfileobj(r, f, 1 << 22)
-        with py7zr.SevenZipFile(archive_path) as archive:
-            archive.extractall(out)
+        extract_7z(archive_path, out)
         archive_path.unlink()
         print(f"  extracted {url.rsplit('/', 2)[-2]}", flush=True)
 
