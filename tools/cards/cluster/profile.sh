@@ -36,3 +36,5 @@ else
   # shellcheck disable=SC2086
   pixel-patrol-slurm ${PP_SLURM_ARGS:---jobs 8 --cores 4 --memory 16GB --walltime 12:00:00} -- "$SRC" "${PP_ARGS[@]}"
 fi
+# pixel-patrol exits 0 even when it found nothing and wrote nothing; a card needs the parquet.
+[[ -s "$OUT/$ID-$MODE.parquet" ]] || { echo "profile.sh: no parquet written for $ID ($MODE) - see warnings above" >&2; exit 1; }

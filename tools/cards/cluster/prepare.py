@@ -182,6 +182,10 @@ def main() -> None:
     shutil.rmtree(partial, ignore_errors=True)
     partial.mkdir(parents=True)
     FETCHERS[entry["kind"]](entry, partial, args.sample)
+    wanted = tuple(f".{e}" for e in entry["extensions"])
+    if not any(f.name.endswith(wanted) for f in partial.rglob("*") if f.is_file()):
+        raise SystemExit(f"fetched {args.dataset} but found no {'/'.join(wanted)} files in {partial} - "
+                         "is the manifest entry current? (the partial directory is left for inspection)")
     partial.rename(final)  # only a complete fetch ever appears under the final name
     print(final)
 
