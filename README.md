@@ -2,6 +2,8 @@
 
 ### Image Dataset Quality Control and Exploration
 
+[![DOI](https://zenodo.org/badge/1012490900.svg)](https://doi.org/10.5281/zenodo.23479548)
+
 <img src="packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
 **[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/latest/tutorials/) | [Documentation](https://pixelpatrol.app/docs/latest/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
@@ -128,8 +130,6 @@ PixelPatrol is designed to be extended with custom loaders, processors, and view
 ---
 
 ## Citation
-
-[![DOI](https://zenodo.org/badge/1012490900.svg)](https://doi.org/10.5281/zenodo.23479548)
 
 If you use PixelPatrol, please cite it (the DOI always resolves to the latest version):
 
