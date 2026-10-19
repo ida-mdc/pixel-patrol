@@ -131,7 +131,7 @@ PixelPatrol is designed to be extended with custom loaders, processors, and view
 
 ## Citation
 
-If you use PixelPatrol, please cite it (the DOI always resolves to the latest version):
+If you use PixelPatrol, please cite it:
 
 ```bibtex
 @software{pixelpatrol,
