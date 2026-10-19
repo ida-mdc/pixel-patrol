@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use PixelPatrol, please cite it as below."
+title: "PixelPatrol"
+abstract: "Image dataset quality control and exploration."
+type: software
+version: 1.0.0
+date-released: 2026-10-15
+license: MIT
+repository-code: "https://github.com/ida-mdc/pixel-patrol"
+url: "https://pixelpatrol.app"
+authors:
+  - family-names: Bahry
+    given-names: Ella
+  - family-names: Rossberg
+    given-names: Thomas
+  - family-names: Otto
+    given-names: Maximilian
+  - family-names: Schmidt
+    given-names: Deborah
