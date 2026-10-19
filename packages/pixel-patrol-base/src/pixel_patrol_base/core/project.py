@@ -200,8 +200,9 @@ class Project:
             _log_processing_summary(self.name, stats)
 
         # Computed once, embedded in the parquet footer and printed below.
+        params = {k: stats.get(k, v) for k, v in _processing_params(config).items()}
         self.metadata.privacy_summary = _privacy_disclosure_lines(
-            self.loader, processors, config.metadata.omit_base_dir, config
+            self.loader, processors, config.metadata.omit_base_dir, params
         )
 
         saved = False
@@ -283,7 +284,7 @@ def _processing_params(config) -> Dict[str, Any]:
     }
 
 
-def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool, config) -> List[str]:
+def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool, params: Dict[str, Any]) -> List[str]:
     """Human-readable summary of what this run stores in the parquet, so users know
     what they're sharing before they hand the file to someone else.
     """
@@ -304,7 +305,7 @@ def _privacy_disclosure_lines(loader, processors: list, omit_base_dir: bool, con
     if stat_procs:
         lines.append(f"- derived image data statistics from: {', '.join(stat_procs)}")
 
-    params_str = ", ".join(f"{k}={v}" for k, v in _processing_params(config).items())
+    params_str = ", ".join(f"{k}={v}" for k, v in params.items())
     lines.append(f"- processing parameters affecting results: {params_str}")
 
     return lines
