@@ -124,3 +124,21 @@ pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained
 ## Extending PixelPatrol
 
 PixelPatrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See [pixel-patrol-example-extension](https://github.com/ida-mdc/pixel-patrol-example-extension) for a working template, and the [Extensions](https://pixelpatrol.app/docs/latest/extensions/) documentation.
+
+---
+
+## Citation
+
+[![DOI](https://zenodo.org/badge/1012490900.svg)](https://doi.org/10.5281/zenodo.23479548)
+
+If you use PixelPatrol, please cite it (the DOI always resolves to the latest version):
+
+```bibtex
+@software{pixelpatrol,
+  author = {Bahry, Ella and Rossberg, Thomas and Otto, Maximilian and Schmidt, Deborah},
+  title  = {PixelPatrol},
+  year   = {2026},
+  doi    = {10.5281/zenodo.23479548},
+  url    = {https://github.com/ida-mdc/pixel-patrol}
+}
+```
