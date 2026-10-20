@@ -494,7 +494,7 @@ async function handleParquetExport(scope, where, isFiltered) {
     const note = buildExportNote(scope, state);
     if (note) params.set('note', note);
     const qs   = params.size ? `?${params}` : '';
-    const resp = await fetch(`/api/export-parquet${qs}`);
+    const resp = await fetch(`./api/export-parquet${qs}`);
     if (!resp.ok) throw new Error(await resp.text());
     const blob         = await resp.blob();
     const filteredPart = isFiltered ? '_filtered' : '';

@@ -60,7 +60,7 @@ function warningKey(w) {
 }
 
 function reportUrl(path) {
-  return `/report?path=${encodeURIComponent(path)}`;
+  return `./report?path=${encodeURIComponent(path)}`;
 }
 
 // ---------------------------------------------------------------------
@@ -69,7 +69,7 @@ function reportUrl(path) {
 
 async function loadReports(refresh = false) {
   try {
-    const res = await fetch(refresh ? "/api/reports?refresh=1" : "/api/reports");
+    const res = await fetch(refresh ? "./api/reports?refresh=1" : "./api/reports");
     const data = await res.json();
     if (data.reports_dir) {
       reportsDirEl.textContent = `Reports directory: ${data.reports_dir}`;
@@ -169,7 +169,7 @@ async function deleteReport(r) {
     : `Delete report "${r.filename}" from disk?\n\n${r.path}`;
   if (!confirm(prompt)) return;
   try {
-    const res = await fetch("/api/delete-report", {
+    const res = await fetch("./api/delete-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: r.path }),
@@ -206,7 +206,7 @@ refreshBtn.addEventListener("click", () => loadReports(true));
 // ---------------------------------------------------------------------
 
 async function loadLoaders() {
-  const res = await fetch("/api/loaders");
+  const res = await fetch("./api/loaders");
   availableLoaders = await res.json();
   loaderSelect.innerHTML = "";
   for (const loader of availableLoaders) {
@@ -219,7 +219,7 @@ async function loadLoaders() {
 }
 
 async function loadProcessors() {
-  const res = await fetch("/api/processors");
+  const res = await fetch("./api/processors");
   const processors = await res.json();
   for (const select of [processorsIncludeSelect, processorsExcludeSelect]) {
     select.innerHTML = "";
@@ -234,7 +234,7 @@ async function loadProcessors() {
 
 // Fill help text, input placeholders and minimums from the shared process-arg definitions.
 async function loadProcessArgs() {
-  const res = await fetch("/api/process-args");
+  const res = await fetch("./api/process-args");
   const args = await res.json();
   for (const el of document.querySelectorAll("[data-arg]")) {
     const { help, default: dflt, minimum } = args[el.dataset.arg];
@@ -313,7 +313,7 @@ form.addEventListener("submit", async (e) => {
   dismissedWarnings.clear();
   lastCompletedReport = null;
 
-  const res = await fetch("/api/process", {
+  const res = await fetch("./api/process", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -341,7 +341,7 @@ function stopPolling() {
 }
 
 async function pollStatus() {
-  const res = await fetch("/api/status");
+  const res = await fetch("./api/status");
   const state = await res.json();
   renderState(state);
   if (state.status !== "running") {
@@ -459,7 +459,7 @@ async function cancelProcessing() {
   const btn = document.getElementById("cancel-btn");
   btn.disabled = true;
   btn.textContent = "Cancelling...";
-  const res = await fetch("/api/cancel", { method: "POST" });
+  const res = await fetch("./api/cancel", { method: "POST" });
   const state = await res.json();
   renderState(state);
 }
@@ -470,7 +470,7 @@ async function openProcessedReport(outputParquet) {
   btn.disabled = true;
   btn.textContent = "Opening…";
   try {
-    const res = await fetch("/api/report-url", {
+    const res = await fetch("./api/report-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ output_parquet: outputParquet, ...viewerDefaults() }),
@@ -621,7 +621,7 @@ async function loadBrowser(path, { forgetIfMissing = false } = {}) {
     const params = new URLSearchParams();
     if (path) params.set("path", path);
     if (!browserListsFiles()) params.set("files", "0");
-    const res = await fetch(`/api/browse?${params}`);
+    const res = await fetch(`./api/browse?${params}`);
     if (forgetIfMissing && res.status === 404 && path && !browserConfig.root) {
       localStorage.removeItem(LAST_BROWSE_DIR_KEY);
       return loadBrowser("");
@@ -717,7 +717,7 @@ async function importReport(path) {
   importConfirmBtn.disabled = true;
   importConfirmBtn.textContent = "Importing…";
   try {
-    const res = await fetch("/api/import-report", {
+    const res = await fetch("./api/import-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
@@ -757,7 +757,7 @@ browserPathInput.addEventListener("keydown", (e) => {
 
 async function checkVersion() {
   try {
-    const res = await fetch("/api/version");
+    const res = await fetch("./api/version");
     const data = await res.json();
     if (!data.update_available) return;
 
@@ -783,7 +783,7 @@ async function installUpdate() {
   btn.disabled = true;
   btn.textContent = "Installing...";
   try {
-    const res = await fetch("/api/update", { method: "POST" });
+    const res = await fetch("./api/update", { method: "POST" });
     const data = await res.json();
     if (res.ok) {
       versionInfoEl.innerHTML = `<span>Update installed — close this tab and reopen PixelPatrol to use the new version.</span>`;
@@ -807,7 +807,7 @@ async function installUpdate() {
   await Promise.all([loadLoaders(), loadProcessors(), loadProcessArgs()]);
   const reportCount = await loadReports();
   checkVersion();
-  const res = await fetch("/api/status");
+  const res = await fetch("./api/status");
   const state = await res.json();
   renderState(state);
   if (state.status === "running") {

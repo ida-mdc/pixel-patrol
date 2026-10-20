@@ -20,7 +20,7 @@ export function makeServerConn() {
   // report. The standalone viewer server has no id and answers /api/query for
   // its single parquet.
   const reportId = (typeof window !== 'undefined' && window.__PP_REPORT_ID) || null;
-  const queryUrl = reportId ? `/api/query?report=${encodeURIComponent(reportId)}` : '/api/query';
+  const queryUrl = reportId ? `./api/query?report=${encodeURIComponent(reportId)}` : './api/query';
 
   async function query(sql) {
     const res = await fetch(queryUrl, {
