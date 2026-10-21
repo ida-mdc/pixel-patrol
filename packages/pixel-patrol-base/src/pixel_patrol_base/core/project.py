@@ -177,7 +177,7 @@ class Project:
     def _save_result(
             self,
             records_df: Optional[pl.DataFrame],
-            stats:      dict,
+            processing_stats: dict,
             parts_dir:  Path,
             config:     ProcessingConfig,
             processors: list,
@@ -191,16 +191,16 @@ class Project:
         if config.parquet_row_group_size is not None:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
 
-        expected_parts = [Path(p) for p in stats.pop("part_paths", [])]  # not persisted metadata
+        expected_parts = [Path(p) for p in processing_stats.pop("part_paths", [])]  # not persisted metadata
 
-        if stats:
+        if processing_stats:
             for k, v in _processing_params(config).items():
-                stats.setdefault(k, v)  # the pipeline's own value wins (e.g. cluster-derived mb_per_worker)
-            self.metadata.processing_stats = stats
-            _log_processing_summary(self.name, stats)
+                processing_stats.setdefault(k, v)  # the pipeline's own value wins (e.g. cluster-derived mb_per_worker)
+            self.metadata.processing_stats = processing_stats
+            _log_processing_summary(self.name, processing_stats)
 
         # Computed once, embedded in the parquet footer and printed below.
-        params = {k: stats.get(k, v) for k, v in _processing_params(config).items()}
+        params = {k: processing_stats.get(k, v) for k, v in _processing_params(config).items()}
         self.metadata.privacy_summary = _privacy_disclosure_lines(
             self.loader, processors, config.metadata.omit_base_dir, params
         )
@@ -246,7 +246,7 @@ class Project:
             self.output_written = True
             _log_privacy_disclosure(self.metadata.privacy_summary)
             logger.info(_output_log_style("Output → '%s'", fg="green", bold=True), self.output_path)
-            n_failed = stats.get("n_images_failed", 0)
+            n_failed = processing_stats.get("n_images_failed", 0)
             if n_failed:
                 logger.warning(_output_log_style(
                     "%d image(s) failed and are missing from the table - see errors/warnings "
