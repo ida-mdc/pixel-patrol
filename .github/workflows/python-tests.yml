@@ -36,7 +36,7 @@ jobs:
     strategy:
       matrix:
         # If on main (push) OR PR targeting main -> test on 3 OSes, else only ubuntu
-        os: ${{ fromJson( (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]' ) }}
+        os: ${{ fromJson( (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main')) && '["ubuntu-latest","windows-latest","macos-latest", "macos-15-intel"]' || '["ubuntu-latest"]' ) }}
         package: ${{ fromJson(needs.discover-packages.outputs.packages) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
