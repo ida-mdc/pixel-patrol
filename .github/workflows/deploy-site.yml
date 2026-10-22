@@ -103,7 +103,7 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           git worktree add gh-pages-branch gh-pages
-          rsync -a --delete \
+          rsync -a --checksum --delete \
             --exclude=/docs --exclude=/.git --exclude=/.nojekyll --exclude=/CNAME \
             gh-pages-site/ gh-pages-branch/
           cd gh-pages-branch
