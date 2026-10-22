@@ -2,6 +2,8 @@
 
 ### Image Dataset Quality Control and Exploration
 
+[![DOI](https://zenodo.org/badge/1012490900.svg)](https://doi.org/10.5281/zenodo.23479548)
+
 <img src="https://raw.githubusercontent.com/ida-mdc/pixel-patrol/main/packages/pixel-patrol/readme_assets/HI_logo.jpg" width="80">
 
 **[Example Report](https://pixelpatrol.app/viewer/?data=../example.parquet) | [Tutorials](https://pixelpatrol.app/docs/latest/tutorials/) | [Documentation](https://pixelpatrol.app/docs/latest/) | [Viewer](https://pixelpatrol.app/viewer/) | [PyPI](https://pypi.org/project/pixel-patrol/)**
@@ -124,3 +126,19 @@ pixel-patrol build-viewer-html -o viewer.html --offline   # fully self-contained
 ## Extending PixelPatrol
 
 PixelPatrol is designed to be extended with custom loaders, processors, and viewer widgets as standalone Python packages. See [pixel-patrol-example-extension](https://github.com/ida-mdc/pixel-patrol-example-extension) for a working template, and the [Extensions](https://pixelpatrol.app/docs/latest/extensions/) documentation.
+
+---
+
+## Citation
+
+If you use PixelPatrol, please cite it:
+
+```bibtex
+@software{pixelpatrol,
+  author = {Bahry, Ella and Rossberg, Thomas and Otto, Maximilian and Schmidt, Deborah},
+  title  = {PixelPatrol},
+  year   = {2026},
+  doi    = {10.5281/zenodo.23479548},
+  url    = {https://github.com/ida-mdc/pixel-patrol}
+}
+```
