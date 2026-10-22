@@ -487,7 +487,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
     def _inject_server_config(self, html: bytes) -> bytes:
         """Inject window.__PP_* config variables before </head>."""
-        extension_urls = [f"/extension/{i}/extension.json" for i in range(len(self.extension_dirs))]
+        extension_urls = [f"./extension/{i}/extension.json" for i in range(len(self.extension_dirs))]
         script = (
             "<script>\n"
             "window.__PP_SERVER = true;\n"

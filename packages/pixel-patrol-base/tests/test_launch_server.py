@@ -546,7 +546,7 @@ def test_report_url_builds_query_string(server, tmp_path, monkeypatch):
         data = json.loads(resp.read())
 
     url = data["url"]
-    assert url.startswith("/report?path=")
+    assert url.startswith("./report?path=")
     for fragment in ("group=path", "fc=file_extension", "fo=eq", "fv=tif",
                      "dims=z0.t1", "sig=1", "palette=viridis", "hidden=histogram.summary"):
         assert fragment in url
@@ -560,7 +560,7 @@ def test_report_url_no_extras_returns_bare_url(server, tmp_path, monkeypatch):
     with _post_json(server, "/api/report-url", {"output_parquet": str(output)}) as resp:
         data = json.loads(resp.read())
 
-    assert data["url"] == f"/report?path={urllib.parse.quote(str(output.resolve()))}"
+    assert data["url"] == f"./report?path={urllib.parse.quote(str(output.resolve()))}"
 
 
 def test_report_url_bad_dimensions(server, tmp_path, monkeypatch):

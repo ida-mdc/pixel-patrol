@@ -664,7 +664,7 @@ class _LaunchHandler(_ViewerHandler):
             is_show_significance=bool(payload.get("is_show_significance")),
             palette=(payload.get("palette") or "").strip() or None,
         )
-        url = f"/report?path={quote(str(parquet_path))}"
+        url = f"./report?path={quote(str(parquet_path))}"
         self._send_json({"url": f"{url}&{viewer_qs}" if viewer_qs else url})
 
     def _bind_report(self, query_string: str) -> bool:
@@ -692,7 +692,7 @@ class _LaunchHandler(_ViewerHandler):
         raw_path = parse_qs(query_string).get("path", [""])[0]
         if not raw_path:
             self.send_response(302)
-            self.send_header("Location", "/")
+            self.send_header("Location", "./")
             self.end_headers()
             return
         parquet_path = library.find_known(raw_path)
