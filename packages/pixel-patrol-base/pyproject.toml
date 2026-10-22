@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol-base"
-version = "1.0.0"
+version = "1.0.1"
 description = "Image prevalidation tool"
 readme = "README.md"
 license = "MIT"

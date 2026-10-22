@@ -1,6 +1,6 @@
 [project]
 name = "pixel-patrol"
-version = "1.0.0"
+version = "1.0.1"
 description = "Image prevalidation tool - PixelPatrol and its add-ons packages"
 readme = "README.md"
 license = "MIT"
@@ -11,10 +11,10 @@ authors = [
 requires-python = ">=3.12"
 
 dependencies = [
-    "pixel-patrol-base==1.0.0",
-    "pixel-patrol-loader-bio==1.0.0",
-    "pixel-patrol-loader-medical==1.0.0",
-    "pixel-patrol-geospatial==1.0.0",
+    "pixel-patrol-base==1.0.1",
+    "pixel-patrol-loader-bio==1.0.1",
+    "pixel-patrol-loader-medical==1.0.1",
+    "pixel-patrol-geospatial==1.0.1",
 ]
 
 [project.urls]
