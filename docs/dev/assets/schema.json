@@ -1920,14 +1920,14 @@
       "via": "modification_date"
     },
     {
-      "source": "loader:h5",
+      "source": "file",
       "target": "widget:histogram",
-      "via": "dtype"
+      "via": "name"
     },
     {
-      "source": "loader:bioio",
+      "source": "processor:raster-histogram",
       "target": "widget:histogram",
-      "via": "dtype"
+      "via": "histogram_counts"
     },
     {
       "source": "loader:dicom",
@@ -1935,12 +1935,7 @@
       "via": "dtype"
     },
     {
-      "source": "loader:nifti",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:zarr",
+      "source": "loader:h5",
       "target": "widget:histogram",
       "via": "dtype"
     },
@@ -1950,24 +1945,34 @@
       "via": "dtype"
     },
     {
+      "source": "loader:bioio",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
       "source": "loader:geospatial",
       "target": "widget:histogram",
       "via": "dtype"
     },
     {
-      "source": "processor:raster-histogram",
-      "target": "widget:histogram",
-      "via": "histogram_nan_count"
-    },
-    {
-      "source": "file",
-      "target": "widget:histogram",
-      "via": "name"
-    },
-    {
       "source": "file",
       "target": "widget:image-table",
-      "via": "common_base"
+      "via": "parent<N>"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:image-table",
+      "via": "dark_clipping_fraction"
     },
     {
       "source": "processor:raster-basic",
@@ -1975,59 +1980,49 @@
       "via": "max_intensity"
     },
     {
+      "source": "derived",
+      "target": "widget:image-table",
+      "via": "size_<axis>"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:image-table",
+      "via": "nodata_value"
+    },
+    {
+      "source": "processor:thumbnail",
+      "target": "widget:image-table",
+      "via": "thumbnail_norm_min"
+    },
+    {
       "source": "loader:h5",
       "target": "widget:image-table",
       "via": "h5_attributes"
     },
     {
-      "source": "loader:geospatial",
-      "target": "widget:image-table",
-      "via": "footprint"
-    },
-    {
-      "source": "processor:raster-quality",
-      "target": "widget:image-table",
-      "via": "laplacian_variance"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
       "source": "loader:dicom",
       "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
-      "source": "loader:nifti",
-      "target": "widget:image-table",
-      "via": "dim_names"
-    },
-    {
-      "source": "loader:zarr",
-      "target": "widget:image-table",
-      "via": "dim_names"
+      "via": "child_id"
     },
     {
       "source": "loader:tifffile",
       "target": "widget:image-table",
-      "via": "dim_names"
+      "via": "child_id"
     },
     {
-      "source": "agg",
+      "source": "loader:bioio",
       "target": "widget:image-table",
-      "via": "dim_<axis>"
+      "via": "child_id"
     },
     {
-      "source": "processor:thumbnail",
+      "source": "loader:zarr",
       "target": "widget:image-table",
-      "via": "thumbnail_dtype"
+      "via": "child_id"
     },
     {
-      "source": "derived",
+      "source": "loader:nifti",
       "target": "widget:image-table",
-      "via": "size_<axis>"
+      "via": "child_id"
     },
     {
       "source": "processor:nodata-statistics",
@@ -2035,7 +2030,22 @@
       "via": "nodata_count"
     },
     {
+      "source": "agg",
+      "target": "widget:image-table",
+      "via": "dim_<axis>"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
       "source": "loader:h5",
+      "target": "widget:metadata",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
       "target": "widget:metadata",
       "via": "dtype"
     },
@@ -2045,22 +2055,12 @@
       "via": "dtype"
     },
     {
-      "source": "loader:dicom",
-      "target": "widget:metadata",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:nifti",
-      "target": "widget:metadata",
-      "via": "dtype"
-    },
-    {
       "source": "loader:zarr",
       "target": "widget:metadata",
       "via": "dtype"
     },
     {
-      "source": "loader:tifffile",
+      "source": "loader:nifti",
       "target": "widget:metadata",
       "via": "dtype"
     },
@@ -2077,7 +2077,7 @@
     {
       "source": "processor:thumbnail",
       "target": "widget:mosaic",
-      "via": "thumbnail_norm_max"
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "file",
@@ -2105,14 +2105,14 @@
       "via": "std_intensity"
     },
     {
-      "source": "processor:raster-quality",
-      "target": "widget:stats-across-dims-quality",
-      "via": "laplacian_variance"
-    },
-    {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-quality",
       "via": "nan_fraction"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:stats-across-dims-quality",
+      "via": "bright_clipping_fraction"
     },
     {
       "source": "file",
@@ -2122,7 +2122,7 @@
     {
       "source": "file",
       "target": "widget:sunburst",
-      "via": "size_bytes"
+      "via": "path"
     },
     {
       "source": "processor:raster-basic",
@@ -2130,14 +2130,14 @@
       "via": "std_intensity"
     },
     {
-      "source": "processor:raster-quality",
-      "target": "widget:violin-quality",
-      "via": "laplacian_variance"
-    },
-    {
       "source": "processor:raster-basic",
       "target": "widget:violin-quality",
       "via": "nan_fraction"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:violin-quality",
+      "via": "bright_clipping_fraction"
     }
   ]
 }
