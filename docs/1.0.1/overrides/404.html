@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Page not found - Pixel Patrol</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; text-align: center; margin-top: 20vh; }
+  </style>
+  <script>
+    // GitHub Pages serves this file for every missing URL. Docs now live in
+    // /docs/<version>/, so send old unversioned links (/docs/<page>) to "latest".
+    var m = location.pathname.match(/^\/docs\/(?!(?:dev|latest|\d+\.\d+\.\d+)(?:\/|$))(.*)/);
+    if (m) location.replace("/docs/latest/" + m[1] + location.search + location.hash);
+  </script>
+</head>
+<body>
+  <h1>Page not found</h1>
+  <p><a href="https://pixelpatrol.app/">Pixel Patrol home</a> &middot; <a href="https://pixelpatrol.app/docs/">Documentation</a></p>
+</body>
+</html>

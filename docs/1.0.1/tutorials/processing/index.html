@@ -1,0 +1,1819 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://pixelpatrol.app/docs/1.0.1/tutorials/processing/">
+      
+      
+        <link rel="prev" href="../installation/">
+      
+      
+        <link rel="next" href="../interactive_report/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Processing - Pixel Patrol Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#processing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-header__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Pixel Patrol Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Processing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://pixelpatrol.app/" title="Pixel Patrol Documentation" class="md-nav__button md-logo" aria-label="Pixel Patrol Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon.png" alt="logo">
+
+    </a>
+    Pixel Patrol Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ida-mdc/pixel-patrol" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ida-mdc/pixel-patrol
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interactive_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exploring the Interactive Report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sharing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sharing a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extension/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create an Extension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Report Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Table Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="processing">Processing</h1>
+<div class="admonition tip">
+<p class="admonition-title">Used the launcher instead?</p>
+<p>Double-click it to open the report manager in your browser, then click <strong>+ New Report</strong> to set up your project and start processing - no terminal needed.</p>
+</div>
+<p><code>pixel-patrol process</code> is the first step in the PixelPatrol workflow. It scans your images and produces a <code>.parquet</code> table containing everything PixelPatrol knows about your dataset - file metadata, image dimensions, and pixel statistics.</p>
+<p>Answer the questions below and we'll walk you through each decision together, building your command as we go. By the end you'll understand not just <em>what</em> to run, but <em>why</em> each flag is there.</p>
+<div class="admonition warning">
+<p class="admonition-title">Make sure you're inside a virtual environment</p>
+<p>Before running any <code>pixel-patrol</code> command, activate the virtual environment where you installed it.
+If you followed the uv instructions, run:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>source .venv/bin/activate        # macOS / Linux
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>.venv\Scripts\Activate.ps1       # Windows
+</code></pre></div>
+Not sure? Go through the <a href="../installation/">Installation tutorial</a> first.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Check what's installed</p>
+<p>Run <code>pixel-patrol list</code> to see which loaders and processors are available in your environment.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Explore all options first</p>
+<p>Before going through the questions, it's worth running <code>pixel-patrol process --help</code> to see every available flag and its default. The wizard covers all of them, but <code>--help</code> gives you the full picture at a glance.</p>
+</div>
+<hr />
+<div class="pp-wizard" id="pp-proc-wizard">
+
+  <!-- Live command preview -->
+  <div class="wiz-preview">
+    <div class="wiz-preview-header">
+      <span class="wiz-preview-label" id="proc-preview-label">Your command</span>
+      <div class="wiz-mode-toggle">
+        <button class="wiz-mode-btn wiz-mode-active" id="proc-mode-cli" onclick="procWiz.setMode('cli')">CLI</button>
+        <button class="wiz-mode-btn" id="proc-mode-api" onclick="procWiz.setMode('api')">Python script</button>
+      </div>
+      <button class="wiz-copy-btn" id="proc-copy-btn" onclick="procWiz.copy()">Copy</button>
+    </div>
+    <pre class="wiz-code-pre" id="proc-cmd">pixel-patrol process &lt;path/to/images/&gt; \
+  -o results.parquet</pre>
+    <div class="wiz-callout wiz-hidden" id="proc-api-slurm-warning" style="margin:0 20px 16px">
+      ⚠️ There's no Python-API equivalent for SLURM clusters - <code>pixel-patrol-slurm</code> is a CLI wrapper
+      around <code>dask_jobqueue.SLURMCluster</code>. Switch to the <strong>CLI</strong> tab above for a ready-to-run
+      SLURM command, or see <a href="../../processing/#connecting-to-an-external-dask-cluster">Connecting to an external Dask cluster</a>
+      to wire up a <code>SLURMCluster</code> by hand from a script.
+    </div>
+  </div>
+
+  <!-- Q1: Base directory -->
+  <div class="wiz-step wiz-visible" id="pws-base_dir">
+    <div class="wiz-step-q">📁 Where are your images?</div>
+    <div class="wiz-step-hint">
+      This is the root folder of your dataset - the <code>BASE_DIRECTORY</code> argument in the command.
+      PixelPatrol will scan it recursively, so you don't need to list subdirectories separately.
+      Use an absolute path (e.g. <code>/data/my-experiment/</code>) or a path relative to where you'll run the command.
+      No images of your own yet? Download the small
+      <a href="https://syncandshare.desy.de/index.php/s/zQjryd2qmZG4Gc7/download"><code>bbbc006_stacks.tar.gz</code></a>
+      example dataset (U2OS cell focus series from BBBC006, 4 focus conditions, ~75 MB), extract it and point
+      <code>BASE_DIRECTORY</code> at the extracted <code>bbbc006_stacks/</code> folder to follow along. It's the very dataset behind the
+      <a href="https://pixelpatrol.app/viewer/?data=../example.parquet" target="_blank">example interactive report</a>.
+    </div>
+    <input class="wiz-input" type="text" id="pwi-base_dir"
+           placeholder="/path/to/images/"
+           oninput="procWiz.set('base_dir', this.value)">
+  </div>
+
+  <!-- Q2: Loader -->
+  <div class="wiz-step wiz-hidden" id="pws-loader">
+    <div class="wiz-step-q">🔬 What format are your images?</div>
+    <div class="wiz-step-hint">
+      PixelPatrol uses <strong>loaders</strong> to open image files and extract their content. This sets the <code>--loader</code> flag
+      and determines what ends up in your table: without a loader you only get basic file system info (names, sizes, extensions);
+      with one you also get image dimensions, pixel type, acquisition metadata, and the pixel data needed for statistics and thumbnails.
+      Choose the one that matches your file format.
+    </div>
+    <div class="wiz-options">
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="bioio"
+               onchange="procWiz.pick('loader','bioio')">
+        <div>
+          <div class="wiz-opt-title">
+            TIFF, CZI, ND2, LIF, PNG, JPG, or other common formats
+            <code class="wiz-badge">--loader bioio</code>
+          </div>
+          <div class="wiz-opt-sub">Recommended for most microscopy and general image datasets</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="zarr"
+               onchange="procWiz.pick('loader','zarr')">
+        <div>
+          <div class="wiz-opt-title">
+            Zarr datasets
+            <code class="wiz-badge">--loader zarr</code>
+          </div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="h5"
+               onchange="procWiz.pick('loader','h5')">
+        <div>
+          <div class="wiz-opt-title">
+            HDF5, BigDataViewer, or Imaris IMS
+            <code class="wiz-badge">--loader h5</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .h5, .hdf5, and .ims files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="tifffile"
+               onchange="procWiz.pick('loader','tifffile')">
+        <div>
+          <div class="wiz-opt-title">
+            TIFF only - lightweight loader
+            <code class="wiz-badge">--loader tifffile</code>
+          </div>
+          <div class="wiz-opt-sub">Faster when your dataset is exclusively TIFF files</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="geospatial"
+               onchange="procWiz.pick('loader','geospatial')">
+        <div>
+          <div class="wiz-opt-title">
+            GeoTIFF or NetCDF
+            <code class="wiz-badge">--loader geospatial</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .tif, .tiff, .nc, .txt, .xyz, and .xyz.gz files; reads geospatial metadata (CRS, resolution, no-data values).</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="nifti"
+               onchange="procWiz.pick('loader','nifti')">
+        <div>
+          <div class="wiz-opt-title">
+            NIfTI
+            <code class="wiz-badge">--loader nifti</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .nii and .nii.gz files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value="dicom"
+               onchange="procWiz.pick('loader','dicom')">
+        <div>
+          <div class="wiz-opt-title">
+            DICOM
+            <code class="wiz-badge">--loader dicom</code>
+          </div>
+          <div class="wiz-opt-sub">Supports .dcm and .dicom files.</div>
+        </div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-loader" value=""
+               onchange="procWiz.pick('loader','')">
+        <div>
+          <div class="wiz-opt-title">Just basic file info - no image reading</div>
+          <div class="wiz-opt-sub">Collects file names, sizes, and extensions only. No loader required.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Q2b: File extensions (after loader chosen) -->
+  <div class="wiz-step wiz-hidden" id="pws-file_exts">
+    <div class="wiz-step-q">🗃️ Restrict to specific file extensions? <span class="wiz-optional">(optional)</span></div>
+    <div class="wiz-step-hint">
+      By default the loader processes all file formats it supports. If your folder contains mixed file types
+      and you only want to process some of them, list the extensions here - each becomes a <code>-e</code> flag.
+      Leave blank to process everything the loader supports.
+      Example: <code>tif, nd2, czi</code>
+    </div>
+    <input class="wiz-input" type="text" id="pwi-file_exts"
+           placeholder="tif, nd2, czi"
+           oninput="procWiz.set('file_exts', this.value)">
+  </div>
+
+  <!-- Q3: Experimental conditions? -->
+  <div class="wiz-step wiz-hidden" id="pws-conditions">
+    <div class="wiz-step-q">🗂️ Do you have multiple experimental conditions or groups?</div>
+    <div class="wiz-step-hint">
+      Use this if your images are organized into subfolders - one per condition, batch, or timepoint.
+      Specifying subfolders does two things: it <strong>limits processing to only those folders</strong> (others are ignored),
+      and it sets each one as a <strong>labeled group</strong> in the interactive report, shown in different colors for easy comparison.
+      This grouping is the default - you can always regroup interactively in the viewer later.
+      If you skip this, all images under the base folder are processed as one group.
+    </div>
+    <div class="wiz-options wiz-options-row">
+      <label class="wiz-option">
+        <input type="radio" name="proc-cond" value="no"
+               onchange="procWiz.setConditions('no')">
+        <div><div class="wiz-opt-title">No - process everything as one group</div></div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-cond" value="yes"
+               onchange="procWiz.setConditions('yes')">
+        <div><div class="wiz-opt-title">Yes - I have subfolders to compare</div></div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Q3b: Subfolder names -->
+  <div class="wiz-step wiz-hidden" id="pws-cond_names">
+    <div class="wiz-step-q">Which subfolders should be compared?</div>
+    <div class="wiz-step-hint">
+      Comma-separated paths relative to your base directory - each becomes a <code>-p</code> flag and a labeled group.
+      Can be immediate subfolders or deeper (e.g. <code>batch_1/control</code>). Only include the ones you want to compare.
+      Example: <code>control, treated_a, treated_b</code>
+    </div>
+    <input class="wiz-input" type="text" id="pwi-cond_names"
+           placeholder="control, treated_a, treated_b"
+           oninput="procWiz.setConditionNames(this.value)">
+  </div>
+
+  <!-- Q4: Output path -->
+  <div class="wiz-step wiz-hidden" id="pws-output">
+    <div class="wiz-step-q">💾 Where should the output parquet (PixelPatrol table) be saved?</div>
+    <div class="wiz-step-hint">
+      A path (relative or absolute) for the output <code>.parquet</code> file - set by <code>-o</code>.
+      This file holds all image metadata, pixel statistics, and thumbnails, and can be shared with collaborators
+      who can open it in the <a href="https://pixelpatrol.app/viewer/" target="_blank">online viewer</a> without installing anything.
+      See the <a href="../../privacy/">privacy policy</a> for what's included before sharing it.
+    </div>
+    <input class="wiz-input" type="text" id="pwi-output"
+           value="results.parquet"
+           oninput="procWiz.set('output', this.value || 'results.parquet')">
+  </div>
+
+  <!-- Q5: Project name -->
+  <div class="wiz-step wiz-hidden" id="pws-name">
+    <div class="wiz-step-q">🏷️ Give your project a name <span class="wiz-optional">(optional)</span></div>
+    <div class="wiz-step-hint">
+      Sets <code>--name</code>. Shown in the viewer header and embedded in the parquet metadata.
+      If left empty, the name defaults to the base directory folder name.
+    </div>
+    <input class="wiz-input" type="text" id="pwi-name"
+           placeholder="My Experiment"
+           oninput="procWiz.set('name', this.value)">
+  </div>
+
+  <!-- Q5b: Description -->
+  <div class="wiz-step wiz-hidden" id="pws-description">
+    <div class="wiz-step-q">📝 Add a description <span class="wiz-optional">(optional)</span></div>
+    <div class="wiz-step-hint">
+      Sets <code>--description</code>. Free-form text shown below the title in the viewer and embedded in the parquet metadata.
+      Useful for recording what the dataset is, who processed it, or any caveats.
+    </div>
+    <input class="wiz-input" type="text" id="pwi-description"
+           placeholder="Treated vs control, 3 replicates"
+           oninput="procWiz.set('description', this.value)">
+  </div>
+
+  <!-- Q6: Cluster? -->
+  <div class="wiz-step wiz-hidden" id="pws-cluster">
+    <div class="wiz-step-q">🖥️ Are you running on an HPC cluster?</div>
+    <div class="wiz-step-hint">
+      PixelPatrol processes images in parallel using <a href="https://www.dask.org/" target="_blank">Dask</a>.
+      On a local machine it auto-detects a sensible number of workers based on your CPUs and RAM - no configuration needed.
+      On a cluster you can harness many more resources, which makes a real difference for large datasets
+      with thousands of images or very large volumes.
+    </div>
+    <div class="wiz-options wiz-options-row">
+      <label class="wiz-option">
+        <input type="radio" name="proc-cluster" value="no"
+               onchange="procWiz.setCluster('no')">
+        <div><div class="wiz-opt-title">No - running locally</div></div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-cluster" value="yes"
+               onchange="procWiz.setCluster('yes')">
+        <div><div class="wiz-opt-title">Yes - using a cluster</div></div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Q6b: SLURM? -->
+  <div class="wiz-step wiz-hidden" id="pws-slurm">
+    <div class="wiz-step-q">Is your cluster managed by SLURM?</div>
+    <div class="wiz-step-hint">
+      SLURM is the most widely used job scheduler on HPC clusters.
+      If your cluster uses it, <code>pixel-patrol-slurm</code> handles everything: it submits worker jobs,
+      waits for them to come online, runs the processing, and cleans up - all in one command.
+      If you're using a different setup (e.g. you already have a running Dask cluster), choose the second option
+      and provide the scheduler address instead.
+    </div>
+    <div class="wiz-options wiz-options-row">
+      <label class="wiz-option">
+        <input type="radio" name="proc-slurm" value="yes"
+               onchange="procWiz.setSlurm('yes')">
+        <div><div class="wiz-opt-title">Yes - SLURM</div></div>
+      </label>
+      <label class="wiz-option">
+        <input type="radio" name="proc-slurm" value="no"
+               onchange="procWiz.setSlurm('no')">
+        <div>
+          <div class="wiz-opt-title">No - I have a Dask scheduler URL</div>
+          <div class="wiz-opt-sub">e.g. from a manually started Dask cluster</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Q6c: SLURM params -->
+  <div class="wiz-step wiz-hidden" id="pws-slurm_params">
+    <div class="wiz-step-q">SLURM cluster settings</div>
+    <div class="wiz-callout">
+      First, install the SLURM wrapper in the same environment:<br>
+      <code>uv pip install pixel-patrol-slurm</code>
+    </div>
+    <div class="wiz-grid">
+      <div class="wiz-field">
+        <label>Number of jobs</label>
+        <input class="wiz-input" type="number" id="pwi-slurm_jobs"
+               value="4" min="1"
+               oninput="procWiz.set('slurm_jobs', this.value || '4')">
+      </div>
+      <div class="wiz-field">
+        <label>Cores per job</label>
+        <input class="wiz-input" type="number" id="pwi-slurm_cores"
+               value="4" min="1"
+               oninput="procWiz.set('slurm_cores', this.value || '4')">
+      </div>
+      <div class="wiz-field">
+        <label>Memory per job</label>
+        <input class="wiz-input" type="text" id="pwi-slurm_mem"
+               value="16GB"
+               oninput="procWiz.set('slurm_mem', this.value || '16GB')">
+      </div>
+      <div class="wiz-field">
+        <label>Partition <span class="wiz-optional">(optional)</span></label>
+        <input class="wiz-input" type="text" id="pwi-slurm_partition"
+               placeholder="gpu"
+               oninput="procWiz.set('slurm_partition', this.value)">
+      </div>
+      <div class="wiz-field">
+        <label>Wall time</label>
+        <input class="wiz-input" type="text" id="pwi-slurm_walltime"
+               value="02:00:00"
+               oninput="procWiz.set('slurm_walltime', this.value || '02:00:00')">
+      </div>
+    </div>
+  </div>
+
+  <!-- Q6d: Dask scheduler URL -->
+  <div class="wiz-step wiz-hidden" id="pws-scheduler_url">
+    <div class="wiz-step-q">Dask scheduler URL</div>
+    <div class="wiz-step-hint">The address of your running Dask scheduler, set by <code>--scheduler</code>.</div>
+    <input class="wiz-input" type="text" id="pwi-scheduler_url"
+           placeholder="tcp://hostname:8786"
+           oninput="procWiz.set('scheduler_url', this.value)">
+  </div>
+
+  <!-- Done message -->
+  <div class="wiz-done-msg" id="proc-done">
+    <span id="proc-done-text">✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.</span>
+  </div>
+
+  <!-- Advanced toggle -->
+  <div id="pws-advanced-toggle" style="display:none;margin-top:1.5rem">
+    <button class="wiz-adv-btn" id="adv-toggle-btn" onclick="procWiz.toggleAdvanced()">
+      ▸ Show advanced options
+    </button>
+  </div>
+
+  <!-- Advanced options section -->
+  <div class="wiz-adv-section wiz-hidden" id="pws-advanced">
+
+    <div class="wiz-adv-title">Advanced options</div>
+    <div class="wiz-adv-intro">These options are rarely needed for a first run. They let you fine-tune processing behaviour for specific scenarios.</div>
+
+    <!-- Processors include -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Run only these processors <code class="wiz-badge">--processors-include</code>
+        <span class="wiz-optional"> (optional)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        By default all installed processors run: <code>raster-basic</code>, <code>raster-histogram</code>,
+        <code>thumbnail</code>, <code>raster-quality</code> (plus <code>nodata-statistics</code> if <code>pixel-patrol-geospatial</code> is installed).
+        List specific ones here to run only those - takes precedence over exclude.
+        Useful for speeding up processing when you only need a subset of metrics.
+      </div>
+      <input class="wiz-input" type="text" id="pwi-processors_include"
+             placeholder="raster-basic, thumbnail"
+             oninput="procWiz.set('processors_include', this.value)">
+    </div>
+
+    <!-- Processors exclude -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Skip these processors <code class="wiz-badge">--processors-exclude</code>
+        <span class="wiz-optional"> (optional)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Exclude specific processors while running all others. Ignored if <em>include</em> is set.
+        Example: <code>raster-quality</code> to skip the quality metrics and speed up a large run.
+      </div>
+      <input class="wiz-input" type="text" id="pwi-processors_exclude"
+             placeholder="raster-quality"
+             oninput="procWiz.set('processors_exclude', this.value)">
+    </div>
+
+    <!-- Slice size -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Slice size <code class="wiz-badge">--slice-size</code>
+        <span class="wiz-optional"> (optional)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Controls the per-dimension granularity of statistics in the table.
+        By default, non-spatial dimensions (Z, T, C, S) each step by 1 - one row of stats per slice.
+        Set a higher step (e.g. <code>Z=5</code>) for coarser, smaller output, or <code>-1</code> to collapse a
+        dimension entirely. Only relevant if you have multidimensional data and care about per-slice statistics.
+        Comma-separated for multiple dims. Example: <code>Z=5, C=1</code>
+      </div>
+      <input class="wiz-input" type="text" id="pwi-slice_size"
+             placeholder="Z=5, C=1"
+             oninput="procWiz.set('slice_size', this.value)">
+    </div>
+
+    <!-- Max workers (hidden for SLURM) -->
+    <div class="wiz-adv-field" id="padv-max_workers">
+      <div class="wiz-adv-field-label">
+        Worker count <code class="wiz-badge">--max-workers</code>
+        <span class="wiz-optional"> (optional)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Number of parallel Dask workers (default: auto, based on CPUs and RAM).
+        Lower this if processing causes out-of-memory errors. Use <code>1</code> to disable parallelism entirely,
+        which is useful for debugging.
+      </div>
+      <input class="wiz-input" type="number" id="pwi-max_workers"
+             placeholder="auto" min="1"
+             oninput="procWiz.set('max_workers', this.value)">
+    </div>
+
+    <!-- MB per worker -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        MB per worker <code class="wiz-badge">--mb-per-worker</code>
+        <span class="wiz-optional"> (default: 4096)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        RAM per worker in MB. More RAM per worker means fewer parallel workers.
+        <strong>Increase</strong> (e.g. 16384) to keep large images whole or if workers run out of memory;
+        <strong>decrease</strong> (e.g. 1024) for more parallel workers when images are small.
+      </div>
+      <input class="wiz-input" type="number" id="pwi-mb_per_worker"
+             placeholder="4096" min="1"
+             oninput="procWiz.set('mb_per_worker', this.value)">
+    </div>
+
+    <!-- Max images per task -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Max images per task <code class="wiz-badge">--max-images-per-task</code>
+        <span class="wiz-optional"> (default: 200)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Maximum number of files (or sub-images) grouped into a single task. Lower this if individual tasks
+        are timing out or you want finer-grained progress reporting.
+      </div>
+      <input class="wiz-input" type="number" id="pwi-max_images_per_task"
+             placeholder="200" min="1"
+             oninput="procWiz.set('max_images_per_task', this.value)">
+    </div>
+
+    <!-- Rows per part -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Rows per part <code class="wiz-badge">--rows-per-part</code>
+        <span class="wiz-optional"> (default: 10000)</span>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Number of result rows buffered in memory before being flushed to a temporary file on disk.
+        Only relevant for very large datasets where memory is tight. Rarely needs changing.
+      </div>
+      <input class="wiz-input" type="number" id="pwi-rows_per_part"
+             placeholder="10000" min="1"
+             oninput="procWiz.set('rows_per_part', this.value)">
+    </div>
+
+    <!-- Log file -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Write a debug log <code class="wiz-badge">--log-file</code>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Writes a detailed debug log file alongside the output parquet. Useful for diagnosing slow or failed runs.
+      </div>
+      <label class="wiz-option" style="max-width:260px">
+        <input type="checkbox" id="pwi-log_file"
+               onchange="procWiz.set('log_file', this.checked)">
+        <div><div class="wiz-opt-title">Enable debug logging</div></div>
+      </label>
+    </div>
+
+    <!-- Open viewer -->
+    <div class="wiz-adv-field">
+      <div class="wiz-adv-field-label">
+        Open viewer when done <code class="wiz-badge">--view</code>
+      </div>
+      <div class="wiz-adv-field-hint">
+        Opens the interactive report automatically once processing completes, using default viewer settings.
+        Equivalent to running <code>pixel-patrol view results.parquet</code> afterwards.
+      </div>
+      <label class="wiz-option" style="max-width:260px">
+        <input type="checkbox" id="pwi-open_viewer"
+               onchange="procWiz.set('open_viewer', this.checked)">
+        <div><div class="wiz-opt-title">Open viewer after processing</div></div>
+      </label>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const procWiz = {
+  state: {
+    base_dir:            '',
+    loader:              null,
+    file_exts:           '',
+    cond_choice:         null,
+    conditions:          [],
+    output:              'results.parquet',
+    name:                '',
+    description:         '',
+    cluster:             null,
+    slurm:               null,
+    slurm_jobs:          '4',
+    slurm_cores:         '4',
+    slurm_mem:           '16GB',
+    slurm_partition:     '',
+    slurm_walltime:      '02:00:00',
+    scheduler_url:       '',
+    adv_open:            false,
+    slice_size:          '',
+    processors_include:  '',
+    processors_exclude:  '',
+    max_workers:         '',
+    mb_per_worker:       '',
+    max_images_per_task: '',
+    rows_per_part:       '',
+    log_file:            false,
+    open_viewer:         false,
+    output_mode:         'cli',
+  },
+
+  show(id) {
+    const el = document.getElementById('pws-' + id);
+    if (el && el.classList.contains('wiz-hidden')) {
+      el.classList.remove('wiz-hidden');
+      el.classList.add('wiz-visible');
+    }
+  },
+
+  hide(id) {
+    const el = document.getElementById('pws-' + id);
+    if (el) { el.classList.add('wiz-hidden'); el.classList.remove('wiz-visible'); }
+  },
+
+  highlightRadio(name, value) {
+    document.querySelectorAll('input[name="' + name + '"]').forEach(r => {
+      r.closest('.wiz-option').classList.toggle('wiz-selected', r.value === value);
+    });
+  },
+
+  set(field, value) {
+    this.state[field] = value;
+    this.rebuild();
+    this.reveal();
+  },
+
+  pick(field, value) {
+    this.state[field] = value;
+    this.highlightRadio('proc-' + field, value);
+    this.rebuild();
+    this.reveal();
+  },
+
+  reveal() {
+    const s = this.state;
+
+    if (s.base_dir && s.base_dir.trim()) this.show('loader');
+
+    if (s.loader !== null) {
+      this.show('file_exts');
+      this.show('conditions');
+    }
+
+    if (s.cond_choice === 'yes') this.show('cond_names');
+    if (s.cond_choice === 'no')  this.hide('cond_names');
+
+    const condsDone = s.cond_choice === 'no' || s.cond_choice === 'yes';
+    if (condsDone && s.loader !== null) {
+      this.show('output');
+      this.show('name');
+      this.show('description');
+      this.show('cluster');
+    }
+
+    if (s.cluster === 'yes') this.show('slurm');
+    if (s.cluster === 'no')  {
+      this.hide('slurm'); this.hide('slurm_params'); this.hide('scheduler_url');
+    }
+    if (s.cluster === 'yes' && s.slurm === 'yes') {
+      this.show('slurm_params'); this.hide('scheduler_url');
+    }
+    if (s.cluster === 'yes' && s.slurm === 'no') {
+      this.hide('slurm_params'); this.show('scheduler_url');
+    }
+
+    const isSlurm   = s.cluster === 'yes' && s.slurm === 'yes';
+    const clusterDone = s.cluster === 'no' ||
+                        (s.cluster === 'yes' && s.slurm !== null);
+    if (condsDone && s.loader !== null && clusterDone) {
+      const done = document.getElementById('proc-done');
+      if (done) done.classList.add('wiz-visible');
+      const tog = document.getElementById('pws-advanced-toggle');
+      if (tog) tog.style.display = 'block';
+    }
+
+    // Hide max-workers field when using SLURM (irrelevant)
+    const mw = document.getElementById('padv-max_workers');
+    if (mw) mw.style.display = isSlurm ? 'none' : '';
+  },
+
+  setConditions(val) {
+    this.state.cond_choice = val;
+    this.highlightRadio('proc-cond', val);
+    this.rebuild();
+    this.reveal();
+  },
+
+  setConditionNames(val) {
+    this.state.conditions = val.split(',').map(s => s.trim()).filter(Boolean);
+    this.rebuild();
+  },
+
+  setCluster(val) {
+    this.state.cluster = val;
+    this.highlightRadio('proc-cluster', val);
+    this.rebuild();
+    this.reveal();
+  },
+
+  setSlurm(val) {
+    this.state.slurm = val;
+    this.highlightRadio('proc-slurm', val);
+    this.rebuild();
+    this.reveal();
+  },
+
+  setMode(mode) {
+    this.state.output_mode = mode;
+    document.getElementById('proc-mode-cli').classList.toggle('wiz-mode-active', mode === 'cli');
+    document.getElementById('proc-mode-api').classList.toggle('wiz-mode-active', mode === 'api');
+    const label = document.getElementById('proc-preview-label');
+    if (label) label.textContent = (mode === 'api') ? 'Your script' : 'Your command';
+    this.rebuild();
+  },
+
+  toggleAdvanced() {
+    this.state.adv_open = !this.state.adv_open;
+    const btn = document.getElementById('adv-toggle-btn');
+    const sec = document.getElementById('pws-advanced');
+    if (this.state.adv_open) {
+      sec.classList.remove('wiz-hidden'); sec.classList.add('wiz-visible');
+      btn.textContent = '▾ Hide advanced options';
+    } else {
+      sec.classList.add('wiz-hidden'); sec.classList.remove('wiz-visible');
+      btn.textContent = '▸ Show advanced options';
+    }
+  },
+
+  rebuild() {
+    const s = this.state;
+    const base    = s.base_dir && s.base_dir.trim() ? s.base_dir.trim() : '<path/to/images/>';
+    const out     = s.output || 'results.parquet';
+    const isSlurm = s.cluster === 'yes' && s.slurm === 'yes';
+    const hasDask = s.cluster === 'yes' && s.slurm === 'no';
+
+    const text = (s.output_mode === 'api')
+      ? this.buildApiScript(s, base, out, isSlurm, hasDask)
+      : this.buildCliCommand(s, base, out, isSlurm, hasDask);
+    document.getElementById('proc-cmd').textContent = text;
+
+    const warn = document.getElementById('proc-api-slurm-warning');
+    if (warn) warn.classList.toggle('wiz-hidden', !(s.output_mode === 'api' && isSlurm));
+
+    const doneText = document.getElementById('proc-done-text');
+    if (doneText) {
+      doneText.innerHTML = (s.output_mode === 'api')
+        ? '✓ Your script is ready above - save it (e.g. <code>run_processing.py</code>) and run it with <code>python run_processing.py</code>. It already opens the viewer at the end via <code>api.view(project)</code>.'
+        : s.open_viewer
+          ? '✓ Your command is ready above. The viewer will open automatically when processing completes.'
+          : '✓ Your command is ready above. Once it finishes, open the interactive report with <code>pixel-patrol view results.parquet</code>.';
+    }
+  },
+
+  buildCliCommand(s, base, out, isSlurm, hasDask) {
+    // Build pixel-patrol process args (shared between local and SLURM)
+    const pp = [];
+    pp.push('-o ' + out);
+    if (s.loader) pp.push('--loader ' + s.loader);
+    if (s.file_exts && s.file_exts.trim())
+      s.file_exts.split(',').map(e => e.trim()).filter(Boolean)
+        .forEach(e => pp.push('-e ' + e));
+    if (s.conditions && s.conditions.length)
+      s.conditions.forEach(c => pp.push('-p ' + c));
+    if (s.name && s.name.trim())
+      pp.push('--name "' + s.name.trim() + '"');
+    if (s.description && s.description.trim())
+      pp.push('--description "' + s.description.trim() + '"');
+    if (hasDask && s.scheduler_url && s.scheduler_url.trim())
+      pp.push('--scheduler ' + s.scheduler_url.trim());
+
+    // Advanced
+    if (s.processors_include && s.processors_include.trim())
+      s.processors_include.split(',').map(e => e.trim()).filter(Boolean)
+        .forEach(p => pp.push('--processors-include ' + p));
+    if (s.processors_exclude && s.processors_exclude.trim())
+      s.processors_exclude.split(',').map(e => e.trim()).filter(Boolean)
+        .forEach(p => pp.push('--processors-exclude ' + p));
+    if (s.slice_size && s.slice_size.trim())
+      s.slice_size.split(',').map(e => e.trim()).filter(Boolean)
+        .forEach(sz => pp.push('--slice-size ' + sz));
+    if (!isSlurm && s.max_workers) pp.push('--max-workers ' + s.max_workers);
+    if (s.mb_per_worker)       pp.push('--mb-per-worker ' + s.mb_per_worker);
+    if (s.max_images_per_task) pp.push('--max-images-per-task ' + s.max_images_per_task);
+    if (s.rows_per_part)       pp.push('--rows-per-part ' + s.rows_per_part);
+    if (s.log_file)            pp.push('--log-file');
+    if (s.open_viewer)         pp.push('--view');
+
+    let lines = [];
+    if (isSlurm) {
+      lines.push('pixel-patrol-slurm');
+      lines.push('  --jobs '     + (s.slurm_jobs    || '4'));
+      lines.push('  --cores '    + (s.slurm_cores   || '4'));
+      lines.push('  --memory '   + (s.slurm_mem     || '16GB'));
+      if (s.slurm_partition && s.slurm_partition.trim())
+        lines.push('  --partition ' + s.slurm_partition.trim());
+      lines.push('  --walltime ' + (s.slurm_walltime || '02:00:00'));
+      lines.push('  --');
+      lines.push('  ' + base);
+      pp.forEach(a => lines.push('  ' + a));
+    } else {
+      lines.push('pixel-patrol process ' + base);
+      pp.forEach(a => lines.push('  ' + a));
+    }
+
+    return lines.join(' \\\n');
+  },
+
+  buildApiScript(s, base, out, isSlurm, hasDask) {
+    const pyBase = (base === '<path/to/images/>') ? '/path/to/images/' : base;
+    const projName = (s.name && s.name.trim())
+      ? s.name.trim()
+      : (pyBase.replace(/\/+$/, '').split('/').filter(Boolean).pop() || 'My Project');
+
+    const lines = [];
+    lines.push('from pixel_patrol_base import api');
+    if (hasDask) lines.push('from dask.distributed import Client');
+    lines.push('');
+    const nHeader = lines.length;
+    lines.push('project = api.create_project(');
+    lines.push('    "' + projName + '",');
+    lines.push('    base_dir="' + pyBase + '",');
+    if (s.loader) lines.push('    loader="' + s.loader + '",');
+    lines.push('    output_path="' + out + '",');
+    lines.push(')');
+
+    if (s.conditions && s.conditions.length) {
+      const condList = s.conditions.map(c => '"' + c + '"').join(', ');
+      lines.push('api.add_paths(project, [' + condList + '])');
+    }
+
+    // Build api.process_files kwargs
+    const kwargs = [];
+    if (s.file_exts && s.file_exts.trim()) {
+      const exts = s.file_exts.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (exts) kwargs.push('selected_file_extensions={' + exts + '}');
+    }
+    if (s.processors_include && s.processors_include.trim()) {
+      const incl = s.processors_include.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (incl) kwargs.push('processors_included={' + incl + '}');
+    }
+    if (s.processors_exclude && s.processors_exclude.trim()) {
+      const excl = s.processors_exclude.split(',').map(e => e.trim()).filter(Boolean)
+        .map(e => '"' + e + '"').join(', ');
+      if (excl) kwargs.push('processors_excluded={' + excl + '}');
+    }
+    if (s.slice_size && s.slice_size.trim()) {
+      const pairs = s.slice_size.split(',').map(e => e.trim()).filter(Boolean)
+        .map(pair => {
+          const [dim, val] = pair.split('=').map(p => p.trim());
+          return '"' + dim + '": ' + val;
+        }).join(', ');
+      if (pairs) kwargs.push('slice_size={' + pairs + '}');
+    }
+    if (!isSlurm && s.max_workers) kwargs.push('max_workers=' + s.max_workers);
+    if (s.mb_per_worker)       kwargs.push('mb_per_worker=' + s.mb_per_worker);
+    if (s.max_images_per_task) kwargs.push('max_images_per_task=' + s.max_images_per_task);
+    if (s.rows_per_part)       kwargs.push('rows_per_part=' + s.rows_per_part);
+    if (s.description && s.description.trim())
+      kwargs.push('description="' + s.description.trim() + '"');
+    if (s.log_file) kwargs.push('log_file=True');
+
+    lines.push('');
+
+    if (isSlurm) {
+      lines.push('# No Python-API equivalent for SLURM clusters - see the note below.');
+    } else {
+      const callLines = [];
+      if (kwargs.length) {
+        callLines.push('api.process_files(');
+        callLines.push('    project,');
+        kwargs.forEach(k => callLines.push('    ' + k + ','));
+        callLines.push(')');
+      } else {
+        callLines.push('api.process_files(project)');
+      }
+
+      if (hasDask) {
+        const url = (s.scheduler_url && s.scheduler_url.trim()) || 'tcp://hostname:8786';
+        lines.push('with Client("' + url + '"):');
+        callLines.forEach(l => lines.push('    ' + l));
+      } else {
+        callLines.forEach(l => lines.push(l));
+      }
+
+      lines.push('');
+      lines.push('api.view(project)');
+    }
+
+    const body = lines.slice(nHeader).map(l => l ? '    ' + l : l);
+    return [...lines.slice(0, nHeader), 'if __name__ == "__main__":', ...body].join('\n');
+  },
+
+  copy() {
+    const text = document.getElementById('proc-cmd').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('proc-copy-btn');
+      const prev = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = prev; }, 2000);
+    });
+  }
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  const outEl = document.getElementById('pwi-output');
+  if (outEl) procWiz.state.output = outEl.value;
+});
+</script>
+
+<hr />
+<div class="admonition tip">
+<p class="admonition-title">Next step</p>
+<p>Once processing finishes, open your interactive report with:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pixel-patrol<span class="w"> </span>view<span class="w"> </span>results.parquet
+</code></pre></div>
+Or drag the <code>.parquet</code> file into the <a href="https://pixelpatrol.app/viewer/">online viewer</a> - no install needed on the recipient's side.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+      <div class="md-copyright" style="margin-top:4px">
+        <a href="../../impressum/" style="color:var(--md-footer-fg-color--light)">Impressum</a>
+        &nbsp;&middot;&nbsp;
+        <a href="../../privacy/" style="color:var(--md-footer-fg-color--light)">Privacy Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
