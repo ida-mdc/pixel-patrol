@@ -181,3 +181,6 @@ const instWiz = {
 !!! tip "Already installed?"
     Run `pixel-patrol --version` to confirm. Then head to the [Processing tutorial](processing.md) to build your first command.
 
+
+!!! note "Encounter problems?"
+    Check out the [installation documentation](../installation.md) for more information.

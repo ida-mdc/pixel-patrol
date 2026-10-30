@@ -47,6 +47,10 @@ Verify:
 pixel-patrol --version
 ```
 
+!!! note "Note for Intel Macs"
+    - The full `pixel-patrol` installation may fail on Intel Macs because some dependencies do not provide prebuilt wheels for these systems.
+    - We recommend using the [modular installation](#modular-install) instead.
+
 ---
 
 ## Modular install
@@ -61,6 +65,20 @@ uv pip install pixel-patrol-geospatial     # GeoTIFF and NetCDF loader, nodata p
 ```
 
 Without a loader, only basic file metadata (name, size, extension) is collected and no image data is read. Install a loader package and choose one of its loaders with `--loader` to also get image metadata, pixel statistics, and thumbnails.
+
+**Additional installation details for Intel Macs:**
+
+`pixel-patrol-loader-bio` depends on the `pylibCZIrw` library (via `bioio-czi`), which may need to be built from source on Intel Macs, causing the standard installation to fail. Install curl via Homebrew and make it available to the build process before installing the bio loader:
+
+```bash
+brew install curl
+
+source .venv/bin/activate
+export CMAKE_PREFIX_PATH="$(brew --prefix curl)"
+uv pip install --no-cache pixel-patrol-loader-bio
+```
+
+The geospatial loader depends on Rasterio and GDAL, which may not be installable on Intel Macs running macOS 14 or older. As a result, the geospatial loader may not be supported on these systems.
 
 ---
 
