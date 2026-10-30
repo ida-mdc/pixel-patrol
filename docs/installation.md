@@ -47,6 +47,8 @@ Verify:
 pixel-patrol --version
 ```
 
+On an Intel Mac and the install failed? See [Known issues](#known-issues).
+
 ---
 
 ## Modular install
@@ -75,3 +77,21 @@ Without a loader, only basic file metadata (name, size, extension) is collected 
 | `pixel-patrol-geospatial` | GeoTIFF and NetCDF loader, nodata processor |
 
 Additional packages are available in the [GitHub repository](https://github.com/ida-mdc/pixel-patrol) - for example `pixel-patrol-aqqua` for AQQUA datasets. You can also extend PixelPatrol by creating your own packages; see [Extensions](extensions.md).
+
+---
+
+## Known issues
+
+### Intel Macs
+
+The full `pixel-patrol` install may fail because some dependencies have no prebuilt wheels. Use the [modular install](#modular-install) instead.
+
+If `pixel-patrol-loader-bio` fails to build (its `pylibCZIrw` dependency is compiled from source), install curl first:
+
+```bash
+brew install curl
+export CMAKE_PREFIX_PATH="$(brew --prefix curl)"
+uv pip install --no-cache pixel-patrol-loader-bio
+```
+
+`pixel-patrol-geospatial` may not work on macOS 14 or older, because its dependencies Rasterio and GDAL may not be installable there.
