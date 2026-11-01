@@ -88,6 +88,7 @@ const ENABLING_SCHEMA = {
   'custom-plot':               { allCols: ['size_bytes'] },
   'dim-size':                  { allCols: ['size_X', 'size_Y'] },
   'metadata':                  { allCols: ['dtype'] },
+  'compression':               { allCols: ['size_bytes', 'num_pixels', 'dtype'] },
   'violin-basic':              { metricCols: ['mean_intensity'] },
   'violin-quality':            { metricCols: ['laplacian_variance'] },
   'stats-across-dims-basic':   { metricCols: ['mean_intensity'], hasDimSlices: true },
