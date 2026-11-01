@@ -20,6 +20,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import Record, record_from
+from pixel_patrol_loader_bio.plugins.loaders._compression import compression_of
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,11 @@ def _physical_pixel_sizes(tf: tifffile.TiffFile, axes_u: str) -> Dict[str, float
     return out
 
 
+def _compression_meta(tf: tifffile.TiffFile) -> Dict[str, Any]:
+    codec = compression_of(Path(tf.filehandle.path))
+    return {} if codec is None else {"compression": codec}
+
+
 def _extract_metadata(
     tf: tifffile.TiffFile,
     series: tifffile.TiffPageSeries,
@@ -111,6 +117,7 @@ def _extract_metadata(
         "ndim": len(shape),
         "num_pixels": math.prod(shape) if shape else 0,
         "dtype": str(np.dtype(series.dtype)),
+        **_compression_meta(tf),
         "channel_names": _channel_names(tf, series, axes_u),
     }
     meta.update(_physical_pixel_sizes(tf, axes_u))

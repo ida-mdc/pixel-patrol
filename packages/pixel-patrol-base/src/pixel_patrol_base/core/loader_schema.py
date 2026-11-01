@@ -34,6 +34,7 @@ RASTER_IMAGE_SCHEMA_LABEL = "Raster Image Loaders"
 _RASTER_IMAGE_LOADER_COLUMNS: List[Tuple[str, Any, str, bool]] = [
     ("dim_order",     str,      "Axis order of the image, e.g. 'TCZYX'.",                        True),
     ("dtype",         str,      "Pixel data type of the source image (e.g. 'uint8', 'float32').", True),
+    ("compression",   str,      "Codec the source file stores its pixels with, read from the file header (e.g. 'deflate', 'JPEG XR', 'blosc(zstd, bitshuffle) level 3'; 'none' when stored raw).", False),
     ("dim_names",     list,     "Human-readable names of the image axes.",                        False),
     ("channel_names", list,     "Names of the image channels, if available.",                     False),
     ("child_id",      str,      "Identifier of a sub-image within a container file (null for single-image files).", False),

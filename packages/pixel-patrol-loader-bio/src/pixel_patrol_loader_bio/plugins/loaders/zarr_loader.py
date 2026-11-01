@@ -12,6 +12,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import record_from, Record
+from pixel_patrol_loader_bio.plugins.loaders._compression import compression_of
 from pixel_patrol_loader_bio.plugins.loaders._utils import infer_dim_order, is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,9 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
 
     meta["shape"] = np.array(arr.shape, dtype=int)
     meta["dtype"] = str(arr.dtype)
+    codec = compression_of(path)
+    if codec is not None:
+        meta["compression"] = codec
     meta["ndim"] = arr.ndim
     meta["num_pixels"] = int(np.prod(arr.shape))
     chunks = getattr(arr, "chunksize", None)
