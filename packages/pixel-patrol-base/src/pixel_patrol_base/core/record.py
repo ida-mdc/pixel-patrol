@@ -108,7 +108,7 @@ def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
     return []
 
 
-def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
+def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "intensity") -> Record:
     mm = dict(meta or {})
     mm = _validate_and_fix_meta(array, mm)
     dim_order = _infer_dim_order(mm)
