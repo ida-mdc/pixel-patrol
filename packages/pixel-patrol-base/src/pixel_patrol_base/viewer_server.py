@@ -297,7 +297,7 @@ class _ViewerHandler(BaseHTTPRequestHandler):
 
         try:
             with self.query_lock:
-                arrow_table = _to_arrow_table(self.duck_conn.execute(sql))
+                arrow_table = _to_arrow_table(self.duck_conn.sql(sql))
 
             sink   = pa.BufferOutputStream()
             writer = ipc.new_stream(sink, arrow_table.schema)
