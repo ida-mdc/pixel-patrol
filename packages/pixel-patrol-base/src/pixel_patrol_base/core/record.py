@@ -122,7 +122,7 @@ def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "intensity"
     if 'C' in dim_order: capabilities.add('multichannel')
     rgb_cap = _infer_rgb_capability(dim_order, mm)
     if rgb_cap:
-        capabilities.add(rgb_cap)
+        capabilities.update({'rgb', rgb_cap})
     return Record(data=array, dim_order=dim_order, dim_names=dim_names, kind=kind, meta=mm, capabilities=capabilities)
 
 
