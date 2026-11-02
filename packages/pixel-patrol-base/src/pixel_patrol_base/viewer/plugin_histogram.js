@@ -243,9 +243,11 @@ export default {
 
     const { table, where } = histSource(ctx);
     const result = await ctx.query(`
-      SELECT ${geFn()}, "histogram_counts"${rangeCols}${dtypeCol}${nanCol}
-      FROM ${table} ${where}
-      QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= 300
+      SELECT * EXCLUDE (__rnd) FROM (
+        SELECT ${geFn()}, "histogram_counts"${rangeCols}${dtypeCol}${nanCol}, random() AS __rnd
+        FROM ${table} ${where}
+      )
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY __rnd) <= 300
     `);
     const rows = result.toArray();
     if (!rows.length) return false;
@@ -437,9 +439,11 @@ export default {
         const dtypeSel = hasDtype    ? ', "dtype"'                          : '';
         const nanSel   = hasNanCount ? ', "histogram_nan_count"'           : '';
         const result   = await ctx.query(
-          `SELECT ${geFn()}, "histogram_counts"${rangeSel}${dtypeSel}${nanSel}
-           FROM ${srcTable} ${where}
-           QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY random()) <= ${ctrl.samplesPerGroup}`
+          `SELECT * EXCLUDE (__rnd) FROM (
+             SELECT ${geFn()}, "histogram_counts"${rangeSel}${dtypeSel}${nanSel}, random() AS __rnd
+             FROM ${srcTable} ${where}
+           )
+           QUALIFY ROW_NUMBER() OVER (PARTITION BY __group__ ORDER BY __rnd) <= ${ctrl.samplesPerGroup}`
         );
         const rows = result.toArray();
 
