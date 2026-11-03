@@ -1,0 +1,54 @@
+[
+  {
+    "title": "U2OS focus z-stacks (BBBC006)",
+    "field": "Microscopy",
+    "description": "285 two-channel z-stacks of U2OS cells (520 x 520 px, uint16), grouped by how far the stack sits from the focal plane: far below, below, near and far above focus.",
+    "tags": [
+      "U2OS cells",
+      "2 channels",
+      "Z-stacks",
+      "Focus series"
+    ],
+    "credit": "Broad Bioimage Benchmark Collection, BBBC006",
+    "report": "./viewer/?data=../example.parquet&group=imported_path_short"
+  },
+  {
+    "title": "Confocal multi-channel 3D kidney",
+    "field": "Microscopy",
+    "description": "Confocal microscopy volumes with mixed data types (uint8 and uint16) and a varying number of dimensions.",
+    "tags": [
+      "Kidney",
+      "Confocal",
+      "3D",
+      "Multi-channel"
+    ],
+    "credit": "Carlos Cordero, Sarah Wendlinger, Michael Kaminski",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fkidney.parquet&group=imported_path_short"
+  },
+  {
+    "title": "Mouse whole brain",
+    "field": "Microscopy",
+    "description": "Three whole-brain OME-Zarr volumes with 1,950 z-planes of roughly 9,000 x 7,400 px each (1.8 x 1.8 x 4 µm voxels, uint16), imaged in three channels: NeuN, cFOS and tdTomato.",
+    "tags": [
+      "Mouse",
+      "Whole brain",
+      "3 channels: NeuN, cFOS, tdTomato",
+      "OME-Zarr"
+    ],
+    "credit": "Treier et al. 2026",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Ftreier-091.parquet&group=name"
+  },
+  {
+    "title": "Zooplankton images (ZooScan, Point B)",
+    "field": "Other",
+    "description": "55,338 grayscale uint8 images from a ZooScan at Point B (WP2 net, 200 µm), recorded through 2016, at 10.6 µm per pixel. Image sizes vary widely. Used as training data for a foundation model.",
+    "tags": [
+      "Plankton",
+      "ZooScan",
+      "Grayscale",
+      "Foundation model training data"
+    ],
+    "credit": "Peter Hirsch, Nick Lechtenbörger and the AqQua team",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fecotaxa_10.parquet&group=imported_path_short"
+  }
+]
