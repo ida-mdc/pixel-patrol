@@ -9,25 +9,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/site.css"/>
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
-
-    /* Nav */
-    .pp-navbar { border-bottom: 1px solid #dee2e6; background: #fff; padding: 0; }
-    .pp-brand { height: 64px; display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
-    .pp-nav-logo { width: 36px; height: 36px; border-radius: 6px; }
-    .pp-nav-title { font-weight: 600; font-size: 1.1rem; color: #212529; }
-    .pp-brand:hover .pp-nav-title { color: #0d6efd; }
-    .pp-nav-link { font-size: 1rem; color: #6c757d; text-decoration: none; }
-    .pp-nav-link:hover { color: #212529; }
-    .pp-nav-link.active { color: #2563eb; font-weight: 600; }
-    @media (max-width: 767.98px) {
-      .pp-nav-open { border-top: 1px solid #dee2e6; padding-bottom: 12px; }
-      .section { padding: 48px 0; }
-    }
-
     /* Sections */
     .section { padding: 72px 0; }
+    @media (max-width: 767.98px) { .section { padding: 48px 0; } }
     .section-alt { background: #f8f9fa; }
     .section-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 16px; }
     .section-lead { font-size: 1.05rem; line-height: 1.8; color: #495057; max-width: 720px; }
@@ -50,18 +36,6 @@
     .when-num { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
     .when-body h5 { font-weight: 700; margin-bottom: 4px; font-size: 1rem; }
     .when-body p { margin: 0; color: #6c757d; font-size: 0.92rem; line-height: 1.6; }
-
-    /* Footer */
-    .pp-footer { background: #212529; margin-top: auto; }
-    .pp-footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; flex-wrap: wrap; gap: 12px; }
-    .pp-footer-left { display: flex; align-items: center; }
-    .pp-footer-right { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
-    .pp-footer-logo { height: 36px; width: auto; margin-right: 14px; }
-    .pp-footer-text { font-size: 12px; line-height: 1.4; color: #adb5bd; }
-    .pp-footer-link { color: #adb5bd; text-decoration: none; font-size: 12px; }
-    .pp-footer-link:hover { color: #dee2e6; }
-    .pp-footer-link-light { color: #dee2e6; text-decoration: none; }
-    .pp-footer-link-light:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -80,6 +54,7 @@
     <div class="collapse navbar-collapse pp-nav-open" id="ppNav">
       <div class="d-flex flex-column flex-md-row ms-auto gap-3 gap-md-4 align-items-md-center py-3 py-md-0">
         <a class="pp-nav-link active" href="./why.html">Why?</a>
+        <a class="pp-nav-link" href="./gallery.html">Gallery</a>
         <a class="pp-nav-link" href="./docs/latest/tutorials/">Tutorials</a>
         <a class="pp-nav-link" href="./docs/">
           <span class="d-md-none">Docs</span><span class="d-none d-md-inline">Documentation</span>

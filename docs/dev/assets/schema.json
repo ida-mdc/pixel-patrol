@@ -1917,47 +1917,7 @@
     {
       "source": "file",
       "target": "widget:file-stats",
-      "via": "modification_date"
-    },
-    {
-      "source": "processor:raster-histogram",
-      "target": "widget:histogram",
-      "via": "histogram_counts"
-    },
-    {
-      "source": "loader:geospatial",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:h5",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:dicom",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:zarr",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:nifti",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:histogram",
-      "via": "dtype"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:histogram",
-      "via": "dtype"
+      "via": "size_bytes"
     },
     {
       "source": "file",
@@ -1965,59 +1925,99 @@
       "via": "name"
     },
     {
-      "source": "processor:thumbnail",
-      "target": "widget:image-table",
-      "via": "thumbnail_norm_max"
+      "source": "processor:raster-histogram",
+      "target": "widget:histogram",
+      "via": "histogram_min"
     },
     {
       "source": "loader:geospatial",
-      "target": "widget:image-table",
-      "via": "longitude"
+      "target": "widget:histogram",
+      "via": "dtype"
     },
     {
-      "source": "processor:raster-quality",
-      "target": "widget:image-table",
-      "via": "spectral_slope"
+      "source": "loader:dicom",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:h5",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:histogram",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "widget:histogram",
+      "via": "dtype"
     },
     {
       "source": "processor:raster-basic",
       "target": "widget:image-table",
-      "via": "std_intensity"
+      "via": "mean_intensity"
     },
     {
       "source": "loader:h5",
       "target": "widget:image-table",
-      "via": "child_id"
-    },
-    {
-      "source": "loader:dicom",
-      "target": "widget:image-table",
-      "via": "child_id"
-    },
-    {
-      "source": "loader:zarr",
-      "target": "widget:image-table",
-      "via": "child_id"
-    },
-    {
-      "source": "loader:nifti",
-      "target": "widget:image-table",
-      "via": "child_id"
-    },
-    {
-      "source": "loader:tifffile",
-      "target": "widget:image-table",
-      "via": "child_id"
-    },
-    {
-      "source": "loader:bioio",
-      "target": "widget:image-table",
-      "via": "child_id"
+      "via": "h5_dataset_path"
     },
     {
       "source": "file",
       "target": "widget:image-table",
-      "via": "size_bytes"
+      "via": "file_extension"
+    },
+    {
+      "source": "loader:geospatial",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:dicom",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:zarr",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:tifffile",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:bioio",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "widget:image-table",
+      "via": "dtype"
+    },
+    {
+      "source": "processor:raster-quality",
+      "target": "widget:image-table",
+      "via": "dark_clipping_fraction"
+    },
+    {
+      "source": "derived",
+      "target": "widget:image-table",
+      "via": "ndim"
     },
     {
       "source": "agg",
@@ -2025,9 +2025,9 @@
       "via": "dim_<axis>"
     },
     {
-      "source": "derived",
+      "source": "processor:thumbnail",
       "target": "widget:image-table",
-      "via": "ndim"
+      "via": "thumbnail_norm_min"
     },
     {
       "source": "processor:nodata-statistics",
@@ -2045,39 +2045,39 @@
       "via": "ndim"
     },
     {
-      "source": "loader:h5",
-      "target": "widget:metadata",
-      "via": "dim_order"
-    },
-    {
       "source": "loader:dicom",
       "target": "widget:metadata",
-      "via": "dim_order"
+      "via": "dtype"
     },
     {
       "source": "loader:zarr",
       "target": "widget:metadata",
-      "via": "dim_order"
+      "via": "dtype"
     },
     {
-      "source": "loader:nifti",
+      "source": "loader:h5",
       "target": "widget:metadata",
-      "via": "dim_order"
+      "via": "dtype"
     },
     {
       "source": "loader:tifffile",
       "target": "widget:metadata",
-      "via": "dim_order"
+      "via": "dtype"
     },
     {
       "source": "loader:bioio",
       "target": "widget:metadata",
-      "via": "dim_order"
+      "via": "dtype"
+    },
+    {
+      "source": "loader:nifti",
+      "target": "widget:metadata",
+      "via": "dtype"
     },
     {
       "source": "processor:thumbnail",
       "target": "widget:mosaic",
-      "via": "thumbnail_norm_max"
+      "via": "thumbnail_dtype"
     },
     {
       "source": "file",
@@ -2102,12 +2102,12 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:stats-across-dims-basic",
-      "via": "min_intensity"
+      "via": "mean_intensity"
     },
     {
       "source": "processor:raster-quality",
       "target": "widget:stats-across-dims-quality",
-      "via": "dark_clipping_fraction"
+      "via": "bright_clipping_fraction"
     },
     {
       "source": "processor:raster-basic",
@@ -2127,12 +2127,12 @@
     {
       "source": "processor:raster-basic",
       "target": "widget:violin-basic",
-      "via": "min_intensity"
+      "via": "mean_intensity"
     },
     {
       "source": "processor:raster-quality",
       "target": "widget:violin-quality",
-      "via": "dark_clipping_fraction"
+      "via": "bright_clipping_fraction"
     },
     {
       "source": "processor:raster-basic",
