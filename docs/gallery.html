@@ -152,6 +152,7 @@ function card(entry) {
     body.append(tags);
   }
   if (entry.credit) body.append(el('div', 'g-credit', entry.credit));
+  if (entry.size) body.append(el('div', 'g-credit', 'Report size: ' + entry.size));
 
   root.append(media, body);
   const col = el('div', 'col-12 col-md-6 col-lg-4');
