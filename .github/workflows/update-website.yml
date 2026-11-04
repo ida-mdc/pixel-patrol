@@ -1,0 +1,58 @@
+name: Update website
+
+# Manual only: publish the landing page, gallery and their assets to the
+# gh-pages root without a release. Docs (mike) and the viewer are not touched;
+# they are only updated by deploy-site.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Share the group with deploy-site.yml so the two never push gh-pages at once.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # Never publish an unmerged branch.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-branch
+
+      # Fills the supported-extensions list in home.html (stdlib only).
+      - name: Generate extensions list
+        run: python3 docs/gen_extensions_docs.py
+
+      # Add/update only, never delete: the site root also holds the viewer,
+      # docs/, 404.html and release-generated files inside assets/.
+      - name: Copy landing files
+        run: |
+          for page in docs/*.html; do
+            name=$(basename "$page")
+            [ "$name" = "index.html" ] && continue
+            [ "$name" = "home.html" ] && name=index.html
+            cp "$page" "gh-pages-branch/$name"
+          done
+          cp docs/example.parquet gh-pages-branch/example.parquet
+          rsync -a --checksum docs/assets/ gh-pages-branch/assets/
+
+      - name: Commit and push
+        working-directory: gh-pages-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to update."
+          else
+            git commit -m "Update website from ${GITHUB_SHA::7}"
+            git push origin gh-pages
+          fi
