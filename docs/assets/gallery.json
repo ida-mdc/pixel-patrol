@@ -1,0 +1,77 @@
+[
+  {
+    "title": "U2OS focus z-stacks (BBBC006)",
+    "field": "Microscopy",
+    "description": "285 two-channel z-stacks of U2OS cells (520 x 520 px, uint16), grouped by how far the stack sits from the focal plane: far below, below, near and far above focus.",
+    "tags": [
+      "U2OS cells",
+      "Z-stacks",
+      "Multi-channel",
+      "OME-TIFF"
+    ],
+    "credit": "Broad Bioimage Benchmark Collection, BBBC006",
+    "report": "./viewer/?data=../example.parquet&group=imported_path_short",
+    "image": "assets/gallery/u2os_focus.jpg",
+    "size": "238 KB"
+  },
+  {
+    "title": "Confocal multi-channel 3D kidney",
+    "field": "Microscopy",
+    "description": "Confocal microscopy volumes with mixed data types (uint8 and uint16) and a varying number of dimensions.",
+    "tags": [
+      "Kidney",
+      "Z-stacks",
+      "Multi-channel",
+      "LIF"
+    ],
+    "credit": "Carlos Cordero, Sarah Wendlinger, Michael Kaminski",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fkidney.parquet&group=imported_path_short",
+    "image": "assets/gallery/kidney.jpg",
+    "size": "5.9 MB"
+  },
+  {
+    "title": "Mouse whole brain",
+    "field": "Microscopy",
+    "description": "Three whole-brain OME-Zarr volumes with 1,950 z-planes of roughly 9,000 x 7,400 px each (1.8 x 1.8 x 4 µm voxels, uint16), imaged in three channels: NeuN, cFOS and tdTomato.",
+    "tags": [
+      "Mouse brain",
+      "Z-stacks",
+      "Multi-channel",
+      "OME-Zarr"
+    ],
+    "credit": "Treier et al. 2026",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Ftreier-091.parquet&group=name",
+    "image": "assets/gallery/mouse_brain.jpg",
+    "size": "8.3 MB"
+  },
+  {
+    "title": "SEN12MS winter (Sentinel-1/2 and land cover)",
+    "field": "Earth",
+    "description": "95,475 georeferenced GeoTIFF patches (256 x 256 px, 10 m resolution) from the winter 2016/17 branch of SEN12MS: Sentinel-1 SAR (2 bands), Sentinel-2 multispectral (13 bands) and MODIS-derived land cover, 31,825 patches each.",
+    "tags": [
+      "Satellite imagery",
+      "2D",
+      "Multi-channel",
+      "GeoTIFF"
+    ],
+    "credit": "Schmitt, Hughes, Qiu and Zhu, SEN12MS (TUM, 2019)",
+    "image": "assets/gallery/sen12ms_winter.jpg",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2F2026-11-03-pp-report-sen12ms-rois2017-winter.parquet",
+    "size": "699 MB"
+  },
+  {
+    "title": "Zooplankton images (ZooScan, Point B)",
+    "field": "Other",
+    "description": "55,338 grayscale uint8 images from a ZooScan at Point B (WP2 net, 200 µm), recorded through 2016, at 10.6 µm per pixel. Image sizes vary widely. Used as training data for a foundation model.",
+    "tags": [
+      "Zooplankton",
+      "2D",
+      "Single-channel",
+      "JPG"
+    ],
+    "credit": "Peter Hirsch, Nick Lechtenbörger and the AqQua team",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fecotaxa_10.parquet&group=imported_path_short",
+    "image": "assets/gallery/plankton.jpg",
+    "size": "114 MB"
+  }
+]

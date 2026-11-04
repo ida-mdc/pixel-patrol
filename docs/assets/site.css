@@ -1,0 +1,27 @@
+/* Shared by the standalone site pages (home, why, gallery): page shell, navbar and footer. */
+body { font-family: 'Inter', system-ui, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Nav */
+.pp-navbar { border-bottom: 1px solid #dee2e6; background: #fff; padding: 0; }
+.pp-brand { height: 64px; display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+.pp-nav-logo { width: 36px; height: 36px; border-radius: 6px; }
+.pp-nav-title { font-weight: 600; font-size: 1.1rem; color: #212529; }
+.pp-brand:hover .pp-nav-title { color: #0d6efd; }
+.pp-nav-link { font-size: 1rem; color: #6c757d; text-decoration: none; }
+.pp-nav-link:hover { color: #212529; }
+.pp-nav-link.active { color: #2563eb; font-weight: 600; }
+@media (max-width: 767.98px) {
+  .pp-nav-open { border-top: 1px solid #dee2e6; padding-bottom: 12px; }
+}
+
+/* Footer */
+.pp-footer { background: #212529; margin-top: auto; }
+.pp-footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; flex-wrap: wrap; gap: 12px; }
+.pp-footer-left { display: flex; align-items: center; }
+.pp-footer-right { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
+.pp-footer-logo { height: 36px; width: auto; margin-right: 14px; }
+.pp-footer-text { font-size: 12px; line-height: 1.4; color: #adb5bd; }
+.pp-footer-link { color: #adb5bd; text-decoration: none; font-size: 12px; }
+.pp-footer-link:hover { color: #dee2e6; }
+.pp-footer-link-light { color: #dee2e6; text-decoration: none; }
+.pp-footer-link-light:hover { text-decoration: underline; }
