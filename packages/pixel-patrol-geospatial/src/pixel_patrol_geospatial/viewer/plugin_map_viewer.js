@@ -192,7 +192,7 @@ function buildImagePickerListHtml(ctx, members) {
 // Hover shows a popup for points and polygons. Click opens the inspector: directly for one image,
 // via a list to pick from when several are stacked at one location or overlap.
 function addMapInteractions(maplibregl, map, ctx) {
-  const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
+  const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false, closeButton: false });
   const picker = new maplibregl.Popup({ offset: 25, maxWidth: '400px' });
   const interactiveLayers = ['points-cluster', 'footprints-fill'];
 
