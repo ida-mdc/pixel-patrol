@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Set, List, Mapping, Tuple
@@ -135,7 +136,7 @@ def _extract_zarr_metadata(arr: da.Array, path: Path) -> Dict[str, Any]:
 
     attrs = _read_zarr_root_and_primary_attrs(path)
     if attrs:
-        meta["zarr_attributes"] = attrs
+        meta["zarr_attributes"] = json.dumps(attrs, default=str)
 
     dim_names = _extract_ngff_dim_names(attrs, ndim)
 
@@ -176,10 +177,10 @@ class ZarrLoader:
     FOLDER_EXTENSIONS:    Set[str] = {"zarr", "ome.zarr"}
     CONTAINER_EXTENSIONS: Set[str] = set()
 
-    OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA, "zarr_attributes": dict}
+    OUTPUT_SCHEMA: Dict[str, Any] = {**RASTER_IMAGE_LOADER_SCHEMA, "zarr_attributes": str}
 
     OUTPUT_SCHEMA_DESCRIPTIONS: Dict[str, str] = {
-        "zarr_attributes": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata.",
+        "zarr_attributes": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata, as a JSON string.",
     }
 
     OUTPUT_SCHEMA_PATTERNS = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
