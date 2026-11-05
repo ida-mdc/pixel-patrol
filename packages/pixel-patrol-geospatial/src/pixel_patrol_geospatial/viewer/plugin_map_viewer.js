@@ -3,8 +3,8 @@
  *
  * Reads `latitude`, `longitude`, and `footprint` (GeoJSON string).
  *
- * The images' locations are shown as cluster badges: one circle per area
- * with the summed number of images.
+ * The images' locations are shown as cluster badges: one pie per area, colored by group
+ * (a plain circle without a grouping), with the summed number of images.
  * Hovering a badge shows a popup with the
  * image path(s) and, if a grouping is selected, a per-group tally.
  *
@@ -17,6 +17,8 @@ const MAPLIBRE_SCRIPT_URL = 'https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-g
 const MAP_STYLE_URL = 'https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json';
 const MAX_POPUP_PATHS  = 5;  // up to this many overlapping images, list their paths; beyond it, a summary
 const MAX_POPUP_GROUPS = 3;  // for how many groups display the number of images when they overlap
+const POINT_COLOR      = '#4a90d9';
+const PIE_PIXEL_RATIO  = 2;  // pie images are drawn at 2x so they stay sharp on high-dpi screens
 
 async function loadMaplibre() {
   // cached, so condensedView and render don't load it twice
@@ -40,7 +42,7 @@ function captureableInSnapshot(map, container) {
 // feature (geometry + arbitrary `properties`) per distinct position.
 // The images' {path, group, fileRowNumber frn} list is stored as a JSON string because MapLibre
 // only preserves flat properties when it hands features back in hover events.
-function groupedPointFeatures(rows) {
+function groupedPointFeatures(rows, groups) {
   const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
   for (const row of rows) {
     const key = `${row.lat},${row.lon}`;
@@ -51,13 +53,22 @@ function groupedPointFeatures(rows) {
   const features = [];
   for (const rowsHere of rowsPerCoord.values()) {
     const members = rowsHere.map(row => ({ path: row.path, group: row.__group__, frn: Number(row.frn) }));
+    const properties = { count: rowsHere.length, members: JSON.stringify(members) };
+    for (const group of groups) properties[groupCountKey(group)] = 0;
+    for (const member of members) properties[groupCountKey(member.group)] += 1;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
-      properties: { count: rowsHere.length, members: JSON.stringify(members) },
+      properties,
     });
   }
   return features;
+}
+
+// Name of the feature property holding the number of images of a group. One flat property per
+// group, so that clusterProperties can sum them up per cluster.
+function groupCountKey(group) {
+  return `count_of_${group}`;
 }
 
 // The {path, group, fileRowNumber frn} members of every feature stacked at the hovered pixel.
@@ -78,48 +89,124 @@ function abbreviatedCount(valueExpr) {
   ];
 }
 
-// Add the image positions to the map as cluster badges, aggregated by
-// on-screen proximity.
-function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
-  const features = groupedPointFeatures(rows);
-  if (bounds) {
-    for (const feature of features) bounds.extend(feature.geometry.coordinates);
+// Draw a pie as an image: one slice per group (proportional to its share) and, with `withHub`, a dark
+// hub in the middle that the count text sits on. `shares` and `colors` have one entry per group.
+function drawPieImage(shares, colors, radius, withHub) {
+  const size = 2 * radius * PIE_PIXEL_RATIO;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const canvasContext = canvas.getContext('2d');
+  canvasContext.scale(PIE_PIXEL_RATIO, PIE_PIXEL_RATIO);
+
+  const total = shares.reduce((sum, share) => sum + share, 0);
+  let startAngle = -Math.PI / 2;  // start at 12 o'clock
+  shares.forEach((share, groupIndex) => {
+    const endAngle = startAngle + 2 * Math.PI * share / total;
+    canvasContext.beginPath();
+    canvasContext.moveTo(radius, radius);
+    canvasContext.arc(radius, radius, radius, startAngle, endAngle);
+    canvasContext.fillStyle = colors[groupIndex];
+    canvasContext.fill();
+    startAngle = endAngle;
+  });
+
+  canvasContext.beginPath();
+  canvasContext.arc(radius, radius, radius - 0.5, 0, 2 * Math.PI);
+  canvasContext.strokeStyle = '#fff';
+  canvasContext.stroke();
+
+  if (withHub) {
+    canvasContext.beginPath();
+    canvasContext.arc(radius, radius, radius * 0.62, 0, 2 * Math.PI);
+    canvasContext.fillStyle = 'rgba(0,0,0,0.6)';
+    canvasContext.fill();
   }
+  return canvasContext.getImageData(0, 0, size, size);
+}
+
+// Pie markers are map images named "pie:<share of group 0>:<share of group 1>:..." (shares in 1/16ths,
+// so only few distinct images exist however many images the map has). MapLibre asks for an image it
+// doesn't have yet via the missing-image resolver; we draw and add it right then.
+// (The 'styleimagemissing' event fires too late: the icon is already dropped from that layout pass.)
+function addPieImageGenerator(map, { colors, radius, withHub }) {
+  map.setMissingStyleImageResolver((imageId) => {
+    if (!imageId.startsWith('pie:')) return;  // the basemap style asks for its own icons here too
+    const shares = imageId.split(':').slice(1).map(Number);
+    map.addImage(imageId, drawPieImage(shares, colors, radius, withHub), { pixelRatio: PIE_PIXEL_RATIO });
+  });
+}
+
+// Expression building the pie image name of a cluster from its summed per-group counts.
+function pieImageNameExpression(groups, totalExpr) {
+  const shareParts = groups.flatMap(group => {
+    const share = ['round', ['*', 16, ['/', ['get', groupCountKey(group)], totalExpr]]];
+    return [':', share];
+  });
+  return ['concat', 'pie', ...shareParts];
+}
+
+// Add the image positions to the map as cluster badges, aggregated by on-screen proximity.
+// Each badge is a pie showing how its images split over the groups; `bounds` grows to contain all points.
+function addPointsLayers(map, rows, ctx, { radius, bounds, showCount = false }) {
+  const groups = ctx.groups;
+  const features = groupedPointFeatures(rows, groups);
+  for (const feature of features) bounds.extend(feature.geometry.coordinates);
 
   map.addSource('points-clustered', {
     type: 'geojson',
     data: { type: 'FeatureCollection', features },
     cluster:          true,
     clusterRadius:    20,  // merge features within 20 screen pixels
-    clusterMinPoints: 1,   // even a lone coordinate becomes a (1-member) cluster
+    clusterMinPoints: 1,   // cluster even single points (but see findImagesUnderCursor: not always)
     clusterMaxZoom:   24,  // never un-cluster (features would lose cluster_id/total)
-    clusterProperties: { total: ['+', ['get', 'count']] },  // sum image counts, not feature counts
+    clusterProperties: {
+      total: ['+', ['get', 'count']],  // sum image counts, not feature counts
+      ...Object.fromEntries(groups.map(group => [groupCountKey(group), ['+', ['get', groupCountKey(group)]]])),
+    },
   });
 
+  // Clustered features carry the summed 'total'; a feature the clustering
+  // left unwrapped only has its own 'count' — hence the coalesce.
+  const totalExpr = ['coalesce', ['get', 'total'], ['get', 'count']];
+  const withHub = showCount && groups.length > 1;  // the count text needs a dark background on a multi-color pie
+  addPieImageGenerator(map, { colors: groupColorsOf(ctx), radius: radius + 6, withHub });
+  // The id 'points-cluster' is what the hover/click code looks up.
   map.addLayer({
     id:     'points-cluster',
-    type:   'circle',
+    type:   'symbol',  // 'symbol' layers draw text and/or icons
     source: 'points-clustered',
-    paint: {
-      'circle-radius':       radius + 6,
-      'circle-color':        '#4a90d9',
-      'circle-stroke-color': '#fff',
-      'circle-stroke-width': 1,
+    layout: {
+      'icon-image':            pieImageNameExpression(groups, totalExpr),
+      'icon-allow-overlap':    true,  // show every pie, don't hide ones that collide
+      'icon-ignore-placement': true,
     },
   });
 
   if (showCount) {  // don't show numbers in condensed view
-    // Clustered features carry the summed 'total'; a feature the clustering
-    // left unwrapped only has its own 'count' — hence the coalesce.
-    const countExpr = ['coalesce', ['get', 'total'], ['get', 'count']];
     map.addLayer({
       id:     'points-cluster-count',
-      type:   'symbol',  // 'symbol' layers draw text (and/or icons)
+      type:   'symbol',
       source: 'points-clustered',
-      layout: { 'text-field': abbreviatedCount(countExpr), 'text-size': 12 },
+      layout: { 'text-field': abbreviatedCount(totalExpr), 'text-size': 12 },
       paint:  { 'text-color': '#fff' },
     });
   }
+}
+
+// One color per ctx.groups entry; without a grouping selected, everything gets the plain point color.
+function groupColorsOf(ctx) {
+  const grouped = ctx.plot.groupingLabel() !== '';
+  return ctx.groups.map(group => (grouped ? ctx.color.group(group) : POINT_COLOR));
+}
+
+// Group color legend in the top-left corner of the map (the shared legend hides itself for a single group).
+function addGroupLegend(container, ctx) {
+  const legend = document.createElement('div');
+  legend.style.cssText = 'position:absolute;top:10px;left:10px;z-index:1;max-width:60%;padding:0 8px;' +
+                         'background:rgba(255,255,255,0.9);color:#222;border-radius:4px';
+  ctx.plot.renderDomGroupLegend(legend);
+  if (legend.children.length) container.appendChild(legend);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,8 +271,11 @@ async function findImagesUnderCursor(map, event, layers) {
 // Clickable list of images; each link carries the file row number for the inspector.
 function buildImagePickerListHtml(ctx, members) {
   const escapeHtml = ctx.plot.escapeHtml;
-  const links = members.map(member =>
-    `<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`);
+  const grouped = ctx.plot.groupingLabel();
+  const links = members.map(member => {
+    const dot = grouped ? `<span style="color:${ctx.color.group(member.group)}">●</span> ` : '';
+    return `${dot}<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`;
+  });
   return `<div style="max-height:200px;overflow:auto;white-space:nowrap">${links.join('<br>')}</div>`;
 }
 
@@ -271,7 +361,7 @@ export default {
     // add points when map has loaded
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds();
-      addPointsLayers(map, rows, { radius: 3, bounds });
+      addPointsLayers(map, rows, ctx, { radius: 3, bounds });
       map.fitBounds(bounds, { padding: 20, maxZoom: 8, animate: false });
     });
 
@@ -318,6 +408,8 @@ export default {
     map.addControl(new maplibregl.ScaleControl());
     map.addControl(new maplibregl.NavigationControl());
 
+    addGroupLegend(container, ctx);
+
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds();
 
@@ -347,16 +439,16 @@ export default {
         id:     'footprints-fill',
         type:   'fill',
         source: 'footprints',
-        paint: { 'fill-color': '#4a90d9', 'fill-opacity': 0.15 },
+        paint: { 'fill-color': POINT_COLOR, 'fill-opacity': 0.15 },
       });
       map.addLayer({
         id:     'footprints-outline',
         type:   'line',
         source: 'footprints',
-        paint: { 'line-color': '#4a90d9', 'line-width': 1.5 },
+        paint: { 'line-color': POINT_COLOR, 'line-width': 1.5 },
       });
       // on top, draw points
-      addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
+      addPointsLayers(map, rows, ctx, { radius: 6, bounds, showCount: true });
 
       addMapInteractions(maplibregl, map, ctx);
 
@@ -364,9 +456,7 @@ export default {
     });
 
     // Redraw the map whenever the container is resized
-    const observer = new ResizeObserver(() => {
-      if (map) map.resize();
-    });
+    const observer = new ResizeObserver(() => map.resize());
     observer.observe(container);
   },
 };
