@@ -38,7 +38,7 @@ function captureableInSnapshot(map, container) {
 
 // Group the query rows by coordinate and build one GeoJSON
 // feature (geometry + arbitrary `properties`) per distinct position.
-// The images' {path, group} list is stored as a JSON string because MapLibre
+// The images' {path, group, fileRowNumber frn} list is stored as a JSON string because MapLibre
 // only preserves flat properties when it hands features back in hover events.
 function groupedPointFeatures(rows) {
   const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
@@ -60,7 +60,7 @@ function groupedPointFeatures(rows) {
   return features;
 }
 
-// The {path, group} members of every feature stacked at the hovered pixel.
+// The {path, group, fileRowNumber frn} members of every feature stacked at the hovered pixel.
 function membersOf(features) {
   const members = [];
   for (const feature of features) {
@@ -127,7 +127,7 @@ function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
 // ---------------------------------------------------------------------------
 
 // Popup text for the images at one hovered spot. `members` is a list of
-// {path, group} objects.
+// {path, group, fileRowNumber frn} objects.
 function popupHtml(ctx, members, kindLabel) {
   const escapeHtml = ctx.plot.escapeHtml;
   const groupingLabel = ctx.plot.groupingLabel();  // '' when no grouping is selected
@@ -161,11 +161,40 @@ function popupHtml(ctx, members, kindLabel) {
   return html;
 }
 
-// one popup on hover for points and polygons. manually setting order, so that the info
-// of points is displayed instead of the polygon.
-function addHoverPopup(maplibregl, map, ctx) {
+// The images under a mouse position. A point badge (possibly a cluster) wins over the footprints beneath it.
+// `anchor` is where a popup should sit: the badge, or the mouse for polygons (no single meaningful anchor point).
+async function findImagesUnderCursor(map, event, layers) {
+  const hits = map.queryRenderedFeatures(event.point, { layers });
+  if (!hits.length) return null;
+
+  const badge = hits.find(hit => hit.layer.id === 'points-cluster');
+  if (badge) {
+    const clusterId = badge.properties.cluster_id;
+    const members = clusterId !== undefined
+      ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+      : membersOf([badge]);  // feature the clustering left unwrapped
+    return { members, anchor: badge.geometry.coordinates, kindLabel: 'points' };
+  }
+
+  // a polygon spanning tiles can be returned more than once
+  const membersPerFrn = new Map(hits.map(hit => [hit.properties.frn, hit.properties]));
+  return { members: [...membersPerFrn.values()], anchor: event.lngLat, kindLabel: 'footprints' };
+}
+
+// Clickable list of images; each link carries the file row number for the inspector.
+function buildImagePickerListHtml(ctx, members) {
+  const escapeHtml = ctx.plot.escapeHtml;
+  const links = members.map(member =>
+    `<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`);
+  return `<div style="max-height:200px;overflow:auto;white-space:nowrap">${links.join('<br>')}</div>`;
+}
+
+// Hover shows a popup for points and polygons. Click opens the inspector: directly for one image,
+// via a list to pick from when several are stacked at one location or overlap.
+function addMapInteractions(maplibregl, map, ctx) {
   const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
-  const hoverLayers = ['points-cluster', 'footprints-fill'];  // priority order
+  const picker = new maplibregl.Popup({ offset: 25, maxWidth: '400px' });
+  const interactiveLayers = ['points-cluster', 'footprints-fill'];
 
   const hide = () => {
     map.getCanvas().style.cursor = '';
@@ -173,60 +202,27 @@ function addHoverPopup(maplibregl, map, ctx) {
   };
 
   map.on('mousemove', async (event) => {
-    const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
-    if (!hits.length) return hide();
-    if (picker.isOpen()) return hide();  // don't stack the hover popup on the picker
+    const hit = await findImagesUnderCursor(map, event, interactiveLayers);
+    if (!hit) return hide();
     map.getCanvas().style.cursor = 'pointer';
-
-    // A point badge (possibly a cluster) wins over the footprint beneath it.
-    const badge = hits.find(hit => hit.layer.id === 'points-cluster');
-    if (badge) {
-      const clusterId = badge.properties.cluster_id;
-      const members = clusterId !== undefined
-        ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
-        : membersOf([badge]);  // feature the clustering left unwrapped
-      popup.setLngLat(badge.geometry.coordinates).setHTML(popupHtml(ctx, members, 'points')).addTo(map);
-      return;
-    }
-
-    // Otherwise the footprint polygon(s) under the cursor, anchored at the
-    // mouse (a polygon has no single meaningful anchor point).
-    const footprints = hits.map(hit => hit.properties);
-    popup.setLngLat(event.lngLat).setHTML(popupHtml(ctx, footprints, 'footprints')).addTo(map);
+    if (picker.isOpen()) return popup.remove();  // don't stack the hover popup on the picker
+    popup.setLngLat(hit.anchor).setHTML(popupHtml(ctx, hit.members, hit.kindLabel)).addTo(map);
   });
 
-  // click: one image opens the point inspector directly; several images (same point/bboxes)
-  // open a list to pick from.
-  const picker = new maplibregl.Popup({ offset: 25, maxWidth: '400px' });
   map.on('click', async (event) => {
-    const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
-    if (!hits.length) return;
-    const badge = hits.find(hit => hit.layer.id === 'points-cluster');
-    let members, anchor;
-    if (badge) {
-      const clusterId = badge.properties.cluster_id;
-      members = clusterId !== undefined
-        ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
-        : membersOf([badge]);
-      anchor = badge.geometry.coordinates;
-    } else {
-      members = hits.map(hit => hit.properties);
-      anchor = event.lngLat;
-    }
-    if (members.length === 1) return ctx.openInspector(Number(members[0].frn));
+    const hit = await findImagesUnderCursor(map, event, interactiveLayers);
+    if (!hit) return;
+    if (hit.members.length === 1) return ctx.openInspector(Number(hit.members[0].frn));
+    picker.setLngLat(hit.anchor).setHTML(buildImagePickerListHtml(ctx, hit.members)).addTo(map);
+  });
 
-    const escapeHtml = ctx.plot.escapeHtml;
-    const links = members.map(member =>
-      `<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`);
-    picker.setLngLat(anchor)
-      .setHTML(`<div style="max-height:200px;overflow:auto;white-space:nowrap">${links.join('<br>')}</div>`)
-      .addTo(map);
-    picker.getElement().onclick = (clickEvent) => {
+  picker.on('open', () => {
+    picker.getElement().addEventListener('click', (clickEvent) => {
       const link = clickEvent.target.closest('a[data-frn]');
       if (!link) return;
       clickEvent.preventDefault();
       ctx.openInspector(Number(link.dataset.frn));
-    };
+    });
   });
 
   // mousemove stops firing once the cursor leaves the canvas entirely.
@@ -362,7 +358,7 @@ export default {
       // on top, draw points
       addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
 
-      addHoverPopup(maplibregl, map, ctx);
+      addMapInteractions(maplibregl, map, ctx);
 
       map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
     });
