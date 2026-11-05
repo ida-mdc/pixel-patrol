@@ -50,7 +50,7 @@ function groupedPointFeatures(rows) {
 
   const features = [];
   for (const rowsHere of rowsPerCoord.values()) {
-    const members = rowsHere.map(row => ({ path: row.path, group: row.__group__ }));
+    const members = rowsHere.map(row => ({ path: row.path, group: row.__group__, frn: Number(row.frn) }));
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
@@ -163,7 +163,7 @@ function popupHtml(ctx, members, kindLabel) {
 
 // one popup on hover for points and polygons. manually setting order, so that the info
 // of points is displayed instead of the polygon.
-function addHoverPopup(map, ctx) {
+function addHoverPopup(maplibregl, map, ctx) {
   const popup = new maplibregl.Popup({ offset: 25, closeOnClick: false });
   const hoverLayers = ['points-cluster', 'footprints-fill'];  // priority order
 
@@ -175,6 +175,7 @@ function addHoverPopup(map, ctx) {
   map.on('mousemove', async (event) => {
     const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
     if (!hits.length) return hide();
+    if (picker.isOpen()) return hide();  // don't stack the hover popup on the picker
     map.getCanvas().style.cursor = 'pointer';
 
     // A point badge (possibly a cluster) wins over the footprint beneath it.
@@ -192,6 +193,40 @@ function addHoverPopup(map, ctx) {
     // mouse (a polygon has no single meaningful anchor point).
     const footprints = hits.map(hit => hit.properties);
     popup.setLngLat(event.lngLat).setHTML(popupHtml(ctx, footprints, 'footprints')).addTo(map);
+  });
+
+  // click: one image opens the point inspector directly; several images (same point/bboxes)
+  // open a list to pick from.
+  const picker = new maplibregl.Popup({ offset: 25, maxWidth: '400px' });
+  map.on('click', async (event) => {
+    const hits = map.queryRenderedFeatures(event.point, { layers: hoverLayers });
+    if (!hits.length) return;
+    const badge = hits.find(hit => hit.layer.id === 'points-cluster');
+    let members, anchor;
+    if (badge) {
+      const clusterId = badge.properties.cluster_id;
+      members = clusterId !== undefined
+        ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+        : membersOf([badge]);
+      anchor = badge.geometry.coordinates;
+    } else {
+      members = hits.map(hit => hit.properties);
+      anchor = event.lngLat;
+    }
+    if (members.length === 1) return ctx.openInspector(Number(members[0].frn));
+
+    const escapeHtml = ctx.plot.escapeHtml;
+    const links = members.map(member =>
+      `<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`);
+    picker.setLngLat(anchor)
+      .setHTML(`<div style="max-height:200px;overflow:auto;white-space:nowrap">${links.join('<br>')}</div>`)
+      .addTo(map);
+    picker.getElement().onclick = (clickEvent) => {
+      const link = clickEvent.target.closest('a[data-frn]');
+      if (!link) return;
+      clickEvent.preventDefault();
+      ctx.openInspector(Number(link.dataset.frn));
+    };
   });
 
   // mousemove stops firing once the cursor leaves the canvas entirely.
@@ -253,6 +288,7 @@ export default {
         "latitude"  AS lat,
         "longitude" AS lon,
         "path" AS path,
+        "file_row_number" AS frn,
         "footprint" as footprint,
         ${ctx.sql.groupCol()} AS __group__
       FROM pp_data
@@ -301,7 +337,7 @@ export default {
         footprintFeatures.push({
           type: 'Feature',
           geometry,
-          properties: { path: row.path, group: row.__group__ },
+          properties: { path: row.path, group: row.__group__, frn: Number(row.frn) },
         });
       }
 
@@ -326,7 +362,7 @@ export default {
       // on top, draw points
       addPointsLayers(map, rows, { radius: 6, bounds, showCount: true });
 
-      addHoverPopup(map, ctx);
+      addHoverPopup(maplibregl, map, ctx);
 
       map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
     });
