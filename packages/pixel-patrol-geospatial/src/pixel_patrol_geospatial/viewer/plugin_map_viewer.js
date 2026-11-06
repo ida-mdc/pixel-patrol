@@ -38,7 +38,7 @@ function captureableInSnapshot(map, container) {
 
 // Group the query rows by coordinate and build one GeoJSON
 // feature (geometry + arbitrary `properties`) per distinct position.
-// The images' {path, group, fileRowNumber frn} list is stored as a JSON string because MapLibre
+// The images' {path, group, frn} list is stored as a JSON string because MapLibre
 // only preserves flat properties when it hands features back in hover events.
 function groupedPointFeatures(rows) {
   const rowsPerCoord = new Map();  // "lat,lon" -> rows at exactly that position
@@ -60,7 +60,7 @@ function groupedPointFeatures(rows) {
   return features;
 }
 
-// The {path, group, fileRowNumber frn} members of every feature stacked at the hovered pixel.
+// The {path, group, frn} members of every feature stacked at the hovered pixel.
 function membersOf(features) {
   const members = [];
   for (const feature of features) {
@@ -127,7 +127,7 @@ function addPointsLayers(map, rows, { radius, bounds, showCount = false }) {
 // ---------------------------------------------------------------------------
 
 // Popup text for the images at one hovered spot. `members` is a list of
-// {path, group, fileRowNumber frn} objects.
+// {path, group, frn} objects.
 function popupHtml(ctx, members, kindLabel) {
   const escapeHtml = ctx.plot.escapeHtml;
   const groupingLabel = ctx.plot.groupingLabel();  // '' when no grouping is selected
@@ -185,7 +185,7 @@ async function findImagesUnderCursor(map, event, layers) {
 function buildImagePickerListHtml(ctx, members) {
   const escapeHtml = ctx.plot.escapeHtml;
   const links = members.map(member =>
-    `<a href="#" data-frn="${Number(member.frn)}">${escapeHtml(String(member.path ?? ''))}</a>`);
+    `<a href="#" data-frn="${member.frn}">${escapeHtml(String(member.path ?? ''))}</a>`);
   return `<div style="max-height:200px;overflow:auto;white-space:nowrap">${links.join('<br>')}</div>`;
 }
 
@@ -212,7 +212,7 @@ function addMapInteractions(maplibregl, map, ctx) {
   map.on('click', async (event) => {
     const hit = await findImagesUnderCursor(map, event, interactiveLayers);
     if (!hit) return;
-    if (hit.members.length === 1) return ctx.openInspector(Number(hit.members[0].frn));
+    if (hit.members.length === 1) return ctx.openInspector(hit.members[0].frn);
     picker.setLngLat(hit.anchor).setHTML(buildImagePickerListHtml(ctx, hit.members)).addTo(map);
   });
 
