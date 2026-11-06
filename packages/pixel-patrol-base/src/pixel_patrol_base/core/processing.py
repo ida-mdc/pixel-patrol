@@ -98,6 +98,11 @@ _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
 # X/Y are the spatial plane dims - never split by default (no slicing = -1).
 _UNSLICED_BY_DEFAULT = {"X", "Y"}
 
+# The sample axis holds a pixel's own colour samples (R, G, B). Memory chunks keep it whole, so processors that
+# compare the samples of one pixel see all of them however the image is split; the planes of a chunk are still
+# processed one sample at a time by LEAF processors.
+_PACKED_SAMPLE_DIMS = {"S"}
+
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
 
@@ -262,6 +267,7 @@ def _compute_memory_chunk_specs(
       primary    - split first; dims with an explicit leaf block size, minus any loader-deferred dims
       deferred   - split only if primary is not enough; loader hint via deferred_dims
       last_resort - split only if unavoidable; unsliced dims (X/Y by default)
+    Packed colour samples (the S axis) are never split unless the user gives S a block size.
     Returns None when the file already fits within the budget.
     """
     dtype_bytes  = np.dtype(dtype).itemsize
@@ -273,11 +279,13 @@ def _compute_memory_chunk_specs(
 
     dim_sizes        = dict(zip(dim_order, shape))
     leaf_block_sizes = _resolve_leaf_block_shape(dim_order, leaf_block_shape)
+    packed           = {d for d in dim_order if d in _PACKED_SAMPLE_DIMS and d not in (leaf_block_shape or {})}
+    leaf_block_sizes.update({d: -1 for d in packed})
 
 
     # Dims the user explicitly pinned to -1 are never split, not even as a fallback.
     user_pinned    = {d for d in dim_order
-                      if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1}
+                      if leaf_block_shape and d in leaf_block_shape and leaf_block_shape[d] == -1} | packed
     # Loader-requested deferred dims (e.g. packed colour channels that are inefficient to split
     # independently). User override takes precedence: if the user explicitly set a block size
     # for a dim, it stays in the primary tier regardless of the loader hint.
