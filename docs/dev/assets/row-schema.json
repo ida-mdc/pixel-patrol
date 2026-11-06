@@ -82,8 +82,8 @@
       "description": "Raster dimensions as [bands, height, width]."
     },
     "zarr_attributes": {
-      "type": "object",
-      "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata."
+      "type": "string",
+      "description": "Raw key-value attributes stored in the Zarr/OME-Zarr group metadata, as a JSON string."
     },
     "ndim": {
       "type": "integer",
