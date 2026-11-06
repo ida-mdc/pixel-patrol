@@ -74,7 +74,7 @@ def test_load_range_one_bad_scene_does_not_lose_its_siblings(monkeypatch, loader
         lambda file_path: _FakeImage(),
     )
 
-    results = dict(loader.load_range(Path("unused.lif"), 0, 3))
+    results = dict(loader.load_range(Path("unused.xyz"), 0, 3))
     assert set(results.keys()) == {"s0", "s1", "s2"}
     assert results["s0"] == "s0"
     assert results["s1"] is None
