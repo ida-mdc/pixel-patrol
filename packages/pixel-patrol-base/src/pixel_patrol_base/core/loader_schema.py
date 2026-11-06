@@ -12,7 +12,7 @@ and adding only its own extras::
         RASTER_IMAGE_LOADER_SCHEMA, RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
     )
 
-    OUTPUT_SCHEMA = {**RASTER_IMAGE_LOADER_SCHEMA, "zarr_attributes": dict}
+    OUTPUT_SCHEMA = {**RASTER_IMAGE_LOADER_SCHEMA, "zarr_attributes": str}
     OUTPUT_SCHEMA_PATTERNS = list(RASTER_IMAGE_LOADER_SCHEMA_PATTERNS)
 
 Each column's type and human description are declared together below (mirroring a

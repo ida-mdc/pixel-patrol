@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 
 import numpy as np
+import polars as pl
 import pytest
 import zarr
 from zarr.storage import LocalStore
@@ -112,3 +114,18 @@ def test_read_header_bioformats2raw_layout3(bioformats2raw_zarr: Path, loader):
     info = loader.read_header(bioformats2raw_zarr)
     assert info.shape == (1, 2, 8, 16, 16)
     assert info.dim_order == "TCZYX"
+
+
+def test_mixed_type_zarr_attributes(tmp_path: Path, loader):
+    zarr_path = tmp_path / "mixed.ome.zarr"
+    root = zarr.group(store=LocalStore(str(zarr_path)))
+    root.create_array("0", shape=(4, 4), chunks=(4, 4), dtype="uint8", overwrite=True)
+    transforms = [{"type": "scale", "scale": [0.5, 0.5]}, {"type": "translation", "translation": [0, 0.0]}]
+    root.attrs.put({"multiscales": [{"version": "0.4", "axes": [{"name": "y"}, {"name": "x"}],
+                                     "datasets": [{"path": "0", "coordinateTransformations": transforms}]}]})
+
+    attributes = loader.load(zarr_path).meta["zarr_attributes"]
+
+    assert isinstance(attributes, str)
+    assert json.loads(attributes)["multiscales"][0]["datasets"][0]["coordinateTransformations"] == transforms
+    pl.from_dicts([{"zarr_attributes": attributes}, {"zarr_attributes": attributes}], infer_schema_length=2)
