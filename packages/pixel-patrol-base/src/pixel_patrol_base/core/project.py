@@ -192,6 +192,7 @@ class Project:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
 
         expected_parts = [Path(p) for p in processing_stats.pop("part_paths", [])]  # not persisted metadata
+        file_columns = processing_stats.pop("file_columns", None)
 
         if processing_stats:
             for k, v in _processing_params(config).items():
@@ -224,7 +225,7 @@ class Project:
             logger.info("Project Core: streaming %d parts → '%s'", len(parts_to_save), self.output_path)
             try:
                 processing.save_parquet_from_parts(
-                    parts_to_save, self.output_path, self.metadata, **rgs_kwargs
+                    parts_to_save, self.output_path, self.metadata, file_columns=file_columns, **rgs_kwargs
                 )
                 processing.cleanup_chunks_dir(parts_dir)
                 saved = True

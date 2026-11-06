@@ -1,5 +1,6 @@
 import logging
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -21,6 +22,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import record_from, Record
+from pixel_patrol_loader_bio.plugins.loaders._compression import compression_of
 from pixel_patrol_loader_bio.plugins.loaders._utils import is_zarr_store
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,18 @@ def _extract_metadata(img: Any, data: Any) -> Dict[str, Any]:
     metadata["num_pixels"] = math.prod(data.shape)
 
     return metadata
+
+
+def _with_compression(record: Record, codec: Optional[str]) -> Record:
+    if codec is None:
+        return record
+    meta: Dict[str, Any] = {}
+    for key, value in record.meta.items():
+        meta[key] = value
+        if key == "dtype":
+            meta["compression"] = codec
+    meta.setdefault("compression", codec)
+    return replace(record, meta=meta)
 
 
 _TIFF_EXTENSIONS = {".tif", ".tiff"}
@@ -167,7 +181,7 @@ class BioIoLoader:
         img = _load_bioio_image(file_path)
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
-        return self._build_record(img)
+        return _with_compression(self._build_record(img), compression_of(file_path))
 
     def load_range(self, file_path: Path, start: int, stop: int) -> Iterator[Tuple[str, Record]]:
         """Yield (scene_name, Record) for scenes [start, stop) in a multi-scene file."""
@@ -175,12 +189,13 @@ class BioIoLoader:
         if img is None:
             raise UnsupportedFileFormatError(self.NAME, path=str(file_path))
         scenes = list(img.scenes) if hasattr(img, "scenes") else [None]
+        codec = compression_of(file_path)
         for scene in scenes[start:stop]:
             child_id = str(scene) if scene is not None else "0"
             try:
                 if scene is not None:
                     img.set_scene(scene)
-                yield child_id, self._build_record(img)
+                yield child_id, _with_compression(self._build_record(img), codec)
             except Exception as e:
                 logger.warning("BioIoLoader: failed to read scene %s in '%s': %s", child_id, file_path, e)
                 yield child_id, None

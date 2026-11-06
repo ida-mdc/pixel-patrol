@@ -25,6 +25,7 @@ from pixel_patrol_base.core.loader_schema import (
     RASTER_IMAGE_LOADER_SCHEMA_PATTERNS,
 )
 from pixel_patrol_base.core.record import record_from, Record
+from pixel_patrol_loader_bio.plugins.loaders._compression import hdf5_compression
 from pixel_patrol_loader_bio.plugins.loaders._utils import infer_dim_order
 
 logger = logging.getLogger(__name__)
@@ -491,6 +492,7 @@ def _extract_metadata(dset: h5py.Dataset, dim_order: str, attrs: Dict[str, Any])
         "h5_dataset_path": dset.name,
         "dim_order": dim_order,
         "dtype": str(dset.dtype),
+        "compression": hdf5_compression(dset),
         "shape": [int(s) for s in dset.shape],
         "ndim": int(dset.ndim),
         "num_pixels": int(np.prod(dset.shape)),
