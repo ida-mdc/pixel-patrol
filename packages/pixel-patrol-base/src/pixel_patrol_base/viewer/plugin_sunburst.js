@@ -1,5 +1,7 @@
 const MAX_FILES_FOR_SUNBURST = 500;
 const MIXED_COLOR = '#aaaaaa';
+const hiddenFilesNote = (n) =>
+  `Total file count is <strong>${n.toLocaleString()}</strong>, so individual files are hidden (max ${MAX_FILES_FOR_SUNBURST}).`;
 
 // Slice size metric. Image count is what reveals container files: they are the
 // slices worth more than one file.
@@ -34,6 +36,9 @@ export default {
   async overviewMessage(ctx) {
     try {
       const count = await countFiles(ctx);
+      if (count > MAX_FILES_FOR_SUNBURST) {
+        return { text: hiddenFilesNote(count), warning: true };
+      }
       return `Folder structure of <strong>${count.toLocaleString()} files</strong>.`;
     } catch { return null; }
   },
@@ -65,7 +70,8 @@ export default {
       const pathWhere = andWhere(ctx.where, '"path" IS NOT NULL');
 
       // Above the threshold, roll files up to their folders so the chart stays legible.
-      const foldersOnly = await countFiles(ctx) > MAX_FILES_FOR_SUNBURST;
+      const fileCount = await countFiles(ctx);
+      const foldersOnly = fileCount > MAX_FILES_FOR_SUNBURST;
       const rows = await fetchSunburstRows(ctx, { foldersOnly, pathWhere });
 
       if (!rows.length) {
@@ -89,6 +95,10 @@ export default {
         </div>
         <div class="sunburst-plot-area"></div>
       `;
+
+      if (foldersOnly) {
+        ctx.plot.prependWarning(container, { level: 'yellow', html: hiddenFilesNote(fileCount) });
+      }
 
       for (const btn of container.querySelectorAll('.sunburst-mode-btn')) {
         btn.onclick = () => {
