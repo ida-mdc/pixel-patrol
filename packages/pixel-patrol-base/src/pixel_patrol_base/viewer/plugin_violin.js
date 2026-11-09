@@ -205,7 +205,7 @@ async function prependFractionWarnings(plotRoot, ctx) {
     const nSigned = Number(signedRow?.n ?? 0);
     if (nSigned > 0) {
       ctx.plot.prependWarning(plotRoot, {
-        level: 'blue',
+        level: 'yellow',
         html: `<strong>${nSigned.toLocaleString()} image${nSigned === 1 ? '' : 's'}</strong> ` +
               `use a signed integer dtype but have no negative values — ` +
               `data may have been acquired as unsigned but stored as signed.`,
