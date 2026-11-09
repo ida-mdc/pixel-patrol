@@ -1,7 +1,5 @@
 # Create an Extension
 
-<img src="../../assets/shark.png" alt="A softly glowing cartoon shark" width="220" align="right">
-
 PixelPatrol is built to be extended - without forking it. An **extension** is a regular, installable Python package that can add any combination of:
 
 - a custom **loader** - read a file format PixelPatrol doesn't support out of the box
