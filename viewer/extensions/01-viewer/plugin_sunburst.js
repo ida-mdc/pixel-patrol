@@ -4,9 +4,9 @@ const MIXED_COLOR = '#aaaaaa';
 // Slice size metric. Image count is what reveals container files: they are the
 // slices worth more than one file.
 const MODES = [
-  { id: 'files',  label: 'File count',  pick: s => s.files  },
-  { id: 'images', label: 'Image count', pick: s => s.images },
-  { id: 'size',   label: 'File size',   pick: s => s.bytes  },
+  { id: 'files',  label: 'File count',  pick: s => s.files,  text: '%{customdata[0]:,} files'   },
+  { id: 'images', label: 'Image count', pick: s => s.images, text: '%{customdata[1]:,} images'  },
+  { id: 'size',   label: 'File size',   pick: s => s.bytes,  text: '%{customdata[2]:.3s}B'      },
 ];
 
 const HOVER = '<b>%{label}</b><br>Files: %{customdata[0]:,}<br>' +
@@ -60,18 +60,23 @@ export default {
 
   async render(container, ctx) {
     try {
-      const mode = MODES.some(m => m.id === container.dataset.mode) ? container.dataset.mode : 'files';
       const { andWhere } = ctx.sql;
       const pathWhere = andWhere(ctx.where, '"path" IS NOT NULL');
 
       // Above the threshold, roll files up to their folders so the chart stays legible.
-      const foldersOnly = await countFiles(ctx) > MAX_FILES_FOR_SUNBURST;
+      const fileCount = await countFiles(ctx);
+      const foldersOnly = fileCount > MAX_FILES_FOR_SUNBURST;
       const rows = await fetchSunburstRows(ctx, { foldersOnly, pathWhere });
 
       if (!rows.length) {
         container.innerHTML = '<div class="no-data">No path data available.</div>';
         return;
       }
+
+      // Image count only differs from file count when some file holds several images.
+      const hasContainers = rows.some(r => num(r.__images__) !== (foldersOnly ? num(r.__n__) : 1));
+      const modes = MODES.filter(m => m.id !== 'images' || hasContainers);
+      const mode  = modes.some(m => m.id === container.dataset.mode) ? container.dataset.mode : 'files';
 
       const { ids, labels, parents, values, colors, customdata } =
         buildHierarchy(rows, ctx.colorMap, { foldersOnly, mode });
@@ -81,7 +86,7 @@ export default {
         return;
       }
 
-      const buttons = MODES.map(m =>
+      const buttons = modes.map(m =>
         `<button type="button" class="btn btn-sm sunburst-mode-btn ${m.id === mode ? 'btn-secondary' : 'btn-outline-secondary'}" data-mode="${m.id}">${m.label}</button>`).join('');
       container.innerHTML = `
         <div class="d-flex justify-content-end mb-2">
@@ -89,6 +94,11 @@ export default {
         </div>
         <div class="sunburst-plot-area"></div>
       `;
+
+      if (foldersOnly) {
+        ctx.plot.prependWarning(container, { level: 'yellow', html:
+          `Total file count is <strong>${fileCount.toLocaleString()}</strong>, so individual files are hidden (max ${MAX_FILES_FOR_SUNBURST}).` });
+      }
 
       for (const btn of container.querySelectorAll('.sunburst-mode-btn')) {
         btn.onclick = () => {
@@ -112,6 +122,7 @@ export default {
         marker:        { colors },
         branchvalues:  'total',
         hovertemplate: HOVER,
+        texttemplate:  `%{label}<br>${MODES.find(m => m.id === mode).text}`,
       }], {
         margin: { l: 0, r: 0, t: 30, b: 0 },
         height: 550,
