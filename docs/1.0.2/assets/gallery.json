@@ -1,0 +1,137 @@
+[
+  {
+    "title": "U2OS focus z-stacks (BBBC006)",
+    "field": "Biology",
+    "description": "285 two-channel z-stacks of U2OS cells (520 x 520 px, uint16), grouped by how far the stack sits from the focal plane: far below, below, near and far above focus.",
+    "tags": [
+      "U2OS cells",
+      "Z-stacks",
+      "Multi-channel",
+      "OME-TIFF"
+    ],
+    "credit": "Broad Bioimage Benchmark Collection, BBBC006",
+    "report": "./viewer/?data=../example.parquet&group=imported_path_short",
+    "image": "assets/gallery/u2os_focus.jpg",
+    "size": "238 KB"
+  },
+  {
+    "title": "Confocal multi-channel 3D kidney",
+    "field": "Biology",
+    "description": "Confocal microscopy volumes with mixed data types (uint8 and uint16) and a varying number of dimensions.",
+    "tags": [
+      "Kidney",
+      "Z-stacks",
+      "Multi-channel",
+      "LIF"
+    ],
+    "credit": "Carlos Cordero, Sarah Wendlinger, Michael Kaminski",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fkidney.parquet&group=imported_path_short",
+    "image": "assets/gallery/kidney.jpg",
+    "size": "5.9 MB"
+  },
+  {
+    "title": "Mouse whole brain",
+    "field": "Biology",
+    "description": "Three whole-brain OME-Zarr volumes with 1,950 z-planes of roughly 9,000 x 7,400 px each (1.8 x 1.8 x 4 µm voxels, uint16), imaged in three channels: NeuN, cFOS and tdTomato.",
+    "tags": [
+      "Mouse brain",
+      "Z-stacks",
+      "Multi-channel",
+      "OME-Zarr"
+    ],
+    "credit": "Treier et al. 2026",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Ftreier-091.parquet&group=name",
+    "image": "assets/gallery/mouse_brain.jpg",
+    "size": "8.3 MB"
+  },
+  {
+    "title": "Steel microstructure (Aachen-Heerlen)",
+    "field": "Materials",
+    "description": "2,580 grayscale microscopy images (1024 x 768 px, uint8) of martensite-austenite structures on steel surfaces, in 10 steel types and grouped by phase transformation temperature (400 or 500 °C).",
+    "tags": [
+      "Steel",
+      "2D",
+      "Single-channel",
+      "TIF"
+    ],
+    "credit": "Iren, Ackerman, Gorfer et al., Aachen-Heerlen Annotated Steel Microstructure Dataset (2021)",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fsteel_01.parquet&group=parent2",
+    "image": "assets/gallery/steel_microstructure.jpg",
+    "size": "20 MB"
+  },
+  {
+    "title": "Brain MRI with head motion (MR-ART)",
+    "field": "Medical",
+    "description": "435 T1-weighted brain MRI volumes (192 x 256 x 256 px, int16) of 148 healthy adults, each scanned while still and with slight and heavier head motion, grouped by motion level. The metadata reveals two acquisition batches with different scanner software and coil setup.",
+    "tags": [
+      "Brain MRI",
+      "3D",
+      "Single-channel",
+      "NIfTI"
+    ],
+    "credit": "Nárai et al., MR-ART (2022)",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fmr_art.parquet&group=SeriesDescription",
+    "image": "assets/gallery/mr_art.jpg",
+    "size": "39 MB"
+  },
+  {
+    "title": "SEN12MS winter (Sentinel-1/2 and land cover)",
+    "field": "Earth",
+    "description": "95,475 georeferenced GeoTIFF patches (256 x 256 px, 10 m resolution) from the winter 2016/17 branch of SEN12MS: Sentinel-1 SAR (2 bands), Sentinel-2 multispectral (13 bands) and MODIS-derived land cover, 31,825 patches each.",
+    "tags": [
+      "Satellite imagery",
+      "2D",
+      "Multi-channel",
+      "GeoTIFF"
+    ],
+    "credit": "Schmitt, Hughes, Qiu and Zhu, SEN12MS (TUM, 2019)",
+    "image": "assets/gallery/sen12ms_winter.jpg",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2F2026-11-03-pp-report-sen12ms-rois2017-winter.parquet",
+    "size": "699 MB"
+  },
+  {
+    "title": "EuroSAT land use and land cover (RGB)",
+    "field": "Earth",
+    "description": "27,000 georeferenced Sentinel-2 RGB patches (64 x 64 px, uint8) in 10 land use and land cover classes, grouped by class.",
+    "tags": [
+      "Satellite imagery",
+      "2D",
+      "Multi-channel",
+      "JPG"
+    ],
+    "credit": "Helber, Bischke, Dengel and Borth, EuroSAT (2018)",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Feurosat_jpg.parquet&group=imported_path_short",
+    "image": "assets/gallery/eurosat_rgb.jpg",
+    "size": "289 MB"
+  },
+  {
+    "title": "H2Crop hyperspectral crops",
+    "field": "Earth",
+    "description": "A random subset of the H2Crop dataset (4,086 of 16,344 HDF5 files). Each file holds EnMAP hyperspectral (218 bands, 30 m) and Sentinel-2 time series (10 bands, 10 m) datasets with mixed data types (uint8 and int16), dimension orders and image sizes (64 x 64 and 192 x 192 px), grouped by dataset within the file.",
+    "tags": [
+      "Satellite imagery",
+      "Multi-image files",
+      "Multi-channel",
+      "HDF5"
+    ],
+    "credit": "Li et al., H2Crop (2026)",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fh2crop_small.parquet&group=h5_dataset_path",
+    "image": "assets/gallery/h2crop.jpg",
+    "size": "509 MB"
+  },
+  {
+    "title": "Zooplankton images (ZooScan, Point B)",
+    "field": "Other",
+    "description": "55,338 grayscale uint8 images from a ZooScan at Point B (WP2 net, 200 µm), recorded through 2016, at 10.6 µm per pixel. Image sizes vary widely. Used as training data for a foundation model.",
+    "tags": [
+      "Zooplankton",
+      "2D",
+      "Single-channel",
+      "JPG"
+    ],
+    "credit": "Peter Hirsch, Nick Lechtenbörger and the AqQua team",
+    "report": "./viewer/?data=https%3A%2F%2Fdcache-doma-door01.desy.de%2FHelmholtz%2FHIP%2Fcollaborations%2FPixelPatrol%2Fecotaxa_10.parquet&group=imported_path_short",
+    "image": "assets/gallery/plankton.jpg",
+    "size": "114 MB"
+  }
+]
