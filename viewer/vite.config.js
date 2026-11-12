@@ -5,7 +5,7 @@ import { resolve } from 'path';
 // After a production build, sync the output into the Python package so that
 // `pixel-patrol view` picks up the latest viewer without a manual copy step.
 const VIEWER_DIST_IN_PKG = resolve(
-  __dirname,
+  import.meta.dirname,
   '../packages/pixel-patrol-base/src/pixel_patrol_base/viewer_dist',
 );
 
@@ -35,8 +35,8 @@ function emitJsLicenses() {
     name: 'emit-js-licenses',
     generateBundle() {
       const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
-      const arrowNotice = read(resolve(__dirname, 'node_modules/apache-arrow/NOTICE.txt'));
-      const chromaLicense = read(resolve(__dirname, 'node_modules/chroma-js/LICENSE'));
+      const arrowNotice = read(resolve(import.meta.dirname, 'node_modules/apache-arrow/NOTICE.txt'));
+      const chromaLicense = read(resolve(import.meta.dirname, 'node_modules/chroma-js/LICENSE'));
       this.emitFile({
         type: 'asset',
         fileName: 'LICENSES.txt',
@@ -72,7 +72,7 @@ function writeBuildMeta() {
     writeBundle() {
       try {
         const duckdbPkg = JSON.parse(readFileSync(
-          resolve(__dirname, 'node_modules/@duckdb/duckdb-wasm/package.json'),
+          resolve(import.meta.dirname, 'node_modules/@duckdb/duckdb-wasm/package.json'),
           'utf8',
         ));
         writeFileSync(
