@@ -35,13 +35,6 @@ build-backend = "hatchling.build"
 [tool.uv]
 package = true
 
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.package-data]
-"pixel_patrol_base.report" = ["assets/*.png"]
-"pixel_patrol_base" = ["viewer_dist/**/*", "viewer/**/*", "viewer-scripts/**/*", "launch_assets/**/*"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
 
