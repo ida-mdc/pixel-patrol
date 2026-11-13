@@ -12,17 +12,16 @@ requires-python = ">=3.12"
 
 dependencies = [
     "click>=8.2.1",
+    "numpy>=1.24",
+    "Pillow>=10.0",
     "packaging>=21.0",
-    "matplotlib>=3.10.3", # TODO: Are we sure we need it in base?
     "polars>=1.31.0",
     "pyarrow>=21.0.0",
-    "pyyaml>=6.0.2",
-    "statsmodels>=0.14.4",
+    "pandas>=2.3.3",
     "dask[distributed]>=2025.5.1",
     "duckdb>=1.2.0",
     "psutil>=6.0.0",
     "tqdm>=4.67.1",
-    "yaspin>=3.4.0",
 ]
 
 [project.urls]
@@ -35,13 +34,6 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 package = true
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.package-data]
-"pixel_patrol_base.report" = ["assets/*.png"]
-"pixel_patrol_base" = ["viewer_dist/**/*", "viewer/**/*", "viewer-scripts/**/*", "launch_assets/**/*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pixel_patrol_base"]
