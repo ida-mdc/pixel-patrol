@@ -15,6 +15,20 @@ from pixel_patrol_base.launch_server import serve_launch
 from pixel_patrol_base.process_args import PROCESS_ARGS
 
 
+class _Cli(click.Group):
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (click.ClickException, click.Abort, SystemExit):
+            raise
+        except KeyboardInterrupt:
+            click.echo("\nCancelled.", err=True)
+            raise SystemExit(1)
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)
+            raise SystemExit(1)
+
+
 def _process_options(command):
     """Add every arg in PROCESS_ARGS to a click command, in list order."""
     for arg in reversed(PROCESS_ARGS):
@@ -27,7 +41,7 @@ def _process_options(command):
     return command
 
 
-@click.group()
+@click.group(cls=_Cli)
 @click.version_option(package_name="pixel-patrol-base")
 def cli():
     """
@@ -93,16 +107,12 @@ def process(base_directory: Path, output: Path, loader: str | None, paths: tuple
         log_file=log_file,
     )
 
-    try:
-        if scheduler:
-            click.echo(f"Connecting to Dask scheduler at '{scheduler}'...")
-            with Client(scheduler) as _client:
-                process_files(my_project, **_process_kwargs)
-        else:
-            process_files(my_project, max_workers=max_workers, **_process_kwargs)
-    except KeyboardInterrupt:
-        click.echo("\nCancelled.")
-        raise SystemExit(1)
+    if scheduler:
+        click.echo(f"Connecting to Dask scheduler at '{scheduler}'...")
+        with Client(scheduler) as _client:
+            process_files(my_project, **_process_kwargs)
+    else:
+        process_files(my_project, max_workers=max_workers, **_process_kwargs)
 
     if not my_project.output_written:
         click.echo("No output written, see warnings above.", err=True)
