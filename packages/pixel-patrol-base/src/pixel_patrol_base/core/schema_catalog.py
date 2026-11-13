@@ -55,11 +55,14 @@ _COMMON_SCHEMA_PATTERNS = {pat for pat, _ in RASTER_IMAGE_LOADER_SCHEMA_PATTERNS
 _COMMON_PATTERN_DESCRIPTIONS = dict(RASTER_IMAGE_LOADER_SCHEMA_PATTERN_DESCRIPTIONS)
 
 # Pipeline-derived columns: computed by processing.py from image data, not provided by loaders.
-# ndim = len(dim_order), num_pixels = prod(shape), size_* = shape per axis.
+# ndim = len(dim_order), num_pixels = prod(shape), size_* = shape per axis, compression_type from compression,
+# compression_factor from pixel bytes and file size.
 # Descriptions live in column_docs.BASE_COLUMN_DESCRIPTIONS - single source of truth.
 _PIPELINE_COLUMNS: List[Tuple[str, Any]] = [
     ("ndim",       int),
     ("num_pixels", int),
+    ("compression_type",   str),
+    ("compression_factor", float),
 ]
 _PIPELINE_PATTERNS: List[Tuple[str, Any, str]] = [
     (r"^size_[A-Za-z]$", int, "Extent (number of elements) of this row along the given axis."),
@@ -381,7 +384,8 @@ def _producers_tree(loaders: List[Dict], processors: List[Dict]) -> List[Dict[st
             {"id": "derived", "label": "Derived metadata",
              "description": "Columns the pipeline computes from image data: ndim and num_pixels are "
                             "derived from dim_order and shape; size_<axis> columns are extracted from "
-                            "the actual array shape per dimension."},
+                            "the actual array shape per dimension; compression_type and compression_factor "
+                            "come from the compression algorithm and the file size."},
             {"id": "agg", "label": "Aggregation",
              "description": "Columns added when per-image rows are rolled up into the obs hierarchy "
                             "(obs_level, per-dimension coordinates)."},

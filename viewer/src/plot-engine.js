@@ -453,6 +453,11 @@ async function fetchCategoryOutliers(ctx, { numCol, table, where, catSql, n = OU
     ) WHERE rlo <= ${n} OR rhi <= ${n}`);
 }
 
+// A strip trace is an invisible box, so its legend entry would be blank.
+const legendDot = (name, color) => ({
+  type: 'scatter', mode: 'markers', name, x: [null], y: [null], marker: { color, size: 9 }, hoverinfo: 'skip',
+});
+
 // One trace per color series; each spans the X categories.
 async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, statRows, series, isDate }) {
   const { q, andWhere } = ctx.sql;
@@ -473,7 +478,7 @@ async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, stat
       const color = colorFn(g);
       if (mode === 'strip') {
         return {
-          type: 'box', name: labelFn(g), x, y, customdata,
+          type: 'box', name: labelFn(g), x, y, customdata, showlegend: false,
           boxpoints: 'all', jitter: 0.3, pointpos: 0,
           fillcolor: 'rgba(0,0,0,0)', line: { width: 0 },
           marker: { color, size: 7 },
@@ -487,6 +492,7 @@ async function buildSeriesTraces(ctx, { numCol, table, where, catSql, mode, stat
         spanmode: 'soft', marker: { color },  // smooth tails, not clipped flat
       };
     }).filter(t => t.y.length);
+    if (mode === 'strip') traces.push(...groups.filter(g => rows.some(r => String(r.__group__) === g)).map(g => legendDot(labelFn(g), colorFn(g))));
     return { traces, categories: cats, categoryValues: cats };
   }
 

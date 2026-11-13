@@ -7,7 +7,7 @@ const GROUP_ORDER = ['Summary', 'File Stats', 'Metadata', 'Dataset Stats', 'Visu
 // across dims" before "violin" purely because "s" < "v"). Anything not
 // listed here keeps its registration order, appended after the listed ones.
 const WIDGET_ORDER = {
-  'Dataset Stats': ['violin-basic', 'violin-quality', 'stats-across-dims-basic', 'stats-across-dims-quality'],
+  'Dataset Stats': ['compression', 'violin-basic', 'violin-quality', 'stats-across-dims-basic', 'stats-across-dims-quality'],
 };
 
 const CANON = new Map(GROUP_ORDER.map(g => [g.toLowerCase(), g]));

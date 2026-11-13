@@ -54,6 +54,7 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import DEFAULT_PARQUET_ROW_GROUP_SIZE, HISTOGRAM_BINS
+from pixel_patrol_base.core.compression import compression_factor, compression_type
 from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, SkipFile
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 from pixel_patrol_base.utils.df_utils import add_parent_level_columns
@@ -97,6 +98,8 @@ _INT_SHRINK_EXEMPT = frozenset({"size_bytes"})
 
 # X/Y are the spatial plane dims - never split by default (no slicing = -1).
 _UNSLICED_BY_DEFAULT = {"X", "Y"}
+
+# Per-file columns the pipeline can only compute once a run is over, kept next to the part files.
 
 # Log a progress line every N completed records.
 _LOG_EVERY = 200
@@ -164,6 +167,7 @@ class ContainerTask:
     file_index:   int
     file_path:   str
     image_slice: Tuple[int, int]   # (start, stop) half-open
+    n_images:    Optional[int] = None   # images in the whole file, across all its tasks
 
 
 def _task_image_count(task: Any) -> int:
@@ -359,7 +363,7 @@ def _plan_container_tasks(
         image_slices.append((pos, min(pos + images_per_task, n)))
         pos += images_per_task
     return [
-        ContainerTask(file_index=file_index, file_path=file_path, image_slice=slc)
+        ContainerTask(file_index=file_index, file_path=file_path, image_slice=slc, n_images=n)
         for slc in image_slices
     ]
 
@@ -535,6 +539,8 @@ def _extract_image_meta(record: Record) -> Dict[str, Any]:
     meta["ndim"]      = len(record.dim_order)
     for i, d in enumerate(record.dim_order):
         meta[f"size_{d}"] = int(record.data.shape[i])
+    if meta.get("compression") is not None:
+        meta["compression_type"] = compression_type(meta["compression"])
     return meta
 
 
@@ -953,6 +959,33 @@ class _RecordAssembler:
         return self._results.pop(record_key)
 
 
+class _FileLedger:
+    """Remembers, per file, how many pixel bytes its processed images held. A few numbers per file,
+    so columns that depend on the whole file can be added once the run is over, however many images it has."""
+
+    def __init__(self) -> None:
+        self._files: Dict[int, List[int]] = {}   # file_index → [pixel bytes, images seen, images expected]
+
+    def add(self, file_index: int, image_row: dict, n_images: int) -> None:
+        try:
+            pixel_bytes = image_row["num_pixels"] * np.dtype(image_row["dtype"]).itemsize
+        except (KeyError, TypeError):
+            return
+        entry = self._files.setdefault(file_index, [0, 0, n_images])
+        entry[0] += pixel_bytes
+        entry[1] += 1
+
+    def compression_factors(self, files_meta: List[dict]) -> pl.DataFrame:
+        """One row per file whose images were all processed: its path and compression factor."""
+        rows = []
+        for file_index, (pixel_bytes, seen, expected) in self._files.items():
+            factor = compression_factor(pixel_bytes, files_meta[file_index].get("size_bytes", 0)) if seen == expected else None
+            if factor is not None:
+                rows.append({"path": files_meta[file_index]["path"], "compression_factor": factor})
+        schema = {"path": pl.String, "compression_factor": pl.Float64}
+        return pl.DataFrame(rows, schema=schema).unique(subset="path", keep="first")
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # _ResultsWriter  - buffers complete record rows and writes part files
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1007,7 +1040,7 @@ class _ResultsWriter:
         )
         self._part_counter += 1
 
-    def finalize(self) -> Optional[pl.DataFrame]:
+    def finalize(self, file_columns: Optional[pl.DataFrame] = None) -> Optional[pl.DataFrame]:
         """Flush remaining buffer and signal what to do next.
 
         Returns:
@@ -1031,6 +1064,8 @@ class _ResultsWriter:
         # In-memory path: no parts were written, concat buffer directly.
         t0 = time.monotonic()
         combined = pl.concat(self._buffer, how="diagonal_relaxed")
+        if file_columns is not None and "path" in combined.columns:
+            combined = combined.join(file_columns, on="path", how="left")
         logger.debug("Finalize: concat done in %.1fs - %d rows, post-processing ...", time.monotonic() - t0, len(combined))
         result = _post_process(combined)
         logger.info("Finalize: complete - %d rows total, elapsed %.1fs", len(result), time.monotonic() - self._t_start)
@@ -1064,6 +1099,7 @@ def _coordinate_pipeline(
     max_pending     = 2 * sum(_nthreads.values())
     writer      = _ResultsWriter(config.rows_per_part, parts_dir, config.parquet_row_group_size)
     assembler   = _RecordAssembler()
+    file_ledger = _FileLedger()
     future_to_task: Dict[Any, Task] = {}
     completed_records = 0
     n_tasks_submitted = 0
@@ -1145,6 +1181,7 @@ def _coordinate_pipeline(
         chunk_results: List[MemoryChunkResult],
         file_index:    int,
         child_id:      Optional[str],
+        n_file_images: Optional[int] = None,
     ) -> None:
         nonlocal completed_records
         for cr in chunk_results:
@@ -1153,6 +1190,8 @@ def _coordinate_pipeline(
         obs_rows = _rollup(chunk_results, processors, config.slice_size)
         if obs_rows:
             writer.add(_join_file_metadata(obs_rows, files_meta[file_index], child_id))
+            if n_images := n_file_images or (1 if child_id is None else None):
+                file_ledger.add(file_index, obs_rows[0], n_images)
         completed_records += 1
         pbar.update(1)
         _update_pbar_postfix()
@@ -1202,7 +1241,7 @@ def _coordinate_pipeline(
                 pbar.refresh()
         elif isinstance(task, ContainerTask):
             for chunk_group in results:
-                _handle_record(chunk_group, chunk_group[0].file_index, chunk_group[0].child_id)
+                _handle_record(chunk_group, chunk_group[0].file_index, chunk_group[0].child_id, task.n_images)
             n_missing = _task_image_count(task) - len(results)
             if n_missing > 0:
                 error_records += n_missing
@@ -1267,10 +1306,12 @@ def _coordinate_pipeline(
         "load_cpu_s":                all_timing.get("load", 0.0),
         **{k: v for k, v in all_timing.items() if k.startswith("proc_")},
     }
-    result_df = writer.finalize()
+    file_columns = file_ledger.compression_factors(files_meta)
+    result_df = writer.finalize(file_columns)
     # Snapshot after finalize() so the final flushed part is included.
     stats["part_paths"] = [str(p) for p in writer._part_paths]
     if result_df is None:
+        stats["file_columns"] = file_columns  # popped by the caller, not persisted
         return None, stats  # parts on disk; caller uses save_parquet_from_parts
     return (result_df if len(result_df) > 0 else None), stats
 
@@ -1356,6 +1397,7 @@ def save_parquet_from_parts(
     dest:         Path,
     metadata:     Any,        # ProjectMetadata
     row_group_size: Optional[int] = None,
+    file_columns: Optional[pl.DataFrame] = None,  # per-file columns joined on path
 ) -> int:
     """Stream-merge part files into the final parquet, applying _post_process.
 
@@ -1377,6 +1419,11 @@ def save_parquet_from_parts(
     drop = _null_columns_from_stats(parts)
     keep = [c for c in unified.columns if c not in drop]
     unified = unified.select(keep)
+
+    if file_columns is not None and "path" in unified.columns and len(file_columns):
+        unified = unified.with_columns(pl.lit(None, dtype=pl.Float64).alias("compression_factor"))
+    else:
+        file_columns = None
 
     # ── Step 3: build target schema with dtype transforms ──
     int_targets = _int_shrink_from_stats(parts, dict(unified.schema))
@@ -1412,6 +1459,8 @@ def save_parquet_from_parts(
     with pq.ParquetWriter(dest, arrow_schema, compression="zstd") as writer:
         for p in parts:
             chunk = pl.read_parquet(p)
+            if file_columns is not None:
+                chunk = chunk.join(file_columns, on="path", how="left")
 
             # child_id → type annotation (same as _post_process step 1)
             if "child_id" in chunk.columns and "type" in chunk.columns:

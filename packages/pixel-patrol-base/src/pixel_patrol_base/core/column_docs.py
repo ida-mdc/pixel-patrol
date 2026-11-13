@@ -43,6 +43,8 @@ BASE_COLUMN_DESCRIPTIONS: Dict[str, str] = {
     "obs_level":           "Aggregation level of the row: 0 is the whole-image summary; higher levels are per-dimension breakdowns.",
     "num_pixels":          "Number of pixels in this row's spatial extent (full image at obs_level=0, slice at higher levels).",
     "ndim":                "Number of image dimensions, derived from dim_order.",
+    "compression_type":    "Whether the compression algorithm stores the pixels uncompressed, lossless, lossy, or lossy or lossless (the algorithm supports both and the file header does not say which), derived from compression.",
+    "compression_factor":  "Uncompressed pixel bytes divided by the size on disk, at least 1: a file larger than its pixels counts as 1. For a container file, the pixels of all its images over the one file size, on every image's rows; not set when some of its images failed.",
 }
 
 BASE_COLUMN_DTYPES: Dict[str, str] = {
