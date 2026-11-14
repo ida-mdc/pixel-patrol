@@ -32,6 +32,7 @@ class ProjectMetadata:
     processing_stats: dict = field(default_factory=dict)  # timing/throughput from build_records_df
     omit_base_dir: bool = False  # when True, pp_base_dir is not written to parquet metadata
     privacy_summary: List[str] = field(default_factory=list)  # "what's in this file" lines, see project.py
+    failed_files: List[dict] = field(default_factory=list)  # {"path", "error"} and optionally "child_id"
 
     def to_parquet_meta(self) -> dict[str, str]:
         """Serialise to parquet footer key-value pairs."""
@@ -45,6 +46,7 @@ class ProjectMetadata:
             "pp_paths":            json.dumps(self.paths),
             "pp_loader":           self.loader or "",
             "pp_privacy_summary":  json.dumps(self.privacy_summary),
+            "pp_failed_files":     json.dumps(self.failed_files),
         }
         if not self.omit_base_dir:
             meta["pp_base_dir"] = self.base_dir or ""
@@ -71,6 +73,12 @@ class ProjectMetadata:
         except json.JSONDecodeError:
             privacy_summary = []
 
+        raw_failed_files = meta.get("pp_failed_files", "[]")
+        try:
+            failed_files = json.loads(raw_failed_files)
+        except json.JSONDecodeError:
+            failed_files = []
+
         raw_base = meta.get("pp_base_dir", "")
 
         return cls(
@@ -84,6 +92,7 @@ class ProjectMetadata:
             paths=paths,
             processing_stats=processing_stats,
             privacy_summary=privacy_summary,
+            failed_files=failed_files,
         )
 
     def populate_from_project(self, project: "Project") -> "ProjectMetadata":  # type: ignore[name-defined]
