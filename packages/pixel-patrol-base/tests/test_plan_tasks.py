@@ -339,10 +339,12 @@ def test_all_task_types_have_correct_file_indices():
 def test_unreadable_header_is_recorded():
     loader = MockLoader({"/data/broken.lmdb": MockEntry(shape=(10, 10), dtype=np.uint8, dim_order="YX", fail=True)})
     files_meta: List[dict] = []
-    unreadable: List[str] = []
+    failed: List[dict] = []
     tasks = list(_plan_tasks(_stream([("/data/broken.lmdb", 100)]), ProcessingConfig(), loader,
-                             files_meta, processors=[], unreadable_files=unreadable))
+                             files_meta, processors=[], failed_files=failed))
 
     assert tasks == []
     assert files_meta == []
-    assert unreadable == [str(Path("/data/broken.lmdb"))]
+    assert len(failed) == 1
+    assert failed[0]["path"] == str(Path("/data/broken.lmdb"))
+    assert "error" in failed[0]
