@@ -108,7 +108,7 @@ def _infer_dim_names(order: str, meta: Mapping[str, Any]) -> List[str]:
     return []
 
 
-def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/intensity") -> Record:
+def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "intensity") -> Record:
     mm = dict(meta or {})
     mm = _validate_and_fix_meta(array, mm)
     dim_order = _infer_dim_order(mm)
@@ -122,7 +122,7 @@ def record_from(array: Any, meta: Mapping[str, Any], *, kind: Kind = "image/inte
     if 'C' in dim_order: capabilities.add('multichannel')
     rgb_cap = _infer_rgb_capability(dim_order, mm)
     if rgb_cap:
-        capabilities.add(rgb_cap)
+        capabilities.update({'rgb', rgb_cap})
     return Record(data=array, dim_order=dim_order, dim_names=dim_names, kind=kind, meta=mm, capabilities=capabilities)
 
 

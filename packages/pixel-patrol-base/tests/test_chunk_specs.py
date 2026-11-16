@@ -66,6 +66,20 @@ def test_2d_yx_no_slice_size_splits_by_budget():
     assert all(s.slices[1] != slice(None) for s in specs)  # X split
 
 
+def test_colour_samples_stay_whole_and_the_image_is_split_spatially_or_along_other_dims():
+    # S would normally be split first, leaving single channels that cannot be compared per pixel.
+    specs = _specs((256, 256, 3), "YXS", 0.1, dtype=np.uint8)
+    assert len(specs) > 1 and all(spec.slices[2] == slice(None) for spec in specs)
+    assert any(spec.slices[0] != slice(None) or spec.slices[1] != slice(None) for spec in specs)
+    with_z = _specs((4, 128, 128, 3), "ZYXS", 0.05, dtype=np.uint8)
+    assert all(spec.slices[3] == slice(None) for spec in with_z) and any(spec.slices[0] != slice(None) for spec in with_z)
+
+
+def test_a_sample_block_size_given_by_the_user_still_splits_it_and_channels_split_as_before():
+    assert any(spec.slices[2] != slice(None) for spec in _specs((256, 256, 3), "YXS", 0.1, leaf_block_shape={"S": 1}, dtype=np.uint8))
+    assert any(spec.slices[0] != slice(None) for spec in _specs((4, 128, 128), "CYX", 0.05, dtype=np.uint8))
+
+
 def test_3d_zyx_no_slice_size_all_dims_split():
     # Z (leaf=1, processed first), then Y and X (leaf=-1) all share the reduction.
     specs = _specs((2, 256, 256), "ZYX", 0.1)

@@ -85,3 +85,8 @@ def test_rgb_capability_requires_ordered_channel_names(channel_names, expect_rgb
     meta = {"dim_order": "CYX", "channel_names": channel_names}
     record = record_from(a, meta)
     assert ("rgb:C" in record.capabilities) == expect_rgb
+
+
+def test_records_default_to_the_kind_processors_ask_for():
+    record = record_from(StubArr((4, 4)), {"dim_order": "YX"})
+    assert record.kind == "intensity"

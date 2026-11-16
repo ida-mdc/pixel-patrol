@@ -12,6 +12,7 @@ import { pluginGroup, orderedGroupNames, groupPlugins } from './plugin-groups.js
 import { buildGroupLabels } from './group-labels.js';
 import { scopeBadgeHtml, setScopeBadge, syncPinnedScopeBadge } from './scopes.js';
 import { openInspector } from './point-inspector.js';
+import { registerPointPlot } from './point-selection.js';
 import { drawThumbnailRGBA, SPRITE } from './exhibit.js';
 
 /**
@@ -151,6 +152,8 @@ function buildCtx(conn, schema, state, colorMap, where, userWhere, groups, filte
     /** Plotly plot helpers (mirror of plot-utils.js). */
     plot: {
       append:      appendPlot,
+      /** Make a plot whose points carry file_row_number in customdata click-to-inspect and part of the linked highlight. */
+      registerPointPlot,
       appendMany:  appendPlots,
       appendMini:  appendMiniPlot,
       niceName,
