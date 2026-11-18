@@ -569,3 +569,15 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   margin: 4px 0 0; padding-left: 18px;
   color: #6c757d; font-size: 11px; line-height: 1.6;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-section-header .bi,
+  .point-inspector,
+  #main-app,
+  .toggle-thumb,
+  .toggle-track,
+  .widget-cell-card,
+  .topbar-btn,
+  .export-opt-btn,
+  .btn { transition: none; animation: none; }
+}
