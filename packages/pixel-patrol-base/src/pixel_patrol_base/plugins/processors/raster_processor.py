@@ -116,21 +116,32 @@ def _pixel_weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
 
 def _weighted_mean_agg(spec: RasterMetricSpec, rows: List[Dict]) -> Any:
     """Pixel-count weighted mean."""
-    num = den = 0.0
-    for r in rows:
-        if spec.name not in r:
+    weighted_sum = total_weight = 0.0
+    for row in rows:
+        if spec.name not in row:
             continue
-        w = float(r.get(MetricNames.FINITE_PIXEL_COUNT, 0) or 0)
-        if w <= 0:
+        weight = float(row.get(MetricNames.FINITE_PIXEL_COUNT, 0) or 0)
+        if weight <= 0:
             continue
-        v = float(r[spec.name])
-        if np.isfinite(v):
-            num += v * w
-            den += w
-    if den > 0:
-        return num / den
-    vals = [float(r[spec.name]) for r in rows if spec.name in r and np.isfinite(r[spec.name])]
-    return float(np.nanmean(vals)) if vals else None
+        metric_value = float(row[spec.name])
+        if np.isfinite(metric_value):
+            weighted_sum += metric_value * weight
+            total_weight += weight
+    if total_weight > 0:
+        return weighted_sum / total_weight
+    # finite_pixel_count unavailable (raster-basic excluded); fall back to num_pixels weighting.
+    weighted_sum = total_weight = 0.0
+    for row in rows:
+        if spec.name not in row:
+            continue
+        weight = float(row.get("num_pixels", 0) or 0)
+        if weight <= 0:
+            continue
+        metric_value = float(row[spec.name])
+        if np.isfinite(metric_value):
+            weighted_sum += metric_value * weight
+            total_weight += weight
+    return (weighted_sum / total_weight) if total_weight > 0 else None
 
 
 def _aggregate_histograms(rows: List[Dict]) -> Any:
