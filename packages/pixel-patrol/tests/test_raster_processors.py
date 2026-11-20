@@ -13,6 +13,9 @@ from pixel_patrol_base.plugins.processors.raster_image_processor import (
 from pixel_patrol_base.plugins.processors.raster_processor import (
     BasicMetricsProcessor,
     HistogramProcessor,
+    MetricNames,
+    RasterMetricSpec,
+    _weighted_mean_agg,
 )
 
 
@@ -158,6 +161,19 @@ def test_nan_fraction(proc):
     # Integer dtypes can't hold NaN: always 0, no isnan() dtype error.
     row_int = _chunk(proc, np.arange(4, dtype=np.uint8).reshape(2, 2), "YX")
     assert row_int["nan_fraction"] == 0.0
+
+
+def test_quality_weighted_mean_fallback_uses_num_pixels():
+    """Without raster-basic, falls back to num_pixels weighting, not an unweighted mean."""
+    spec = RasterMetricSpec(name="laplacian_variance", data_type=np.float32,
+                            aggregate_rows=_weighted_mean_agg)
+    rows = [
+        {"laplacian_variance": 1.0, "num_pixels": 900},
+        {"laplacian_variance": 3.0, "num_pixels": 100},
+    ]
+    result = _weighted_mean_agg(spec, rows)
+    assert result != pytest.approx(2.0)          # not the unweighted mean
+    assert result == pytest.approx(1.2)          # (1.0*900 + 3.0*100) / 1000
 
 
 def test_nan_fraction_aggregated_across_chunks(proc):
