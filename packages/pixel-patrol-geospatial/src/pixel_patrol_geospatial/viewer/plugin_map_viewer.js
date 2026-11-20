@@ -36,6 +36,11 @@ function captureableInSnapshot(map, container) {
   window.addEventListener('pp:before-snapshot', redraw);
 }
 
+// Pick only the fields needed for the members list.
+function parquetRowToMapMember(row) {
+  return { path: row.path, group: row.__group__, frn: Number(row.frn) };
+}
+
 // Group the query rows by coordinate and build one GeoJSON
 // feature (geometry + arbitrary `properties`) per distinct position.
 // The images' {path, group, frn} list is stored as a JSON string because MapLibre
@@ -50,7 +55,7 @@ function groupedPointFeatures(rows) {
 
   const features = [];
   for (const rowsHere of rowsPerCoord.values()) {
-    const members = rowsHere.map(row => ({ path: row.path, group: row.__group__, frn: Number(row.frn) }));
+    const members = rowsHere.map(parquetRowToMapMember);
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
@@ -60,8 +65,8 @@ function groupedPointFeatures(rows) {
   return features;
 }
 
-// The {path, group, frn} members of every feature stacked at the hovered pixel.
-function membersOf(features) {
+// The {path, group, frn} members of every map feature stacked at the hovered pixel.
+function collectMembersFromFeatures(features) {
   const members = [];
   for (const feature of features) {
     members.push(...JSON.parse(feature.properties.members));
@@ -171,14 +176,14 @@ async function findImagesUnderCursor(map, event, layers) {
   if (badge) {
     const clusterId = badge.properties.cluster_id;
     const members = clusterId !== undefined
-      ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
-      : membersOf([badge]);  // feature the clustering left unwrapped
+      ? collectMembersFromFeatures(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+      : collectMembersFromFeatures([badge]);  // feature the clustering left unwrapped
     return { members, anchor: badge.geometry.coordinates, kindLabel: 'points' };
   }
 
   // a polygon spanning tiles can be returned more than once
-  const membersPerFrn = new Map(hits.map(hit => [hit.properties.frn, hit.properties]));
-  return { members: [...membersPerFrn.values()], anchor: event.lngLat, kindLabel: 'footprints' };
+  const shapes = new Map(hits.map(hit => [hit.properties.shape, hit]));
+  return { members: collectMembersFromFeatures([...shapes.values()]), anchor: event.lngLat, kindLabel: 'footprints' };
 }
 
 // Clickable list of images; each link carries the file row number for the inspector.
@@ -321,19 +326,24 @@ export default {
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds();
 
-      // One polygon feature per image that has a footprint; grow `bounds`
-      // by every polygon corner.
-      const footprintFeatures = [];
+      // One polygon per distinct footprint, so identical ones don't stack into solid blue.
+      const rowsPerFootprint = new Map();  // footprint string -> rows sharing it
       for (const row of rows) {
         if (row.footprint == null) continue;
-        const geometry = JSON.parse(row.footprint);
+        if (!rowsPerFootprint.has(row.footprint)) rowsPerFootprint.set(row.footprint, []);
+        rowsPerFootprint.get(row.footprint).push(row);
+      }
+
+      const footprintFeatures = [];
+      for (const [footprint, rowsHere] of rowsPerFootprint) {
+        const geometry = JSON.parse(footprint);
         for (const [lon, lat] of geometry.coordinates[0]) {
           bounds.extend([lon, lat]);
         }
         footprintFeatures.push({
           type: 'Feature',
           geometry,
-          properties: { path: row.path, group: row.__group__, frn: Number(row.frn) },
+          properties: { shape: footprintFeatures.length, members: JSON.stringify(rowsHere.map(parquetRowToMapMember)) },
         });
       }
 
