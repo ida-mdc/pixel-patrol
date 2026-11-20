@@ -636,6 +636,22 @@ function populateReportFooter(meta) {
     </div>`;
   }
 
+  // ── failed files ──
+  const failedFiles = meta.failedFiles || [];
+  if (failedFiles.length) {
+    const n = failedFiles.length;
+    const items = failedFiles.map(f => {
+      const label = f.child_id != null ? `${_esc(f.path)} [${_esc(f.child_id)}]` : _esc(f.path);
+      return `<li><span class="ri-failed-path">${label}</span><span class="ri-failed-error">${_esc(f.error)}</span></li>`;
+    }).join('');
+    html += `<div class="ri-row ri-privacy">
+      <details class="ri-privacy-details ri-failed-details">
+        <summary>${n} image${n !== 1 ? 's' : ''} failed to process</summary>
+        <ul>${items}</ul>
+      </details>
+    </div>`;
+  }
+
   if (html) {
     el.innerHTML = html;
     el.hidden = false;

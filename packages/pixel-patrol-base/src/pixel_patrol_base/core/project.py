@@ -192,6 +192,13 @@ class Project:
             rgs_kwargs["row_group_size"] = config.parquet_row_group_size
 
         expected_parts = [Path(p) for p in processing_stats.pop("part_paths", [])]  # not persisted metadata
+        raw_failed = processing_stats.pop("failed_files", [])  # not persisted in stats
+        if raw_failed:
+            base = self.base_dir
+            self.metadata.failed_files = [
+                {**f, "path": str(Path(f["path"]).relative_to(base)) if base else f["path"]}
+                for f in raw_failed
+            ]
 
         if processing_stats:
             for k, v in _processing_params(config).items():

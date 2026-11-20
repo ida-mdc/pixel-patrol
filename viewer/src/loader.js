@@ -233,6 +233,8 @@ function _parseRawMeta(raw) {
   try { privacySummary = JSON.parse(raw.pp_privacy_summary || '[]'); } catch {}
   let columnProducers = {};
   try { columnProducers = JSON.parse(raw.pp_column_producers || '{}'); } catch {}
+  let failedFiles = [];
+  try { failedFiles = JSON.parse(raw.pp_failed_files || '[]'); } catch {}
   return {
     projectName:     raw.pp_project_name || null,
     description:     raw.pp_description  || null,
@@ -247,13 +249,14 @@ function _parseRawMeta(raw) {
     processingStats,
     privacySummary,
     columnProducers,
+    failedFiles,
   };
 }
 
 function _emptyReportMeta() {
   return { projectName: null, description: null, flavor: null, version: null,
            createdAt: null, loader: null, baseDir: null, fileKind: null, exportNote: null,
-           paths: [], processingStats: {}, privacySummary: [], columnProducers: {} };
+           paths: [], processingStats: {}, privacySummary: [], columnProducers: {}, failedFiles: [] };
 }
 
 async function filterGroupColsByCardinality(conn, cols, dateCols = []) {

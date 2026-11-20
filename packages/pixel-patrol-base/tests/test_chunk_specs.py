@@ -254,7 +254,7 @@ def test_small_sub_image_stays_a_single_chunk():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 1
     assert len(results[0]) == 1
@@ -267,7 +267,7 @@ def test_oversized_sub_image_is_chunked_and_reassembles_correctly():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes; big = 320 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 1
     assert len(results[0]) > 1  # actually split into multiple memory chunks
@@ -281,7 +281,7 @@ def test_mixed_batch_only_chunks_the_oversized_sub_image():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 2))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 2
     assert len(results[0]) == 1
@@ -319,11 +319,14 @@ def test_one_bad_sub_image_does_not_discard_its_siblings():
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 3))
     config = ProcessingConfig(mb_per_worker=800)
 
-    results = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
+    results, failed = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
 
     assert len(results) == 2  # sub-images 0 and 2 survive; only 1 is lost
     assert _sums(results[0]) == 0        # sub-image 0: filled with 0
     assert _sums(results[1]) == 4 * 4 * 2  # sub-image 2: filled with 2
+    assert len(failed) == 1
+    assert failed[0]["path"] == "mock.lmdb"
+    assert failed[0]["child_id"] == "1"
 
 
 class _OneBadFileLoader:
@@ -345,7 +348,9 @@ def test_one_bad_file_does_not_discard_its_batch_siblings():
     ))
     config = ProcessingConfig(mb_per_worker=800)
 
-    results = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
+    results, failed = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
 
     assert len(results) == 2  # a.tif and c.tif survive; only bad.tif is lost
     assert {r.file_index for r in results} == {0, 2}
+    assert len(failed) == 1
+    assert failed[0]["path"] == "bad.tif"

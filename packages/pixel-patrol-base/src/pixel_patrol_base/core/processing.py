@@ -370,11 +370,12 @@ def _plan_tasks(
     loader:      Any,
     files_meta:  List[dict],
     processors:  List[Any],
-    unreadable_files: Optional[List[str]] = None,
+    failed_files: Optional[List[dict]] = None,
+    n_plan_failures: Optional[List[int]] = None,
 ) -> Iterator[Task]:
     """Yield Tasks from a streaming file_stream, populating files_meta in-place.
 
-    Files whose header cannot be read are skipped and appended to unreadable_files.
+    Files whose header cannot be read are skipped and appended to failed_files.
 
     Routing (evaluated in order):
       n_images > 1  → flush pending batch; yield ContainerTasks.
@@ -425,8 +426,10 @@ def _plan_tasks(
             continue
         except Exception as exc:
             logger.warning("_plan_tasks: read_header failed for %s; skipping (%s)", file_path, exc)
-            if unreadable_files is not None:
-                unreadable_files.append(str(file_path))
+            if failed_files is not None:
+                failed_files.append({"path": str(file_path), "error": str(exc)})
+            if n_plan_failures is not None:
+                n_plan_failures[0] += 1
             continue
 
         file_index = len(files_meta)
@@ -662,13 +665,14 @@ def _execute_batch_task(
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
-) -> List[MemoryChunkResult]:
+) -> Tuple[List[MemoryChunkResult], List[dict]]:
     """Process every file in the task as one complete memory chunk each.
 
     Each file is isolated in its own try/except so one bad file doesn't
     discard the rest of the batch's already-processed results.
     """
     results: List[MemoryChunkResult] = []
+    failed: List[dict] = []
     for idxed_path in task.files:
         try:
             _t = time.perf_counter()
@@ -676,6 +680,7 @@ def _execute_batch_task(
             load_s = time.perf_counter() - _t
             if record is None:
                 logger.warning("worker: loader returned None for %s; skipping", idxed_path.file_path)
+                failed.append({"path": idxed_path.file_path, "error": "loader returned None"})
                 continue
             result = _run_record(record, record.data, tuple(0 for _ in record.dim_order),
                                  idxed_path.file_index, None, processors, config, idxed_path.file_path)
@@ -683,7 +688,8 @@ def _execute_batch_task(
             results.append(result)
         except Exception as exc:
             logger.warning("worker: failed to process '%s': %s", idxed_path.file_path, exc)
-    return results
+            failed.append({"path": idxed_path.file_path, "error": str(exc)})
+    return results, failed
 
 
 def _execute_memory_chunk_task(
@@ -712,7 +718,7 @@ def _execute_container_task(
     loader:     Any,
     processors: List[Any],
     config:     ProcessingConfig,
-) -> List[List[MemoryChunkResult]]:
+) -> Tuple[List[List[MemoryChunkResult]], List[dict]]:
     """Load and process a batch of sub-images from a container file.
 
     One inner list per sub-image - length 1 normally, or one entry per memory
@@ -720,6 +726,7 @@ def _execute_container_task(
     its own try/except so one bad sub-image doesn't discard its siblings.
     """
     results: List[List[MemoryChunkResult]] = []
+    failed: List[dict] = []
     start, stop = task.image_slice
     file_path = Path(task.file_path)
     task_mb = _task_budget_mb(config)
@@ -727,6 +734,7 @@ def _execute_container_task(
         if record is None:
             logger.warning("worker: loader returned None for sub-image %s in %s; skipping",
                            child_id, task.file_path)
+            failed.append({"path": task.file_path, "child_id": child_id, "error": "loader returned None"})
             continue
         try:
             # Each sub-image record carries its own metadata (shape, dtype, pixel sizes, …).
@@ -745,7 +753,8 @@ def _execute_container_task(
         except Exception as exc:
             logger.warning("worker: failed to process sub-image %s in %s: %s",
                            child_id, task.file_path, exc)
-    return results
+            failed.append({"path": task.file_path, "child_id": child_id, "error": str(exc)})
+    return results, failed
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1051,7 +1060,8 @@ def _coordinate_pipeline(
     parts_dir:    Optional[Path],
     on_progress:  Optional[Callable[[int, int], None]],
     is_distributed: bool = False,
-    unreadable_files: Optional[List[str]] = None,
+    failed_files: Optional[List[dict]] = None,
+    n_plan_failures: Optional[List[int]] = None,
 ) -> Tuple[Optional[pl.DataFrame], Dict[str, Any]]:
     """Drive the full submit → gather → rollup → join → accumulate cycle.
 
@@ -1177,16 +1187,27 @@ def _coordinate_pipeline(
             ac.add(_submit(next_task))
 
         try:
-            results: Any = future.result()  # shape depends on task type - see _executor_for
+            raw: Any = future.result()  # shape depends on task type - see _executor_for
         except Exception as exc:
             # Emit one user-visible warning per affected file path.
             if isinstance(task, BatchTask):
                 for ip in task.files:
                     logger.warning("Skipping '%s' - worker error: %s", ip.file_path, exc)
+                    if failed_files is not None:
+                        failed_files.append({"path": ip.file_path, "error": str(exc)})
             else:
                 logger.warning("Skipping '%s' - worker error: %s", task.file_path, exc)
+                if failed_files is not None:
+                    failed_files.append({"path": task.file_path, "error": str(exc)})
             error_records += _count_failed_images(task, failed_chunked_files)
             continue
+
+        if isinstance(task, (BatchTask, ContainerTask)):
+            results, task_failed = raw
+            if failed_files is not None:
+                failed_files.extend(task_failed)
+        else:
+            results = raw
 
         before = completed_records
         if isinstance(task, MemoryChunkTask):
@@ -1223,7 +1244,7 @@ def _coordinate_pipeline(
 
     pbar.close()
     # Files skipped during planning never reach a worker; count each as one failed image.
-    error_records += len(unreadable_files or ())
+    error_records += (n_plan_failures[0] if n_plan_failures else 0)
     wall_s = time.perf_counter() - t_wall_start
     elapsed_total = time.monotonic() - t_pipeline_start
     attempted = completed_records + error_records
@@ -1270,6 +1291,7 @@ def _coordinate_pipeline(
     result_df = writer.finalize()
     # Snapshot after finalize() so the final flushed part is included.
     stats["part_paths"] = [str(p) for p in writer._part_paths]
+    stats["failed_files"] = list(failed_files) if failed_files else []
     if result_df is None:
         return None, stats  # parts on disk; caller uses save_parquet_from_parts
     return (result_df if len(result_df) > 0 else None), stats
@@ -1599,7 +1621,8 @@ def build_records_df(
                 cfg = replace(cfg, mb_per_worker=min(limits) / 2**20)
                 logger.info("Existing cluster: tasks sized for %.1f GB workers.", cfg.mb_per_worker / 1024)
         files_meta: List[dict] = []
-        unreadable_files: List[str] = []
+        failed_files: List[dict] = []
+        n_plan_failures: List[int] = [0]
         folder_exts = getattr(loader, "FOLDER_EXTENSIONS", None)
         task_stream = _plan_tasks(
             _discover_files(bases, cfg.selected_file_extensions, folder_exts, base_dir=base_dir,
@@ -1609,7 +1632,8 @@ def build_records_df(
             loader=loader,
             files_meta=files_meta,
             processors=processors,
-            unreadable_files=unreadable_files,
+            failed_files=failed_files,
+            n_plan_failures=n_plan_failures,
         )
         return _coordinate_pipeline(
             client=client,
@@ -1621,7 +1645,8 @@ def build_records_df(
             parts_dir=parts_dir,
             on_progress=on_progress,
             is_distributed=is_distributed,
-            unreadable_files=unreadable_files,
+            failed_files=failed_files,
+            n_plan_failures=n_plan_failures,
         )
 
 

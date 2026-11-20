@@ -569,3 +569,10 @@ canvas { image-rendering: pixelated; max-width: 100%; }
   margin: 4px 0 0; padding-left: 18px;
   color: #6c757d; font-size: 11px; line-height: 1.6;
 }
+
+.ri-failed-details summary { color: #a15c00; }
+.ri-failed-details summary:hover { color: #7a4500; }
+.ri-failed-details ul { list-style: none; padding-left: 0; }
+.ri-failed-details li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.ri-failed-details .ri-failed-path { color: #495057; font-weight: 600; white-space: nowrap; }
+.ri-failed-details .ri-failed-error { color: #6c757d; word-break: break-word; }
