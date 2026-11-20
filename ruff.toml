@@ -1,0 +1,2 @@
+[lint]
+select = ["F"]             # pyflakes: unused imports, undefined names
