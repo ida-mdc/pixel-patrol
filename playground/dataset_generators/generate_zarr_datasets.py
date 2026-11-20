@@ -1,7 +1,6 @@
 from pathlib import Path
 import zarr
 import numpy as np
-import os
 import shutil
 
 # --- Configuration ---
