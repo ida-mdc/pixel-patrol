@@ -8,7 +8,6 @@ behavior, not a hand-built stand-in.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from pixel_patrol_base.core.processing import _run_record, _rollup
 from pixel_patrol_base.core.processing_config import ProcessingConfig

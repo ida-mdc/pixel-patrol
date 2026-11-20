@@ -18,7 +18,6 @@ def test_fallback_order_and_names():
 
 
 def test_meta_order_preserved_and_names_from_order():
-    a = StubArr((2, 3, 4, 5, 6))
     meta = {"dim_order": "TCZYX", "ndim": 5}
     order = _infer_dim_order(meta)
     names = _infer_dim_names(order, meta)

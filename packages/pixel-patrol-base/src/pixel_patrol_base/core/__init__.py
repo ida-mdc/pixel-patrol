@@ -1,1 +1,1 @@
-from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project import Project as Project

@@ -1,6 +1,5 @@
 """Make the launcher module importable from the tests directory."""
 import sys
-import os
 from pathlib import Path
 
 import pytest

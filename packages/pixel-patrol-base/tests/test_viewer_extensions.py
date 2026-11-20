@@ -7,7 +7,6 @@ Covers:
   - viewer_server.find_viewer_dist               (dist directory lookup)
 """
 import json
-import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

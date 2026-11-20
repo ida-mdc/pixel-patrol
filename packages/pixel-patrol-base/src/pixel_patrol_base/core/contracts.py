@@ -7,7 +7,7 @@ from typing import Protocol, Iterator, Set, Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
 from pixel_patrol_base.core.record import Record
-from pixel_patrol_base.core.specs import ProcessResult, RecordSpec, ProcessorOutput
+from pixel_patrol_base.core.specs import RecordSpec, ProcessorOutput
 
 
 class SkipFile(Exception):

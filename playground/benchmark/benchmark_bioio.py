@@ -23,7 +23,6 @@ import bioio_tifffile.reader
 import statistics
 import cProfile
 import pstats
-import io
 import matplotlib.pyplot as plt
 
 # --- Configuration ---

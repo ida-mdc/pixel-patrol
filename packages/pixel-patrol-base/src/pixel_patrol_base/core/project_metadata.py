@@ -86,7 +86,7 @@ class ProjectMetadata:
             privacy_summary=privacy_summary,
         )
 
-    def populate_from_project(self, project: "Project") -> "ProjectMetadata":  # type: ignore[name-defined]
+    def populate_from_project(self, project: "Project") -> "ProjectMetadata":  # type: ignore[name-defined] # noqa: F821
         """Fill project_name, base_dir and paths from a live Project instance."""
         from pathlib import Path
         self.project_name = project.name
