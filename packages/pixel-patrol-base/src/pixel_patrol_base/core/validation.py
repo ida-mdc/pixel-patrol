@@ -1,6 +1,5 @@
 import logging
 
-import matplotlib
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Union, Optional, Tuple, Set
@@ -102,20 +101,3 @@ def validate_and_filter_extensions(extensions: Set[str], supported_extensions: S
             f"Supported extensions (after filtering): {', '.join(sorted(supported_extensions))}."
         )
     return supported_extensions
-
-
-def is_valid_colormap(cmap_name: str) -> bool:
-    """
-    Checks if a given string is a valid Matplotlib colormap name.
-    """
-    if not isinstance(cmap_name, str):
-        logger.warning(f"Colormap name '{cmap_name}' is not a string type.")
-        return False
-    try:
-        matplotlib.colormaps.get_cmap(cmap_name)
-        return True
-    except ValueError:
-        return False
-    except Exception as e:
-        logger.error(f"Unexpected error when checking colormap '{cmap_name}': {e}")
-        return False
