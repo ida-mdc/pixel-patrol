@@ -25,7 +25,7 @@ def is_zarr_store(path: Path) -> bool:
 
         return True
 
-    except Exception as e:
+    except Exception:
         # Catches any error, indicating it's not a valid or accessible Zarr store.
         return False
 
