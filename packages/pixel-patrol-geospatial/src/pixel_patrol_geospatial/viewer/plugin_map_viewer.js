@@ -36,8 +36,7 @@ function captureableInSnapshot(map, container) {
   window.addEventListener('pp:before-snapshot', redraw);
 }
 
-// map from image rows to map element members (=features). MapLibre uses flat properties so store as JSON string,
-// and keep only the relevant row fields to reduce size.
+// Pick only the fields needed for the members list.
 function parquetRowToMapMember(row) {
   return { path: row.path, group: row.__group__, frn: Number(row.frn) };
 }
