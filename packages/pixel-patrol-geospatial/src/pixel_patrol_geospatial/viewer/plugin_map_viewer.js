@@ -36,7 +36,9 @@ function captureableInSnapshot(map, container) {
   window.addEventListener('pp:before-snapshot', redraw);
 }
 
-function memberOf(row) {
+// map from image rows to map element members (=features). MapLibre uses flat properties so store as JSON string,
+// and keep only the relevant row fields to reduce size.
+function parquetRowToMapMember(row) {
   return { path: row.path, group: row.__group__, frn: Number(row.frn) };
 }
 
@@ -54,7 +56,7 @@ function groupedPointFeatures(rows) {
 
   const features = [];
   for (const rowsHere of rowsPerCoord.values()) {
-    const members = rowsHere.map(memberOf);
+    const members = rowsHere.map(parquetRowToMapMember);
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [Number(rowsHere[0].lon), Number(rowsHere[0].lat)] },
@@ -64,8 +66,8 @@ function groupedPointFeatures(rows) {
   return features;
 }
 
-// The {path, group, frn} members of every feature stacked at the hovered pixel.
-function membersOf(features) {
+// The {path, group, frn} members of every map feature stacked at the hovered pixel.
+function collectMembersFromFeatures(features) {
   const members = [];
   for (const feature of features) {
     members.push(...JSON.parse(feature.properties.members));
@@ -175,14 +177,14 @@ async function findImagesUnderCursor(map, event, layers) {
   if (badge) {
     const clusterId = badge.properties.cluster_id;
     const members = clusterId !== undefined
-      ? membersOf(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
-      : membersOf([badge]);  // feature the clustering left unwrapped
+      ? collectMembersFromFeatures(await map.getSource('points-clustered').getClusterLeaves(clusterId, 1e6, 0))
+      : collectMembersFromFeatures([badge]);  // feature the clustering left unwrapped
     return { members, anchor: badge.geometry.coordinates, kindLabel: 'points' };
   }
 
   // a polygon spanning tiles can be returned more than once
   const shapes = new Map(hits.map(hit => [hit.properties.shape, hit]));
-  return { members: membersOf([...shapes.values()]), anchor: event.lngLat, kindLabel: 'footprints' };
+  return { members: collectMembersFromFeatures([...shapes.values()]), anchor: event.lngLat, kindLabel: 'footprints' };
 }
 
 // Clickable list of images; each link carries the file row number for the inspector.
@@ -342,7 +344,7 @@ export default {
         footprintFeatures.push({
           type: 'Feature',
           geometry,
-          properties: { shape: footprintFeatures.length, members: JSON.stringify(rowsHere.map(memberOf)) },
+          properties: { shape: footprintFeatures.length, members: JSON.stringify(rowsHere.map(parquetRowToMapMember)) },
         });
       }
 
