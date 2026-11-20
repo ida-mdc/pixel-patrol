@@ -1,11 +1,9 @@
-import re
 import shutil
 import tempfile
 from pathlib import Path
 from typing import List
 
 import numpy as np
-import polars as pl
 import tifffile
 
 from pixel_patrol_base import api

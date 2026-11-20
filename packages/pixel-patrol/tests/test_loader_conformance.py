@@ -13,11 +13,9 @@ covered without needing to enumerate them by hand.
 import importlib.metadata
 import inspect
 import warnings
-from typing import Set
 
 import pytest
 
-from pixel_patrol_base.core.contracts import PixelPatrolLoader
 
 # ── Required class-level attributes and their expected Python types ──────────
 REQUIRED_ATTRS = {

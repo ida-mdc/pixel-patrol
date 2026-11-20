@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-import pytest
 
 from pixel_patrol_base.core.processing import MemoryChunkResult, _process_memory_chunk, _rollup, build_records_df
 from pixel_patrol_base.core.processing_config import ProcessingConfig

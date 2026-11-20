@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import dask.array as da
 import numpy as np
-import polars as pl
 import tifffile
 import zarr
 from pixel_patrol_base.core.contracts import FileInfo
