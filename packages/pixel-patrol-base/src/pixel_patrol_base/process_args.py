@@ -49,6 +49,9 @@ PROCESS_ARGS = [
     ProcessArg("loader", flags=("--loader", "-l"), metavar="NAME", help=(
         "Loader plugin to use (e.g. bioio, zarr, tifffile). The loader opens image files and extracts "
         "image metadata. Without a loader, only basic file info is collected (name, size, extension).")),
+    ProcessArg("labels", metavar="PATH", type=click.Path(exists=True, file_okay=False, dir_okay=True, 
+               readable=True, path_type=Path), help="Optional directory containing label masks. Masks are"
+               " matched to input images by filename (without extension)."),
     ProcessArg("paths", flags=("--paths", "-p"), metavar="PATH", multiple=True, help=(
         "Subdirectory to process, relative to BASE_DIRECTORY. If specified, only files within those paths "
         "are processed and they become the default grouping when the interactive report opens. "

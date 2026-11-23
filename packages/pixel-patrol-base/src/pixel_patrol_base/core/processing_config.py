@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Union
+from pathlib import Path
 
 from pixel_patrol_base.config import (
     DEFAULT_ROWS_PER_PART, DEFAULT_MAX_IMAGES_PER_TASK, DEFAULT_MB_PER_WORKER, DEFAULT_PARQUET_ROW_GROUP_SIZE,
@@ -48,6 +49,9 @@ class ProcessingConfig:
 
     # ── Project metadata ─────────────────────────────────────────────────────
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
+
+    # ── Labels ───────────────────────────────────────────────────────────────
+    labels: Optional[Path] = None
 
     def __post_init__(self) -> None:
         if self.processors_included and self.processors_excluded:

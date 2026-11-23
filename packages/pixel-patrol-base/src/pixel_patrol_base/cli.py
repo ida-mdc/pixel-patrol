@@ -41,7 +41,7 @@ def cli():
 
 @cli.command()
 @_process_options
-def process(base_directory: Path, output: Path, loader: str | None, paths: tuple[str, ...],
+def process(base_directory: Path, output: Path, loader: str | None, labels: Path | None, paths: tuple[str, ...],
             file_extensions: tuple[str, ...], name: str | None, flavor: str | None, description: str | None,
             processors_include: tuple[str, ...], processors_exclude: tuple[str, ...],
             slice_size: tuple[str, ...],
@@ -91,6 +91,7 @@ def process(base_directory: Path, output: Path, loader: str | None, paths: tuple
         omit_base_dir=omit_base_dir,
         parquet_row_group_size=parquet_row_group_size,
         log_file=log_file,
+        labels=labels.resolve() if labels else None,
     )
 
     try:
