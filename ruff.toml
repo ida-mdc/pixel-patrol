@@ -1,3 +1,4 @@
 [lint]
-select = ["F"]             # pyflakes: unused imports, undefined names
+# PIE810 multiple-starts-ends-with
+select = ["F", "PIE810"]             # pyflakes: unused imports, undefined names
 ignore = ["F541"] # F541 - f-string-missing placeholders

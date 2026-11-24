@@ -86,7 +86,7 @@ def _inline_local_assets(html: str, dist_dir: Path, exclude_names: frozenset[str
     def repl_script(match: re.Match[str]) -> str:
         attrs = match.group("attrs")
         src = match.group("src")
-        if src.startswith("http://") or src.startswith("https://"):
+        if src.startswith(("http://", "https://")):
             return match.group(0)
         path = (dist_dir / src.lstrip("./")).resolve()
         if not path.is_file():
@@ -97,7 +97,7 @@ def _inline_local_assets(html: str, dist_dir: Path, exclude_names: frozenset[str
 
     def repl_style(match: re.Match[str]) -> str:
         href = match.group("href")
-        if href.startswith("http://") or href.startswith("https://"):
+        if href.startswith(("http://", "https://")):
             return match.group(0)
         path = (dist_dir / href.lstrip("./")).resolve()
         if not path.is_file():
@@ -108,7 +108,7 @@ def _inline_local_assets(html: str, dist_dir: Path, exclude_names: frozenset[str
     def repl_media(match: re.Match[str]) -> str:
         attr = match.group("attr")
         url = match.group("url")
-        if url.startswith("http://") or url.startswith("https://") or url.startswith("data:"):
+        if url.startswith(("http://", "https://", "data:")):
             return match.group(0)
         path = (dist_dir / url.lstrip("./")).resolve()
         if not path.is_file():
