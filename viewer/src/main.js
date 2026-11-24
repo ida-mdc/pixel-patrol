@@ -638,15 +638,20 @@ function populateReportFooter(meta) {
 
   // ── failed files ──
   const failedFiles = meta.failedFiles || [];
-  if (failedFiles.length) {
-    const n = failedFiles.length;
+  const nFailed = stats.n_images_failed || 0;
+  if (failedFiles.length || nFailed > 0) {
+    // n_images_failed counts images; the list has one entry per failed file or sub-image group, so they can differ.
+    const n = Math.max(nFailed, failedFiles.length);
+    const listed = failedFiles.length;
+    const note_explanation = ` (${listed} listed below; the difference is mostly container files, where 1 file holds many images)`;
+    const note = listed !== n  ? note_explanation : '';
     const items = failedFiles.map(f => {
       const label = f.child_id != null ? `${_esc(f.path)} [${_esc(f.child_id)}]` : _esc(f.path);
       return `<li><span class="ri-failed-path">${label}</span><span class="ri-failed-error">${_esc(f.error)}</span></li>`;
     }).join('');
     html += `<div class="ri-row ri-privacy">
       <details class="ri-privacy-details ri-failed-details">
-        <summary>${n} image${n !== 1 ? 's' : ''} failed to process</summary>
+        <summary>${n.toLocaleString()} image${n !== 1 ? 's' : ''} failed to process${note}</summary>
         <ul>${items}</ul>
       </details>
     </div>`;
