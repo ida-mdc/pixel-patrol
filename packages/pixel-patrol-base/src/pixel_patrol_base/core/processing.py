@@ -1197,9 +1197,11 @@ def _coordinate_pipeline(
                         failed_files.append({"path": ip.file_path, "error": str(exc)})
             else:
                 logger.warning("Skipping '%s' - worker error: %s", task.file_path, exc)
-                if failed_files is not None:
-                    failed_files.append({"path": task.file_path, "error": str(exc)})
-            error_records += _count_failed_images(task, failed_chunked_files)
+            n_new_failed = _count_failed_images(task, failed_chunked_files)
+            # A file split into memory chunks is listed once, however many of its chunks fail.
+            if failed_files is not None and not isinstance(task, BatchTask) and n_new_failed > 0:
+                failed_files.append({"path": task.file_path, "error": str(exc)})
+            error_records += n_new_failed
             continue
 
         if isinstance(task, (BatchTask, ContainerTask)):
