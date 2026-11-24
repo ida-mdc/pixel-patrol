@@ -369,7 +369,9 @@ def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
                          f"Available: {', '.join(sorted(p.NAME for p in processors))}.")
     if config.processors_included:
         return [p for p in processors if p.NAME in config.processors_included]
-    return [p for p in processors if p.NAME not in config.processors_excluded]
+    # temp: exclude label-basic from a normal run
+    # later: use flag --label
+    return [p for p in processors if p.NAME not in config.processors_excluded and p.NAME != "label-basic"]
 
 
 def _resolve_extensions(
