@@ -50,8 +50,6 @@ def process_files(
         omit_base_dir: bool = False,
         # --- Logging ---
         log_file: bool = False,
-        # --- Labels ---
-        labels: Optional[Path] = None,
 ) -> Project:
     """
     Process files in the project and write the .parquet table.
@@ -92,8 +90,6 @@ def process_files(
                                     local filesystem paths (default: False).
         log_file:                   Write a DEBUG-level log file alongside the output parquet.
                                     INFO and WARNING still appear in the terminal as usual.
-        labels                      Optional directory containing label masks. Masks are matched
-                                    to input images by filename without extension.
 
     Returns:
         The project (use api.load(output_path) to access the results as a DataFrame).
@@ -114,8 +110,7 @@ def process_files(
             flavor=flavor or "",
             description=description or "",
             omit_base_dir=omit_base_dir,
-        ),
-        labels=labels
+        )
     )
     logger.debug(f"API Call: Processing files and building DataFrame for project '{project.name}'.")
     return project.process_records(progress_callback=progress_callback, processing_config=processing_config)

@@ -62,9 +62,6 @@ PROCESS_ARGS = [
                help="Label shown next to the PixelPatrol title in the viewer."),
     ProcessArg("description", metavar="TEXT", help=(
         "Free-form description of the data or the project, shown below the title in the viewer and embedded in the parquet metadata.")),
-    ProcessArg("labels", metavar="PATH", type=click.Path(exists=True, file_okay=False, dir_okay=True, 
-                   readable=True, path_type=Path), help="Optional directory containing label masks. Masks are"
-                   " matched to input images by filename (without extension)."),
 
     # ── What gets measured ──
     ProcessArg("processors_include", metavar="NAME", multiple=True, help=(

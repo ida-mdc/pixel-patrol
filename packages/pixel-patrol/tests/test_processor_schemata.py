@@ -10,7 +10,6 @@ import tifffile
 
 from pixel_patrol_base import api
 from pixel_patrol_base.core.processing_config import ProcessingConfig
-from pixel_patrol_base.core.project import _filter_processors
 from pixel_patrol_base.core.specs import is_record_matching_processor
 from pixel_patrol_base.plugin_registry import discover_processor_plugins
 
@@ -68,9 +67,7 @@ def test_processor_schemata():
 
     assert records_df.height >= 1  # one global row + per-slice rows
 
-    # tmp? not all registered processors are enabled by default.
-    # Apply the same processor selection as the processing pipeline.
-    processors = _filter_processors(discover_processor_plugins(),processing_config)
+    processors = discover_processor_plugins()
     
     df_columns = set(records_df.columns)
 

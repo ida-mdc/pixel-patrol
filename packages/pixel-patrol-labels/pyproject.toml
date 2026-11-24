@@ -1,0 +1,42 @@
+[project]
+name = "pixel-patrol-labels"
+version = "1.0.2"
+description = "PixelPatrol add-on package for quality control of label masks"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+
+dependencies = [
+    "numpy",
+    "pixel-patrol-base==1.0.2",
+]
+
+[project.urls]
+Homepage = "https://pixelpatrol.app/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
+
+[build-system]
+requires = ["hatchling<1.27"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_labels"]
+
+[project.entry-points."pixel_patrol.processor_plugins"]
+pixel_patrol_labels_processor_builtins = "pixel_patrol_labels.plugin_registry:register_processor_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }

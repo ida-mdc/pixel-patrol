@@ -140,8 +140,6 @@ class Project:
         logger.info("Output:     %s", self.output_path)
         logger.info("Loader:     %s", self.loader.NAME if self.loader else "none")
         logger.info("Processors: %s", ", ".join(p.NAME for p in processors) or "none")
-        if config.labels is not None:
-            logger.info("Labels:     %s", config.labels)
         
         return config, processors
 
@@ -369,9 +367,7 @@ def _filter_processors(processors: list, config: "ProcessingConfig") -> list:
                          f"Available: {', '.join(sorted(p.NAME for p in processors))}.")
     if config.processors_included:
         return [p for p in processors if p.NAME in config.processors_included]
-    # temp: exclude label-basic from a normal run
-    # later: use flag --label
-    return [p for p in processors if p.NAME not in config.processors_excluded and p.NAME != "label-basic"]
+    return [p for p in processors if p.NAME not in config.processors_excluded]
 
 
 def _resolve_extensions(

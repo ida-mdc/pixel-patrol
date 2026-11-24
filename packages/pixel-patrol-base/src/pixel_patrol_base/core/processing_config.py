@@ -50,9 +50,6 @@ class ProcessingConfig:
     # ── Project metadata ─────────────────────────────────────────────────────
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
 
-    # ── Labels ───────────────────────────────────────────────────────────────
-    labels: Optional[Path] = None
-
     def __post_init__(self) -> None:
         if self.processors_included and self.processors_excluded:
             logger.warning(
