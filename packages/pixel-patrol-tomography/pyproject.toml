@@ -1,0 +1,43 @@
+[project]
+name = "pixel-patrol-tomography"
+version = "0.1.0"
+description = "PixelPatrol extension for (soft X-ray) tomography tilt series and reconstructions in MRC format."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Helmholtz Imaging Engineering & Support Unit MDC" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pixel-patrol-base==1.0.2",
+    "mrcfile>=1.5",
+]
+
+[project.urls]
+Homepage = "https://pixelpatrol.app/"
+Repository = "https://github.com/ida-mdc/pixel-patrol"
+
+[build-system]
+requires = ["hatchling<1.27"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pixel_patrol_tomography"]
+
+[project.entry-points."pixel_patrol.loader_plugins"]
+tomography_loaders = "pixel_patrol_tomography.plugin_registry:register_loader_plugins"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+pixel-patrol-base = { path = "../pixel-patrol-base" }
