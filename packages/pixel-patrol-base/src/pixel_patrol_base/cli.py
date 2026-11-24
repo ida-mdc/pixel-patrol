@@ -63,6 +63,9 @@ def process(base_directory: Path, output: Path, loader: str | None, labels: Path
     \b
       pixel-patrol process path/to/images/ -o results.parquet --loader bioio --view
     """
+    # temp
+    print(f"Labels directory: {labels}")
+
     base_directory = base_directory.resolve()
 
     if name is None:

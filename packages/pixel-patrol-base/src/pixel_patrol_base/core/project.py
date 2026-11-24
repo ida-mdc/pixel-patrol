@@ -140,7 +140,9 @@ class Project:
         logger.info("Output:     %s", self.output_path)
         logger.info("Loader:     %s", self.loader.NAME if self.loader else "none")
         logger.info("Processors: %s", ", ".join(p.NAME for p in processors) or "none")
-
+        if config.labels is not None:
+            logger.info("Labels:     %s", config.labels)
+        
         return config, processors
 
 
