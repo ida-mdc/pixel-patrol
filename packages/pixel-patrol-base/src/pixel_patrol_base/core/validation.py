@@ -70,7 +70,7 @@ def resolve_and_validate_project_path(raw_path: Union[str, Path], base_dir: Path
         return resolved_path
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Error validating path '{raw_path}': {e}", exc_info=True
         )
         return None

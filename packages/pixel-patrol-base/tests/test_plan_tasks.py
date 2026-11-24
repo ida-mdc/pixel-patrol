@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Iterator, List, Tuple
 
 import numpy as np
-import pytest
 
 from pixel_patrol_base.core.contracts import FileInfo
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY

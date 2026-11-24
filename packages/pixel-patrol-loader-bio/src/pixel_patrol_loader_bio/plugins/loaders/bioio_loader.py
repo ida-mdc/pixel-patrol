@@ -7,7 +7,6 @@ import bioio_imageio
 import bioio_ome_tiff
 import bioio_tifffile
 import numpy as np
-import polars as pl
 import tifffile
 from bioio import BioImage
 from bioio.ome_utils import generate_ome_channel_id

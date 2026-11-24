@@ -58,7 +58,7 @@ def main(new_version: str):
                 updated = d
                 for pkg_id in PACKAGES:
                     name = pkg_id.replace("_", "-")
-                    if d.startswith(pkg_id) or d.startswith(name):
+                    if d.startswith((pkg_id, name)):
                         parts = d.split(";")
                         left = parts[0].strip()
                         rest = (";" + parts[1]) if len(parts) > 1 else ""

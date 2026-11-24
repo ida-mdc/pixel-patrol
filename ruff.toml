@@ -1,0 +1,5 @@
+[lint]
+# PIE810 multiple-starts-ends-with
+# G201   logging-exc-info (use logger.exception in exception handler)
+select = ["F", "PIE810", "G201"]             # pyflakes: unused imports, undefined names
+ignore = ["F541"] # F541 - f-string-missing placeholders

@@ -54,7 +54,7 @@ from dask.distributed import Client, LocalCluster, as_completed, get_client
 from tqdm.auto import tqdm
 
 from pixel_patrol_base.config import DEFAULT_PARQUET_ROW_GROUP_SIZE, HISTOGRAM_BINS
-from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, PixelPatrolLoader, PixelPatrolProcessor, SkipFile
+from pixel_patrol_base.core.contracts import ChunkKind, FileInfo, SkipFile
 from pixel_patrol_base.core.file_system import FOLDER_DATASET_KEY, _discover_files
 from pixel_patrol_base.utils.df_utils import add_parent_level_columns
 from pixel_patrol_base.core.processing_config import ProcessingConfig

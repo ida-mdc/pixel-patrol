@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import sys
 import tempfile
 import time
 from datetime import datetime

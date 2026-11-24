@@ -11,7 +11,6 @@ import logging
 
 from pixel_patrol_base.core.project import Project
 from pixel_patrol_base.core.project_metadata import ProjectMetadata
-from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.io.parquet_io import save_parquet, load_parquet
 from pixel_patrol_base import api
 

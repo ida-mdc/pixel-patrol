@@ -35,12 +35,8 @@ from typing import Dict, List
 import polars as pl
 import os
 # Because polars can't append to parquet directly:
-import pyarrow as pa
 import pyarrow.parquet as pq
 
-import os
-import time
-import random
 
 def time_call(label, fn, *args, **kwargs):
     random.seed(42)                               # fair, repeatable rows
@@ -117,7 +113,6 @@ def build_df_from_chunks(base_cols: int, extra_pool: int, n: int,
     If write=True, ALSO append each chunk to a SINGLE Parquet file (PyArrow).
     Returns the full in-memory DF regardless.
     """
-    import pyarrow.parquet as pq
 
     df = pl.DataFrame([])
     buf: List[Dict[str, object]] = []

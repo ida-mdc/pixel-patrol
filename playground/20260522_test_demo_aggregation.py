@@ -12,15 +12,13 @@ Covers:
 
 import tempfile
 from pathlib import Path
-from typing import Dict, List
 
-import dask.array as da
 import numpy as np
 import polars as pl
 import pytest
 import tifffile
 
-from pixel_patrol_base.core.record import record_from, Record
+from pixel_patrol_base.core.record import Record
 from pixel_patrol_base.plugins.processors.raster_processor import BasicMetricsProcessor
 from pixel_patrol_loader_bio.plugins.loaders.tifffile_loader import TifffileLoader
 

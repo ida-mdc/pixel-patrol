@@ -1,26 +1,18 @@
 import time
-import tempfile
-import shutil
 import logging
-from pathlib import Path
-from typing import Callable, Tuple, Dict, List, Any, NamedTuple
+from typing import Callable, Tuple, Dict, List
 
 import numpy as np
-import dask.array as da
 import xarray as xr
 
 # Assuming the following imports from your provided files
 # These classes/functions are not defined in this script, but are assumed to exist
 # in a separate file (e.g., image_operations.py).
 from image_operations_and_metadata import _column_fn_registry
-from image_operations_and_metadata import STANDARD_DIM_ORDER
-from image_operations_and_metadata import SliceAxisSpec
 from image_operations_and_metadata import compute_hierarchical_stats
 from image_operations_and_metadata import to_gray
 
 from image_operations_and_metadata_new import calculate_sliced_stats
-from image_operations_and_metadata_new import _compute_all_metrics_gufunc
-from image_operations_and_metadata_new import _format_and_aggregate_results
 
 
 # Set up a logger for clean output
