@@ -1,0 +1,6 @@
+{
+  "name": "Label Extension",
+  "plugins": [
+    "./label_count.js"
+  ]
+}

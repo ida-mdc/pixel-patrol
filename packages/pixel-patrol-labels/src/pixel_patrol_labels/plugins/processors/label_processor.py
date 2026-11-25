@@ -14,12 +14,17 @@ from pixel_patrol_base.plugins.processors.raster_processor import (
 
 
 class LabelMetricNames(StrEnum):
-    LABEL_COUNT     = "label_count"
-    LABEL_IDS       = "label_ids"
-    LABEL_AREAS     = "label_areas"
-    LABEL_MIN_SIZE  = "label_min_size"
-    LABEL_MAX_SIZE  = "label_max_size"
-    LABEL_MEAN_SIZE = "label_mean_size"
+    LABEL_COUNT       = "label_count"
+    LABEL_IDS         = "label_ids"
+    LABEL_AREAS       = "label_areas"
+    LABEL_MIN_SIZE    = "label_min_size"
+    # In case of ties, argmin/argmax return the first occurrence.
+    # Since label_ids is sorted, the smallest label ID is selected.
+    # TODO: Consider supporting multiple IDs with equal extremal sizes.
+    LABEL_MIN_SIZE_ID = "label_min_size_id"
+    LABEL_MAX_SIZE    = "label_max_size"
+    LABEL_MAX_SIZE_ID = "label_max_size_id"
+    LABEL_MEAN_SIZE   = "label_mean_size"
 
 
 # ---------------------------------------------------------------------------
@@ -58,12 +63,17 @@ def numpy_label_compute(arr: np.ndarray) -> Dict[str, Any]:
     label_ids, counts = np.unique(arr, return_counts=True)
     label_count = label_ids.size
 
+    min_idx = np.argmin(counts)
+    max_idx = np.argmax(counts)
+
     return {
         LabelMetricNames.LABEL_COUNT: int(label_count),
         LabelMetricNames.LABEL_IDS: label_ids,
         LabelMetricNames.LABEL_AREAS: counts,
-        LabelMetricNames.LABEL_MIN_SIZE: int(counts.min()),
-        LabelMetricNames.LABEL_MAX_SIZE: int(counts.max()),
+        LabelMetricNames.LABEL_MIN_SIZE: int(counts[min_idx]),
+        LabelMetricNames.LABEL_MIN_SIZE_ID: int(label_ids[min_idx]),
+        LabelMetricNames.LABEL_MAX_SIZE: int(counts[max_idx]),
+        LabelMetricNames.LABEL_MAX_SIZE_ID: int(label_ids[max_idx]),
         LabelMetricNames.LABEL_MEAN_SIZE: arr.size / label_count,
     }
 
@@ -74,6 +84,7 @@ def numpy_label_compute(arr: np.ndarray) -> Dict[str, Any]:
 
 class LabelProcessor:
     NAME        = "label-basic"
+    # DEFAULT_ENABLED = False # temp_ 
     DESCRIPTION = "Computes basic label counts and size statistics for integer label masks."
     CHUNK_KIND  = ChunkKind.LEAF
     INPUT       = RecordSpec(axes=set(), kinds={"intensity"})
@@ -105,10 +116,22 @@ class LabelProcessor:
             description="Size of the smallest label.",
         ),
         RasterMetricSpec(
+            name=LabelMetricNames.LABEL_MIN_SIZE_ID,
+            data_type=np.int64,
+            aggregate_rows=_single_chunk_agg,
+            description="ID of the smallest label.",
+        ),
+        RasterMetricSpec(
             name=LabelMetricNames.LABEL_MAX_SIZE,
             data_type=np.uint64,
             aggregate_rows=_single_chunk_agg,
             description="Size of the largest label.",
+        ),
+        RasterMetricSpec(
+            name=LabelMetricNames.LABEL_MAX_SIZE_ID,
+            data_type=np.int64,
+            aggregate_rows=_single_chunk_agg,
+            description="ID of the largest label.",
         ),
         RasterMetricSpec(
             name=LabelMetricNames.LABEL_MEAN_SIZE,
