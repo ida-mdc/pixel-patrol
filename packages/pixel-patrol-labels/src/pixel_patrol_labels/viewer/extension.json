@@ -1,6 +1,7 @@
 {
   "name": "Label Extension",
   "plugins": [
-    "./label_count.js"
+    "./label_count.js",
+    "./label_size_distribution.js"
   ]
 }

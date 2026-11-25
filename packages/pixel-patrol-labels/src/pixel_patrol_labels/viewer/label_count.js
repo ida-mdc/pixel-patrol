@@ -3,45 +3,104 @@
  *
  * Displays the number of distinct label IDs per record.
  * All label IDs are included, including zero.
+ * Supports PixelPatrol's global grouping and color scheme.
  */
 
 /**
- * Query label count frequencies directly in SQL.
+ * Query label count frequencies per group directly in SQL.
  */
 async function queryLabelCounts(ctx) {
-  const { andWhere } = ctx.sql;
+  const { andWhere, groupExpr } = ctx.sql;
 
   return ctx.queryRows(`
     SELECT
+      ${groupExpr()},
       "label_count" AS label_count,
       COUNT(*) AS frequency
     FROM pp_data
     ${andWhere(ctx.where, '"label_count" IS NOT NULL')}
-    GROUP BY "label_count"
-    ORDER BY "label_count"
+    GROUP BY __group__, "label_count"
+    ORDER BY "label_count", __group__
   `);
 }
 
 /**
- * Build a shared bar trace for the full plot and overview.
+ * Calculate global statistics from aggregated frequencies.
  */
-function buildTrace(rows) {
-  return {
-    type: 'bar',
-    x: rows.map(r => Number(r.label_count)),
-    y: rows.map(r => Number(r.frequency)),
-    marker: { color: '#3d7ea6' },
-    hovertemplate:
-      'Distinct labels: %{x:d}<br>' +
-      'Number of records: %{y:d}<extra></extra>',
-  };
+function getStats(rows) {
+  let min = Infinity;
+  let max = -Infinity;
+  let total = 0;
+  let maxFrequency = 0;
+
+  for (const row of rows) {
+    const count = Number(row.label_count);
+    const frequency = Number(row.frequency);
+
+    min = Math.min(min, count);
+    max = Math.max(max, count);
+    total += frequency;
+    maxFrequency = Math.max(maxFrequency, frequency);
+  }
+
+  return { min, max, total, maxFrequency };
+}
+
+/**
+ * Build one bar trace per group using PixelPatrol's
+ * existing group labels and colors.
+ */
+function buildTraces(ctx, rows) {
+  const grouped = new Map();
+
+  for (const row of rows) {
+    const group = String(row.__group__);
+
+    if (!grouped.has(group)) {
+      grouped.set(group, {
+        x: [],
+        y: [],
+      });
+    }
+
+    const data = grouped.get(group);
+
+    data.x.push(Number(row.label_count));
+    data.y.push(Number(row.frequency));
+  }
+
+  return ctx.groups
+    .filter(g => grouped.has(String(g)))
+    .map(g => {
+      const data = grouped.get(String(g));
+
+      return {
+        type: 'bar',
+        name: ctx.groupLabel(g),
+
+        x: data.x,
+        y: data.y,
+
+        marker: {
+          color: ctx.color.group(g),
+        },
+
+        hovertemplate:
+          'Distinct labels: %{x:d}<br>' +
+          'Number of records: %{y:d}' +
+          '<extra>%{fullData.name}</extra>',
+      };
+    });
 }
 
 /**
  * Use integer ticks with adaptive spacing.
  */
 function integerAxis(title, min, max) {
-  const step = Math.max(1, Math.ceil((max - min) / 10));
+  const step = Math.max(
+    1,
+    Math.ceil((max - min) / 10)
+  );
 
   return {
     title,
@@ -55,11 +114,77 @@ function integerAxis(title, min, max) {
 /**
  * Build the table for invariant label counts.
  */
-function invariantRows(rows) {
-  return [[
-    Number(rows[0].label_count).toLocaleString(),
-    Number(rows[0].frequency).toLocaleString(),
-  ]];
+function invariantRows(ctx, rows, stats) {
+  if (ctx.groups.length <= 1) {
+    return [[
+      stats.min.toLocaleString(),
+      stats.total.toLocaleString(),
+    ]];
+  }
+
+  const frequencies = new Map(
+    rows.map(row => [
+      String(row.__group__),
+      row,
+    ])
+  );
+
+  return ctx.groups
+    .filter(g => frequencies.has(String(g)))
+    .map(g => {
+      const row = frequencies.get(String(g));
+
+      return [
+        ctx.groupLabel(g),
+        Number(row.label_count).toLocaleString(),
+        Number(row.frequency).toLocaleString(),
+      ];
+    });
+}
+
+/**
+ * Build table headers depending on active grouping.
+ */
+function invariantHeaders(ctx) {
+  return ctx.groups.length > 1
+    ? ['Group', 'Distinct labels', 'Records']
+    : ['Distinct labels', 'Records'];
+}
+
+/**
+ * Shared plot layout for the full plot and overview.
+ */
+function buildLayout(ctx, stats, mini = false) {
+  return {
+    barmode: 'group',
+
+    xaxis: integerAxis(
+      mini
+        ? 'Label count'
+        : 'Number of distinct labels',
+      stats.min,
+      stats.max
+    ),
+
+    yaxis: {
+      ...integerAxis(
+        mini ? '' : 'Number of records',
+        0,
+        stats.maxFrequency
+      ),
+      rangemode: 'tozero',
+      showticklabels: !mini,
+    },
+
+    showlegend: !mini && ctx.groups.length > 1,
+
+    ...(mini ? {} : {
+      title: {
+        text: 'Label Count Distribution',
+      },
+      height: 420,
+    }),
+  };
 }
 
 export default {
@@ -74,6 +199,8 @@ export default {
   info: [
     'Shows the distribution of distinct label counts across records.',
     'All label IDs are included, including zero.',
+    '',
+    'Distributions are displayed separately for active groups.',
     '',
     'If all records with label data have the same label count, ' +
     'a table is displayed instead of a plot.',
@@ -90,26 +217,21 @@ export default {
       return 'No label data available.';
     }
 
-    const total = rows.reduce(
-      (sum, r) => sum + Number(r.frequency), 0
-    );
+    const stats = getStats(rows);
 
-    const min = Number(rows[0].label_count);
-    const max = Number(rows[rows.length - 1].label_count);
-
-    if (rows.length === 1) {
+    if (stats.min === stats.max) {
       return (
-        `All <strong>${total.toLocaleString()}</strong> records ` +
+        `All <strong>${stats.total.toLocaleString()}</strong> records ` +
         'with label data contain exactly ' +
-        `<strong>${min.toLocaleString()}</strong> distinct label IDs.`
+        `<strong>${stats.min.toLocaleString()}</strong> distinct label IDs.`
       );
     }
 
     return (
       'Label counts range from ' +
-      `<strong>${min.toLocaleString()}</strong> to ` +
-      `<strong>${max.toLocaleString()}</strong> across ` +
-      `${total.toLocaleString()} records with label data.`
+      `<strong>${stats.min.toLocaleString()}</strong> to ` +
+      `<strong>${stats.max.toLocaleString()}</strong> across ` +
+      `${stats.total.toLocaleString()} records with label data.`
     );
   },
 
@@ -120,73 +242,58 @@ export default {
       return false;
     }
 
+    const stats = getStats(rows);
+
     // No variance: show a compact table.
-    if (rows.length === 1) {
+    if (stats.min === stats.max) {
       ctx.plot.tilePreviewTable(
         container,
-        ['Distinct labels', 'Records'],
-        invariantRows(rows)
+        invariantHeaders(ctx),
+        invariantRows(ctx, rows, stats)
       );
 
       return true;
     }
 
-    const min = Number(rows[0].label_count);
-    const max = Number(rows[rows.length - 1].label_count);
-
-    ctx.plot.appendMini(container, [buildTrace(rows)], {
-      xaxis: integerAxis('Label count', min, max),
-      yaxis: {
-        showticklabels: false,
-        rangemode: 'tozero',
-      },
-    });
+    // Use the same group traces and colors as the full plot.
+    ctx.plot.appendMini(
+      container,
+      buildTraces(ctx, rows),
+      buildLayout(ctx, stats, true)
+    );
 
     return true;
   },
 
   async render(container, ctx) {
-    
     const rows = await queryLabelCounts(ctx);
 
     // No data available.
     if (!rows.length) {
       container.innerHTML =
         '<div class="no-data">No label data available.</div>';
+
       return;
     }
 
+    const stats = getStats(rows);
+
     // No variance: reuse PixelPatrol's invariant table.
-    if (rows.length === 1) {
+    if (stats.min === stats.max) {
       ctx.plot.invariantTable(container, {
         title: 'Label count with no variance',
-        headers: ['Distinct labels', 'Number of records'],
-        rows: invariantRows(rows),
+        headers: invariantHeaders(ctx),
+        rows: invariantRows(ctx, rows, stats),
       });
 
       return;
     }
 
-    const min = Number(rows[0].label_count);
-    const max = Number(rows[rows.length - 1].label_count);
-
-    const maxFrequency = rows.reduce(
-      (max, r) => Math.max(max, Number(r.frequency)), 0
-    );
-
     // Reuse PixelPatrol's standard plot rendering.
-    ctx.plot.append(container, [buildTrace(rows)], {
-      title: { text: 'Label Count Distribution' },
-      height: 420,
-
-      xaxis: integerAxis(
-        'Number of distinct labels', min, max
-      ),
-
-      yaxis: {
-        ...integerAxis('Number of records', 0, maxFrequency),
-        rangemode: 'tozero',
-      },
-    });
+    ctx.plot.append(
+      container,
+      buildTraces(ctx, rows),
+      buildLayout(ctx, stats)
+    );
   },
 };
