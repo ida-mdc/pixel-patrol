@@ -31,6 +31,9 @@ packages = ["src/pixel_patrol_tomography"]
 [project.entry-points."pixel_patrol.loader_plugins"]
 tomography_loaders = "pixel_patrol_tomography.plugin_registry:register_loader_plugins"
 
+[project.entry-points."pixel_patrol.processor_plugins"]
+tomography_processors = "pixel_patrol_tomography.plugin_registry:register_processor_plugins"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
