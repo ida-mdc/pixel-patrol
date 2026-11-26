@@ -17,13 +17,18 @@ def get_profile_column(axis: str) -> str:
     return f"{axis.lower()}_profile_mean"
 
 
+def get_profile_sum_key(axis: str) -> str:
+    """Private leaf-row key: read by the aggregation only, never written to the table."""
+    return f"_{axis.lower()}_profile_sum"
+
+
 def get_profile_count_key(axis: str) -> str:
     """Private leaf-row key: read by the aggregation only, never written to the table."""
     return f"_{axis.lower()}_profile_count"
 
 
-def compute_axis_profile(arr: np.ndarray, axis_index: int) -> tuple[np.ndarray, np.ndarray]:
-    """Mean over all axes except axis_index, ignoring NaN/Inf; returns (means, finite counts) per coordinate."""
+def compute_axis_sums(arr: np.ndarray, axis_index: int) -> tuple[np.ndarray, np.ndarray]:
+    """Get an image (chunk) and calculate the sum and count of the finite pixels over all axes except axis_index."""
     other_axes = tuple(index for index in range(arr.ndim) if index != axis_index)
     if np.issubdtype(arr.dtype, np.floating):
         finite = np.isfinite(arr)
@@ -31,46 +36,50 @@ def compute_axis_profile(arr: np.ndarray, axis_index: int) -> tuple[np.ndarray, 
         counts = np.sum(finite, axis=other_axes, dtype=np.int64)
     else:
         sums = np.sum(arr, axis=other_axes, dtype=np.float64)
-        counts = np.full(arr.shape[axis_index], arr.size // arr.shape[axis_index], dtype=np.int64)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        means = sums / counts
-    return means, counts
+        # the number of pixels is determined by the array shape: total pixel count / dim_size
+        counts = np.full(shape=arr.shape[axis_index], fill_value=arr.size // arr.shape[axis_index], dtype=np.int64)
+    return sums, counts
 
 
 def merge_axis_profiles(rows: list[dict[str, Any]], axis: str) -> np.ndarray | None:
-    """Count-weighted mean profile over leaf rows, each placed at its global offset (dim_x / dim_y) along the axis.
-
-    Leaves may cover only part of the axis (memory chunks split along X/Y, or a user slice_size on X/Y); every
-    coordinate is averaged over the leaves that contain it.
-    """
-    column = get_profile_column(axis)
-    count_key = get_profile_count_key(axis)
+    """Aggregate mean profile of leaf rows into the profile of the whole image."""
+    sums_key = get_profile_sum_key(axis)
+    counts_key = get_profile_count_key(axis)
     offset_key = f"dim_{axis.lower()}"
-    rows = [row for row in rows if column in row and count_key in row]
+
+    rows = [row for row in rows if sums_key in row and counts_key in row]
     if not rows:
         return None
+
     starts = [int(row.get(offset_key) or 0) for row in rows]
     origin = min(starts)
-    stop = max(start + len(row[column]) for start, row in zip(starts, rows))
-    sums = np.zeros(stop - origin, dtype=np.float64)
-    counts = np.zeros(stop - origin, dtype=np.int64)
-    for start, row in zip(starts, rows):
-        means = np.asarray(row[column], dtype=np.float64)
-        row_counts = np.asarray(row[count_key], dtype=np.int64)
-        window = slice(start - origin, start - origin + len(means))
-        with np.errstate(invalid="ignore"):
-            sums[window] += np.where(row_counts > 0, means * row_counts, 0.0)
-        counts[window] += row_counts
+    stop = max(start + len(row[sums_key]) for start, row in zip(starts, rows))
+
+    # initialize empty arrays for sum and counts
+    image_sums = np.zeros(stop - origin, dtype=np.float64)
+    image_counts = np.zeros(stop - origin, dtype=np.int64)
+
+    # aggregate the leaf sums and counts into image sums and counts
+    for leaf_start, row in zip(starts, rows):
+        leaf_sums = np.asarray(row[sums_key], dtype=np.float64)
+        leaf_counts = np.asarray(row[counts_key], dtype=np.int64)
+
+        # add sum|counts of leaf to the one of the whole image
+        window = slice(leaf_start - origin, leaf_start - origin + len(leaf_sums))
+        image_sums[window] += leaf_sums
+        image_counts[window] += leaf_counts
+
+    # TODO downsample, because this would blow up for large (30k px) images...
     with np.errstate(invalid="ignore", divide="ignore"):
-        return (sums / counts).astype(np.float32)
+        return (image_sums / image_counts).astype(np.float32)
 
 
 class AxisProfileProcessor:
     """Per-column (X) and per-row (Y) mean intensity, averaged over all other dimensions of the image.
 
-    Each leaf block contributes its profile means and finite-pixel counts; the aggregation adds them up at their
-    global X/Y offsets, so no slicing along X or Y is needed. The profiles are only stored in the global row
-    (obs_level 0), not per slice.
+    Each leaf block contributes its per-coordinate pixel sums and finite-pixel counts; the aggregation adds them up
+    at their global X/Y offsets and divides once. No slicing along X or Y is needed. The profiles are only stored
+    in the global row (obs_level 0), not per slice.
     """
 
     NAME = "axis-profile"
@@ -105,8 +114,9 @@ class AxisProfileProcessor:
         row: dict[str, Any] = {}
         for axis in PROFILE_AXES:
             axis_idx = record.dim_order.index(axis)
-            means, counts = compute_axis_profile(arr, axis_idx)
-            row[get_profile_column(axis)] = means
+            sums, counts = compute_axis_sums(arr, axis_idx)
+            row[get_profile_column(axis)] = None  # placeholder, gets filled by get_aggregation()
+            row[get_profile_sum_key(axis)] = sums
             row[get_profile_count_key(axis)] = counts
         return row
 
