@@ -645,10 +645,12 @@ function populateReportFooter(meta) {
     const listed = failedFiles.length;
     const note_explanation = ` (${listed} listed below; the difference is mostly container files, where 1 file holds many images)`;
     const note = listed !== n  ? note_explanation : '';
-    const items = failedFiles.map(f => {
+    const shown = failedFiles.slice(0, 20);
+    const overflow = failedFiles.length - shown.length;
+    const items = shown.map(f => {
       const label = f.child_id != null ? `${_esc(f.path)} [${_esc(f.child_id)}]` : _esc(f.path);
       return `<li><span class="ri-failed-path">${label}</span><span class="ri-failed-error">${_esc(f.error)}</span></li>`;
-    }).join('');
+    }).join('') + (overflow > 0 ? `<li class="ri-failed-more">…and ${overflow} more</li>` : '');
     html += `<div class="ri-row ri-privacy">
       <details class="ri-privacy-details ri-failed-details">
         <summary>${n.toLocaleString()} image${n !== 1 ? 's' : ''} failed to process${note}</summary>
