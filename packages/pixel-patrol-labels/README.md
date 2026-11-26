@@ -1,4 +1,3 @@
-# PixelPatrol Aqqua Package (`pixel-patrol-aqqua`)
+# PixelPatrol Labels Package (`pixel-patrol-labels`)
 
-Extension for **PixelPatrol** that adds an LMDB loader for [Aqqua](https://www.aqqua.life/) datasets.   
-See the main [pixel-patrol documentation](https://pixelpatrol.app/docs/latest/) for usage.
+Extension for **PixelPatrol** that adds label mask analysis and visualization tools for quality control of semantic and instance segmentation datasets.
