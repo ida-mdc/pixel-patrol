@@ -3,6 +3,7 @@
   "plugins": [
     "./label_count.js",
     "./label_size_distribution.js",
-    "./label_size_distribution_per_id.js"
+    "./label_size_distribution_per_id.js",
+    "./label_size_statistics.js"
   ]
 }
