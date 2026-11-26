@@ -25,6 +25,8 @@ class LabelMetricNames(StrEnum):
     LABEL_MAX_SIZE    = "label_max_size"
     LABEL_MAX_SIZE_ID = "label_max_size_id"
     LABEL_MEAN_SIZE   = "label_mean_size"
+    LABEL_MEDIAN_SIZE = "label_median_size"
+    LABEL_SIZE_STD    = "label_size_std"
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +77,8 @@ def numpy_label_compute(arr: np.ndarray) -> Dict[str, Any]:
         LabelMetricNames.LABEL_MAX_SIZE: int(counts[max_idx]),
         LabelMetricNames.LABEL_MAX_SIZE_ID: int(label_ids[max_idx]),
         LabelMetricNames.LABEL_MEAN_SIZE: arr.size / label_count,
+        LabelMetricNames.LABEL_MEDIAN_SIZE: float(np.median(counts)),
+        LabelMetricNames.LABEL_SIZE_STD: float(np.std(counts, ddof=0)),
     }
 
 
@@ -84,7 +88,7 @@ def numpy_label_compute(arr: np.ndarray) -> Dict[str, Any]:
 
 class LabelProcessor:
     NAME        = "label-basic"
-    # DEFAULT_ENABLED = False # temp_ 
+    # DEFAULT_ENABLED = False # temp_
     DESCRIPTION = "Computes basic label counts and size statistics for integer label masks."
     CHUNK_KIND  = ChunkKind.LEAF
     INPUT       = RecordSpec(axes=set(), kinds={"intensity"})
@@ -138,6 +142,18 @@ class LabelProcessor:
             data_type=np.float64,
             aggregate_rows=_single_chunk_agg,
             description="Mean label size in pixels or voxels.",
+        ),
+        RasterMetricSpec(
+            name=LabelMetricNames.LABEL_MEDIAN_SIZE,
+            data_type=np.float64,
+            aggregate_rows=_single_chunk_agg,
+            description="Median label size in pixels or voxels.",
+        ),
+        RasterMetricSpec(
+            name=LabelMetricNames.LABEL_SIZE_STD,
+            data_type=np.float64,
+            aggregate_rows=_single_chunk_agg,
+            description="Population standard deviation of label sizes in pixels or voxels.",
         ),
     )
 
