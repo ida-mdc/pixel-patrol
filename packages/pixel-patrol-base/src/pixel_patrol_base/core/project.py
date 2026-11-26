@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 import dataclasses
@@ -194,11 +195,7 @@ class Project:
         expected_parts = [Path(p) for p in processing_stats.pop("part_paths", [])]  # not persisted metadata
         raw_failed = processing_stats.pop("failed_files", [])  # not persisted in stats
         if raw_failed:
-            base = self.base_dir
-            self.metadata.failed_files = [
-                {**f, "path": str(Path(f["path"]).relative_to(base)) if base else f["path"]}
-                for f in raw_failed
-            ]
+            self.metadata.failed_files = _sanitize_failed_files(raw_failed, self.base_dir)
 
         if processing_stats:
             for k, v in _processing_params(config).items():
@@ -278,6 +275,20 @@ class Project:
 
     def get_output_path(self) -> Path:
         return self.output_path
+
+
+def _sanitize_failed_files(raw: list, base_dir: Optional[str]) -> list:
+    base = Path(base_dir) if base_dir else None
+    def _sanitize(f: dict) -> dict:
+        path = str(Path(f["path"]).relative_to(base)) if base and Path(f["path"]).is_relative_to(base) else f["path"]
+        error = f["error"]
+        if base:
+            for sep in (os.sep, "/"):
+                prefix = str(base) + sep
+                if prefix in error:
+                    error = error.replace(prefix, "<base_path>/")
+        return {**f, "path": path, "error": error}
+    return [_sanitize(f) for f in raw]
 
 
 def _processing_params(config) -> Dict[str, Any]:
