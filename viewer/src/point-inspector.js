@@ -44,6 +44,8 @@ function ensureDrawer() {
   if (drawer) return;
   drawer = document.createElement('aside');
   drawer.className = 'point-inspector';
+  drawer.setAttribute('aria-label', 'Image inspector');
+  drawer.inert = true;
   drawer.style.cssText =
     'position:fixed;top:0;right:0;height:100vh;width:432px;max-width:94vw;z-index:9998;' +
     'background:var(--card-bg,#fff);color:var(--text,#222);box-shadow:-2px 0 16px rgba(0,0,0,0.22);' +
@@ -71,7 +73,7 @@ function ensureDrawer() {
 }
 
 export function closeInspector() {
-  if (drawer) drawer.style.transform = 'translateX(100%)';
+  if (drawer) { drawer.style.transform = 'translateX(100%)'; drawer.inert = true; }
   pushMain(false);
   setSelectedPoint(null);
 }
@@ -332,6 +334,7 @@ export async function openInspector(fileRowNumber, ctx, opts = {}) {
   const seq = ++_seq;
   ensureDrawer();
   drawer.style.transform = 'translateX(0)';
+  drawer.inert = false;
   pushMain(true);
   setSelectedPoint(Number(fileRowNumber));
   bodyEl.textContent = 'Loading…';
