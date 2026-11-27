@@ -332,10 +332,11 @@ class LmdbLoader:
                         meta = {**toml_defaults, **dataset_meta, **pq_meta, **b2_meta, **arr_meta}
                         yield child_id, record_from(np_array, meta, kind="intensity")
                     except Exception as e:
-                        logger.exception(
+                        logger.warning(
                             "LmdbLoader: failed to read image key %s in '%s': %s",
                             child_id, lmdb_path.name, e,
                         )
+                        yield child_id, None
                     if not cursor.next():
                         return
         finally:
