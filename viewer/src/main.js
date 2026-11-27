@@ -640,21 +640,25 @@ function populateReportFooter(meta) {
   const failedFiles = meta.failedFiles || [];
   const nFailed = stats.n_images_failed || 0;
   if (failedFiles.length || nFailed > 0) {
-    // n_images_failed counts images; the list has one entry per failed file or sub-image group, so they can differ.
-    const n = Math.max(nFailed, failedFiles.length);
-    const listed = failedFiles.length;
-    const note_explanation = ` (${listed} listed below; the difference is mostly container files, where 1 file holds many images)`;
-    const note = listed !== n  ? note_explanation : '';
+    const hasSubImages = failedFiles.some(f => f.child_id != null);
+    const hasFiles     = failedFiles.some(f => f.child_id == null);
+    const noun = hasSubImages && hasFiles ? 'files/images' : hasSubImages ? 'images' : 'files';
     const shown = failedFiles.slice(0, 20);
     const overflow = failedFiles.length - shown.length;
-    const items = shown.map(f => {
-      const label = f.child_id != null ? `${_esc(f.path)} [${_esc(f.child_id)}]` : _esc(f.path);
-      return `<li><span class="ri-failed-path">${label}</span><span class="ri-failed-error">${_esc(f.error)}</span></li>`;
-    }).join('') + (overflow > 0 ? `<li class="ri-failed-more">…and ${overflow} more</li>` : '');
+    let body;
+    if (failedFiles.length === 0) {
+      body = `<p class="ri-failed-error">Details not available — check processing logs.</p>`;
+    } else {
+      const items = shown.map(f => {
+        const label = f.child_id != null ? `${_esc(f.path)} [${_esc(f.child_id)}]` : _esc(f.path);
+        return `<li><span class="ri-failed-path">${label}</span><span class="ri-failed-error">${_esc(f.error)}</span></li>`;
+      }).join('') + (overflow > 0 ? `<li class="ri-failed-more">…and ${overflow} more</li>` : '');
+      body = `<ul>${items}</ul>`;
+    }
     html += `<div class="ri-row ri-privacy">
       <details class="ri-privacy-details ri-failed-details">
-        <summary>${n.toLocaleString()} image${n !== 1 ? 's' : ''} failed to process${note}</summary>
-        <ul>${items}</ul>
+        <summary>${nFailed.toLocaleString()} ${noun} failed to process</summary>
+        ${body}
       </details>
     </div>`;
   }
