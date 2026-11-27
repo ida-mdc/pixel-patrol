@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 
 from pixel_patrol_base import api
-from pixel_patrol_base.core.project import Project
+from pixel_patrol_base.core.project import Project, _sanitize_failed_files
 
 def test_create_project_basic(mock_project_name: str, tmp_path: Path):
     project = api.create_project(mock_project_name, tmp_path)
@@ -160,3 +160,17 @@ def test_output_written(mock_project_name: str, tmp_path: Path, files: list, exp
 
     assert project.output_written is expected
     assert project.output_path.exists() is expected
+
+
+def test_sanitize_failed_files_removes_base_from_path_and_error():
+    raw = [{"path": "/data/project/img.tif", "error": f"corrupt: /data/project{os.sep}img.tif"}]
+    result = _sanitize_failed_files(raw, "/data/project")
+    assert result[0]["path"] == "img.tif"
+    assert "/data/project" not in result[0]["error"]
+    assert "<base_path>/" in result[0]["error"]
+
+
+def test_sanitize_failed_files_path_outside_base_left_unchanged():
+    raw = [{"path": "/other/img.tif", "error": "error"}]
+    result = _sanitize_failed_files(raw, "/data/project")
+    assert result[0]["path"] == "/other/img.tif"

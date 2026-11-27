@@ -7,7 +7,9 @@ from typing import Iterator, List, Tuple
 
 import numpy as np
 
+from pixel_patrol_base.core import processing
 from pixel_patrol_base.core.processing import (
+    build_records_df,
     BatchTask,
     ContainerTask,
     MemoryChunkResult,
@@ -19,7 +21,7 @@ from pixel_patrol_base.core.processing import (
 )
 from pixel_patrol_base.core.processing_config import ProcessingConfig
 from pixel_patrol_base.core.record import Record, record_from
-from _processing_mocks import MockMemoryProcessor
+from _processing_mocks import MockEntry, MockLoader, MockMemoryProcessor
 
 _DUMMY_PATH = Path("/mock/file")
 
@@ -254,7 +256,7 @@ def test_small_sub_image_stays_a_single_chunk():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 1
     assert len(results[0]) == 1
@@ -267,7 +269,7 @@ def test_oversized_sub_image_is_chunked_and_reassembles_correctly():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))  # budget = 100 bytes; big = 320 bytes
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 1))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 1
     assert len(results[0]) > 1  # actually split into multiple memory chunks
@@ -281,7 +283,7 @@ def test_mixed_batch_only_chunks_the_oversized_sub_image():
     config = ProcessingConfig(mb_per_worker=800 / (1024 * 1024))
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 2))
 
-    results = _execute_container_task(task, loader, [_SumProcessor()], config)
+    results, _ = _execute_container_task(task, loader, [_SumProcessor()], config)
 
     assert len(results) == 2
     assert len(results[0]) == 1
@@ -319,11 +321,14 @@ def test_one_bad_sub_image_does_not_discard_its_siblings():
     task = ContainerTask(file_index=0, file_path="mock.lmdb", image_slice=(0, 3))
     config = ProcessingConfig(mb_per_worker=800)
 
-    results = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
+    results, failed = _execute_container_task(task, _OneBadSubImageLoader(), [_SumProcessor()], config)
 
     assert len(results) == 2  # sub-images 0 and 2 survive; only 1 is lost
     assert _sums(results[0]) == 0        # sub-image 0: filled with 0
     assert _sums(results[1]) == 4 * 4 * 2  # sub-image 2: filled with 2
+    assert len(failed) == 1
+    assert failed[0]["path"] == "mock.lmdb"
+    assert failed[0]["child_id"] == "1"
 
 
 class _OneBadFileLoader:
@@ -345,7 +350,33 @@ def test_one_bad_file_does_not_discard_its_batch_siblings():
     ))
     config = ProcessingConfig(mb_per_worker=800)
 
-    results = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
+    results, failed = _execute_batch_task(task, _OneBadFileLoader(), [_SumProcessor()], config)
 
     assert len(results) == 2  # a.tif and c.tif survive; only bad.tif is lost
     assert {r.file_index for r in results} == {0, 2}
+    assert len(failed) == 1
+    assert failed[0]["path"] == "bad.tif"
+
+
+class _HeaderOkLoadFailsLoader(MockLoader):
+    """read_header succeeds so the file is split into memory chunks; every chunk load then raises."""
+
+    def load(self, file_path):
+        raise OSError(f"corrupt strip in {Path(file_path).name}")
+
+
+def test_failed_chunked_file_is_listed_once(tmp_path, monkeypatch):
+    # monkeypatch to force chunked processing of small 64x64px image
+    monkeypatch.setattr(processing, "_MAX_SIZE_EXPANSION_FACTOR", 1_000_000)  # ~1 KB task budget
+    path = tmp_path / "big.tif"
+    path.write_bytes(b"x")
+    loader = _HeaderOkLoadFailsLoader({str(path): MockEntry(shape=(64, 64), dtype=np.uint8, dim_order="YX")})
+    config = ProcessingConfig(selected_file_extensions={"tif"}, mb_per_worker=1024, max_workers=1)
+
+    _, stats = build_records_df([tmp_path], loader=loader, processors=[], config=config, base_dir=tmp_path)
+
+    assert stats["task_types"].get("MemoryChunkTask", 0) > 1, stats["task_types"]
+    assert stats["n_images_failed"] == 1
+    assert len(stats["failed_files"]) == 1, stats["failed_files"]
+    assert "corrupt strip" in stats["failed_files"][0]["error"]
+
