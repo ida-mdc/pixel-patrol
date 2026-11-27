@@ -278,15 +278,17 @@ class Project:
 
 
 def _sanitize_failed_files(raw: list, base_dir: Optional[str]) -> list:
-    base = Path(base_dir) if base_dir else None
+    base = Path(base_dir) if base_dir and base_dir != "/" else None
     def _sanitize(f: dict) -> dict:
-        path = str(Path(f["path"]).relative_to(base)) if base and Path(f["path"]).is_relative_to(base) else f["path"]
+        p = Path(f["path"])
+        path = str(p.relative_to(base)) if base and p.is_relative_to(base) else f["path"]
         error = f["error"]
         if base:
-            for sep in (os.sep, "/"):
-                prefix = str(base) + sep
-                if prefix in error:
-                    error = error.replace(prefix, "<base_path>/")
+            for base_str in dict.fromkeys([str(base), base_dir]):  # deduplicated, order-preserving
+                for sep in (os.sep, "/"):
+                    prefix = base_str + sep
+                    if prefix in error:
+                        error = error.replace(prefix, "<base_path>/")
         return {**f, "path": path, "error": error}
     return [_sanitize(f) for f in raw]
 
