@@ -19,7 +19,7 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pandas>=2.3.3",
     "dask[distributed]>=2025.5.1",
-    "duckdb>=1.2.0,<2",
+    "duckdb>=1.2.0,<3",
     "psutil>=6.0.0",
     "tqdm>=4.67.1",
 ]
